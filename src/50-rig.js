@@ -9,12 +9,24 @@ class PartBatch {
     m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
     this.flash = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1); this.flash.setUsage(THREE.DynamicDrawUsage); geo.setAttribute('aFlash', this.flash);
     m.frustumCulled = false; m.castShadow = o.shadow !== false; m.receiveShadow = true; m.count = 0;
-    this.rad = o.rad || .1;
+    this.rad = o.rad || .1; this.maxCap = Math.max(64, cap * 4);
     R.scene.add(m); PartBatch.all.push(this);
+  }
+  // Doubles the instance capacity (up to 4x the starting cap) so big crowds are not silently clipped.
+  grow() {
+    if (this.cap >= this.maxCap) return false;
+    const old = this.mesh, cap = Math.min(this.maxCap, this.cap * 2), geo = old.geometry;
+    const m = new THREE.InstancedMesh(geo, old.material, cap);
+    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.instanceMatrix.array.set(old.instanceMatrix.array);
+    m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3); m.instanceColor.setUsage(THREE.DynamicDrawUsage); m.instanceColor.array.set(old.instanceColor.array);
+    const fl = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1); fl.setUsage(THREE.DynamicDrawUsage); fl.array.set(this.flash.array); this.flash = fl; geo.setAttribute('aFlash', fl);
+    m.frustumCulled = false; m.castShadow = old.castShadow; m.receiveShadow = old.receiveShadow; m.count = 0; m.renderOrder = old.renderOrder;
+    if (old.parent) { old.parent.add(m); old.parent.remove(old); }
+    old.dispose(); this.mesh = m; this.cap = cap; return true;
   }
   put(mat, flash = 0, tint = null) {
     if (RIG_CAPTURE) { RIG_CAPTURE(this, mat, tint); return; }
-    if (this.n >= this.cap) return; const i = this.n++;
+    if (this.n >= this.cap && !this.grow()) return; const i = this.n++;
     mat.toArray(this.mesh.instanceMatrix.array, i * 16);
     const c = this.mesh.instanceColor.array;
     if (tint) { c[i * 3] = tint[0]; c[i * 3 + 1] = tint[1]; c[i * 3 + 2] = tint[2]; } else { c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = 1; }

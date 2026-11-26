@@ -83,7 +83,7 @@ function step(rdt) {
     for (const t of G.towers) if (t.alive) t.update(dt);
     updateUnits(dt);
     for (let i = G.mons.length - 1; i >= 0; i--) if (G.mons[i].dead) swapRemove(G.mons, i);
-    updateProjectiles(dt);
+    updateProjectiles(dt); updateHazards(dt);
     for (const m of G.mons) drawMonster(m, G.t);
     for (const f of G.men) if (!f.dead) drawFootman(f);
     if (G.phase === 'play') {

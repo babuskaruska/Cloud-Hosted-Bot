@@ -101,11 +101,14 @@ function killMonster(m, kind, dx, dz, tower) {
     for (let i = 0; i < 5; i++) fxSmoke(m.x, m.y + .3, m.z, rr(-1, 1), rr(.5, 1.5), rr(-1, 1), rr(.4, .8), .35 * sc, .5, .12, .3, .12, .5, { drag: 3 });
     sfx('squelch', m.x, m.z, .8, big ? .8 : .2);
   }
-  if (def.split && G.mons.length < 90) { const [ty, n] = def.split; for (let i = 0; i < n; i++) { const u = n > 1 ? i / (n - 1) * 2 - 1 : 0; spawnMonster(ty, { s: Math.max(.5, m.s - .15 - .1 * Math.abs(u)), lat: clamp(m.lat + u * .34, -.95, .95), hpMul: m.maxHp / def.hp, pop: 1 }).kl = u * 2.2; } }
+  if (def.split && G.mons.length < MAX_ALIVE + 6) { const [ty, n] = def.split; for (let i = 0; i < n; i++) { const u = n > 1 ? i / (n - 1) * 2 - 1 : 0; spawnMonster(ty, { s: Math.max(.5, m.s - .15 - .1 * Math.abs(u)), lat: clamp(m.lat + u * .34, -.95, .95), hpMul: m.maxHp / def.hp, pop: 1 }).kl = u * 2.2; } }
   if (m.torch && m.flame) fxEmbers(m.flame.x, m.flame.y, m.flame.z, 8, .15);
   dropCoins(m.x, m.y + m.hitH * .6, m.z, Math.round(def.bounty * G.bountyMul), clamp(Math.round(def.bounty / 3), 1, 6));
   removeMonster(m);
-  if (def.explode) blastAround(m, def.explode);
+  if (def.explode) {
+    if (kind === 'blast') G.chain.push({ t: rr(.12, .24), x: m.x, y: m.y, z: m.z, ex: def.explode });
+    else blastAround(m, def.explode);
+  }
 }
 function finishBoss(m) {
   G.slain++; G.waveKills++;
@@ -240,7 +243,7 @@ function drawFootman(f) {
   if (f.hp < f.maxHp) G.hbars.push({ x: f.x, y: f.y + 1.55 * f.scale, z: f.z, f: sat(f.hp / f.maxHp), boss: false, man: true });
 }
 
-const _units = [];
+const _grid = new Map(), _units = [], byS = (a, b) => a.s - b.s;
 function updateUnits(dt) {
   const B = G.B, mons = G.mons, men = G.men, L = B.L, maxLatBase = ROAD_HALF + .04;
   for (let i = men.length - 1; i >= 0; i--) { const f = men[i]; if (f.gone) { swapRemove(men, i); continue; } footmanThink(f, dt); if (f.gone) swapRemove(men, i); }
@@ -248,7 +251,7 @@ function updateUnits(dt) {
   for (const m of mons) { m.haste = 0; if (!m.dead && !m.fly && !m.def.ghost) _units.push(m); }
   for (const d of mons) if (!d.dead && d.def.aura && d.vis && !d.dying) for (const m of mons) if (m !== d && !m.dead && !m.fly && !m.def.boss && Math.abs(m.s - d.s) < d.def.aura[0]) m.haste = d.def.aura[1];
   for (const f of men) if (!f.dead && f.onRoad) _units.push(f);
-  const U = _units, nu = U.length;
+  const U = _units, nu = U.length; U.sort(byS); let uMaxRad = 0; for (let j = 0; j < nu; j++) if (U[j].rad > uMaxRad) uMaxRad = U[j].rad;
   for (const m of mons) {
     if (m.dead) continue;
     m.flash = Math.max(0, m.flash - dt * 7); m.flinch = Math.max(0, m.flinch - dt * 4.2);
@@ -268,7 +271,7 @@ function updateUnits(dt) {
     if (m.cast > 0) m.cast = Math.max(0, m.cast - dt * 1.1);
     if (def.summon && m.vis) {
       m.sumT -= dt;
-      if (m.sumT <= 0 && m.sumN < def.summon.max && mons.length < 78) {
+      if (m.sumT <= 0 && m.sumN < def.summon.max && mons.length < MAX_ALIVE - 6) {
         const sm = def.summon; m.sumT = sm.every; m.sumN++; m.cast = 1; sfx('ignite', m.x, m.z, .7, .3);
         for (let i = 0; i < sm.n; i++) { const q = spawnMonster(sm.type, { s: Math.max(.5, m.s - .6 - .3 * i - (def.boss ? 1.2 : 0)), lat: clamp(m.lat + (i - (sm.n - 1) / 2) * .8 + rr(-.1, .1), -.9, .9), hpMul: (m.maxHp / def.hp) * sm.hp, pop: 1 }); fxTimed(4, q.x, q.y + .08, q.z, 1.8, 1.8, .4, 1.6, .7, .6, .5, { ground: true }); fxDust(q.x, q.y + .1, q.z, 4, .6, { a: .4, c: [.2, .34, .24] }); }
       }
@@ -290,11 +293,16 @@ function updateUnits(dt) {
       if (!m.foe) for (const f of men) if (!f.dead && f.onRoad && f.s > m.s - .3 && f.s - m.s < 1.9 && Math.abs(f.lat - m.lat) < 1.4) { m.foe = f; break; }
       if (m.foe) v *= .55;
     } else if (m.foe) v = 0;
-    else if (!def.ghost) for (let j = 0; j < nu; j++) {
-      const o = U[j]; if (o === m || (def.slip && o.isMan)) continue; const ds = o.s - m.s; if (ds <= 0 || ds > 1.7 + m.rad + o.rad) continue;
-      if (Math.abs(o.lat - m.lat) > (m.rad + o.rad) * .92) continue;
-      const gap = ds - (m.rad + o.rad), lim = Math.max(0, (o.vf || 0) + gap * 2.6);
-      if (lim < v) { v = lim; obstacle = o; og = gap; }
+    else if (!def.ghost) {
+      // U is sorted by s at the start of the step, so only scan the units just ahead (margins cover movement within this step).
+      let lo = 0, hi = nu; const s0 = m.s - .3; while (lo < hi) { const md = (lo + hi) >> 1; if (U[md].s < s0) lo = md + 1; else hi = md; }
+      const reach = m.s + 1.7 + m.rad + uMaxRad + .3;
+      for (let j = lo; j < nu; j++) {
+        const o = U[j]; if (o.s > reach) break; if (o === m || (def.slip && o.isMan)) continue; const ds = o.s - m.s; if (ds <= 0 || ds > 1.7 + m.rad + o.rad) continue;
+        if (Math.abs(o.lat - m.lat) > (m.rad + o.rad) * .92) continue;
+        const gap = ds - (m.rad + o.rad), lim = Math.max(0, (o.vf || 0) + gap * 2.6);
+        if (lim < v) { v = lim; obstacle = o; og = gap; }
+      }
     }
     if (!m.foe && obstacle && obstacle.isMan && og < .3 && obstacle.foes < 2) m.foe = obstacle;
     if (obstacle && v < want * .55 && !m.foe) {
@@ -302,7 +310,8 @@ function updateUnits(dt) {
         m.laneT = .35; const first = rnd() < .5 ? 1 : -1;
         for (const d of [first * .5, -first * .5, first * 1.0, -first * 1.0]) {
           const cand = clamp(m.lat + d, -maxLat, maxLat); if (Math.abs(cand - m.lat) < .2) continue; let free = true;
-          for (let j = 0; j < nu && free; j++) { const o = U[j]; if (o === m) continue; const ds = o.s - m.s; if (ds < -.5 - o.rad || ds > 1.3 + o.rad) continue; if (Math.abs(o.lat - cand) < (m.rad + o.rad) * .97) free = false; }
+          let j0 = 0, j1 = nu; const sl = m.s - .8 - uMaxRad; while (j0 < j1) { const md = (j0 + j1) >> 1; if (U[md].s < sl) j0 = md + 1; else j1 = md; }
+          for (let j = j0; j < nu && free; j++) { const o = U[j]; if (o.s > m.s + 1.6 + uMaxRad) break; if (o === m) continue; const ds = o.s - m.s; if (ds < -.5 - o.rad || ds > 1.3 + o.rad) continue; if (Math.abs(o.lat - cand) < (m.rad + o.rad) * .97) free = false; }
           if (free) { m.lane = cand; break; }
         }
       } else m.laneT -= dt;
@@ -325,14 +334,17 @@ function updateUnits(dt) {
   for (const u of U) if (u.isMan) u.foes = 0;
   for (const m of mons) if (!m.dead && m.foe) m.foe.foes++;
   for (const m of mons) { if (m.dead || m.fly) continue; const p = pathAt(B, m.s, _ap); m.x = p.x - p.tz * m.lat; m.z = p.z + p.tx * m.lat; m.y = p.y + .02 - (m.dying > 0 ? (1.9 - m.dying) * .15 : 0); m._tx = p.tx; m._tz = p.tz; m._x0 = m.x; m._z0 = m.z; }
+  // Push overlapping units apart. A uniform grid keeps this near-linear with big crowds.
+  const cell = Math.max(1, uMaxRad * 2 + .05); _grid.clear();
+  for (let i = 0; i < nu; i++) { const a = U[i]; a._gi = i; const k = (Math.floor(a.x / cell) + 512) * 4096 + Math.floor(a.z / cell) + 512; let c = _grid.get(k); if (!c) { c = []; _grid.set(k, c); } c.push(a); }
   for (let i = 0; i < nu; i++) {
-    const a = U[i]; if (a.dead) continue;
-    for (let j = i + 1; j < nu; j++) {
-      const b = U[j]; if (b.dead) continue; const dx = b.x - a.x, dz = b.z - a.z, rs = a.rad + b.rad, d2 = dx * dx + dz * dz;
+    const a = U[i]; if (a.dead) continue; const cx = Math.floor(a.x / cell) + 512, cz = Math.floor(a.z / cell) + 512;
+    for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gz = cz - 1; gz <= cz + 1; gz++) { const c = _grid.get(gx * 4096 + gz); if (c) for (let q = 0; q < c.length; q++) {
+      const b = c[q]; if (b._gi <= i || b.dead) continue; const dx = b.x - a.x, dz = b.z - a.z, rs = a.rad + b.rad, d2 = dx * dx + dz * dz;
       if (d2 >= rs * rs || d2 < 1e-6) continue;
       const d = Math.sqrt(d2), ov = (rs - d) * .6, ma = a.isMan ? (a.target ? 9 : 4) : a.mass, mb = b.isMan ? (b.target ? 9 : 4) : b.mass, wa = mb / (ma + mb), wb = ma / (ma + mb);
       a.x -= dx / d * ov * wa; a.z -= dz / d * ov * wa; b.x += dx / d * ov * wb; b.z += dz / d * ov * wb;
-    }
+    } }
   }
   for (const m of mons) {
     if (m.dead || m.fly) continue;

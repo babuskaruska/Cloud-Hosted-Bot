@@ -57,7 +57,7 @@ function updateWaves(dt) {
   if (G.spawning) {
     G.waveT += dt;
     while (G.queue.length && G.queue[0].t <= G.waveT) {
-      if (G.mons.length > 84) break;
+      if (G.mons.length >= MAX_ALIVE) break;
       const e = G.queue.shift(); spawnMonster(e.type, { hpMul: e.hpMul });
     }
     if (!G.queue.length) {

@@ -10,6 +10,8 @@ const TOWER = {
   guard: { name: 'Guard post', short: 'Guards', icon: 'guard', cost: [80, 90, 150], range: [3.4, 3.7, 4.0], n: [2, 3, 3], hp: [62, 90, 135], dmg: [7, 10, 15], rate: [7, 6, 5], air: false, ground: true, light: [55, 70, 90], desc: ['Footmen who block', 'and duel on the road.'] },
 };
 const TOWER_KINDS = ['archer', 'bombard', 'spire', 'guard'];
+// Most monsters alive at once. Phones get a smaller crowd.
+const MAX_ALIVE = (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 190 : 260;
 
 function blueprint(kind, lvl) {
   const pieces = [], mounts = {};
@@ -397,7 +399,7 @@ function updateProjectiles(dt) {
     _tm.compose(_tv.set(s.x, s.y, s.z), _tq.setFromAxisAngle(_tz, s.t * 9), _ts.set(1, 1, 1)); KIT.shell.put(_tm, 0, null);
     FX.add.push(s.x, s.y + .1, s.z, .3, .3, 0, 0, 3.2, 1.5, .3, 1, 0, 0, 0, 0);
     s.sm += dt * 30; while (s.sm > 1) { s.sm -= 1; fxSmoke(s.x, s.y, s.z, rr(-.1, .1), rr(0, .2), rr(-.1, .1), rr(.5, .9), .16, .3, .26, .25, .25, .32, { drag: 1 }); if (rnd() < .5) fxPart(s.x, s.y, s.z, rr(-.5, .5), rr(-.2, .5), rr(-.5, .5), .4, .05, 2.5, 1.1, .2, { grav: 2 }); }
-    if (u >= 1) { swapRemove(Sh, i); explodeAt(s.tx, s.ty, s.tz, s.dmg, s.splash, s.tower); }
+    if (u >= 1) { swapRemove(Sh, i); explodeAt(s.tx, s.ty, s.tz, s.dmg, s.splash, s.tower); if (s.tower && s.tower.lvl >= 2) addGroundFire(s.tx, s.tz, s.splash * .55, 2.6, s.dmg * .1, s.tower); }
   }
 }
 function explodeAt(x, y, z, dmg, splash, tower) {
@@ -412,4 +414,28 @@ function explodeAt(x, y, z, dmg, splash, tower) {
     hitMonster(m, dmg * k, 'blast', (m.x - x) / l, (m.z - z) / l, tower);
   }
   for (let i = 0; i < 5; i++) { _tm.compose(_tv.set(x + rr(-.3, .3), y + .2, z + rr(-.3, .3)), _tq.set(rr(-1, 1), rr(-1, 1), rr(-1, 1), 1).normalize(), _ts.set(.6, .6, .6)); addDebris(KIT.rubble, _tm, [.5, .45, .4], rr(-3, 3), rr(3, 6), rr(-3, 3), rr(4, 10), rr(1.6, 2.6)); }
+}
+
+// Delayed chain explosions (sappers set off by blasts) and burning ground.
+G.chain = []; G.fires = [];
+function addGroundFire(x, z, r, secs, dps, tower) {
+  if (G.fires.length >= 24) G.fires.shift();
+  G.fires.push({ x, z, r, t: secs, dps, tower, tick: 0 });
+  if (typeof FX.groundFire === 'function') FX.groundFire(x, z, r, secs);
+  sfx('burn', x, z, .5);
+}
+function updateHazards(dt) {
+  if (G.phase !== 'play') { G.chain.length = 0; G.fires.length = 0; return; }
+  for (let i = G.chain.length - 1; i >= 0; i--) {
+    const c = G.chain[i]; c.t -= dt; if (c.t > 0) continue; swapRemove(G.chain, i);
+    blastAround(c, { r: c.ex.r * 1.15, dmg: c.ex.dmg, men: c.ex.men });
+    sfx('chainBoom', c.x, c.z, 1); FX.shake = Math.min(1.2, (FX.shake || 0) + .35);
+  }
+  for (let i = G.fires.length - 1; i >= 0; i--) {
+    const f = G.fires[i]; f.t -= dt; f.tick -= dt;
+    if (f.t <= 0) { swapRemove(G.fires, i); continue; }
+    if (typeof FX.groundFire !== 'function' && rnd() < dt * 10) fxEmbers(f.x + rr(-f.r, f.r) * .6, G.B.heightAt(f.x, f.z) + .1, f.z + rr(-f.r, f.r) * .6, 2, .2);
+    if (f.tick > 0) continue; f.tick = .25;
+    for (const m of G.mons) { if (m.dead || m.hp <= 0 || m.fly || !m.vis) continue; if (dist2(m.x, m.z, f.x, f.z) < (f.r + m.rad) * (f.r + m.rad)) hitMonster(m, f.dps * .25, 'fire', 0, 0, f.tower); }
+  }
 }
