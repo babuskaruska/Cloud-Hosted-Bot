@@ -39,9 +39,32 @@ Nothing merges unless `node tools/qa.js` passes: no page errors, no NaN, no earl
 - **Worktree gotcha:** agent worktrees start from the old `main`. First run `git merge --ff-only claude/sleepy-cannon-hu2caw` (or merge it).
 - **QA after round 1:** no defeats; battlefield 1 now ends with 2–3 towers maxed (was 0); hordes reach about 145 alive.
 - **Known:** `G.press` sits at its 2.2 cap for the AI most of the time, so the game is easy for the AI. Health bars clutter big crowds.
-- Echo (sound, round 1) is still to merge.
+- **Echo** (round 1, merged): per-kind voice limits, a soft clipper (peak below -0.9 dBFS), reactive music with danger layers and six boss themes, a crowd bed, the new sounds, `AU.setVolume`, `AU.stats()`. Forge added `navigator.audioSession.type = 'playback'` so the iPhone silent switch doesn't mute the game.
+- Long runs: 83 min of game time, 10 lands, no errors or defeats, up to 206 alive.
+
+## Round 2 contracts
+
+- **Tower branches.** A max-level tower (`t.lvl === 2`) can buy one of two branches, which sets `t.lvl = 3` and `t.branch`:
+  - archer: `'longbow' | 'volley'`
+  - bombard: `'mortar' | 'firebomb'`
+  - spire: `'tempest' | 'frost'`
+  - guard: `'knights' | 'pikes'`
+
+  Mira owns the data (`TOWER[kind].branches`), the mechanics, the UI and the AI. Ash owns the look: `blueprint(kind, 3, branch)` returns the branch model. Until Ash's work lands, Mira's branch clamps `lvl > 2` to 2 at the top of `blueprint`. Overcharge (`t.oc`) works on top of a branch.
+- **Spells.** Mana `G.mana` / `G.manaMax` fills from kills. Spells:
+  - `castSpell('meteor', x, z)`: a big blast and burning ground
+  - `castSpell('frost', x, z)`: freezes monsters in a radius
+  - `castSpell('rally', x, z)`: temporary footmen
+
+  Mira owns the rules, the UI, the keys and the AI. Ash provides the visuals: `FX.meteor(x, z, r)` (the fall, impact and crater) and `FX.frostNova(x, z, r)`; the gameplay side calls them if present. Echo provides the sounds `'meteor'`, `'frostNova'`, `'rally'` and `'spellReady'`.
+- **Land events.** Forge owns them. `G.event` is `null` or `{ kind, t, ... }`, with kinds `'rockslide'` (ashen), `'blizzard'` (frost), `'bogfog'` (fen), `'lavaSurge'` (ember) and `'sandstorm'` (dunes). Echo provides a sound for each, named after its kind, plus `'eventEnd'`. Ash may add looks later.
+- **Branch purchase sound:** `'branch'` (Echo).
 
 ## Next
 
-- Merge Echo, run QA, republish the playable build.
-- Round 2: tower branches at level 3 (a gold sink), spells, land events, raising the difficulty ceiling, decluttering health bars, tower crews, overcharge glow.
+- Round 2 in progress:
+  - **Mira:** tower branches, spells, difficulty ceiling, cleaner health bars.
+  - **Ash:** branch models, spell visuals, overcharge glow, tower crews.
+  - **Echo:** the sounds for all of the above, ambience for each land, a fix so the crowd bed pauses, and boss entrance stingers.
+  - **Forge:** land events, QA coverage for the new systems, merging.
+- After round 2: republish the build, then a round 3 polish and bug-bash.
