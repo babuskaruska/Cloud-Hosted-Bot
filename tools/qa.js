@@ -39,6 +39,7 @@ const SIM = (secs) => {
   const tw = G.towers.filter(t => t.alive);
   st.towers = tw.length; st.towerLevels = tw.reduce((a, t) => a + t.lvl, 0); st.maxedTowers = tw.filter(t => t.lvl >= (t.def.cost.length - 1)).length;
   st.lands = [...st.lands]; st.lives = G.lives; st.gold = G.gold; st.slain = G.slain; st.level = G.level;
+  const S = G.stats || {}; st.branches = S.branches || 0; st.spells = S.spells || 0; st.statDetail = S; st.press = +(G.press || 0).toFixed(2);
   return st;
 };
 
@@ -64,6 +65,8 @@ const SIM = (secs) => {
     const st = await p.evaluate(SIM, SIM_SECONDS);
     out.sims[seed] = st;
     if (st.nanSeen) fails.push('seed ' + seed + ': NaN monster position or hp');
+    if (!st.branches && !QUICK) fails.push('seed ' + seed + ': the AI bought no tower branch');
+    if (!st.spells) fails.push('seed ' + seed + ': the AI cast no spell');
     await p.close();
   }
   // 3. Render cost (relative only; software GL here).
@@ -79,6 +82,7 @@ const SIM = (secs) => {
   for (const s in out.sims) { const a = out.sims[s], b = base && base.sims && base.sims[s];
     const f = k => a[k] + (b && b[k] !== undefined && b[k] !== a[k] ? ' (was ' + b[k] + ')' : '');
     console.log(`  seed ${s}: wave ${f('maxWave')}, lives ${f('lives')} (min ${f('minLives')}), defeats ${f('defeats')}, bosses ${f('bossKills')}, towers ${f('towers')}, levels ${f('towerLevels')}, maxed ${f('maxedTowers')}, gold earned ${f('goldEarned')}, max alive ${f('maxMons')}`);
+    console.log(`    branches ${f('branches')}, spells ${f('spells')}, press ${f('press')}: ` + JSON.stringify(a.statDetail));
     console.log('    end of each battlefield (towers/levels/maxed of pads): ' + a.boards.map(x => x.towers + '/' + x.levels + '/' + x.maxed + ' of ' + x.pads).join('  ')); }
   console.log('Perf:', JSON.stringify(out.perf), base && base.perf ? '(baseline ' + JSON.stringify(base.perf) + ')' : '');
   if (errs.length) { console.log('\nPAGE ERRORS:'); for (const e of [...new Set(errs)].slice(0, 20)) console.log('  ' + e); fails.push(errs.length + ' page errors'); }
