@@ -5333,14 +5333,16 @@ const UI = (() => {
 // Cinderwatch sound: every sound is synthesized here with Web Audio (no audio files).
 // Layout: helpers and the one-shot sound library S, the voice manager play() (per-kind voice
 // limits, stealing, density-aware gain, jittered timing), the ambient beds (wind, fire, drone),
-// the crowd bed (a horde on the road), the reactive music (pads + a step sequencer whose layers
-// follow the danger, with a theme per boss) and the master chain (glue, limiter, soft clipper).
+// the crowd bed (a horde on the road), the land soundscapes and land-event swells, the reactive
+// music (pads + a step sequencer whose layers follow the danger, with a sting and a theme per boss),
+// pause and page-hide handling, and the master chain (glue, limiter, soft clipper).
 const AU = (function () {
   const api = { ready: false, muted: false, intensity: 0, unlock: unlock, setMuted: setMuted, setPaused: setPaused, play: play, setAmbience: setAmbience, update: update, setVolume: setVolume, stats: stats, has: (n) => typeof n === 'string' && hasOwn(DEF, n) };
 
   let ctx = null, sr = 44100;
   let nMaster = null, nMute = null, nSfx = null, nAmb = null, nMusic = null, nRevIn = null;
-  let nPad = null, nSeq = null, nMusDuck = null, nCrowd = null, nCrowdDuck = null;
+  let nPad = null, nSeq = null, nMusDuck = null, nCrowd = null, nCrowdDuck = null, nPage = null, nUi = null, nLand = null, nEvt = null;
+  const PZ = { on: false, sfx: null, amb: null, crowd: null, pad: null, seq: null, rev: null };
   let bufWhite = null, bufPink = null, bufBrown = null;
   let V = null;
   const shapeCurves = {};
@@ -5350,7 +5352,7 @@ const AU = (function () {
   // Phones get fewer simultaneous voices and a sparser crowd.
   const LOW = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
-  const ST = { req: 0, played: 0, gap: 0, cap: 0, kind: 0, stolen: 0, peak: 0, seq: 0, crowd: 0, err: '', names: {} };
+  const ST = { req: 0, played: 0, gap: 0, cap: 0, kind: 0, stolen: 0, peak: 0, seq: 0, crowd: 0, amb: 0, err: '', names: {} };
 
   const rnd = Math.random;
   const rr = (a, b) => a + (b - a) * rnd();
@@ -5794,6 +5796,183 @@ const AU = (function () {
     grains(lp, t + 0.3, 8, 0.7, 0.1, 0.004, 0.02, 2500, 6000, 3, 1);
   };
 
+  // ---- Round 2: tower branches, spells, land events and boss entrance stings. ----
+  // A struck bell or crystal: inharmonic partials, the high ones dying first (skipped above 15 kHz).
+  function belld(d, t, f, vel, len) {
+    const R = [1, 2.76, 5.4, 8.93], D = [1, 0.5, 0.25, 0.12];
+    for (let i = 0; i < 4; i++) { if (f * R[i] > 15000) break; const g = gn(d); osc('sine', f * R[i], t, len * D[i] + 0.05, g); ad(g.gain, t, vel / (1 + i * 1.4), 0.002, len * D[i]); }
+  }
+  function softChord(d, t, notes, dur, peak) { // slow sine-and-triangle swell, for resolutions
+    const env = gn(d), lp = flt(env, 'lowpass', 1800);
+    for (let i = 0; i < notes.length; i++) { const f = mtof(notes[i]); osc('triangle', f, t, dur + 0.3, gn(lp, 0.5)); osc('sine', f * 2, t, dur + 0.3, gn(lp, 0.15)); }
+    env.gain.setValueAtTime(0.0001, t); env.gain.linearRampToValueAtTime(peak, t + dur * 0.3); env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  }
+  S.branch = (d, t) => {
+    // A heavy thump and a ringing metal clang, then a bright D major brass chord that rises out of the minor-key music.
+    const sh = shape(d, 1.8);
+    const g = gn(sh), o = osc('sine', 100, t, 0.7, g); sw(o.frequency, t, 150, 45, 0.3); ad(g.gain, t, 0.9, 0.003, 0.5);
+    const m = gn(d), mf = flt(m, 'bandpass', 380, 1.2); noi(t, 0.3, mf); ad(m.gain, t, 0.5, 0.002, 0.2);
+    const lp = flt(d, 'lowpass', 7000), R = [1, 1.51, 2.27, 2.94, 3.76];
+    for (let i = 0; i < 5; i++) { const cg = gn(lp); osc(i % 2 ? 'sine' : 'triangle', 620 * R[i] * rr(0.995, 1.005), t + 0.01, 1.4, cg); ad(cg.gain, t + 0.01, 0.14 / (1 + i * 0.4), 0.001, 1.1 / (1 + i * 0.5)); }
+    const t2 = t + 0.2, ch = [50, 57, 62, 66];
+    for (let i = 0; i < ch.length; i++) brassNote(d, t2, mtof(ch[i]), 1.0, 0.11, 1.15);
+    brassNote(d, t2 + 0.5, mtof(69), 0.9, 0.11, 1.3);
+    whoomp(d, t, 0.4, 0.6);
+    grains(lp, t + 0.25, 14, 1.2, 0.09, 0.003, 0.015, 2600, 7000, 3, 1);
+    belld(lp, t + 0.75, mtof(86), 0.05, 1.6);
+  };
+  const METEOR_FALL = 0.9; // seconds of whistle before the impact
+  S.meteor = (d, t) => {
+    const ti = t + METEOR_FALL;
+    // the fall: a whistle that rises while a roar of torn air builds
+    const wg = gn(d), wo = osc('sine', 520, t, METEOR_FALL + 0.05, wg); wo.frequency.setValueAtTime(520, t); wo.frequency.exponentialRampToValueAtTime(1900, ti);
+    osc('sine', 7, t, METEOR_FALL, gn(wo.detune, 25));
+    wg.gain.setValueAtTime(0.0001, t); wg.gain.exponentialRampToValueAtTime(0.12, ti - 0.05); wg.gain.linearRampToValueAtTime(0.0001, ti + 0.02);
+    const rg = gn(d), rf = flt(rg, 'bandpass', 600, 1.2); noi(t, METEOR_FALL + 0.05, rf, bufPink); sw(rf.frequency, t, 300, 2600, METEOR_FALL);
+    rg.gain.setValueAtTime(0.0001, t); rg.gain.exponentialRampToValueAtTime(0.45, ti - 0.03); rg.gain.linearRampToValueAtTime(0.0001, ti + 0.03);
+    // the impact: a deep drop, a wide blast, a mid crunch for small speakers, then debris and a long rumble
+    const sh = shape(d, 2.4);
+    const g = gn(sh), o = osc('sine', 110, ti, 1.3, g); sw(o.frequency, ti, 125, 26, 0.7); ad(g.gain, ti, 1.0, 0.002, 1.1);
+    const b = gn(sh), bf = flt(b, 'lowpass', 3500, 0.7); noi(ti, 1.2, bf); sw(bf.frequency, ti, 4200, 150, 0.8); ad(b.gain, ti, 0.9, 0.001, 0.85);
+    const m = gn(d), mf = flt(m, 'bandpass', 320, 0.9); noi(ti, 0.9, mf); ad(m.gain, ti, 0.8, 0.002, 0.7);
+    const k2 = gn(d), ko = osc('triangle', 210, ti, 0.4, k2); sw(ko.frequency, ti, 260, 120, 0.25); ad(k2.gain, ti, 0.35, 0.002, 0.3); // a body that small speakers can play
+    const c = gn(d), cf = flt(c, 'highpass', 1500); noi(ti, 0.12, cf); ad(c.gain, ti, 0.5, 0.0005, 0.06);
+    grains(d, ti + 0.1, 22, 1.6, 0.25, 0.015, 0.06, 300, 2200, 5, 1);
+    const r = gn(d), rff = flt(r, 'lowpass', 200, 0.6); noi(ti + 0.05, 2.6, rff, bufBrown); ad(r.gain, ti + 0.05, 0.7, 0.15, 2.2);
+    const s2 = gn(d), sf2 = flt(flt(s2, 'highpass', 2500), 'lowpass', 7000); noi(ti + 0.2, 1.6, sf2); ad(s2.gain, ti + 0.2, 0.07, 0.3, 1.2);
+  };
+  S.frostNova = (d, t) => {
+    const lp = flt(d, 'lowpass', 9000);
+    const c = gn(lp), cf = flt(c, 'highpass', 2500); noi(t, 0.08, cf); ad(c.gain, t, 0.55, 0.0005, 0.04); // the crack
+    const th = gn(d), to = osc('sine', 180, t, 0.3, th); sw(to.frequency, t, 260, 90, 0.18); ad(th.gain, t, 0.45, 0.002, 0.2);
+    const w = gn(d), wf = flt(w, 'bandpass', 3000, 1.1); noi(t, 0.9, wf); sw(wf.frequency, t, 5500, 900, 0.8); ad(w.gain, t, 0.3, 0.01, 0.75);
+    for (let i = 0; i < 9; i++) belld(lp, t + 0.01 + Math.pow(rnd(), 1.6) * 0.5, rr(1900, 4200), rr(0.04, 0.08), rr(0.4, 0.9)); // shards
+    grains(lp, t + 0.02, 18, 0.6, 0.16, 0.002, 0.01, 4500, 9000, 4, 1);
+    // the cold that stays: a trembling cluster and an airy hiss
+    const sg = gn(lp), tr = gn(sg, 0.5); osc('sine', 6.5, t, 2.7, gn(tr.gain, 0.5));
+    [2349, 2794, 3520, 4186].forEach((f) => { const o = osc('sine', f, t + 0.15, 2.5, gn(tr, 0.25)); o.detune.value = rr(-12, 12); });
+    sg.gain.setValueAtTime(0.0001, t + 0.15); sg.gain.linearRampToValueAtTime(0.1, t + 0.5); sg.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+    const a = gn(lp), af = flt(a, 'highpass', 6000); noi(t + 0.1, 2.2, af, bufPink); ad(a.gain, t + 0.1, 0.05, 0.4, 1.7);
+  };
+  S.rally = (d, t) => {
+    // A bugle call (G C E G, the last held, a second horn under it) over a squad of boots marching in.
+    const N = [[0, 55, 0.15], [0.19, 60, 0.15], [0.38, 64, 0.15], [0.57, 67, 0.95]];
+    for (let i = 0; i < N.length; i++) { brassNote(d, t + N[i][0], mtof(N[i][1]), N[i][2], 0.26, 1.25); brassNote(d, t + N[i][0], mtof(N[i][1] - 12), N[i][2], 0.08, 0.9); }
+    brassNote(d, t + 0.6, mtof(64), 0.9, 0.11, 1.1);
+    for (let i = 0; i < 10; i++) {
+      const ti = t + 0.3 + i * 0.27 + rr(-0.01, 0.01), v = Math.min(1, 0.35 + i * 0.12) * (i > 7 ? 1 - (i - 7) * 0.28 : 1);
+      const g = gn(d), o = osc('sine', rr(90, 110), ti, 0.14, g); sw(o.frequency, ti, 140, 62, 0.07); ad(g.gain, ti, 0.35 * v, 0.002, 0.09);
+      grains(d, ti, 5, 0.05, 0.3 * v, 0.006, 0.02, 700, 2600, 3, 1); // gravel under several feet
+      if (i % 2 === 0) { const s = gn(d), sf = flt(s, 'bandpass', 1900, 0.9); noi(ti, 0.1, sf); ad(s.gain, ti, 0.12 * v, 0.001, 0.07); } // side drum
+    }
+  };
+  S.spellReady = (d, t) => {
+    const lp = flt(d, 'lowpass', 8000);
+    belld(lp, t, mtof(81), 0.07, 1.2); belld(lp, t + 0.12, mtof(88), 0.05, 1.4);
+    const a = gn(lp), af = flt(a, 'highpass', 5000); noi(t, 0.8, af); ad(a.gain, t, 0.02, 0.1, 0.6);
+  };
+  S.rockslide = (d, t) => {
+    const D = 3.6, sh = shape(d, 1.6);
+    const r = gn(d), rf = flt(r, 'lowpass', 160, 0.7); noi(t, D + 0.5, rf, bufBrown); sw(rf.frequency, t, 90, 300, 1.2);
+    r.gain.setValueAtTime(0.0001, t); r.gain.exponentialRampToValueAtTime(0.9, t + 0.8); r.gain.linearRampToValueAtTime(0.6, t + D * 0.7); r.gain.exponentialRampToValueAtTime(0.0001, t + D + 0.4);
+    const m = gn(d), mf = flt(m, 'bandpass', 380, 1); noi(t, D, mf, bufBrown); ad(m.gain, t + 0.2, 0.9, 0.6, D - 0.8);
+    for (let i = 0; i < 6; i++) boulder(sh, t + 0.3 + Math.pow(i / 6, 1.2) * 2.6 + rr(0, 0.2), rr(0.5, 0.9));
+    grains(d, t + 0.2, 30, D - 0.4, 0.3, 0.01, 0.06, 250, 1600, 4, 0);
+    grains(d, t + 0.4, 18, D - 0.6, 0.14, 0.005, 0.02, 1500, 4000, 5, 0);
+  };
+  S.blizzard = (d, t) => {
+    const D = 4.2, w = gn(d), b1 = flt(w, 'bandpass', 420, 7), b2 = flt(w, 'bandpass', 780, 10), hs = flt(gn(w, 0.25), 'highpass', 3500);
+    const s = noi(t, D + 0.3, gn(b1, 3), bufPink); s.connect(gn(b2, 2.5)); s.connect(hs);
+    sw(b1.frequency, t, 300, 900, D * 0.6); b1.frequency.exponentialRampToValueAtTime(500, t + D);
+    sw(b2.frequency, t, 600, 1500, D * 0.5); b2.frequency.exponentialRampToValueAtTime(800, t + D);
+    w.gain.setValueAtTime(0.0001, t); w.gain.exponentialRampToValueAtTime(0.7, t + D * 0.55); w.gain.exponentialRampToValueAtTime(0.0001, t + D + 0.2);
+    grains(d, t + 1, 20, D - 1.2, 0.06, 0.003, 0.012, 3500, 8000, 3, 0);
+    const l = gn(d), lf = flt(l, 'lowpass', 220); noi(t, D, lf, bufBrown); ad(l.gain, t, 0.35, D * 0.5, D * 0.5);
+  };
+  S.bogfog = (d, t) => {
+    const D = 4.5, env = gn(d), lp = flt(env, 'lowpass', 500, 2);
+    [[55, -7], [55, 6], [82.4, 0], [116.5, 4], [164.8, -3]].forEach((a, i) => { const o = osc(i < 2 ? 'sawtooth' : 'triangle', a[0], t, D + 0.3, gn(lp, i < 2 ? 0.3 : 0.2)); o.detune.value = a[1]; });
+    sw(lp.frequency, t, 200, 900, D * 0.6); lp.frequency.exponentialRampToValueAtTime(300, t + D);
+    env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(0.45, t + D * 0.5); env.gain.exponentialRampToValueAtTime(0.0001, t + D + 0.2);
+    const t1 = t + 0.8, wg = gn(d), wo = osc('sine', 700, t1, D, wg); // a ghostly wail above the drone
+    wo.frequency.setValueAtTime(700, t1); wo.frequency.linearRampToValueAtTime(820, t1 + 1.4); wo.frequency.linearRampToValueAtTime(620, t1 + D - 0.2);
+    osc('sine', 5, t1, D, gn(wo.detune, 30));
+    wg.gain.setValueAtTime(0.0001, t1); wg.gain.linearRampToValueAtTime(0.05, t1 + 1.2); wg.gain.exponentialRampToValueAtTime(0.0001, t1 + D - 0.1);
+    for (let i = 0; i < 9; i++) bubble(d, t + 0.4 + rnd() * (D - 0.6), rr(0.12, 0.3));
+  };
+  S.lavaSurge = (d, t) => {
+    const D = 3.8, sh = shape(d, 2.2);
+    const r = gn(sh), rf = flt(r, 'lowpass', 200, 1); noi(t, D + 0.4, rf, bufBrown); sw(rf.frequency, t, 100, 420, D * 0.4); rf.frequency.exponentialRampToValueAtTime(140, t + D);
+    r.gain.setValueAtTime(0.0001, t); r.gain.exponentialRampToValueAtTime(1.0, t + 1.0); r.gain.exponentialRampToValueAtTime(0.0001, t + D + 0.3);
+    const gr = gn(d), gl = flt(gr, 'lowpass', 380, 1.5), o = osc('sawtooth', 46, t, D, gl); sw(o.frequency, t, 38, 58, D * 0.4); ad(gr.gain, t, 0.3, 0.9, D - 1);
+    const h = gn(d), hf = flt(h, 'highpass', 4500); noi(t + 0.3, D, hf); ad(h.gain, t + 0.3, 0.07, 1.0, D - 1.2);
+    grains(d, t + 0.3, 40, D - 0.5, 0.12, 0.002, 0.008, 3000, 8000, 2, 0);
+    for (let i = 0; i < 7; i++) blorp(d, t + 0.3 + rnd() * (D - 0.5), rr(0.2, 0.45));
+  };
+  S.sandstorm = (d, t) => {
+    const D = 4.2, w = gn(d), b = flt(w, 'bandpass', 1200, 0.8), h = flt(gn(w, 0.6), 'highpass', 4000);
+    noi(t, D + 0.3, gn(b, 1.4), bufPink); noi(t, D + 0.3, h);
+    sw(b.frequency, t, 500, 2200, D * 0.55); b.frequency.exponentialRampToValueAtTime(900, t + D);
+    w.gain.setValueAtTime(0.0001, t); w.gain.exponentialRampToValueAtTime(0.5, t + D * 0.5); w.gain.exponentialRampToValueAtTime(0.0001, t + D + 0.2);
+    grains(d, t + 0.5, 50, D - 0.7, 0.1, 0.002, 0.006, 2500, 7000, 2, 0);
+    const l = gn(d), lf = flt(l, 'lowpass', 300); noi(t, D, lf, bufBrown); ad(l.gain, t, 0.3, D * 0.45, D * 0.5);
+  };
+  S.eventEnd = (d, t) => {
+    const w = gn(d), wf = flt(w, 'bandpass', 1200, 1); noi(t, 1.6, wf, bufPink); sw(wf.frequency, t, 1800, 300, 1.4); ad(w.gain, t, 0.25, 0.15, 1.3);
+    softChord(d, t + 0.1, [50, 57, 62, 66], 2.0, 0.12);
+    const lp = flt(d, 'lowpass', 6000); belld(lp, t + 0.3, mtof(78), 0.04, 1.6); belld(lp, t + 0.55, mtof(81), 0.035, 1.8);
+  };
+
+  // Boss entrance stings: short and different for each boss, played the first time one is seen.
+  function stingHit(d, t, vel) { // a drum and a dull thud under each stab
+    drumHit(d, t, vel, 50);
+    const m = gn(d), mf = flt(m, 'bandpass', 300, 1); noi(t, 0.25, mf); ad(m.gain, t, vel * 0.45, 0.002, 0.18);
+  }
+  const STING = {
+    giant: (d, t) => { // DUN... DUN: two low brass stabs, the second a semitone down, bones rattling after
+      [38, 45, 50].forEach((n) => brassNote(d, t, mtof(n), 0.32, 0.14, 0.9)); stingHit(d, t, 0.7);
+      [37, 44, 49].forEach((n) => brassNote(d, t + 0.5, mtof(n), 1.1, 0.16, 0.95)); stingHit(d, t + 0.5, 0.95);
+      grains(d, t + 0.6, 10, 0.8, 0.3, 0.012, 0.04, 600, 1900, 11, 1);
+    },
+    ogre: (d, t) => { // slow and heavy: two drum blows and a distorted brass chord sagging down
+      stingHit(d, t, 0.7); stingHit(d, t + 0.55, 1);
+      const sh = shape(d, 3), os = [];
+      [36, 43].forEach((n) => os.push(hornNote(sh, t + 0.55, mtof(n), 1.3, 0.17, 0.8)));
+      for (let j = 0; j < os.length; j++) for (let i = 0; i < os[j].length; i++) { const fr = os[j][i][0].frequency, b = os[j][i][1]; fr.setValueAtTime(b, t + 0.9); fr.exponentialRampToValueAtTime(b * 0.94, t + 1.8); }
+    },
+    jotun: (d, t) => { // cold: a cluster of high bells over a low brass swell, frost hissing
+      const lp = flt(d, 'lowpass', 9000);
+      [86, 89, 93, 98].forEach((n, i) => belld(lp, t + i * 0.07, mtof(n), 0.07, 1.6));
+      [38, 45].forEach((n) => brassNote(d, t + 0.1, mtof(n), 1.3, 0.13, 0.85)); stingHit(d, t + 0.1, 0.8);
+      const a = gn(lp), af = flt(a, 'highpass', 5500); noi(t, 1.8, af, bufPink); ad(a.gain, t, 0.06, 0.3, 1.4);
+    },
+    queen: (d, t) => { // skittering: a tremolo that climbs, then a screech and a hit
+      const lp = flt(d, 'lowpass', 5000);
+      for (let i = 0; i < 16; i++) { const ti = t + i * 0.055, f = mtof(62 + Math.floor(i / 3)), g = gn(lp), f2 = flt(g, 'lowpass', f * 5, 2); osc('sawtooth', f, ti, 0.08, f2); ad(g.gain, ti, 0.07 + i * 0.006, 0.003, 0.06); }
+      const ts = t + 0.9, bp = flt(lp, 'bandpass', 3200, 3);
+      for (let i = 0; i < 2; i++) { const ti = ts + i * 0.07, g = gn(bp), o = osc('square', 3600, ti, 0.1, g); sw(o.frequency, ti, 4000, 2400, 0.08); ad(g.gain, ti, 0.12, 0.004, 0.07); }
+      stingHit(d, ts, 0.9); [37, 44].forEach((n) => brassNote(d, ts, mtof(n), 0.8, 0.1, 0.9));
+    },
+    colossus: (d, t) => { // the forge: three anvil strikes, then a distorted low brass blast
+      const lp = flt(d, 'lowpass', 8000), R = [1, 2.71, 4.13];
+      for (let k = 0; k < 3; k++) { const tk = t + k * 0.22; for (let i = 0; i < 3; i++) { const g = gn(lp); osc('sine', 880 * R[i] * rr(0.995, 1.005), tk, 0.6, g); ad(g.gain, tk, (0.14 + k * 0.03) / (1 + i), 0.001, 0.45 / (1 + i * 0.5)); } }
+      const tb = t + 0.66, sh = shape(d, 3);
+      [26, 33, 38].forEach((n) => brassNote(sh, tb, mtof(n + 12), 1.0, 0.09, 0.8)); stingHit(d, tb, 1);
+    },
+    king: (d, t) => { // a minor reed fanfare and a gong
+      const notes = [[0, 62, 0.16], [0.18, 65, 0.16], [0.36, 69, 0.7], [1.08, 68, 0.6]];
+      for (let i = 0; i < notes.length; i++) {
+        const n = notes[i], ti = t + n[0], f = mtof(n[1]), env = gn(d), pk = flt(flt(env, 'lowpass', 2800), 'peaking', 1150, 1.4); pk.gain.value = 8;
+        osc('square', f, ti, n[2] + 0.2, gn(pk, 0.4)); env.gain.setValueAtTime(0.0001, ti); env.gain.linearRampToValueAtTime(0.18, ti + 0.03); env.gain.setTargetAtTime(0.0001, ti + n[2], 0.06);
+      }
+      const R = [1, 1.47, 2.09, 2.56], tg = t + 0.36;
+      for (let i = 0; i < 4; i++) { const g = gn(d); osc('sine', 98 * R[i], tg, 2.4, g); g.gain.setValueAtTime(0.0001, tg); g.gain.linearRampToValueAtTime(0.2 / (1 + i), tg + 0.04 + i * 0.05); g.gain.exponentialRampToValueAtTime(0.0001, tg + 2.3 - i * 0.4); }
+      stingHit(d, tg, 0.8);
+    },
+  };
+  let stingKey = 'giant';
+  S.bossSting = (d, t) => { (STING[stingKey] || STING.giant)(d, t); };
+
   //  name: [fn, min gap s, reverb send, priority 0-3, duration s, gain, max voices of this kind]
   const DEF = Object.assign(Object.create(null), {
     bow: [S.bow, 0.05, 0.18, 1, 0.3, 0.55, 4],
@@ -5832,11 +6011,31 @@ const AU = (function () {
     chainBoom: [S.chainBoom, 0.06, 0.4, 1, 1.0, 0.8, 3],
     burn: [S.burn, 0.1, 0.25, 0, 0.6, 0.55, 3],
     buyout: [S.buyout, 0.5, 0.5, 2, 1.6, 0.7, 1],
+    branch: [S.branch, 0.4, 0.5, 3, 2.2, 0.8, 1],
+    meteor: [S.meteor, 0.25, 0.5, 3, 3.9, 0.95, 2],
+    frostNova: [S.frostNova, 0.25, 0.55, 3, 2.8, 0.75, 2],
+    rally: [S.rally, 0.5, 0.45, 3, 3.4, 1.0, 1],
+    spellReady: [S.spellReady, 2.0, 0.4, 2, 1.5, 0.6, 1],
+    rockslide: [S.rockslide, 5, 0.5, 3, 4.1, 0.85, 1],
+    blizzard: [S.blizzard, 5, 0.5, 3, 4.6, 0.9, 1],
+    bogfog: [S.bogfog, 5, 0.6, 3, 5.0, 1.0, 1],
+    lavaSurge: [S.lavaSurge, 5, 0.5, 3, 4.3, 0.85, 1],
+    sandstorm: [S.sandstorm, 5, 0.45, 3, 4.6, 0.75, 1],
+    eventEnd: [S.eventEnd, 4, 0.5, 2, 2.2, 0.6, 1],
+    bossSting: [S.bossSting, 3, 0.55, 3, 2.6, 1.15, 1],
   });
   // Kinds that share a voice budget, and how hard a sound ducks the music and crowd.
   const FAM = { cannon: 'boom', explode: 'boom', chainBoom: 'boom', burn: 'fire', ignite: 'fire', ratSqueal: 'die', boneRattle: 'die', squelch: 'die', batScreech: 'die' };
   const FAMCAP = LOW ? { boom: 4, fire: 3, die: 5 } : { boom: 5, fire: 4, die: 7 };
-  const DUCK = { cannon: 0.3, explode: 0.4, chainBoom: 0.3, zap: 0.2, roar: 0.5, bossStep: 0.35, bossDie: 0.8, horn: 0.35, hornBoss: 0.5, horde: 0.6, crumble: 0.7, beaconOut: 0.8, rise: 0.5 };
+  const DUCK = { cannon: 0.3, explode: 0.4, chainBoom: 0.3, zap: 0.2, roar: 0.5, bossStep: 0.35, bossDie: 0.8, horn: 0.35, hornBoss: 0.5, horde: 0.6, crumble: 0.7, beaconOut: 0.8, rise: 0.5,
+    branch: 0.4, frostNova: 0.3, rally: 0.3, rockslide: 0.4, blizzard: 0.3, bogfog: 0.3, lavaSurge: 0.4, sandstorm: 0.3, bossSting: 0.6 };
+  // Ducks that land later than the call (the meteor hits after its whistle).
+  const DUCK_LATE = { meteor: [METEOR_FALL, 0.8] };
+  // Exact gaps, no jitter: these are one per event, and the gap is what stops a double start.
+  const NOJIT = { rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1 };
+  // UI sounds go to their own bus so they still play while the game is paused.
+  const UIS = { uiHover: 1, uiClick: 1, uiDeny: 1 };
+  const lateDuck = [];
   // Total live voices allowed for each priority (a priority-3 sound may use all of them).
   // A sound that cuts off another (the horde alarm replaces the ordinary wave horn).
   const SUPER = { horde: ['horn'] };
@@ -5874,16 +6073,17 @@ const AU = (function () {
     if (live >= CAP[pri]) { if (lo < 0 || act[lo].end <= now || pri < 2) { ST.cap++; return; } steal(act[lo], now); live--; }
     const busy = live / CAP[3];
     // Randomised spacing and density-aware level stop the "machine gun" effect.
-    lastAt[name] = now; gapOf[name] = df[1] * rr(0.75, 1.5) * (1 + 0.8 * busy);
+    lastAt[name] = now; gapOf[name] = NOJIT[name] ? df[1] : df[1] * rr(0.75, 1.5) * (1 + 0.8 * busy);
     g *= 1 / Math.sqrt(1 + 0.45 * nk + 0.15 * nf);
     const t = now + 0.006 + rnd() * (0.014 + 0.035 * busy);
-    const v = voice(pan, cl(g, 0, 1.5) * df[5], df[2], nSfx);
+    const v = voice(pan, cl(g, 0, 1.5) * df[5], df[2], UIS[name] ? nUi : nSfx);
     V = v;
     try { df[0](v.out, t, cl(+p || 0, 0, 1)); } catch (e) { if (!ST.err) ST.err = name + ': ' + e.message; }
     finishVoice(v);
     act.push({ end: t + df[4], v: v, name: name, fam: fam, pri: pri, t0: now });
     ST.played++; ST.names[name] = (ST.names[name] || 0) + 1; if (act.length > ST.peak) ST.peak = act.length;
     if (DUCK[name]) duckE = Math.max(duckE, DUCK[name] * cl(g, 0, 1));
+    if (DUCK_LATE[name] && lateDuck.length < 8) lateDuck.push([t + DUCK_LATE[name][0], DUCK_LATE[name][1] * cl(g, 0, 1)]);
     const sup = SUPER[name];
     if (sup) for (let i = 0; i < act.length - 1; i++) if (act[i].end > now && sup.indexOf(act[i].name) >= 0) steal(act[i], now);
   }
@@ -5897,7 +6097,7 @@ const AU = (function () {
     const roarG = gn(bed.fireG, 0.32), roarF = flt(flt(roarG, 'highpass', 75, 0.5), 'lowpass', 280, 0.5); loopSrc(bufBrown, roarF, 1.0);
     loopOsc('sine', 6.7, gn(roarG.gain, 0.1)); loopOsc('sine', 2.3, gn(roarG.gain, 0.07));
     bed.popBus = gn(bed.fireG, 2.0); bed.popBus.connect(gn(nRevIn, 0.1));
-    bed.droneG = gn(nMusic, 0); bed.droneG.connect(gn(nRevIn, 0.3));
+    bed.droneG = gn(PZ.pad, 0); bed.droneG.connect(gn(nRevIn, 0.3));
     bed.droneLP = flt(bed.droneG, 'lowpass', 300, 0.6);
     const dv = gn(null, 4); loopOsc('sine', 4.9, dv);
     [[73.42, -5, 0.5], [73.42, 6, 0.5], [36.71, 0, 0.3], [110.0, 3, 0.12]].forEach((a) => { const o = loopOsc('sawtooth', a[0], gn(bed.droneLP, a[2])); o.detune.value = a[1]; dv.connect(o.detune); });
@@ -6016,7 +6216,7 @@ const AU = (function () {
     colossus: { perc: 'anvil', lead: 'dist', bpm: 0, m: [[0, 26, 8], [8, 26, 4], [12, 29, 4], [16, 32, 8], [24, 31, 8]] },
     king: { perc: 'ritual', lead: 'reed', bpm: -4, m: [[0, 62, 4], [4, 63, 4], [8, 65, 6], [14, 63, 2], [16, 62, 6], [22, 60, 2], [24, 62, 8]] },
   };
-  const SEQ = { next: 0, step: 0, bar: 0, phrase: 0, bpm: 80, I: 0, tI: 0, lay: {}, pat: 0, ost: 0, motif: -1, rest: false, boss: null, bossKey: null, rage: false, horde: 0, hordeT: 0, hordeWas: false, heard: typeof WeakSet === 'function' ? new WeakSet() : null, low: 0, lastNow: 0, scanAt: 0, choir: null };
+  const SEQ = { next: 0, step: 0, bar: 0, phrase: 0, bpm: 80, I: 0, tI: 0, lay: {}, pat: 0, ost: 0, motif: -1, rest: false, boss: null, bossKey: null, rage: false, horde: 0, hordeT: 0, hordeWas: false, heard: typeof WeakSet === 'function' ? new WeakSet() : null, seenBoss: typeof WeakSet === 'function' ? new WeakSet() : null, stingTill: 0, low: 0, lastNow: 0, scanAt: 0, choir: null };
 
   function sv(pan, send) { const v = voice(pan, 1, send, nSeq); V = v; ST.seq++; return v; }
   function drum(t, vel, f) {
@@ -6158,7 +6358,7 @@ const AU = (function () {
   // ---- Crowd bed: shuffling feet, murmur and skittering that follow the horde on the road. ----
   const CR = { pan: null, src: null, lvl: 0, tl: 0, p: 0, big: 0, swarm: 0, acc: 0, idle: 0, pick: [], ends: [] };
   function startCrowd() {
-    nCrowd = gn(nCrowdDuck, 0); nCrowd.connect(gn(nRevIn, 0.15));
+    nCrowd = gn(nCrowdDuck, 0); // its reverb send is taken after the pause gain, in build()
     CR.pan = panNode(0, nCrowd);
   }
   // The bed's sources only run while monsters are on the road.
@@ -6199,6 +6399,181 @@ const AU = (function () {
     CR.ends.push(t + D + 0.05); ST.crowd++;
   }
 
+  // ---- Soundscapes: a looping bed plus sparse random details, faded in and out as one unit. ----
+  // Each land has one under the music; each land event (Forge's G.event) has one that swells while it lasts.
+  // def: { lvl, rev, bed(g) -> [sources], ev: [[fn(d, t), mean seconds between, gain, pan spread]] }
+  function scapeOn(def, bus, tc) {
+    const now = ctx.currentTime, g = gn(bus, 0);
+    g.connect(gn(nRevIn, def.rev === undefined ? 0.3 : def.rev)); // send after the fade, so a fading scape fades its echo too
+    g.gain.setValueAtTime(0, now); g.gain.setTargetAtTime(def.lvl, now, tc);
+    let nodes = [];
+    try { nodes = def.bed ? def.bed(g) || [] : []; } catch (e) { if (!ST.err) ST.err = 'scape: ' + e.message; }
+    const ev = def.ev || [], next = [];
+    for (let i = 0; i < ev.length; i++) next.push(now + rr(0.2, 1) * ev[i][1]);
+    return { def: def, g: g, nodes: nodes, next: next };
+  }
+  function scapeOff(s, tc) {
+    if (!s) return;
+    const now = ctx.currentTime, g = s.g;
+    g.gain.setTargetAtTime(0, now, tc);
+    const end = now + tc * 7;
+    for (let i = 0; i < s.nodes.length; i++) { try { s.nodes[i].stop(end); } catch (e) {} }
+    if (s.nodes.length) s.nodes[0].onended = () => { try { g.disconnect(); } catch (e) {} };
+    else setTimeout(() => { try { g.disconnect(); } catch (e) {} }, tc * 7000);
+  }
+  function scapeTick(s, now) {
+    const E = s.def.ev; if (!E) return;
+    for (let i = 0; i < E.length; i++) {
+      if (now < s.next[i]) continue;
+      s.next[i] = now + E[i][1] * rr(0.35, 1.65);
+      if (LOW && E[i][1] < 2 && rnd() < 0.4) continue; // phones: thinner fast layers
+      const sp = E[i][3] === undefined ? 0.8 : E[i][3], v = voice(rr(-sp, sp), E[i][2] || 1, 0, s.g); V = v;
+      try { E[i][0](v.out, now + rr(0.01, 0.1)); } catch (e) { if (!ST.err) ST.err = 'scape ev: ' + e.message; }
+      finishVoice(v); ST.amb++;
+    }
+  }
+
+  // Small building blocks for the land details.
+  function caw(d, t, k) { // one crow call: a nasal saw with two formants, pitch bends down
+    const g = gn(d), f1 = flt(g, 'bandpass', 1300 * k, 3), f2 = flt(gn(g, 0.6), 'bandpass', 2300 * k, 4), src = gn(null, 1);
+    src.connect(f1); src.connect(f2);
+    const o = osc('sawtooth', 430 * k, t, 0.3, src); o.frequency.setValueAtTime(400 * k, t); o.frequency.linearRampToValueAtTime(470 * k, t + 0.05); o.frequency.exponentialRampToValueAtTime(330 * k, t + 0.26);
+    osc('sine', rr(28, 40), t, 0.3, gn(o.frequency, 18 * k)); // throaty rasp
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.3, t + 0.03); g.gain.setValueAtTime(0.3, t + 0.16); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+  }
+  function crows(d, t) { const n = 2 + ((rnd() * 3) | 0), k = rr(0.85, 1.15); for (let i = 0; i < n; i++) caw(d, t + i * rr(0.32, 0.48), k * rr(0.97, 1.03)); }
+  function pebbles(d, t) { grains(d, t, 6 + ((rnd() * 6) | 0), rr(0.6, 1.4), 0.35, 0.006, 0.03, 500, 2200, 6, 1); }
+  function ember(d, t) { grains(d, t, 3 + ((rnd() * 4) | 0), rr(0.2, 0.6), 0.4, 0.003, 0.012, 1500, 5000, 3, 0); }
+  function creak(d, t) { // ice under strain: a slow click-train through a resonance
+    const D = rr(0.5, 1.3), g = gn(d), bp = flt(g, 'bandpass', rr(500, 900), 5), lp = flt(bp, 'lowpass', 1800);
+    const o = osc('sawtooth', rr(25, 40), t, D + 0.05, lp); o.frequency.setValueAtTime(rr(20, 35), t); o.frequency.linearRampToValueAtTime(rr(45, 90), t + D * 0.6); o.frequency.linearRampToValueAtTime(rr(25, 40), t + D);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.45, t + D * 0.3); g.gain.linearRampToValueAtTime(0.3, t + D * 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + D);
+  }
+  function icePing(d, t) { // the "pew" a frozen lake makes when the ice shifts
+    for (let i = 0; i < 2; i++) {
+      const ti = t + i * rr(0.18, 0.3), g = gn(d), o = osc('sine', 3000, ti, 0.4, g), f0 = rr(2400, 3400);
+      o.frequency.setValueAtTime(f0, ti); o.frequency.exponentialRampToValueAtTime(f0 * 0.14, ti + 0.3); ad(g.gain, ti, i ? 0.06 : 0.12, 0.002, 0.3);
+    }
+  }
+  function tinkle(d, t) { for (let i = 0; i < 4; i++) belld(d, t + rnd() * 0.5, rr(2800, 4800), rr(0.02, 0.05), rr(0.3, 0.6)); }
+  function frog(d, t) {
+    const k = rr(0.8, 1.25), n = rnd() < 0.3 ? 1 : 2 + ((rnd() * 2) | 0), trill = rnd() < 0.25;
+    for (let i = 0; i < n; i++) {
+      const ti = t + i * rr(0.15, 0.2), D = trill ? rr(0.4, 0.7) : rr(0.07, 0.12), g = gn(d), am = gn(g, 0.5);
+      const b1 = flt(am, 'bandpass', 700 * k, 4), b2 = flt(gn(am, 0.5), 'bandpass', 1500 * k, 6), src = gn(null, 1); src.connect(b1); src.connect(b2);
+      osc('sawtooth', rr(170, 230) * k, ti, D + 0.05, src); osc('square', rr(30, 45), ti, D + 0.05, gn(am.gain, 0.5));
+      g.gain.setValueAtTime(0.0001, ti); g.gain.linearRampToValueAtTime(0.4, ti + 0.012); g.gain.setValueAtTime(0.4, ti + D * 0.7); g.gain.exponentialRampToValueAtTime(0.0001, ti + D);
+      if (trill) break;
+    }
+  }
+  function cricket(d, t) { // one chirp: a few quick pulses of a high tone
+    const f = rr(4000, 4700), n = 3 + ((rnd() * 2) | 0), g = gn(d); osc('sine', f, t, n * 0.026 + 0.05, g);
+    g.gain.setValueAtTime(0, t);
+    for (let i = 0; i < n; i++) { const ti = t + i * 0.026; g.gain.setValueAtTime(0.0001, ti); g.gain.linearRampToValueAtTime(0.12, ti + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, ti + 0.017); }
+  }
+  function drip(d, t) { const f = rr(800, 1300), g = gn(d), o = osc('sine', f, t, 0.12, g); sw(o.frequency, t, f, f * 1.9, 0.035); ad(g.gain, t, 0.35, 0.002, 0.07); }
+  function bubble(d, t, vel) { const f = rr(170, 420), g = gn(d), o = osc('sine', f, t, 0.12, g); sw(o.frequency, t, f, f * rr(1.6, 2.4), 0.06); ad(g.gain, t, vel, 0.004, 0.07); }
+  function bubbles(d, t) { const n = 3 + ((rnd() * 5) | 0); let ti = t; for (let i = 0; i < n; i++) { bubble(d, ti, rr(0.15, 0.35)); ti += rr(0.05, 0.2); } }
+  function blorp(d, t, vel) { // a fat lava bubble bursting
+    const f = rr(170, 320), g = gn(d), o = osc('sine', f, t, 0.2, g); sw(o.frequency, t, f * 1.4, f * 0.5, 0.13); ad(g.gain, t, vel, 0.004, 0.13);
+    const n = gn(d), nf = flt(n, 'lowpass', 1000); noi(t + 0.02, 0.08, nf); ad(n.gain, t + 0.02, vel * 0.6, 0.002, 0.05);
+  }
+  function lavaPops(d, t) { const n = 1 + ((rnd() * 3) | 0); for (let i = 0; i < n; i++) blorp(d, t + rnd() * 0.6, rr(0.25, 0.5)); }
+  function steam(d, t) { // a vent hissing for a moment
+    const D = rr(0.9, 2.2), g = gn(d), f = flt(flt(g, 'bandpass', rr(2600, 4200), 1.2), 'lowpass', 8000); noi(t, D + 0.1, f);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.25, t + D * 0.25); g.gain.exponentialRampToValueAtTime(0.0001, t + D);
+  }
+  function rustle(d, t) { // palm fronds in a gust
+    const D = rr(1.2, 2.6), g = gn(d); grains(g, t, (20 * D) | 0, D, 0.25, 0.004, 0.02, 2200, 6500, 2, 0);
+    const s = gn(d), sf = flt(s, 'bandpass', 3800, 0.8); noi(t, D, sf, bufPink);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(1, t + D * 0.4); g.gain.linearRampToValueAtTime(0.0001, t + D);
+    s.gain.setValueAtTime(0.0001, t); s.gain.linearRampToValueAtTime(0.12, t + D * 0.4); s.gain.linearRampToValueAtTime(0.0001, t + D);
+  }
+  function chirps(d, t) { // a small bird far off
+    const n = 2 + ((rnd() * 4) | 0), f0 = rr(2800, 3800);
+    for (let i = 0; i < n; i++) { const ti = t + i * rr(0.09, 0.16), g = gn(d), o = osc('sine', f0, ti, 0.08, g); o.frequency.setValueAtTime(f0 * 0.85, ti); o.frequency.exponentialRampToValueAtTime(f0 * rr(1.1, 1.3), ti + 0.05); ad(g.gain, ti, 0.1, 0.005, 0.05); }
+  }
+  function hawk(d, t) { // a long falling cry, very distant
+    const D = rr(0.8, 1.2), g = gn(d), o = osc('sine', 2600, t, D, g), f0 = rr(2300, 2800);
+    o.frequency.setValueAtTime(f0 * 0.9, t); o.frequency.linearRampToValueAtTime(f0, t + 0.1); o.frequency.exponentialRampToValueAtTime(f0 * 0.6, t + D);
+    osc('sine', 9, t, D, gn(o.detune, 40));
+    const h = osc('sine', f0 * 2, t, D, gn(g, 0.25)); h.frequency.setValueAtTime(f0 * 1.8, t); h.frequency.exponentialRampToValueAtTime(f0 * 1.2, t + D);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.09, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + D);
+  }
+  function boulder(d, t, vel) {
+    const k = rr(0.7, 1.3), g = gn(d), o = osc('sine', 90 * k, t, 0.4, g); sw(o.frequency, t, 120 * k, 45 * k, 0.2); ad(g.gain, t, vel, 0.003, 0.3);
+    const c = gn(d), cf = flt(c, 'bandpass', 800 * k, 1.4); noi(t, 0.16, cf); ad(c.gain, t, vel * 0.7, 0.001, 0.1);
+  }
+
+  // Loop helper for beds: a noise source through a filter, its level and pitch wandering on slow LFOs.
+  function nbed(g, buf, type, f, q, lvl, lfoHz, lfoAmt, fHz, fAmt) {
+    const m = gn(g, lvl), b = flt(m, type, f, q), out = [loopSrc(buf, b, 1.0)];
+    if (lfoHz) out.push(loopOsc('sine', lfoHz * rr(0.85, 1.15), gn(m.gain, lvl * lfoAmt)));
+    if (fHz) out.push(loopOsc('sine', fHz * rr(0.85, 1.15), gn(b.frequency, fAmt)));
+    return out;
+  }
+  function fogDrone(g) { // low and uneasy: a slow beating cluster under a soft filter that breathes
+    const lp = flt(g, 'lowpass', 420, 2.5), out = [];
+    [[55, -8, 0.22], [55, 7, 0.22], [82.4, 3, 0.16], [116.5, 0, 0.1], [164.8, -4, 0.08]].forEach((a, i) => { const o = loopOsc(i < 2 ? 'sawtooth' : 'triangle', a[0], gn(lp, a[2])); o.detune.value = a[1]; out.push(o); });
+    out.push(loopOsc('sine', 0.08, gn(lp.frequency, 220)));
+    return out;
+  }
+  const LAND = {
+    ashen: { lvl: 0.67, rev: 0.35, // wind moaning through a dead pass, crows, trickling scree, sparks off the beacon
+      bed: (g) => nbed(g, bufPink, 'bandpass', 330, 7, 0.55, 0.07, 0.8, 0.05, 90).concat(nbed(g, bufBrown, 'lowpass', 260, 0.7, 0.35, 0.11, 0.5)),
+      ev: [[crows, 16, 0.45, 0.9], [pebbles, 11, 0.35], [ember, 2.5, 0.5, 0.3]] },
+    frost: { lvl: 0.5, rev: 0.45, // thin icy whistle, creaking ice, the frozen lake's ping, crystals
+      bed: (g) => nbed(g, bufPink, 'bandpass', 1700, 9, 0.45, 0.09, 0.8, 0.06, 450).concat(nbed(g, bufWhite, 'highpass', 5200, 0.7, 0.05, 0.13, 0.7)),
+      ev: [[creak, 9, 0.6], [icePing, 17, 0.5], [tinkle, 8, 0.45]] },
+    fen: { lvl: 0.75, rev: 0.3, // a wet murmur, frogs, crickets, drips and bubbles
+      bed: (g) => nbed(g, bufBrown, 'bandpass', 300, 1.1, 0.45, 0.06, 0.4),
+      ev: [[frog, 3.2, 0.45], [cricket, 0.9, 0.3], [drip, 2.8, 0.4], [bubbles, 7, 0.5, 0.6]] },
+    ember: { lvl: 0.6, rev: 0.3, // lava rumbling, vents hissing, lava popping, rock crackling
+      bed: (g) => nbed(g, bufBrown, 'lowpass', 170, 0.8, 0.32, 0.17, 0.5).concat(nbed(g, bufBrown, 'bandpass', 280, 1.4, 0.26, 0.23, 0.6), nbed(g, bufWhite, 'highpass', 3500, 0.7, 0.03, 0.08, 0.9)),
+      ev: [[lavaPops, 2.6, 0.55], [steam, 9, 0.6], [ember, 3, 0.6, 0.6]] },
+    dunes: { lvl: 0.48, rev: 0.25, // dry wind with sand in it, palms rustling, birds far away
+      bed: (g) => nbed(g, bufPink, 'bandpass', 1100, 0.9, 0.25, 0.09, 0.8, 0.05, 300).concat(nbed(g, bufWhite, 'highpass', 5500, 0.7, 0.05, 0.09, 0.8)),
+      ev: [[rustle, 6, 0.5], [chirps, 9, 0.5], [hawk, 24, 0.6]] },
+  };
+  // The general wind bed's colour per land: [filter multiplier, whistle multiplier].
+  const WINDK = { ashen: [1, 1], frost: [1.3, 1.7], fen: [0.75, 0.5], ember: [0.85, 0.7], dunes: [1.45, 0.8] };
+  const WIND_LVL = 0.42;
+
+  // Land events: a swell under the one-shot that starts them.
+  const EVB = {
+    rockslide: { lvl: 0.66, rev: 0.4, bed: (g) => nbed(g, bufBrown, 'lowpass', 150, 0.8, 0.9, 0.3, 0.6).concat(nbed(g, bufBrown, 'bandpass', 360, 1.2, 0.6, 0.45, 0.7)),
+      ev: [[pebbles, 0.7, 0.8], [(d, t) => boulder(d, t, rr(0.3, 0.6)), 2.2, 0.7]] },
+    blizzard: { lvl: 0.65, rev: 0.4, bed: (g) => nbed(g, bufPink, 'bandpass', 520, 6, 0.9, 0.14, 0.7, 0.09, 260).concat(nbed(g, bufPink, 'bandpass', 950, 9, 0.6, 0.11, 0.8, 0.07, 400), nbed(g, bufWhite, 'highpass', 4000, 0.7, 0.07, 0.2, 0.8)),
+      ev: [[tinkle, 3, 0.4]] },
+    bogfog: { lvl: 0.7, rev: 0.6, bed: (g) => fogDrone(g), ev: [[bubbles, 1.6, 0.7, 0.7], [drip, 2.2, 0.4]] },
+    lavaSurge: { lvl: 0.46, rev: 0.35, bed: (g) => nbed(g, bufBrown, 'lowpass', 220, 1, 1.1, 0.25, 0.5).concat(nbed(g, bufWhite, 'highpass', 3800, 0.7, 0.08, 0.4, 0.9)),
+      ev: [[lavaPops, 0.8, 0.7], [steam, 3.5, 0.6], [ember, 1.2, 0.6]] },
+    sandstorm: { lvl: 0.35, rev: 0.3, bed: (g) => nbed(g, bufPink, 'bandpass', 1200, 0.8, 0.7, 0.16, 0.6, 0.08, 500).concat(nbed(g, bufWhite, 'highpass', 3800, 0.7, 0.14, 0.21, 0.6)),
+      ev: [[(d, t) => grains(d, t, 30, 1.2, 0.2, 0.002, 0.006, 2500, 7000, 2, 0), 0.9, 0.6]] },
+  };
+
+  // Which land and event are playing now.
+  const PAD_LVL = 1.5; // calm pads, a little above the wind
+  const LS = { key: null, land: null, ev: null, evKind: null };
+  function scapes(now, paused) {
+    if (typeof G === 'undefined' || !G) return;
+    const key = G.B && G.B.bio && typeof G.B.bio.key === 'string' ? G.B.bio.key : null;
+    if (key !== LS.key) { // crossfade the land beds over a few seconds
+      LS.key = key; scapeOff(LS.land, 1.3); LS.land = key && LAND[key] ? scapeOn(LAND[key], nLand, 1.5) : null;
+    }
+    const ek = G.event && typeof G.event.kind === 'string' ? G.event.kind : null;
+    if (ek !== LS.evKind) {
+      const was = LS.evKind; LS.evKind = ek;
+      scapeOff(LS.ev, ek ? 0.5 : 1.0); LS.ev = null;
+      if (ek && EVB[ek]) {
+        LS.ev = scapeOn(EVB[ek], nEvt, 1.6);
+        // The game calls sfx(kind) when an event starts; this backs it up, and the gap rule stops a double.
+        if (G.phase === 'play' && !paused) play(ek, 0, 0.9, 0);
+      } else if (!ek && was && G.phase === 'play' && !paused) play('eventEnd', 0, 1, 0);
+    }
+    if (!paused && !api.muted) { if (LS.land) scapeTick(LS.land, now); if (LS.ev) scapeTick(LS.ev, now); }
+  }
+
   // ---- Reading the battlefield (about 8 times a second). ----
   // Same pan and distance law as sfx() in 90-main, for sounds the audio plays on its own.
   function playAt(name, x, z, gain) {
@@ -6229,20 +6604,24 @@ const AU = (function () {
     const dens = 1 - Math.exp(-n / 32), flood = cl((n - 60) / 120, 0, 1), prox = n ? cl((maxP - 0.45) / 0.5, 0, 1) * (0.6 + 0.4 * cl(near / 6, 0, 1)) : 0;
     let I = 0.55 * dens + 0.25 * flood + 0.4 * prox + (n ? 0.25 : 0.12) * low;
     if (boss) I = Math.max(I, 0.62) + 0.1;
+    if (G.event) I += 0.08;
+    // A boss's first appearance: its sting, and its theme waits for the sting to finish.
+    const now = ctx.currentTime;
+    if (boss && live && SEQ.seenBoss && !SEQ.seenBoss.has(boss)) { SEQ.seenBoss.add(boss); stingKey = boss.type; playAt('bossSting', boss.x, boss.z, 1.1); SEQ.stingTill = now + 1.9; }
     const horde = live && G.horde === true;
     if (horde && !SEQ.hordeWas && G.B && G.B.cave) playAt('horde', G.B.cave.x, G.B.cave.z, 1.1);
     SEQ.hordeWas = horde;
     if (horde) I = Math.max(I, 0.8);
     I = Math.max(I, cur.tension * 0.6);
     SEQ.tI = live ? cl(I, 0, 1) : 0;
-    SEQ.low = low; SEQ.bossKey = live && boss ? boss.type : null; SEQ.rage = !!(boss && boss.rage); SEQ.hordeT = horde ? 1 : 0;
+    SEQ.low = low; SEQ.bossKey = live && boss && now >= SEQ.stingTill ? boss.type : null; SEQ.rage = !!(boss && boss.rage); SEQ.hordeT = horde ? 1 : 0;
     CR.tl = live || G.phase === 'defeat' ? cl(Math.sqrt(ground / 110), 0, 1) * (horde ? 1.25 : 1) : 0;
     const tot = wl + wr; CR.p = tot > 0 ? 0.7 * (wr - wl) / tot : 0;
     CR.big = ground ? big / ground : 0; CR.swarm = ground ? swarm / ground : 0;
   }
   function stats() {
     const L = SEQ.lay;
-    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(',') });
+    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(','), land: LS.key, event: LS.evKind, paused: PZ.on, hidden: hidden, state: ctx ? ctx.state : 'none' });
   }
 
   function softClip() {
@@ -6261,18 +6640,24 @@ const AU = (function () {
     lim.connect(pre);
     const sh = (dest, type, f, g, q) => { const b = flt(dest, type, f, q); b.gain.value = g; return b; };
     nMaster = gn(sh(sh(sh(flt(flt(lim, 'highpass', 32, 0.7), 'highpass', 32, 0.7), 'highshelf', 3000, 6), 'peaking', 1200, 3, 0.7), 'lowshelf', 180, -10), 0); nMaster.gain.setValueAtTime(0.0001, ctx.currentTime); nMaster.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.6);
-    nMute = gn(nMaster, api.muted ? 0 : 1);
+    nPage = gn(nMaster, 1); // fades out before the page is hidden and the context suspended
+    nMute = gn(nPage, api.muted ? 0 : 1);
     // Glue compressor on effects only, so a pile-up of hits thickens instead of spiking.
     const glue = ctx.createDynamicsCompressor();
     glue.threshold.value = -14; glue.knee.value = 10; glue.ratio.value = 2.5; glue.attack.value = 0.006; glue.release.value = 0.25;
     glue.connect(nMute);
-    nSfx = gn(glue, VOL.sfx); nAmb = gn(nMute, 0.9 * VOL.ambience);
-    nMusDuck = gn(nMute, 1); nMusic = gn(nMusDuck, 0.5 * VOL.music); nPad = gn(nMusic, 1); nSeq = gn(nMusic, 1.5);
-    nCrowdDuck = gn(nMute, 1);
+    // Pause gains: one per bus, so pausing can quiet each part differently (see pauseMix).
+    PZ.sfx = gn(glue, 1); PZ.amb = gn(nMute, 1); PZ.crowd = gn(nMute, 1);
+    nSfx = gn(PZ.sfx, VOL.sfx); nUi = gn(glue, VOL.sfx); nAmb = gn(PZ.amb, 0.9 * VOL.ambience);
+    nMusDuck = gn(nMute, 1); nMusic = gn(nMusDuck, 0.5 * VOL.music);
+    PZ.pad = gn(nMusic, 1); PZ.seq = gn(nMusic, 1); nPad = gn(PZ.pad, 1); nSeq = gn(PZ.seq, 1.5);
+    nCrowdDuck = gn(PZ.crowd, 1);
+    nLand = gn(nAmb, 1); nEvt = gn(nAmb, 1);
     makeBuffers();
     const conv = ctx.createConvolver(); conv.buffer = makeImpulse();
-    conv.connect(gn(nMute, 0.5));
+    PZ.rev = gn(nMute, 0.5); conv.connect(PZ.rev);
     nRevIn = gn(null, 1); nRevIn.connect(flt(conv, 'highpass', 120));
+    PZ.crowd.connect(gn(nRevIn, 0.15));
     startBeds();
     try { startCrowd(); } catch (e) { ST.err = 'crowd: ' + e.message; }
     mus.nextChord = ctx.currentTime + 1.5; mus.chord = 0;
@@ -6288,14 +6673,32 @@ const AU = (function () {
       catch (e) { try { if (ctx && ctx.close) ctx.close(); } catch (e2) {} ctx = null; api.ready = false; return false; }
     }
     if (ctx.state !== 'running' && ctx.resume) { const pr = ctx.resume(); if (pr && pr.then) pr.then(sync, () => {}); }
+    if (nPage && !hidden) nPage.gain.setTargetAtTime(1, ctx.currentTime, 0.1);
     sync();
     return api.ready;
   }
-  let pausedByPage = false;
+  // Page hidden: fade out quickly, then suspend the context; on return resume it and fade back in.
+  // (iPhone may also leave the context 'interrupted'; resuming covers that, or the next tap unlocks it.)
+  let hidden = false, hideTimer = 0;
   function setPaused(b) {
-    if (!ctx) return;
-    if (b && ctx.state === 'running') { pausedByPage = true; if (ctx.suspend) ctx.suspend(); }
-    else if (!b && pausedByPage) { pausedByPage = false; if (ctx.resume) { const pr = ctx.resume(); if (pr && pr.then) pr.then(sync, () => {}); } }
+    if (!ctx || !nPage) return;
+    hidden = !!b;
+    clearTimeout(hideTimer);
+    if (hidden) {
+      nPage.gain.setTargetAtTime(0, ctx.currentTime, 0.03);
+      hideTimer = setTimeout(() => { if (hidden && ctx.state === 'running' && ctx.suspend) { const pr = ctx.suspend(); if (pr && pr.then) pr.then(sync, () => {}); } }, 200);
+    } else {
+      const up = () => { sync(); if (!hidden) nPage.gain.setTargetAtTime(1, ctx.currentTime, 0.25); };
+      // Fade back in even if resuming fails (no gesture yet): the next tap's unlock() resumes the context.
+      if (ctx.state !== 'running' && ctx.state !== 'closed' && ctx.resume) { const pr = ctx.resume(); if (pr && pr.then) pr.then(up, up); else up(); } else up();
+    }
+  }
+  // Game paused (P): effects, crowd and the beat stop; the pads and the land murmur on quietly. UI sounds stay.
+  function pauseMix(p, now) {
+    if (p === PZ.on) return;
+    PZ.on = p;
+    const tc = p ? 0.12 : 0.35, L = [[PZ.sfx, 0], [PZ.crowd, 0], [PZ.seq, 0], [PZ.pad, 0.5], [PZ.amb, 0.45], [PZ.rev, 0.25]];
+    for (let i = 0; i < L.length; i++) L[i][0].gain.setTargetAtTime(p ? L[i][1] : i === 5 ? 0.5 : 1, now, tc);
   }
   // Bus levels 0..1 for a future settings menu: 'sfx', 'music', 'ambience' (wind, fire), 'crowd'.
   const VOL = { sfx: 1, music: 1, ambience: 1, crowd: 1 };
@@ -6305,6 +6708,7 @@ const AU = (function () {
     if (!ctx || !nSfx) return;
     const now = ctx.currentTime, n = { sfx: nSfx, music: nMusic, ambience: nAmb, crowd: nCrowd }[bus], base = { sfx: 1, music: 0.5, ambience: 0.9, crowd: 1 }[bus];
     if (n && bus !== 'crowd') n.gain.setTargetAtTime(base * VOL[bus], now, 0.05);
+    if (bus === 'sfx') nUi.gain.setTargetAtTime(VOL.sfx, now, 0.05);
     if (bus === 'crowd') appM.crowd = -1;
   }
   function setMuted(b) {
@@ -6326,8 +6730,9 @@ const AU = (function () {
     if (!api.muted) seqTick(now); else SEQ.next = 0;
     const dr = Math.max(cur.tension, SEQ.I * 0.75);
     if (Math.abs(dr - appM.drone) > 0.01) { appM.drone = dr; bed.droneG.gain.setTargetAtTime(dr * 0.1, now, 0.4); bed.droneLP.frequency.setTargetAtTime(280 + 220 * dr, now, 0.4); }
-    setM('pad', nPad.gain, 1 - 0.3 * SEQ.I, now, 0.6);
+    setM('pad', nPad.gain, PAD_LVL * (1 - 0.3 * SEQ.I), now, 0.6);
     duckE *= Math.exp(-adt / 0.35);
+    for (let i = lateDuck.length - 1; i >= 0; i--) if (now >= lateDuck[i][0]) { duckE = Math.max(duckE, lateDuck[i][1]); lateDuck.splice(i, 1); }
     setM('dm', nMusDuck.gain, 1 - 0.45 * duckE, now, 0.04);
     setM('dc', nCrowdDuck.gain, 1 - 0.35 * duckE, now, 0.04);
     if (nCrowd) {
@@ -6342,24 +6747,30 @@ const AU = (function () {
       }
     }
   }
-  function update(dt) {
+  let lastUpd = -1;
+  function update() {
     if (!ctx) return;
     sync();
     if (!api.ready) return;
-    dt = cl(+dt || 0.016, 0, 0.1);
-    const now = ctx.currentTime, k = 1 - Math.exp(-dt * 2.5);
+    // Time comes from the audio clock, so fast-forward (several steps a frame) does not speed up the beds.
+    const now = ctx.currentTime, dt = lastUpd < 0 ? 0.016 : cl(now - lastUpd, 0, 0.1);
+    if (lastUpd >= 0 && dt <= 0) return;
+    lastUpd = now;
+    const paused = typeof G !== 'undefined' && !!G && G.paused === true;
+    pauseMix(paused, now);
+    const k = 1 - Math.exp(-dt * 2.5);
     cur.fire += (tgt.fire - cur.fire) * k; cur.wind += (tgt.wind - cur.wind) * k; cur.tension += (tgt.tension - cur.tension) * k;
     setP('fire', bed.fireG.gain, cur.fire, now);
-    setP('wind', bed.windG.gain, cur.wind, now);
+    setP('wind', bed.windG.gain, cur.wind * WIND_LVL, now);
     bed.timer -= dt;
     if (bed.timer <= 0) {
       bed.timer = rr(2, 5);
-      const tc = rr(1.2, 3), f = rr(200, 520) * (0.7 + 0.6 * cur.wind);
+      const wk = WINDK[LS.key] || WINDK.ashen, tc = rr(1.2, 3), f = rr(200, 520) * (0.7 + 0.6 * cur.wind) * wk[0];
       for (let i = 0; i < bed.windLP.length; i++) bed.windLP[i].frequency.setTargetAtTime(f * rr(0.85, 1.15), now, tc);
       bed.gustG.gain.setTargetAtTime(rr(0.45, 1.0), now, tc);
-      const w = rnd(); bed.whG.gain.setTargetAtTime(w * w * 0.3, now, tc); bed.whF.frequency.setTargetAtTime(rr(600, 1100), now, tc);
+      const w = rnd(); bed.whG.gain.setTargetAtTime(w * w * 0.3 * wk[1], now, tc); bed.whF.frequency.setTargetAtTime(rr(600, 1100) * wk[0], now, tc);
     }
-    if (cur.fire > 0.02) {
+    if (cur.fire > 0.02 && !paused) {
       bed.popAcc += dt * (1.5 + 13 * cur.fire);
       let n = 0;
       while (bed.popAcc >= 1 && n++ < 4) { bed.popAcc -= rr(0.5, 1.5); pop(); }
@@ -6367,7 +6778,7 @@ const AU = (function () {
     }
     musicTick(now);
     // The reactive parts never take the game down: any fault is recorded in stats().err.
-    try { reactive(now); } catch (e) { if (!ST.err) ST.err = String(e && e.stack || e).slice(0, 300); }
+    try { scapes(now, paused); if (!paused) reactive(now); else { SEQ.lastNow = now; SEQ.next = 0; } } catch (e) { if (!ST.err) ST.err = String(e && e.stack || e).slice(0, 300); }
   }
 
   if (typeof window !== 'undefined') window.__cwAudio = api;
@@ -6506,7 +6917,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   if (now - _last < 10.5) return;
   const raw = (now - _last) / 1000, rdt = Math.min(.05, Math.max(.001, raw)); _last = now; R.frameDt = rdt;
-  if (G.paused) { FX.shake = 0; updateShake(rdt); updateCamera(rdt); UI.update(rdt); } else for (let i = 0; i < G.speed; i++) step(rdt);
+  if (G.paused) { FX.shake = 0; updateShake(rdt); updateCamera(rdt); UI.update(rdt); AU.update(rdt); } else for (let i = 0; i < G.speed; i++) step(rdt);
   R.fade = Math.min(1, R.fade + rdt * 1.6);
   applyCamera(); renderFrame(); UI.draw();
   if (document.hidden || raw > .25) { _acc = 0; _frames = 0; return; }
