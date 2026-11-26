@@ -29,11 +29,19 @@ Nothing merges unless `node tools/qa.js` passes: no page errors, no NaN, no earl
 
 ## Status
 
+- **Playable build (private to the owner):** https://claude.ai/artifact/53H8ujm4JWWLAGVr5KhyHs. To update it, copy `index.html` to the scratchpad as `cinderwatch.html` and republish it with the Artifact tool (pass this URL as `url` from a new session).
 - Phase 0 done: the game is imported, the tools run on Linux, and `tools/qa.js` plus a baseline exist.
-- Baseline finding: on battlefield 1 the AI commander ends with 0 of 11 towers maxed, and from battlefield 4 on every tower is maxed, so gold has nothing to buy. That drives the economy work.
-- Round 1 (in progress): Forge does crowds, hordes and chain reactions; Mira does longer battlefields, the economy and elites; Ash does feedback effects and elite auras; Echo does reactive music and the new sounds.
+- Round 1 merged:
+  - **Forge:** `MAX_ALIVE` (260 desktop, 190 phone); `PartBatch` grows up to 4× its cap; crowd sim about 3× faster (sorted scan plus a grid); delayed sapper chain blasts (`G.chain`); max-level bombard leaves burning ground (`addGroundFire`, `G.burns`).
+  - **Ash:** `shake(a)`, `hitStop(sec, flash)`, `FX.groundFire` (returns a handle), elite auras, `fxGore` death mayhem, its own fx random stream (visuals no longer change gameplay), a fix so ground-facing sprites are no longer culled.
+  - **Mira:** `G.wavesPerLand = 8` (helpers `landWave()`, `isBossK()`, `isHordeK()`); new economy; overcharge (`t.oc` 0–3) and mend beacon (R key); elites (`makeElite`, `m.ward` shield, `G.fires` = elite fire that hurts footmen); horde waves.
+- **Fire naming:** `G.burns` is the player's fire (hurts monsters); `G.fires` is elite fire (hurts footmen). Don't mix them.
+- **Worktree gotcha:** agent worktrees start from the old `main`. First run `git merge --ff-only claude/sleepy-cannon-hu2caw` (or merge it).
+- **QA after round 1:** no defeats; battlefield 1 now ends with 2–3 towers maxed (was 0); hordes reach about 145 alive.
+- **Known:** `G.press` sits at its 2.2 cap for the AI most of the time, so the game is easy for the AI. Health bars clutter big crowds.
+- Echo (sound, round 1) is still to merge.
 
 ## Next
 
-- Finish and merge round 1, then publish a playable build.
-- Round 2 ideas, in order: tower branches at level 3 (also a gold sink), spells, land events, tower crews, persistent battlefield wear.
+- Merge Echo, run QA, republish the playable build.
+- Round 2: tower branches at level 3 (a gold sink), spells, land events, raising the difficulty ceiling, decluttering health bars, tower crews, overcharge glow.
