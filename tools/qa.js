@@ -29,7 +29,7 @@ const SIM = (secs) => {
   for (let i = 0; i < secs * 30; i++) {
     step(1 / 30);
     const alive = G.mons.filter(m => !m.dead).length; if (alive > st.maxMons) st.maxMons = alive;
-    const w = G.level * 5 + Math.max(1, G.k); if (w > st.maxWave) st.maxWave = w;
+    const w = G.level * (G.wavesPerLand || 5) + Math.max(1, G.k); if (w > st.maxWave) st.maxWave = w;
     if (G.gold > lastGold) st.goldEarned += G.gold - lastGold; lastGold = G.gold;
     if (G.phase !== lastPhase) { st.phases[G.phase] = (st.phases[G.phase] || 0) + 1; if (G.phase === 'defeat') st.defeats++; if (G.phase === 'clear') { st.bossKills++; const tw = G.towers.filter(t => t.alive); st.boards.push({ towers: tw.length, levels: tw.reduce((a, t) => a + t.lvl, 0), maxed: tw.filter(t => t.lvl >= t.def.cost.length - 1).length, pads: G.B.pads.length }); } lastPhase = G.phase; }
     if (G.lives < st.minLives) st.minLives = G.lives;
@@ -54,7 +54,7 @@ const SIM = (secs) => {
     await p.close();
   }
   { // boss wave on a later level
-    const p = await page(browser, `seed=8&biome=frost&level=1&k=4&ff=40&manual=1`, errs);
+    const p = await page(browser, `seed=8&biome=frost&level=1&k=7&ff=40&manual=1`, errs);
     out.smoke.boss = await p.evaluate(() => { const { G, tick } = window.__cw; for (let i = 0; i < 20; i++) tick(1 / 30, i % 5 === 0); return { phase: G.phase, k: G.k, mons: G.mons.length }; });
     await p.screenshot({ path: path.join(SHOTS, 'qa-boss.png') }); await p.close();
   }
