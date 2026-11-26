@@ -2,7 +2,7 @@ const { spawn } = require('child_process'); const fs = require('fs'); const path
 const ROOT = path.dirname(__dirname), FFMPEG = process.env.FFMPEG || 'ffmpeg';
 const [mode, seed, arg, out] = process.argv.slice(2); const W = +(process.env.W || 1920), H = +(process.env.H || 1080);
 const port = 9400 + Math.floor(Math.random() * 400), prof = path.join(os.tmpdir(), 'cinderwatch-rec-' + port);
-const chrome = spawn(process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', '--force-device-scale-factor=1', '--window-size=' + W + ',' + H, '--remote-debugging-port=' + port, '--user-data-dir=' + prof, '--mute-audio', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(require('./chrome.js').path, ['--headless=new', ...require('./chrome.js').gl, '--enable-gpu', '--ignore-gpu-blocklist', '--force-device-scale-factor=1', '--window-size=' + W + ',' + H, '--remote-debugging-port=' + port, '--user-data-dir=' + prof, '--mute-audio', 'about:blank'], { stdio: 'ignore' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PAGE = `(() => {
   const cv = document.createElement('canvas'), gl = document.getElementById('gl'), hud = document.getElementById('hud');

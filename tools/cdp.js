@@ -3,7 +3,7 @@ const SP = __dirname; const ROOT = path.dirname(__dirname); fs.mkdirSync(path.jo
 if (/^\d+,\d+$/.test(args[0])) size = args.shift();
 const port = 9300 + Math.floor(Math.random() * 500);
 const prof = path.join(require('os').tmpdir(), 'cinderwatch-chrome-' + port);
-const chrome = spawn(process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', '--force-device-scale-factor=' + (process.env.DPR || 1), '--window-size=' + size, '--remote-debugging-port=' + port, '--user-data-dir=' + prof, '--autoplay-policy=no-user-gesture-required', '--mute-audio', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(require('./chrome.js').path, ['--headless=new', ...require('./chrome.js').gl, '--enable-gpu', '--ignore-gpu-blocklist', '--force-device-scale-factor=' + (process.env.DPR || 1), '--window-size=' + size, '--remote-debugging-port=' + port, '--user-data-dir=' + prof, '--autoplay-policy=no-user-gesture-required', '--mute-audio', 'about:blank'], { stdio: 'ignore' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
   let ws = null;
