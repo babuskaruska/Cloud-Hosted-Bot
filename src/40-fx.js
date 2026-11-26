@@ -1,4 +1,6 @@
 
+// Cosmetic randomness has its own stream so visual changes never shift the gameplay RNG (and the balance sims).
+const frnd = makeRng(0xF1A3E5), frr = (a, b) => a + (b - a) * frnd();
 const LT = {
   hemi: null, moon: null, fill: null, beacon: null, spots: [], towers: [], flashes: [], torches: [], env: [], envSrc: [], envK: 0,
   beaconBase: 1500, beaconMul: 1, beaconLevel: 1, bp: new THREE.Vector3(), tick: 0, shadowsAt: -1, beaconGutter: 0, beaconOn: 1, cold: 0, emitters: [], spotTimer: 0,
@@ -120,7 +122,7 @@ void main(){
   vec3 L = uAmb; for (int i = 0; i < 12; i++) { vec3 d = uLightPos[i] - iPos; L += uLightCol[i] / (dot(d, d) + 3.0); }
   vCol.rgb *= L;
   #endif
-  if (iMisc.w > 0.5) { gl_Position = projectionMatrix * viewMatrix * vec4(iPos + vec3(q.x, 0.0, q.y), 1.0); }
+  if (iMisc.w > 0.5) { gl_Position = projectionMatrix * viewMatrix * vec4(iPos + vec3(q.x, 0.0, -q.y), 1.0); }
   else { vec4 mv = viewMatrix * vec4(iPos, 1.0); mv.xy += q; gl_Position = projectionMatrix * mv; }
 }`;
 const SPR_NOISE = `
@@ -163,6 +165,12 @@ void main(){
     float band = smoothstep(0.5, 0.74, r) * smoothstep(1.0, 0.9, r);
     float trail = smoothstep(front - 1.5, front, th) * step(th, front) * step(-1.6, th);
     a = band * trail * (1.0 - smoothstep(0.45, 1.0, age));
+  }
+  else if (type == 8) {
+    float th = atan(p.y, p.x), inside = 1.0 - smoothstep(0.97, 1.0, r);
+    float sh = noise(vec2(th * 2.4 + uTime * 1.1 + seed, r * 3.0 - uTime * 0.8)) * 0.6 + noise(p * 6.0 + vec2(uTime * 0.6, seed)) * 0.4;
+    vec2 g = p - vec2(-0.36, 0.4);
+    a = (smoothstep(0.7, 0.97, r) * (0.45 + 0.55 * sh) + 0.06 + 0.9 * exp(-dot(g, g) * 26.0)) * inside;
   }
   gl_FragColor = vec4(col * a * vCol.a, 1.0);
 }`;
@@ -236,14 +244,17 @@ void main(){ vec4 a = viewMatrix * vec4(iA.xyz, 1.0), b = viewMatrix * vec4(iB.x
 }
 
 class DecalBatch {
+  // Ground stains (scorch, blood, goo). A ring of slots in one mesh. Decals persist through a wave (at least
+  // DECAL_MIN_LIFE seconds) and fadeAll() fades them out between waves. Dead slots are collapsed far below
+  // the board so they cost no fill.
   constructor(cap) {
-    this.cap = cap; this.G = 4; this.next = 0; this.slots = [];
+    this.cap = cap; this.G = 4; this.next = 0; this.slots = []; this.dirty = false;
     const vps = (this.G + 1) * (this.G + 1), g = new THREE.BufferGeometry();
-    this.pos = new THREE.BufferAttribute(new Float32Array(cap * vps * 3), 3); this.uv = new THREE.BufferAttribute(new Float32Array(cap * vps * 2), 2); this.col = new THREE.BufferAttribute(new Float32Array(cap * vps * 4), 4);
+    this.pos = new THREE.BufferAttribute(new Float32Array(cap * vps * 3).fill(-999), 3); this.uv = new THREE.BufferAttribute(new Float32Array(cap * vps * 2), 2); this.col = new THREE.BufferAttribute(new Float32Array(cap * vps * 4), 4);
     this.pos.setUsage(THREE.DynamicDrawUsage); this.col.setUsage(THREE.DynamicDrawUsage);
     const idx = [];
     for (let s = 0; s < cap; s++) {
-      this.slots.push({ life: 0, max: 1, a: 0, seed: 0 });
+      this.slots.push({ life: 0, fade: 1, a: 0, seed: 0, k: 0, dead: true, r: 0, g: 0, b: 0 });
       for (let j = 0; j <= this.G; j++) for (let i = 0; i <= this.G; i++) { const o = s * vps + j * (this.G + 1) + i; this.uv.array[o * 2] = i / this.G * 2 - 1; this.uv.array[o * 2 + 1] = j / this.G * 2 - 1; }
       for (let j = 0; j < this.G; j++) for (let i = 0; i < this.G; i++) { const a = s * vps + j * (this.G + 1) + i, b = a + 1, c = a + this.G + 2, d = a + this.G + 1; idx.push(a, d, c, a, c, b); }
     }
@@ -260,57 +271,62 @@ void main(){ float r = length(vUv); float sd = floor(vCol.a) ; float al = fract(
   }
   add(heightAt, x, z, size, r, g, b, alpha, life) {
     const s = this.next; this.next = (this.next + 1) % this.cap; const sl = this.slots[s];
-    sl.life = life; sl.max = life; sl.a = alpha; sl.seed = Math.floor(rnd() * 90) + 1; sl.r = r; sl.g = g; sl.b = b;
-    const P = this.pos.array, rot = rnd() * TAU, cs = Math.cos(rot), sn = Math.sin(rot);
+    sl.life = Math.max(life, DECAL_MIN_LIFE); sl.fade = Math.max(.6, Math.min(4, life * .25)); sl.a = alpha; sl.seed = Math.floor(frnd() * 90) + 1; sl.r = r; sl.g = g; sl.b = b; sl.k = -1; sl.dead = false;
+    const P = this.pos.array, rot = frnd() * TAU, cs = Math.cos(rot), sn = Math.sin(rot);
     for (let j = 0; j <= this.G; j++) for (let i = 0; i <= this.G; i++) {
       const o = (s * this.vps + j * (this.G + 1) + i) * 3, lx = (i / this.G * 2 - 1) * size, lz = (j / this.G * 2 - 1) * size, wx = x + lx * cs - lz * sn, wz = z + lx * sn + lz * cs;
-      P[o] = wx; P[o + 1] = heightAt(wx, wz) + .05; P[o + 2] = wz;
+      P[o] = wx; P[o + 1] = heightAt(wx, wz) + .1; P[o + 2] = wz;
     }
-    this.pos.needsUpdate = true;
+    this.pos.addUpdateRange(s * this.vps * 3, this.vps * 3); this.pos.needsUpdate = true;
   }
   update(dt) {
-    const C = this.col.array;
+    const C = this.col.array, P = this.pos.array;
     for (let s = 0; s < this.cap; s++) {
-      const sl = this.slots[s]; if (sl.life <= 0 && sl.dead) continue;
-      sl.life -= dt; const k = sl.life <= 0 ? 0 : Math.min(1, sl.life / (sl.max * .25)) * sl.a; sl.dead = sl.life <= 0;
+      const sl = this.slots[s]; if (sl.dead) continue;
+      sl.life -= dt; const k = sl.life <= 0 ? 0 : Math.min(1, sl.life / sl.fade) * sl.a;
+      if (Math.abs(k - sl.k) < .004) continue;
+      sl.k = k; this.dirty = true;
       for (let v = 0; v < this.vps; v++) { const o = (s * this.vps + v) * 4; C[o] = sl.r; C[o + 1] = sl.g; C[o + 2] = sl.b; C[o + 3] = sl.seed + Math.min(.97, k); }
+      if (sl.life <= 0) { sl.dead = true; P.fill(-999, s * this.vps * 3, (s + 1) * this.vps * 3); this.pos.addUpdateRange(s * this.vps * 3, this.vps * 3); this.pos.needsUpdate = true; }
     }
-    this.col.needsUpdate = true;
+    if (this.dirty) { this.dirty = false; this.col.needsUpdate = true; }
   }
-  clear() { for (const sl of this.slots) sl.life = 0; }
+  fadeAll(sec) { for (const sl of this.slots) if (!sl.dead && sl.life > sec) { sl.life = sec * frr(.7, 1.15); sl.fade = sl.life; } }
+  clear() { for (const sl of this.slots) if (!sl.dead) sl.life = 0; }
 }
+const DECAL_MIN_LIFE = 150;
 
 const FX = {
   add: null, alpha: null, segs: null, decals: null,
-  parts: [], smokes: [], flames: [], timed: [], bolts: [], shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, groundAt: () => 0,
+  parts: [], smokes: [], flames: [], timed: [], bolts: [], fires: [], scorch: [], shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, shakeT: 0, flash: 0, flashK: 1, dt: 0, calm: false, groundAt: () => 0,
 };
 function initFX() {
-  FX.add = new SpriteBatch(2600, false); FX.alpha = new SpriteBatch(700, true); FX.segs = new SegBatch(600); FX.decals = new DecalBatch(40);
+  FX.add = new SpriteBatch(4000, false); FX.alpha = new SpriteBatch(800, true); FX.segs = new SegBatch(900); FX.decals = new DecalBatch(200);
   R.scene.add(FX.add.mesh, FX.alpha.mesh, FX.segs.mesh, FX.decals.mesh);
 }
 function fxPart(x, y, z, vx, vy, vz, life, size, r, g, b, o) {
   if (FX.parts.length > 1700) return;
-  FX.parts.push({ x, y, z, vx, vy, vz, life, max: life, size, r, g, b, grav: o && o.grav || 0, drag: o && o.drag || 0, streak: o && o.streak || 0, rise: o && o.rise || 0, bounce: o && o.bounce || 0, seed: rnd() * 100, wob: o && o.wob || 0 });
+  FX.parts.push({ x, y, z, vx, vy, vz, life, max: life, size, r, g, b, grav: o && o.grav || 0, drag: o && o.drag || 0, streak: o && o.streak || 0, rise: o && o.rise || 0, bounce: o && o.bounce || 0, seed: frnd() * 100, wob: o && o.wob || 0 });
 }
 function fxSmoke(x, y, z, vx, vy, vz, life, size, grow, r, g, b, a, o) {
   if (FX.smokes.length > 640) return;
-  FX.smokes.push({ x, y, z, vx, vy, vz, life, max: life, size, grow, r, g, b, a, drag: o && o.drag !== undefined ? o.drag : 1.2, seed: rnd() * 100, rise: o && o.rise || 0 });
+  FX.smokes.push({ x, y, z, vx, vy, vz, life, max: life, size, grow, r, g, b, a, drag: o && o.drag !== undefined ? o.drag : 1.2, seed: frnd() * 100, rise: o && o.rise || 0 });
 }
 function fxSparks(x, y, z, n, speed, r, g, b, o = {}) {
   for (let i = 0; i < n; i++) {
-    const a = rnd() * TAU, e = rr(o.lo === undefined ? .1 : o.lo, o.hi === undefined ? 1.3 : o.hi), s = speed * rr(.4, 1);
-    fxPart(x, y, z, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s, Math.sin(a) * Math.cos(e) * s, rr(.25, .6) * (o.life || 1), o.size || .07, r, g, b, { grav: o.grav === undefined ? 9 : o.grav, drag: .6, streak: 1, bounce: .35 });
+    const a = frnd() * TAU, e = frr(o.lo === undefined ? .1 : o.lo, o.hi === undefined ? 1.3 : o.hi), s = speed * frr(.4, 1);
+    fxPart(x, y, z, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s, Math.sin(a) * Math.cos(e) * s, frr(.25, .6) * (o.life || 1), o.size || .07, r, g, b, { grav: o.grav === undefined ? 9 : o.grav, drag: .6, streak: 1, bounce: .35 });
   }
 }
 function fxEmbers(x, y, z, n, spread, r = 1, g = .5, b = .12) {
-  for (let i = 0; i < n; i++) fxPart(x + rr(-spread, spread), y + rr(0, spread), z + rr(-spread, spread), rr(-.25, .25), rr(.7, 1.9), rr(-.25, .25), rr(.9, 2.2), rr(.05, .09), r * rr(1.6, 3), g * rr(1.2, 2.4), b * 2, { drag: .3, wob: 1, rise: .25 });
+  for (let i = 0; i < n; i++) fxPart(x + frr(-spread, spread), y + frr(0, spread), z + frr(-spread, spread), frr(-.25, .25), frr(.7, 1.9), frr(-.25, .25), frr(.9, 2.2), frr(.05, .09), r * frr(1.6, 3), g * frr(1.2, 2.4), b * 2, { drag: .3, wob: 1, rise: .25 });
 }
 function fxDust(x, y, z, n, size, o = {}) {
   const c = o.c || [.34, .3, .27];
-  for (let i = 0; i < n; i++) { const a = rnd() * TAU, s = rr(.3, 1) * (o.speed || 1.3); fxSmoke(x + Math.cos(a) * size * .3, y + rr(0, .15), z + Math.sin(a) * size * .3, Math.cos(a) * s, rr(.2, .7) * (o.up || 1), Math.sin(a) * s, rr(.5, 1.1) * (o.life || 1), size * rr(.5, .9), size * 1.2, c[0], c[1], c[2], o.a || .5, { drag: 2.4 }); }
+  for (let i = 0; i < n; i++) { const a = frnd() * TAU, s = frr(.3, 1) * (o.speed || 1.3); fxSmoke(x + Math.cos(a) * size * .3, y + frr(0, .15), z + Math.sin(a) * size * .3, Math.cos(a) * s, frr(.2, .7) * (o.up || 1), Math.sin(a) * s, frr(.5, 1.1) * (o.life || 1), size * frr(.5, .9), size * 1.2, c[0], c[1], c[2], o.a || .5, { drag: 2.4 }); }
 }
 function fxTimed(type, x, y, z, w, h, r, g, b, a, life, o = {}) {
-  FX.timed.push({ type, x, y, z, w, h, r, g, b, a, life, max: life, rot: o.rot || 0, ground: o.ground ? 1 : 0, grow: o.grow || 0, seed: rnd() * 50, anchor: o.anchor || 0 });
+  FX.timed.push({ type, x, y, z, w, h, r, g, b, a, life, max: life, rot: o.rot || 0, ground: o.ground ? 1 : 0, grow: o.grow || 0, seed: frnd() * 50, anchor: o.anchor || 0 });
 }
 function fxExplosion(x, y, z, sc = 1) {
   lightFlash(x, y + 1.1, z, 0xffb060, 520 * sc * sc, .4, 20 + sc * 6);
@@ -318,22 +334,22 @@ function fxExplosion(x, y, z, sc = 1) {
   fxTimed(5, x, y + .4 * sc, z, 4.2 * sc, 4.2 * sc, 3.5, 2.4, 1.2, 1, .12);
   fxTimed(4, x, y + .08, z, 5.4 * sc, 5.4 * sc, 1.6, 1.0, .5, .55, .4, { ground: true });
   fxSparks(x, y + .2, z, Math.round(22 * sc), 7.5 * sc, 3.2, 1.7, .5, { size: .08 });
-  for (let i = 0; i < 9 * sc; i++) { const a = rnd() * TAU, s = rr(.4, 1.6) * sc; fxSmoke(x + Math.cos(a) * .3, y + rr(.2, .7), z + Math.sin(a) * .3, Math.cos(a) * s, rr(.6, 1.7), Math.sin(a) * s, rr(1.6, 3.4), rr(.7, 1.1) * sc, 1.5 * sc, .2, .19, .19, .62, { drag: 1.5, rise: .25 }); }
+  for (let i = 0; i < 9 * sc; i++) { const a = frnd() * TAU, s = frr(.4, 1.6) * sc; fxSmoke(x + Math.cos(a) * .3, y + frr(.2, .7), z + Math.sin(a) * .3, Math.cos(a) * s, frr(.6, 1.7), Math.sin(a) * s, frr(1.6, 3.4), frr(.7, 1.1) * sc, 1.5 * sc, .2, .19, .19, .62, { drag: 1.5, rise: .25 }); }
   fxDust(x, y, z, 6, .9 * sc, { speed: 2.6 });
-  FX.shake = Math.min(1.2, FX.shake + .32 * sc);
+  shake(.2 * sc);
 }
 function fxBolt(a, b, life = .22, col = [.55, .8, 1.6], width = .09) {
-  FX.bolts.push({ a: a.slice(), b: b.slice(), life, max: life, col, width, seed: Math.floor(rnd() * 1000), re: 0, pts: null });
+  FX.bolts.push({ a: a.slice(), b: b.slice(), life, max: life, col, width, seed: Math.floor(frnd() * 1000), re: 0, pts: null });
 }
 function addFlame(o) {
-  const f = Object.assign({ size: 1, r: 1, g: 1, b: 1, embers: 1, glow: 1, on: 1, seed: rnd() * 10, acc: rnd(), layers: 1, alive: true, smoke: 0 }, o);
+  const f = Object.assign({ size: 1, r: 1, g: 1, b: 1, embers: 1, glow: 1, on: 1, seed: frnd() * 10, acc: frnd(), layers: 1, alive: true, smoke: 0 }, o);
   FX.flames.push(f); return f;
 }
 function removeFlame(f) { if (!f) return; f.alive = false; const i = FX.flames.indexOf(f); if (i >= 0) swapRemove(FX.flames, i); }
 
 function updateFX(dt, t) {
   const A = FX.add, AL = FX.alpha, SG = FX.segs, groundAt = FX.groundAt;
-  A.begin(); AL.begin(); SG.begin();
+  A.begin(); AL.begin(); SG.begin(); FX.dt = dt;
   const rx = Math.cos(CAM.yaw), rz = -Math.sin(CAM.yaw), se = Math.sin(CAM.elev), ce = Math.cos(CAM.elev), ux = -se * Math.sin(CAM.yaw), uy = ce, uz = -se * Math.cos(CAM.yaw);
   for (const f of FX.flames) {
     const on = f.on; if (on <= .01) continue;
@@ -346,9 +362,9 @@ function updateFX(dt, t) {
     f.acc += dt * (2.2 + 5 * s) * f.embers * on;
     while (f.acc >= 1) {
       f.acc -= 1;
-      fxPart(f.x + rr(-.25, .25) * s, f.y + s * rr(.3, 1.1), f.z + rr(-.25, .25) * s, rr(-.3, .3), rr(.8, 2.0) * (0.7 + s * .3), rr(-.3, .3), rr(.8, 2.0) * (.7 + s * .35), rr(.045, .085), f.r * rr(1.8, 3.2), f.g * rr(.7, 1.4), f.b * .25, { drag: .25, wob: 1, rise: .3 });
+      fxPart(f.x + frr(-.25, .25) * s, f.y + s * frr(.3, 1.1), f.z + frr(-.25, .25) * s, frr(-.3, .3), frr(.8, 2.0) * (0.7 + s * .3), frr(-.3, .3), frr(.8, 2.0) * (.7 + s * .35), frr(.045, .085), f.r * frr(1.8, 3.2), f.g * frr(.7, 1.4), f.b * .25, { drag: .25, wob: 1, rise: .3 });
     }
-    if (f.smoke > 0) { f.sacc = (f.sacc || 0) + dt * f.smoke * on; while (f.sacc >= 1) { f.sacc -= 1; fxSmoke(f.x + rr(-.2, .2) * s, f.y + s * 1.3, f.z + rr(-.2, .2) * s, rr(-.15, .15), rr(.9, 1.5), rr(-.15, .15), rr(2.5, 4.5), s * .7, s * 1.6, .16, .15, .16, .22, { drag: .25, rise: .1 }); } }
+    if (f.smoke > 0) { f.sacc = (f.sacc || 0) + dt * f.smoke * on; while (f.sacc >= 1) { f.sacc -= 1; fxSmoke(f.x + frr(-.2, .2) * s, f.y + s * 1.3, f.z + frr(-.2, .2) * s, frr(-.15, .15), frr(.9, 1.5), frr(-.15, .15), frr(2.5, 4.5), s * .7, s * 1.6, .16, .15, .16, .22, { drag: .25, rise: .1 }); } }
   }
   const P = FX.parts;
   for (let i = P.length - 1; i >= 0; i--) {
@@ -383,16 +399,114 @@ function updateFX(dt, t) {
     b.re -= dt;
     if (!b.pts || b.re <= 0) {
       b.re = .045; const n = Math.max(3, Math.round(Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1], b.b[2] - b.a[2]) / .45)), pts = [];
-      for (let k = 0; k <= n; k++) { const u = k / n, j = Math.sin(u * PI) * .34; pts.push([lerp(b.a[0], b.b[0], u) + rr(-j, j), lerp(b.a[1], b.b[1], u) + rr(-j, j), lerp(b.a[2], b.b[2], u) + rr(-j, j)]); }
-      b.pts = pts; b.fork = rnd() < .7 ? Math.floor(rr(1, n - 1)) : -1; b.fd = [rr(-1, 1), rr(-.2, .8), rr(-1, 1)];
+      for (let k = 0; k <= n; k++) { const u = k / n, j = Math.sin(u * PI) * .34; pts.push([lerp(b.a[0], b.b[0], u) + frr(-j, j), lerp(b.a[1], b.b[1], u) + frr(-j, j), lerp(b.a[2], b.b[2], u) + frr(-j, j)]); }
+      b.pts = pts; b.fork = frnd() < .7 ? Math.floor(frr(1, n - 1)) : -1; b.fd = [frr(-1, 1), frr(-.2, .8), frr(-1, 1)];
     }
     const k = b.life / b.max, c = b.col, w = b.width * (.5 + .5 * k);
     for (let j = 0; j < b.pts.length - 1; j++) { const p = b.pts[j], q = b.pts[j + 1]; SG.push(p[0], p[1], p[2], w, q[0], q[1], q[2], w, c[0] * 4, c[1] * 4, c[2] * 4, k); SG.push(p[0], p[1], p[2], w * 3.5, q[0], q[1], q[2], w * 3.5, c[0], c[1], c[2], k * .35); }
     if (b.fork > 0) { const p = b.pts[b.fork]; SG.push(p[0], p[1], p[2], w * .7, p[0] + b.fd[0] * .7, p[1] + b.fd[1] * .7, p[2] + b.fd[2] * .7, w * .2, c[0] * 3, c[1] * 3, c[2] * 3, k); }
   }
+  updateFires(dt, t);
+  const calm = G.phase === 'play' && !G.spawning && !G.mons.length;
+  if (calm && !FX.calm) FX.decals.fadeAll(4.5);
+  FX.calm = calm;
   FX.decals.update(dt);
-  FX.shake = Math.max(0, FX.shake - dt * 2.6);
-  const sh = FX.shake * FX.shake * FX.shakeK; FX.shakeX = n1(t * 31, 7) * sh * .22; FX.shakeY = n1(t * 37, 9) * sh * .22;
 }
 function endFX() { FX.add.end(); FX.alpha.end(); FX.segs.end(); }
-function clearFX() { FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; FX.decals.clear(); }
+function clearFX() { FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; for (const f of FX.fires) f.alive = false; FX.fires.length = 0; FX.scorch.length = 0; FX.decals.clear(); }
+
+// ---- Camera shake, hit-stop and flash ----------------------------------------------------------------
+// shake(amount): adds trauma that decays smoothly. ~.2 shell, ~.5 sapper, ~1 boss stomp; the total is capped
+// and repeated calls saturate rather than stack. Turned off by prefers-reduced-motion.
+const SHAKE_CAP = 1.25;
+function shake(a) {
+  if (!(a > 0) || !FX.shakeK) return;
+  FX.shake = Math.min(SHAKE_CAP, FX.shake + a * (1 - FX.shake / (SHAKE_CAP + .15)));
+}
+// hitStop(seconds, flash): freezes simulation time for a moment (step() scales dt down while G.hitstop > 0,
+// counted in the caller's fixed step, so record.js stays deterministic) and briefly brightens the frame.
+function hitStop(sec, flash = 0) {
+  G.hitstop = Math.max(G.hitstop || 0, Math.min(.09, sec));
+  if (flash > 0) FX.flash = Math.min(1, Math.max(FX.flash, flash * FX.flashK));
+}
+// Runs on real (unscaled) time so the shake keeps moving through hit-stop and slow motion.
+function updateShake(rdt) {
+  FX.shakeT += rdt; FX.shake = Math.max(0, FX.shake - rdt * (1.5 + FX.shake * .8)); FX.flash = Math.max(0, FX.flash - rdt * 7);
+  const t = FX.shakeT, a = Math.pow(FX.shake, 1.3) * .32 * FX.shakeK;
+  FX.shakeX = a ? (n1(t * 23, 7) * .8 + n1(t * 41, 3) * .2) * a : 0; FX.shakeY = a ? (n1(t * 27, 9) * .8 + n1(t * 47, 5) * .2) * a : 0;
+}
+
+// ---- Burning ground ----------------------------------------------------------------------------------
+// FX.groundFire(x, z, r, seconds) -> handle. A patch of flames with embers, smoke, a ground glow, a pooled
+// torch light (no new lights) and a scorch decal left behind. Cheap: a few sprites per patch, so 10-20 at
+// once is fine. The handle's x/z can be moved, and setting handle.life = 0 puts it out.
+// At most FIRE_MAX burn at once; beyond that the oldest is put out early.
+const FIRE_MAX = 24;
+FX.groundFire = function (x, z, r = 1, seconds = 4) {
+  if (!isFinite(x) || !isFinite(z) || G.phase === 'crumble' || G.phase === 'rise') return null;
+  r = clamp(+r || 1, .3, 4); seconds = clamp(+seconds || 4, .3, 120);
+  if (FX.fires.length >= FIRE_MAX) { let o = null; for (const f of FX.fires) if (f.life > .6 && (!o || f.age > o.age)) o = f; if (o) o.life = .6; else return null; }
+  const gy = FX.groundAt(x, z);
+  const f = { x, z, r, life: seconds, age: 0, seed: frnd() * 100, acc: frnd(), sacc: frnd(), n: clamp(Math.round(1.6 + r * r * 1.5), 2, 7), alive: true, lI: 0, lx: x, ly: gy + .6, lz: z, lCol: 0xff7a2a, lseed: frnd() * 9 };
+  let near = false; for (const q of FX.scorch) if (dist2(q[0], q[1], x, z) < (r * .7) * (r * .7) && G.t - q[2] < 30) { near = true; break; }
+  if (!near) { FX.decals.add(FX.groundAt, x, z, r * 1.2, .018, .014, .012, .88, seconds + 60); FX.scorch.push([x, z, G.t]); if (FX.scorch.length > 24) FX.scorch.shift(); }
+  fxTimed(4, x, gy + .14, z, r * 2.6, r * 2.6, 1.8, .8, .25, .6, .35, { ground: true });
+  FX.fires.push(f); return f;
+};
+function updateFires(dt, t) {
+  const A = FX.add, F = FX.fires, groundAt = FX.groundAt;
+  for (let i = F.length - 1; i >= 0; i--) {
+    const f = F[i]; f.life -= dt; f.age += dt;
+    if (f.life <= 0 || !f.alive) { f.alive = false; f.lI = 0; swapRemove(F, i); continue; }
+    const on = sat(f.age / .35) * sat(f.life / .6), fl = .85 + .15 * n1(t * 7 + f.seed, f.seed), gy = groundAt(f.x, f.z), r = f.r;
+    A.push(f.x, gy + .13, f.z, r * 3.2, r * 3.2, 0, 0, 1.2, .42, .08, .5 * on * fl, 2, 0, 0, 1);
+    A.push(f.x, gy + .14, f.z, r * 2.1, r * 2.1, f.seed, 0, .95, .55, .32, .75 * on, 3, f.seed, .3 + .05 * Math.sin(t * 1.7 + f.seed), 1);
+    A.push(f.x, gy + .6, f.z, r * 2.6, r * 2.2, 0, 0, 1.0, .4, .1, .14 * on * fl, 2, 0, 0, 0);
+    for (let k = 0; k < f.n; k++) {
+      const u = (k + .5) / f.n, rad = r * .62 * Math.sqrt(u), ang = k * 2.39996 + f.seed, px = f.x + Math.cos(ang) * rad, pz = f.z + Math.sin(ang) * rad;
+      const cyc = (t * (.8 + .21 * ((k * 7) % 5)) + k * .37 + f.seed) % 1, lick = Math.pow(Math.sin(cyc * PI), .6);
+      const s = (.5 + .34 * Math.sqrt(r)) * (1.1 - .4 * Math.sqrt(u)) * (.5 + .5 * lick) * on;
+      if (s < .04) continue;
+      A.push(px, groundAt(px, pz) - s * .05, pz, s * 1.45, s * 1.8, 0, 1, 2.0, 1.4, .9, on, 1, f.seed + k * 3.7, 0, 0);
+    }
+    f.acc += dt * (1.5 + 3 * r) * on;
+    while (f.acc >= 1) { f.acc -= 1; const a = frnd() * TAU, d = Math.sqrt(frnd()) * r * .8; fxPart(f.x + Math.cos(a) * d, gy + frr(.1, .5), f.z + Math.sin(a) * d, frr(-.3, .3), frr(.9, 2.2), frr(-.3, .3), frr(.7, 1.8), frr(.045, .08), frr(1.8, 3.2), frr(.7, 1.3), .22, { drag: .3, wob: 1, rise: .3 }); }
+    f.sacc += dt * (.35 + .4 * r) * on;
+    while (f.sacc >= 1) { f.sacc -= 1; fxSmoke(f.x + frr(-.4, .4) * r, gy + .5 + r * .3, f.z + frr(-.4, .4) * r, frr(-.15, .15), frr(.7, 1.3), frr(-.15, .15), frr(2, 3.6), .35 + r * .25, .7 + r * .5, .14, .12, .12, .26, { drag: .3, rise: .12 }); }
+    f.lx = f.x; f.ly = gy + .55 + r * .2; f.lz = f.z; f.lI = (16 + 9 * r) * on * fl;
+  }
+}
+
+// ---- Elite auras -------------------------------------------------------------------------------------
+// m.elite = 'burning' | 'shielded' | 'hasted' | 'splitting'. The body gets a coloured rim from the instanced
+// material (ELITE_CODE is packed into the flash attribute in drawMonster); drawElite adds a few sprites.
+const ELITE_CODE = { burning: 1, shielded: 2, hasted: 3, splitting: 4 };
+function drawElite(m, t) {
+  if (!(m.vis || m.fly) || m.dead) return;
+  const e = m.elite, A = FX.add, sc = m.scale / (m.def.scale || 1), top = m.def.top * sc, R0 = Math.max(.32, m.rad * 1.5), cy = m.y + top * .5, sd = (m.lseed || 0) * 7, dt = FX.dt;
+  if (e === 'burning') {
+    const fl = .85 + .15 * n1(t * 9 + sd, sd), lx = Math.cos(m.yaw) * R0 * .32, lz = -Math.sin(m.yaw) * R0 * .32;
+    A.push(m.x + lx, m.y + top * .12, m.z + lz, R0 * .95, R0 * 1.55, 0, 1, 3.3, 3.3, 3.3, .9, 1, sd, 0, 0);
+    A.push(m.x - lx, m.y + top * .38, m.z - lz, R0 * .8, R0 * 1.35, 0, 1, 3.3, 3.3, 3.3, .85, 1, sd + 5.3, 0, 0);
+    A.push(m.x, cy, m.z, R0 * 4, R0 * 4, 0, 0, 1.0, .42, .1, .2 * fl, 2, 0, 0, 0);
+    if (frnd() < dt * 1.6) fxSmoke(m.x, m.y + top * .9, m.z, frr(-.1, .1), frr(.6, 1), frr(-.1, .1), frr(1, 1.8), .22 + R0 * .2, .5, .12, .11, .11, .3, { drag: .4, rise: .1 });
+    if (frnd() < dt * 6) fxPart(m.x + frr(-.6, .6) * R0, m.y + frr(.2, 1) * top, m.z + frr(-.6, .6) * R0, frr(-.3, .3), frr(.8, 1.8), frr(-.3, .3), frr(.5, 1.1), frr(.04, .07), frr(2, 3.2), frr(.8, 1.2), .2, { drag: .4, wob: 1, rise: .3 });
+  } else if (e === 'shielded') {
+    const hit = m.flash || 0, d = Math.max(top * 1.02, m.rad * 2.8);
+    A.push(m.x, cy, m.z, d, d, 0, 0, .35 + hit, .62 + hit, 1.45 + hit * .5, .5 + hit * .9, 8, sd, 0, 0);
+    if (hit > .6 && frnd() < .5) fxSparks(m.x, cy, m.z, 3, 2.4, 1.2, 1.8, 3, { size: .05, grav: 3 });
+  } else if (e === 'hasted') {
+    const fx = Math.sin(m.yaw), fz = Math.cos(m.yaw), lx = fz, lz = -fx, SG = FX.segs, mv = Math.max(.35, m.mv || 0);
+    for (let k = 0; k < 3; k++) {
+      const h = m.y + top * (.22 + .25 * k), o = (k - 1) * m.rad * .8, len = (.55 + .5 * (.5 + .5 * Math.sin(t * 13 + k * 2.1 + sd))) * (.6 + R0) * mv;
+      const ax = m.x - fx * m.rad * .6 + lx * o, az = m.z - fz * m.rad * .6 + lz * o;
+      SG.push(ax, h, az, .045, ax - fx * len, h, az - fz * len, .005, 1.6, 1.25, .3, .6);
+    }
+    A.push(m.x, cy, m.z, R0 * 3.2, R0 * 3.2, 0, 0, .9, .75, .15, .16, 2, 0, 0, 0);
+  } else if (e === 'splitting') {
+    const pu = .5 + .5 * Math.sin(t * 4.2 + sd), age = (t * .8 + sd) % 1;
+    A.push(m.x, m.y + .1, m.z, R0 * 3.4, R0 * 3.4, 0, 0, .5, 2.2, .45, 1, 4, 0, age, 1);
+    A.push(m.x, cy, m.z, R0 * 3.6, R0 * 3.6, 0, 0, .3, 1.0, .25, .1 + .14 * pu, 2, 0, 0, 0);
+    if (frnd() < dt * 3) fxPart(m.x + frr(-.5, .5) * R0, m.y + top * frr(.3, .9), m.z + frr(-.5, .5) * R0, 0, frr(-.2, .3), 0, frr(.4, .8), frr(.04, .07), .5, 2.2, .45, { grav: 3, drag: .5 });
+  }
+}

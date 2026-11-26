@@ -165,7 +165,7 @@ function startCrumble() {
   for (const f of B.flames) removeFlame(f); B.flames.length = 0;
   for (const p of B.pieces) { p.t = 0; p.delay = .25 + rnd() * .9 + sat((36 - (p.cx + p.cz)) / 72) * 1.3 + (p.kind !== 'chunk' ? .2 : 0); p.vy = 0; }
   FX.groundAt = () => -500; clearFX(); setBoardCasting(B, true);
-  sfx('crumble', 0, 0, 1.3); FX.shake = 1.2;
+  sfx('crumble', 0, 0, 1.3); shake(1.2);
 }
 function startRise() {
   if (G.B) { for (const t of G.towers) { t.clearModel(false); } G.towers.length = 0; clearDebris(); disposeBoard(G.B); }
@@ -210,7 +210,7 @@ function updatePhase(dt) {
       const u = t - p.delay;
       if (u < 0) { p.mesh.position.set(p.cx + rr(-.03, .03) * sat(t * 2), p.cy, p.cz + rr(-.03, .03) * sat(t * 2)); done = false; continue; }
       const y = p.cy - 9 * u * u - u * 1.2; p.mesh.position.set(p.cx, y, p.cz); p.mesh.rotation.set(p.spin.x * u * .5, p.spin.y * u * .25, p.spin.z * u * .5);
-      if (!p.dusted) { p.dusted = true; fxDust(p.cx, 0, p.cz, 5, 2.2, { speed: 2.5, life: 1.4 }); FX.shake = Math.min(1, FX.shake + .12); }
+      if (!p.dusted) { p.dusted = true; fxDust(p.cx, 0, p.cz, 5, 2.2, { speed: 2.5, life: 1.4 }); shake(.1); }
       if (y > -60) done = false; else p.mesh.visible = false;
     }
     if (done || t > 5.2) { if (G.advance) { G.level++; G.advance = false; } setPhase('rise'); }
@@ -220,13 +220,13 @@ function updatePhase(dt) {
       const u = (t - p.delay) / (p.kind === 'chunk' ? 1.15 : .8);
       if (u < 0) { done = false; continue; }
       p.mesh.visible = true;
-      if (u >= 1) { p.mesh.position.set(p.cx, p.cy, p.cz); p.mesh.rotation.set(0, 0, 0); if (!p.set) { p.set = true; if (p.kind !== 'chunk') { fxDust(p.cx, p.cy + .2, p.cz, 12, 2.2, { speed: 3 }); FX.shake = Math.min(1, FX.shake + .3); sfx('hammer', p.cx, p.cz, 1, .1); } } continue; }
+      if (u >= 1) { p.mesh.position.set(p.cx, p.cy, p.cz); p.mesh.rotation.set(0, 0, 0); if (!p.set) { p.set = true; if (p.kind !== 'chunk') { fxDust(p.cx, p.cy + .2, p.cz, 12, 2.2, { speed: 3 }); shake(.25); sfx('hammer', p.cx, p.cz, 1, .1); } } continue; }
       done = false; const e = easeOut(u), k = 1 - e;
       if (p.kind === 'chunk') { p.mesh.position.set(p.cx, p.cy - 30 * k, p.cz); p.mesh.rotation.set(p.spin.x * k * .7, p.spin.y * k * .5, p.spin.z * k * .7); }
       else { const d = 1 - u * u; p.mesh.position.set(p.cx, p.cy + 16 * d, p.cz); p.mesh.rotation.set(0, 0, 0); }
     }
     if (done && !B.igniteAt) { B.igniteAt = t + .25; }
-    if (B.igniteAt && t > B.igniteAt && !B.lit) { B.lit = true; sfx('ignite', B.beacon.x, B.beacon.z, 1.3, 1); lightFlash(B.beacon.x, B.beacon.y + 1, B.beacon.z, 0xffa050, 2600, .7, 60); fxEmbers(B.beacon.x, B.beacon.y, B.beacon.z, 50, .6); FX.shake = .5; }
+    if (B.igniteAt && t > B.igniteAt && !B.lit) { B.lit = true; sfx('ignite', B.beacon.x, B.beacon.z, 1.3, 1); lightFlash(B.beacon.x, B.beacon.y + 1, B.beacon.z, 0xffa050, 2600, .7, 60); fxEmbers(B.beacon.x, B.beacon.y, B.beacon.z, 50, .6); shake(.5); }
     if (B.lit && t > B.igniteAt + .7) { setBoardCasting(B, false); beginBattle(false); }
   }
 }

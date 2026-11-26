@@ -311,7 +311,7 @@ class Tower {
         fxTimed(5, mz.x + dx * .2, mz.y + .1, mz.z + dz * .2, 1.9, 1.9, 4, 3, 1.6, 1, .1); fxTimed(3, mz.x + dx * .3, mz.y + .12, mz.z + dz * .3, .9, .9, 4, 3.2, 2.2, 1, .2, { grow: .8 });
         for (let i = 0; i < 6; i++) fxSmoke(mz.x + dx * .3, mz.y + .1, mz.z + dz * .3, dx * rr(1, 3.4) + rr(-.5, .5), rr(.3, 1.2), dz * rr(1, 3.4) + rr(-.5, .5), rr(1.2, 2.4), rr(.35, .6), .9, .3, .29, .28, .5, { drag: 2.2, rise: .2 });
         fxSparks(mz.x + dx * .2, mz.y, mz.z + dz * .2, 8, 5, 3, 1.8, .6, { lo: 0, hi: .6 });
-        sfx('cannon', this.x, this.z, 1, lvl / 2); FX.shake = Math.min(1, FX.shake + .12);
+        sfx('cannon', this.x, this.z, 1, lvl / 2); shake(.05);
       }
     } else this.gunYaw = angDamp(this.gunYaw, this.yaw + Math.sin(G.t * .3 + this.idx) * .7, 1.2, dt);
     this.carriage.rotation.y = this.gunYaw - this.yaw;
@@ -344,7 +344,7 @@ class Tower {
         cur = nb;
       }
       lightFlash(tgt.x, tgt.y + 1.2, tgt.z, 0x9fd0ff, 520, .22, 16); lightFlash(cp.x, cp.y, cp.z, 0x9fd0ff, 300, .18, 12);
-      sfx('zap', this.x, this.z, 1, lvl / 2); FX.shake = Math.min(1, FX.shake + .08);
+      sfx('zap', this.x, this.z, 1, lvl / 2); shake(.04);
     }
   }
   updGuard(dt, d, lvl) {
@@ -429,7 +429,7 @@ function updateHazards(dt) {
   for (let i = G.chain.length - 1; i >= 0; i--) {
     const c = G.chain[i]; c.t -= dt; if (c.t > 0) continue; swapRemove(G.chain, i);
     blastAround(c, { r: c.ex.r * 1.15, dmg: c.ex.dmg, men: c.ex.men });
-    sfx('chainBoom', c.x, c.z, 1); FX.shake = Math.min(1.2, (FX.shake || 0) + .35);
+    sfx('chainBoom', c.x, c.z, 1); shake(.4);
   }
   for (let i = G.fires.length - 1; i >= 0; i--) {
     const f = G.fires[i]; f.t -= dt; f.tick -= dt;

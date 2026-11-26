@@ -164,6 +164,8 @@ function initKits() {
   KIT.goo = new PartBatch(S => { S.ico(.08, 0, 0, 0, COL.slime, { d: 1, rough: .3, emis: .08 }); }, 200, { shadow: false, rad: .06 });
   KIT.rubble = new PartBatch(S => { S.rock(.14, 0, 0, 0, COL.stone, {}); }, 160, { rad: .1 });
   KIT.plank = new PartBatch(S => { S.box(.12, .6, .05, 0, 0, 0, COL.wood, { l: L_WOOD }); }, 100, { rad: .08 });
+  // Neutral lump for death bits: tinted bone, gore, chitin or fur, squashed by the matrix scale.
+  KIT.bit = new PartBatch(S => { S.ico(.06, 0, 0, 0, [.8, .8, .8], { sc: [1, .7, 1.7], d: 0, jit: .05 }); S.ico(.035, 0, .01, .09, [.72, .72, .72], { d: 0 }); }, 320, { shadow: false, rad: .05 });
   initBestiary();
 }
 
@@ -256,17 +258,20 @@ function rigBat(e, K = KIT.bat, wx = .06, wy = .02) {
   return M0;
 }
 
-const DEB = [];
+const DEB = [], SHATTER = { a: 0, b: 0 };
 const _dq = new THREE.Quaternion(), _dax = new THREE.Vector3(), _dp = new THREE.Vector3(), _ds = new THREE.Vector3(), _dm = new THREE.Matrix4();
+// Debris cap with headroom: extra gore stops first, then body parts, so coins always fit.
+const DEB_CAP = 900, DEB_BODY = 820, DEB_EXTRA = 700;
 function addDebris(batch, mat, tint, vx, vy, vz, spin, life, o = {}) {
-  if (DEB.length > 520) return null;
-  const d = { batch, p: new THREE.Vector3(), q: new THREE.Quaternion(), s: new THREE.Vector3(), vx, vy, vz, w: new THREE.Vector3(rr(-1, 1), rr(-1, 1), rr(-1, 1)).normalize(), ws: spin, life, max: life, tint: tint ? tint.slice() : null, rad: o.rad || batch.rad, rest: false, coin: o.coin || 0, bounce: o.bounce === undefined ? .32 : o.bounce, flash: o.flash || 0, goo: o.goo || 0, hold: o.hold || 0 };
+  if (DEB.length >= (o.coin ? DEB_CAP : o.extra ? DEB_EXTRA : DEB_BODY)) return null;
+  const d = { batch, p: new THREE.Vector3(), q: new THREE.Quaternion(), s: new THREE.Vector3(), vx, vy, vz, w: new THREE.Vector3(frr(-1, 1), frr(-1, 1), frr(-1, 1)).normalize(), ws: spin, life, max: life, tint: tint ? tint.slice() : null, rad: o.rad || batch.rad, rest: false, coin: o.coin || 0, bounce: o.bounce === undefined ? .32 : o.bounce, flash: o.flash || 0, goo: o.goo || 0, hold: o.hold || 0, float: o.float || 0 };
   mat.decompose(d.p, d.q, d.s); d.rad *= Math.max(d.s.x, d.s.y); DEB.push(d); return d;
 }
 function shatter(rigFn, e, impulse, o = {}) {
   const ix = impulse[0], iy = impulse[1], iz = impulse[2], spread = o.spread === undefined ? 1.6 : o.spread;
-  RIG_CAPTURE = (batch, mat, tint) => { addDebris(batch, mat, tint, ix + rr(-spread, spread), iy + rr(.4, 2.2) * (o.up || 1), iz + rr(-spread, spread), rr(3, 11), rr(3.2, 5.5) * (o.life || 1), { hold: o.hold ? rr(0, o.hold) : 0 }); };
-  try { rigFn(e); } finally { RIG_CAPTURE = null; }
+  SHATTER.a = DEB.length;
+  RIG_CAPTURE = (batch, mat, tint) => { addDebris(batch, mat, tint, ix + frr(-spread, spread), iy + frr(.4, 2.2) * (o.up || 1), iz + frr(-spread, spread), frr(3, 11), frr(3.2, 5.5) * (o.life || 1), { hold: o.hold ? frr(0, o.hold) : 0 }); };
+  try { rigFn(e); } finally { RIG_CAPTURE = null; SHATTER.b = DEB.length; }
 }
 function updateDebris(dt, groundAt, onCoin) {
   for (let i = DEB.length - 1; i >= 0; i--) {
@@ -274,16 +279,21 @@ function updateDebris(dt, groundAt, onCoin) {
     if (d.life <= 0) { swapRemove(DEB, i); continue; }
     if (d.hold > 0) { d.hold -= dt; }
     else if (!d.rest) {
-      d.vy -= 13 * dt; d.p.x += d.vx * dt; d.p.y += d.vy * dt; d.p.z += d.vz * dt;
+      if (d.float) { const k = Math.exp(-2.2 * dt); d.vx *= k; d.vz *= k; d.vy = Math.max(-.9, d.vy * k - 3 * dt); } else d.vy -= 13 * dt;
+      d.p.x += d.vx * dt; d.p.y += d.vy * dt; d.p.z += d.vz * dt;
       _dq.setFromAxisAngle(d.w, d.ws * dt); d.q.premultiply(_dq);
       const gy = groundAt(d.p.x, d.p.z) + d.rad;
       if (d.p.y < gy) {
         d.p.y = gy;
-        if (d.goo) { d.life = 0; continue; }
+        if (d.goo) {
+          if (d.goo > 1 || frnd() < .35) { d.life = 0; continue; }
+          d.goo = 2; d.rest = true; d.vy = 0; d.p.y = gy - d.rad + .025; d.q.setFromAxisAngle(_dax.set(0, 1, 0), frnd() * TAU); d.s.set(d.s.x * 1.8, d.s.y * .2, d.s.z * 1.8); d.life = Math.min(d.life, frr(1.6, 3.2)); d.max = d.life; continue;
+        }
         if (Math.abs(d.vy) < 1.2) { d.rest = true; d.vy = 0; } else { d.vy = -d.vy * d.bounce; }
         d.vx *= .55; d.vz *= .55; d.ws *= .5;
       }
-    } else if (d.life < .9 && !d.coin) { d.p.y -= dt * .22; }
+    } else if (d.rest && groundAt(d.p.x, d.p.z) < d.p.y - 3) { d.rest = false; d.vy = 0; }
+    else if (d.life < .9 && !d.coin) { d.p.y -= dt * .22; }
     if (d.coin && d.max - d.life > d.coin) { onCoin(d); swapRemove(DEB, i); continue; }
     let sc = 1; if (!d.coin && d.life < .5) sc = Math.max(.01, d.life / .5);
     _dm.compose(d.p, d.q, _ds.copy(d.s).multiplyScalar(sc));
@@ -291,3 +301,47 @@ function updateDebris(dt, groundAt, onCoin) {
   }
 }
 function clearDebris() { DEB.length = 0; }
+
+// Extra death mayhem on top of the shatter in killMonster: loose bits (bone, gore, fur, chitin, rock), goo
+// splats and ground stains. Scales back as the debris pool fills so bodies and coins always have room.
+const _gm = new THREE.Matrix4(), _gp = new THREE.Vector3(), _gq = new THREE.Quaternion(), _gs = new THREE.Vector3();
+const GORE_C = { bone: [1.08, 1.02, .88], blood: [.5, .07, .06], dark: [.3, .04, .04], fur: [.62, .5, .45], bat: [.36, .3, .36], chitin: [.32, .28, .22], rock: [.62, .6, .58] };
+function fxGore(m, dth, kind, ix, iz, up) {
+  if (!G.B || !KIT.bit) return;
+  const hA = G.B.heightAt, sc = m.scale || 1, x = m.x, y = m.y, z = m.z, blast = kind === 'blast';
+  const load = sat(DEB.length / DEB_BODY), more = 1 - load, ext = lerp(1.5, 1, sat((load - .3) / .4));
+  const keep = k => { if (k <= 1) return; for (let i = SHATTER.a; i < SHATTER.b && i < DEB.length; i++) { const d = DEB[i]; if (!d.coin) { d.life *= k; d.max *= k; } } };
+  const bits = (n, tint, spd, upv, size, l0, l1, o = {}) => {
+    n = Math.round(n * more);
+    for (let i = 0; i < n; i++) {
+      _gm.compose(_gp.set(x + frr(-.2, .2) * sc, y + frr(.2, .7) * sc, z + frr(-.2, .2) * sc), _gq.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _gs.setScalar(size * frr(.7, 1.3) * sc));
+      if (o.flat) _gs.y *= .35;
+      const tn = o.var ? [tint[0] * frr(.8, 1.15), tint[1] * frr(.8, 1.15), tint[2] * frr(.8, 1.15)] : tint;
+      addDebris(KIT.bit, _gm, tn, ix * .6 + frr(-spd, spd), frr(upv * .45, upv) * up, iz * .6 + frr(-spd, spd), frr(4, 12), frr(l0, l1), { extra: 1, float: o.float || 0, bounce: o.bounce });
+    }
+  };
+  const stain = (dx, dz, size, c, a) => FX.decals.add(hA, x + dx, z + dz, size, c[0], c[1], c[2], a, 60);
+  const tintOf = base => m.tint ? [base[0] * m.tint[0], base[1] * m.tint[1], base[2] * m.tint[2]] : base;
+  if (dth === 'bones') {
+    keep(ext); bits(3 + (blast ? 2 : 0), GORE_C.bone, 1.7, 3.6, .9, 5, 8, { var: 1 });
+    stain(0, 0, .45 * sc + .2, [.16, .15, .14], .3);
+  } else if (dth === 'fur') {
+    keep(ext * .9); bits(6, tintOf(GORE_C.fur), 1.3, 2.8, .85, 2.4, 3.8, { flat: 1, float: 1, var: 1 }); bits(3, GORE_C.blood, 1.8, 3, .45, 3, 5);
+    stain(0, 0, .3 * sc + .22, [.055, .012, .012], .6);
+  } else if (dth === 'bat') {
+    bits(4, tintOf(GORE_C.bat), 1, 1.5, .7, 2, 3.2, { flat: 1, float: 1, var: 1 });
+  } else if (dth === 'flesh') {
+    keep(ext * .9); bits(4 + (blast ? 2 : 0), GORE_C.blood, 2, 4, 1.0, 4, 7, { var: 1 }); bits(4, GORE_C.dark, 2.5, 3.6, .4, 2.5, 4);
+    stain(ix * .22, iz * .22, .4 * sc + .2, [.05, .01, .01], .55);
+  } else if (dth === 'bug') {
+    bits(4, tintOf(GORE_C.chitin), 1.8, 3, .7, 3, 5, { var: 1 });
+    stain(ix * .18, iz * .18, .25 * sc + .12, [.03, .045, .012], .5);
+  } else if (dth === 'rock') {
+    keep(ext);
+    const n = Math.round(3 * more);
+    for (let i = 0; i < n; i++) { _gm.compose(_gp.set(x + frr(-.3, .3) * sc, y + frr(.2, 1) * sc, z + frr(-.3, .3) * sc), _gq.identity(), _gs.setScalar(frr(.4, .8))); addDebris(KIT.rubble, _gm, m.tint, frr(-2.5, 2.5) + ix, frr(2, 4.5), frr(-2.5, 2.5) + iz, frr(3, 9), frr(4, 6.5), { extra: 1 }); }
+    stain(0, 0, .6 * sc + .2, [.1, .095, .09], .45);
+  } else if (dth === 'goo') {
+    for (let i = 0; i < 3; i++) { const a = frnd() * TAU, d = frr(.5, 1.1) * sc; stain(Math.cos(a) * d + ix * .2, Math.sin(a) * d + iz * .2, frr(.15, .3) * sc + .1, [.012, .034, .014], .6); }
+  }
+}

@@ -334,7 +334,17 @@ ${world ? `if (uCover.x > 0.001) {
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += diffuseColor.rgb * vSurf.w * 6.0;
 ${water ? 'if (uWat.x > 1.5 && uWat.x < 2.5) totalEmissiveRadiance += mix(vec3(0.7, 0.07, 0.008), vec3(1.45, 0.42, 0.05), wHeat * wHeat) * (1.0 - wMask) + vec3(0.1, 0.012, 0.0) * wMask * (0.3 + wn2);' : ''}
-${inst ? 'totalEmissiveRadiance += vec3(1.0, 0.8, 0.55) * vFlash * 0.55;' : ''}`)
+${inst ? `{
+  float cwEc = floor(vFlash * 0.25 + 0.002), cwFl = vFlash - cwEc * 4.0;
+  totalEmissiveRadiance += vec3(1.0, 0.8, 0.55) * cwFl * 0.55;
+  if (cwEc > 0.5) {
+    vec3 cwRc = cwEc < 1.5 ? vec3(1.7, 0.55, 0.1) : cwEc < 2.5 ? vec3(0.55, 0.9, 1.7) : cwEc < 3.5 ? vec3(1.5, 1.2, 0.18) : vec3(0.4, 1.6, 0.35);
+    float cwPu = cwEc > 3.5 ? 0.45 + 0.55 * sin(uTime * 4.2 + vViewPosition.x * 0.7) : 0.8 + 0.2 * sin(uTime * 7.0 + vViewPosition.x);
+    float cwFr = pow(1.0 - clamp(abs(normal.z), 0.0, 1.0), 2.0);
+    totalEmissiveRadiance += cwRc * (cwFr * 0.85 + 0.07) * cwPu;
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * cwRc * 0.75, 0.25);
+  }
+}` : ''}`)
       .replace('#include <opaque_fragment>', `${water ? 'outgoingLight += uSky * (0.4 + 4.0 * pow(1.0 - clamp(normal.z, 0.0, 1.0), 2.0)) * (1.5 - 0.6 * min(vSurf.z, 1.0)) * (1.0 - wMask * 0.8);' : ''}
 #include <opaque_fragment>`);
   };
@@ -729,7 +739,7 @@ function renderFrame() {
   u.tColor.value = T.bB.texture; u.uDir.value.set(1.6 / T.bB.width, 0); fsPass(M.blur, T.bB2);
   u.tColor.value = T.bB2.texture; u.uDir.value.set(0, 1.6 / T.bB.height); fsPass(M.blur, T.bB);
   u = M.comp.uniforms; u.tColor.value = T.dof.texture; u.tBloomA.value = T.bA.texture; u.tBloomB.value = T.bB.texture;
-  u.uGrade.value.x = R.exposure; u.uGrade.value.w = R.fade; u.uRes.value.set(R.iw, R.ih);
+  u.uGrade.value.x = R.exposure * (1 + FX.flash * .9); u.uGrade.value.w = R.fade; u.uRes.value.set(R.iw, R.ih);
   fsPass(M.comp, T.final);
   u = M.up.uniforms; u.tColor.value = T.final.texture; u.uTex.value.set(R.iw, R.ih); u.uOut.value.set(R.dw, R.dh); u.uSeed.value = (SH.uTime.value * 60 % 1000) * 7.13;
   fsPass(M.up, null);
@@ -2038,6 +2048,8 @@ const BIOME_DRESS = {
 };
 
 
+// Cosmetic randomness has its own stream so visual changes never shift the gameplay RNG (and the balance sims).
+const frnd = makeRng(0xF1A3E5), frr = (a, b) => a + (b - a) * frnd();
 const LT = {
   hemi: null, moon: null, fill: null, beacon: null, spots: [], towers: [], flashes: [], torches: [], env: [], envSrc: [], envK: 0,
   beaconBase: 1500, beaconMul: 1, beaconLevel: 1, bp: new THREE.Vector3(), tick: 0, shadowsAt: -1, beaconGutter: 0, beaconOn: 1, cold: 0, emitters: [], spotTimer: 0,
@@ -2159,7 +2171,7 @@ void main(){
   vec3 L = uAmb; for (int i = 0; i < 12; i++) { vec3 d = uLightPos[i] - iPos; L += uLightCol[i] / (dot(d, d) + 3.0); }
   vCol.rgb *= L;
   #endif
-  if (iMisc.w > 0.5) { gl_Position = projectionMatrix * viewMatrix * vec4(iPos + vec3(q.x, 0.0, q.y), 1.0); }
+  if (iMisc.w > 0.5) { gl_Position = projectionMatrix * viewMatrix * vec4(iPos + vec3(q.x, 0.0, -q.y), 1.0); }
   else { vec4 mv = viewMatrix * vec4(iPos, 1.0); mv.xy += q; gl_Position = projectionMatrix * mv; }
 }`;
 const SPR_NOISE = `
@@ -2202,6 +2214,12 @@ void main(){
     float band = smoothstep(0.5, 0.74, r) * smoothstep(1.0, 0.9, r);
     float trail = smoothstep(front - 1.5, front, th) * step(th, front) * step(-1.6, th);
     a = band * trail * (1.0 - smoothstep(0.45, 1.0, age));
+  }
+  else if (type == 8) {
+    float th = atan(p.y, p.x), inside = 1.0 - smoothstep(0.97, 1.0, r);
+    float sh = noise(vec2(th * 2.4 + uTime * 1.1 + seed, r * 3.0 - uTime * 0.8)) * 0.6 + noise(p * 6.0 + vec2(uTime * 0.6, seed)) * 0.4;
+    vec2 g = p - vec2(-0.36, 0.4);
+    a = (smoothstep(0.7, 0.97, r) * (0.45 + 0.55 * sh) + 0.06 + 0.9 * exp(-dot(g, g) * 26.0)) * inside;
   }
   gl_FragColor = vec4(col * a * vCol.a, 1.0);
 }`;
@@ -2275,14 +2293,17 @@ void main(){ vec4 a = viewMatrix * vec4(iA.xyz, 1.0), b = viewMatrix * vec4(iB.x
 }
 
 class DecalBatch {
+  // Ground stains (scorch, blood, goo). A ring of slots in one mesh. Decals persist through a wave (at least
+  // DECAL_MIN_LIFE seconds) and fadeAll() fades them out between waves. Dead slots are collapsed far below
+  // the board so they cost no fill.
   constructor(cap) {
-    this.cap = cap; this.G = 4; this.next = 0; this.slots = [];
+    this.cap = cap; this.G = 4; this.next = 0; this.slots = []; this.dirty = false;
     const vps = (this.G + 1) * (this.G + 1), g = new THREE.BufferGeometry();
-    this.pos = new THREE.BufferAttribute(new Float32Array(cap * vps * 3), 3); this.uv = new THREE.BufferAttribute(new Float32Array(cap * vps * 2), 2); this.col = new THREE.BufferAttribute(new Float32Array(cap * vps * 4), 4);
+    this.pos = new THREE.BufferAttribute(new Float32Array(cap * vps * 3).fill(-999), 3); this.uv = new THREE.BufferAttribute(new Float32Array(cap * vps * 2), 2); this.col = new THREE.BufferAttribute(new Float32Array(cap * vps * 4), 4);
     this.pos.setUsage(THREE.DynamicDrawUsage); this.col.setUsage(THREE.DynamicDrawUsage);
     const idx = [];
     for (let s = 0; s < cap; s++) {
-      this.slots.push({ life: 0, max: 1, a: 0, seed: 0 });
+      this.slots.push({ life: 0, fade: 1, a: 0, seed: 0, k: 0, dead: true, r: 0, g: 0, b: 0 });
       for (let j = 0; j <= this.G; j++) for (let i = 0; i <= this.G; i++) { const o = s * vps + j * (this.G + 1) + i; this.uv.array[o * 2] = i / this.G * 2 - 1; this.uv.array[o * 2 + 1] = j / this.G * 2 - 1; }
       for (let j = 0; j < this.G; j++) for (let i = 0; i < this.G; i++) { const a = s * vps + j * (this.G + 1) + i, b = a + 1, c = a + this.G + 2, d = a + this.G + 1; idx.push(a, d, c, a, c, b); }
     }
@@ -2299,57 +2320,62 @@ void main(){ float r = length(vUv); float sd = floor(vCol.a) ; float al = fract(
   }
   add(heightAt, x, z, size, r, g, b, alpha, life) {
     const s = this.next; this.next = (this.next + 1) % this.cap; const sl = this.slots[s];
-    sl.life = life; sl.max = life; sl.a = alpha; sl.seed = Math.floor(rnd() * 90) + 1; sl.r = r; sl.g = g; sl.b = b;
-    const P = this.pos.array, rot = rnd() * TAU, cs = Math.cos(rot), sn = Math.sin(rot);
+    sl.life = Math.max(life, DECAL_MIN_LIFE); sl.fade = Math.max(.6, Math.min(4, life * .25)); sl.a = alpha; sl.seed = Math.floor(frnd() * 90) + 1; sl.r = r; sl.g = g; sl.b = b; sl.k = -1; sl.dead = false;
+    const P = this.pos.array, rot = frnd() * TAU, cs = Math.cos(rot), sn = Math.sin(rot);
     for (let j = 0; j <= this.G; j++) for (let i = 0; i <= this.G; i++) {
       const o = (s * this.vps + j * (this.G + 1) + i) * 3, lx = (i / this.G * 2 - 1) * size, lz = (j / this.G * 2 - 1) * size, wx = x + lx * cs - lz * sn, wz = z + lx * sn + lz * cs;
-      P[o] = wx; P[o + 1] = heightAt(wx, wz) + .05; P[o + 2] = wz;
+      P[o] = wx; P[o + 1] = heightAt(wx, wz) + .1; P[o + 2] = wz;
     }
-    this.pos.needsUpdate = true;
+    this.pos.addUpdateRange(s * this.vps * 3, this.vps * 3); this.pos.needsUpdate = true;
   }
   update(dt) {
-    const C = this.col.array;
+    const C = this.col.array, P = this.pos.array;
     for (let s = 0; s < this.cap; s++) {
-      const sl = this.slots[s]; if (sl.life <= 0 && sl.dead) continue;
-      sl.life -= dt; const k = sl.life <= 0 ? 0 : Math.min(1, sl.life / (sl.max * .25)) * sl.a; sl.dead = sl.life <= 0;
+      const sl = this.slots[s]; if (sl.dead) continue;
+      sl.life -= dt; const k = sl.life <= 0 ? 0 : Math.min(1, sl.life / sl.fade) * sl.a;
+      if (Math.abs(k - sl.k) < .004) continue;
+      sl.k = k; this.dirty = true;
       for (let v = 0; v < this.vps; v++) { const o = (s * this.vps + v) * 4; C[o] = sl.r; C[o + 1] = sl.g; C[o + 2] = sl.b; C[o + 3] = sl.seed + Math.min(.97, k); }
+      if (sl.life <= 0) { sl.dead = true; P.fill(-999, s * this.vps * 3, (s + 1) * this.vps * 3); this.pos.addUpdateRange(s * this.vps * 3, this.vps * 3); this.pos.needsUpdate = true; }
     }
-    this.col.needsUpdate = true;
+    if (this.dirty) { this.dirty = false; this.col.needsUpdate = true; }
   }
-  clear() { for (const sl of this.slots) sl.life = 0; }
+  fadeAll(sec) { for (const sl of this.slots) if (!sl.dead && sl.life > sec) { sl.life = sec * frr(.7, 1.15); sl.fade = sl.life; } }
+  clear() { for (const sl of this.slots) if (!sl.dead) sl.life = 0; }
 }
+const DECAL_MIN_LIFE = 150;
 
 const FX = {
   add: null, alpha: null, segs: null, decals: null,
-  parts: [], smokes: [], flames: [], timed: [], bolts: [], shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, groundAt: () => 0,
+  parts: [], smokes: [], flames: [], timed: [], bolts: [], fires: [], scorch: [], shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, shakeT: 0, flash: 0, flashK: 1, dt: 0, calm: false, groundAt: () => 0,
 };
 function initFX() {
-  FX.add = new SpriteBatch(2600, false); FX.alpha = new SpriteBatch(700, true); FX.segs = new SegBatch(600); FX.decals = new DecalBatch(40);
+  FX.add = new SpriteBatch(4000, false); FX.alpha = new SpriteBatch(800, true); FX.segs = new SegBatch(900); FX.decals = new DecalBatch(200);
   R.scene.add(FX.add.mesh, FX.alpha.mesh, FX.segs.mesh, FX.decals.mesh);
 }
 function fxPart(x, y, z, vx, vy, vz, life, size, r, g, b, o) {
   if (FX.parts.length > 1700) return;
-  FX.parts.push({ x, y, z, vx, vy, vz, life, max: life, size, r, g, b, grav: o && o.grav || 0, drag: o && o.drag || 0, streak: o && o.streak || 0, rise: o && o.rise || 0, bounce: o && o.bounce || 0, seed: rnd() * 100, wob: o && o.wob || 0 });
+  FX.parts.push({ x, y, z, vx, vy, vz, life, max: life, size, r, g, b, grav: o && o.grav || 0, drag: o && o.drag || 0, streak: o && o.streak || 0, rise: o && o.rise || 0, bounce: o && o.bounce || 0, seed: frnd() * 100, wob: o && o.wob || 0 });
 }
 function fxSmoke(x, y, z, vx, vy, vz, life, size, grow, r, g, b, a, o) {
   if (FX.smokes.length > 640) return;
-  FX.smokes.push({ x, y, z, vx, vy, vz, life, max: life, size, grow, r, g, b, a, drag: o && o.drag !== undefined ? o.drag : 1.2, seed: rnd() * 100, rise: o && o.rise || 0 });
+  FX.smokes.push({ x, y, z, vx, vy, vz, life, max: life, size, grow, r, g, b, a, drag: o && o.drag !== undefined ? o.drag : 1.2, seed: frnd() * 100, rise: o && o.rise || 0 });
 }
 function fxSparks(x, y, z, n, speed, r, g, b, o = {}) {
   for (let i = 0; i < n; i++) {
-    const a = rnd() * TAU, e = rr(o.lo === undefined ? .1 : o.lo, o.hi === undefined ? 1.3 : o.hi), s = speed * rr(.4, 1);
-    fxPart(x, y, z, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s, Math.sin(a) * Math.cos(e) * s, rr(.25, .6) * (o.life || 1), o.size || .07, r, g, b, { grav: o.grav === undefined ? 9 : o.grav, drag: .6, streak: 1, bounce: .35 });
+    const a = frnd() * TAU, e = frr(o.lo === undefined ? .1 : o.lo, o.hi === undefined ? 1.3 : o.hi), s = speed * frr(.4, 1);
+    fxPart(x, y, z, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s, Math.sin(a) * Math.cos(e) * s, frr(.25, .6) * (o.life || 1), o.size || .07, r, g, b, { grav: o.grav === undefined ? 9 : o.grav, drag: .6, streak: 1, bounce: .35 });
   }
 }
 function fxEmbers(x, y, z, n, spread, r = 1, g = .5, b = .12) {
-  for (let i = 0; i < n; i++) fxPart(x + rr(-spread, spread), y + rr(0, spread), z + rr(-spread, spread), rr(-.25, .25), rr(.7, 1.9), rr(-.25, .25), rr(.9, 2.2), rr(.05, .09), r * rr(1.6, 3), g * rr(1.2, 2.4), b * 2, { drag: .3, wob: 1, rise: .25 });
+  for (let i = 0; i < n; i++) fxPart(x + frr(-spread, spread), y + frr(0, spread), z + frr(-spread, spread), frr(-.25, .25), frr(.7, 1.9), frr(-.25, .25), frr(.9, 2.2), frr(.05, .09), r * frr(1.6, 3), g * frr(1.2, 2.4), b * 2, { drag: .3, wob: 1, rise: .25 });
 }
 function fxDust(x, y, z, n, size, o = {}) {
   const c = o.c || [.34, .3, .27];
-  for (let i = 0; i < n; i++) { const a = rnd() * TAU, s = rr(.3, 1) * (o.speed || 1.3); fxSmoke(x + Math.cos(a) * size * .3, y + rr(0, .15), z + Math.sin(a) * size * .3, Math.cos(a) * s, rr(.2, .7) * (o.up || 1), Math.sin(a) * s, rr(.5, 1.1) * (o.life || 1), size * rr(.5, .9), size * 1.2, c[0], c[1], c[2], o.a || .5, { drag: 2.4 }); }
+  for (let i = 0; i < n; i++) { const a = frnd() * TAU, s = frr(.3, 1) * (o.speed || 1.3); fxSmoke(x + Math.cos(a) * size * .3, y + frr(0, .15), z + Math.sin(a) * size * .3, Math.cos(a) * s, frr(.2, .7) * (o.up || 1), Math.sin(a) * s, frr(.5, 1.1) * (o.life || 1), size * frr(.5, .9), size * 1.2, c[0], c[1], c[2], o.a || .5, { drag: 2.4 }); }
 }
 function fxTimed(type, x, y, z, w, h, r, g, b, a, life, o = {}) {
-  FX.timed.push({ type, x, y, z, w, h, r, g, b, a, life, max: life, rot: o.rot || 0, ground: o.ground ? 1 : 0, grow: o.grow || 0, seed: rnd() * 50, anchor: o.anchor || 0 });
+  FX.timed.push({ type, x, y, z, w, h, r, g, b, a, life, max: life, rot: o.rot || 0, ground: o.ground ? 1 : 0, grow: o.grow || 0, seed: frnd() * 50, anchor: o.anchor || 0 });
 }
 function fxExplosion(x, y, z, sc = 1) {
   lightFlash(x, y + 1.1, z, 0xffb060, 520 * sc * sc, .4, 20 + sc * 6);
@@ -2357,22 +2383,22 @@ function fxExplosion(x, y, z, sc = 1) {
   fxTimed(5, x, y + .4 * sc, z, 4.2 * sc, 4.2 * sc, 3.5, 2.4, 1.2, 1, .12);
   fxTimed(4, x, y + .08, z, 5.4 * sc, 5.4 * sc, 1.6, 1.0, .5, .55, .4, { ground: true });
   fxSparks(x, y + .2, z, Math.round(22 * sc), 7.5 * sc, 3.2, 1.7, .5, { size: .08 });
-  for (let i = 0; i < 9 * sc; i++) { const a = rnd() * TAU, s = rr(.4, 1.6) * sc; fxSmoke(x + Math.cos(a) * .3, y + rr(.2, .7), z + Math.sin(a) * .3, Math.cos(a) * s, rr(.6, 1.7), Math.sin(a) * s, rr(1.6, 3.4), rr(.7, 1.1) * sc, 1.5 * sc, .2, .19, .19, .62, { drag: 1.5, rise: .25 }); }
+  for (let i = 0; i < 9 * sc; i++) { const a = frnd() * TAU, s = frr(.4, 1.6) * sc; fxSmoke(x + Math.cos(a) * .3, y + frr(.2, .7), z + Math.sin(a) * .3, Math.cos(a) * s, frr(.6, 1.7), Math.sin(a) * s, frr(1.6, 3.4), frr(.7, 1.1) * sc, 1.5 * sc, .2, .19, .19, .62, { drag: 1.5, rise: .25 }); }
   fxDust(x, y, z, 6, .9 * sc, { speed: 2.6 });
-  FX.shake = Math.min(1.2, FX.shake + .32 * sc);
+  shake(.2 * sc);
 }
 function fxBolt(a, b, life = .22, col = [.55, .8, 1.6], width = .09) {
-  FX.bolts.push({ a: a.slice(), b: b.slice(), life, max: life, col, width, seed: Math.floor(rnd() * 1000), re: 0, pts: null });
+  FX.bolts.push({ a: a.slice(), b: b.slice(), life, max: life, col, width, seed: Math.floor(frnd() * 1000), re: 0, pts: null });
 }
 function addFlame(o) {
-  const f = Object.assign({ size: 1, r: 1, g: 1, b: 1, embers: 1, glow: 1, on: 1, seed: rnd() * 10, acc: rnd(), layers: 1, alive: true, smoke: 0 }, o);
+  const f = Object.assign({ size: 1, r: 1, g: 1, b: 1, embers: 1, glow: 1, on: 1, seed: frnd() * 10, acc: frnd(), layers: 1, alive: true, smoke: 0 }, o);
   FX.flames.push(f); return f;
 }
 function removeFlame(f) { if (!f) return; f.alive = false; const i = FX.flames.indexOf(f); if (i >= 0) swapRemove(FX.flames, i); }
 
 function updateFX(dt, t) {
   const A = FX.add, AL = FX.alpha, SG = FX.segs, groundAt = FX.groundAt;
-  A.begin(); AL.begin(); SG.begin();
+  A.begin(); AL.begin(); SG.begin(); FX.dt = dt;
   const rx = Math.cos(CAM.yaw), rz = -Math.sin(CAM.yaw), se = Math.sin(CAM.elev), ce = Math.cos(CAM.elev), ux = -se * Math.sin(CAM.yaw), uy = ce, uz = -se * Math.cos(CAM.yaw);
   for (const f of FX.flames) {
     const on = f.on; if (on <= .01) continue;
@@ -2385,9 +2411,9 @@ function updateFX(dt, t) {
     f.acc += dt * (2.2 + 5 * s) * f.embers * on;
     while (f.acc >= 1) {
       f.acc -= 1;
-      fxPart(f.x + rr(-.25, .25) * s, f.y + s * rr(.3, 1.1), f.z + rr(-.25, .25) * s, rr(-.3, .3), rr(.8, 2.0) * (0.7 + s * .3), rr(-.3, .3), rr(.8, 2.0) * (.7 + s * .35), rr(.045, .085), f.r * rr(1.8, 3.2), f.g * rr(.7, 1.4), f.b * .25, { drag: .25, wob: 1, rise: .3 });
+      fxPart(f.x + frr(-.25, .25) * s, f.y + s * frr(.3, 1.1), f.z + frr(-.25, .25) * s, frr(-.3, .3), frr(.8, 2.0) * (0.7 + s * .3), frr(-.3, .3), frr(.8, 2.0) * (.7 + s * .35), frr(.045, .085), f.r * frr(1.8, 3.2), f.g * frr(.7, 1.4), f.b * .25, { drag: .25, wob: 1, rise: .3 });
     }
-    if (f.smoke > 0) { f.sacc = (f.sacc || 0) + dt * f.smoke * on; while (f.sacc >= 1) { f.sacc -= 1; fxSmoke(f.x + rr(-.2, .2) * s, f.y + s * 1.3, f.z + rr(-.2, .2) * s, rr(-.15, .15), rr(.9, 1.5), rr(-.15, .15), rr(2.5, 4.5), s * .7, s * 1.6, .16, .15, .16, .22, { drag: .25, rise: .1 }); } }
+    if (f.smoke > 0) { f.sacc = (f.sacc || 0) + dt * f.smoke * on; while (f.sacc >= 1) { f.sacc -= 1; fxSmoke(f.x + frr(-.2, .2) * s, f.y + s * 1.3, f.z + frr(-.2, .2) * s, frr(-.15, .15), frr(.9, 1.5), frr(-.15, .15), frr(2.5, 4.5), s * .7, s * 1.6, .16, .15, .16, .22, { drag: .25, rise: .1 }); } }
   }
   const P = FX.parts;
   for (let i = P.length - 1; i >= 0; i--) {
@@ -2422,19 +2448,117 @@ function updateFX(dt, t) {
     b.re -= dt;
     if (!b.pts || b.re <= 0) {
       b.re = .045; const n = Math.max(3, Math.round(Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1], b.b[2] - b.a[2]) / .45)), pts = [];
-      for (let k = 0; k <= n; k++) { const u = k / n, j = Math.sin(u * PI) * .34; pts.push([lerp(b.a[0], b.b[0], u) + rr(-j, j), lerp(b.a[1], b.b[1], u) + rr(-j, j), lerp(b.a[2], b.b[2], u) + rr(-j, j)]); }
-      b.pts = pts; b.fork = rnd() < .7 ? Math.floor(rr(1, n - 1)) : -1; b.fd = [rr(-1, 1), rr(-.2, .8), rr(-1, 1)];
+      for (let k = 0; k <= n; k++) { const u = k / n, j = Math.sin(u * PI) * .34; pts.push([lerp(b.a[0], b.b[0], u) + frr(-j, j), lerp(b.a[1], b.b[1], u) + frr(-j, j), lerp(b.a[2], b.b[2], u) + frr(-j, j)]); }
+      b.pts = pts; b.fork = frnd() < .7 ? Math.floor(frr(1, n - 1)) : -1; b.fd = [frr(-1, 1), frr(-.2, .8), frr(-1, 1)];
     }
     const k = b.life / b.max, c = b.col, w = b.width * (.5 + .5 * k);
     for (let j = 0; j < b.pts.length - 1; j++) { const p = b.pts[j], q = b.pts[j + 1]; SG.push(p[0], p[1], p[2], w, q[0], q[1], q[2], w, c[0] * 4, c[1] * 4, c[2] * 4, k); SG.push(p[0], p[1], p[2], w * 3.5, q[0], q[1], q[2], w * 3.5, c[0], c[1], c[2], k * .35); }
     if (b.fork > 0) { const p = b.pts[b.fork]; SG.push(p[0], p[1], p[2], w * .7, p[0] + b.fd[0] * .7, p[1] + b.fd[1] * .7, p[2] + b.fd[2] * .7, w * .2, c[0] * 3, c[1] * 3, c[2] * 3, k); }
   }
+  updateFires(dt, t);
+  const calm = G.phase === 'play' && !G.spawning && !G.mons.length;
+  if (calm && !FX.calm) FX.decals.fadeAll(4.5);
+  FX.calm = calm;
   FX.decals.update(dt);
-  FX.shake = Math.max(0, FX.shake - dt * 2.6);
-  const sh = FX.shake * FX.shake * FX.shakeK; FX.shakeX = n1(t * 31, 7) * sh * .22; FX.shakeY = n1(t * 37, 9) * sh * .22;
 }
 function endFX() { FX.add.end(); FX.alpha.end(); FX.segs.end(); }
-function clearFX() { FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; FX.decals.clear(); }
+function clearFX() { FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; for (const f of FX.fires) f.alive = false; FX.fires.length = 0; FX.scorch.length = 0; FX.decals.clear(); }
+
+// ---- Camera shake, hit-stop and flash ----------------------------------------------------------------
+// shake(amount): adds trauma that decays smoothly. ~.2 shell, ~.5 sapper, ~1 boss stomp; the total is capped
+// and repeated calls saturate rather than stack. Turned off by prefers-reduced-motion.
+const SHAKE_CAP = 1.25;
+function shake(a) {
+  if (!(a > 0) || !FX.shakeK) return;
+  FX.shake = Math.min(SHAKE_CAP, FX.shake + a * (1 - FX.shake / (SHAKE_CAP + .15)));
+}
+// hitStop(seconds, flash): freezes simulation time for a moment (step() scales dt down while G.hitstop > 0,
+// counted in the caller's fixed step, so record.js stays deterministic) and briefly brightens the frame.
+function hitStop(sec, flash = 0) {
+  G.hitstop = Math.max(G.hitstop || 0, Math.min(.09, sec));
+  if (flash > 0) FX.flash = Math.min(1, Math.max(FX.flash, flash * FX.flashK));
+}
+// Runs on real (unscaled) time so the shake keeps moving through hit-stop and slow motion.
+function updateShake(rdt) {
+  FX.shakeT += rdt; FX.shake = Math.max(0, FX.shake - rdt * (1.5 + FX.shake * .8)); FX.flash = Math.max(0, FX.flash - rdt * 7);
+  const t = FX.shakeT, a = Math.pow(FX.shake, 1.3) * .32 * FX.shakeK;
+  FX.shakeX = a ? (n1(t * 23, 7) * .8 + n1(t * 41, 3) * .2) * a : 0; FX.shakeY = a ? (n1(t * 27, 9) * .8 + n1(t * 47, 5) * .2) * a : 0;
+}
+
+// ---- Burning ground ----------------------------------------------------------------------------------
+// FX.groundFire(x, z, r, seconds) -> handle. A patch of flames with embers, smoke, a ground glow, a pooled
+// torch light (no new lights) and a scorch decal left behind. Cheap: a few sprites per patch, so 10-20 at
+// once is fine. The handle's x/z can be moved, and setting handle.life = 0 puts it out.
+// At most FIRE_MAX burn at once; beyond that the oldest is put out early.
+const FIRE_MAX = 24;
+FX.groundFire = function (x, z, r = 1, seconds = 4) {
+  if (!isFinite(x) || !isFinite(z) || G.phase === 'crumble' || G.phase === 'rise') return null;
+  r = clamp(+r || 1, .3, 4); seconds = clamp(+seconds || 4, .3, 120);
+  if (FX.fires.length >= FIRE_MAX) { let o = null; for (const f of FX.fires) if (f.life > .6 && (!o || f.age > o.age)) o = f; if (o) o.life = .6; else return null; }
+  const gy = FX.groundAt(x, z);
+  const f = { x, z, r, life: seconds, age: 0, seed: frnd() * 100, acc: frnd(), sacc: frnd(), n: clamp(Math.round(1.6 + r * r * 1.5), 2, 7), alive: true, lI: 0, lx: x, ly: gy + .6, lz: z, lCol: 0xff7a2a, lseed: frnd() * 9 };
+  let near = false; for (const q of FX.scorch) if (dist2(q[0], q[1], x, z) < (r * .7) * (r * .7) && G.t - q[2] < 30) { near = true; break; }
+  if (!near) { FX.decals.add(FX.groundAt, x, z, r * 1.2, .018, .014, .012, .88, seconds + 60); FX.scorch.push([x, z, G.t]); if (FX.scorch.length > 24) FX.scorch.shift(); }
+  fxTimed(4, x, gy + .14, z, r * 2.6, r * 2.6, 1.8, .8, .25, .6, .35, { ground: true });
+  FX.fires.push(f); return f;
+};
+function updateFires(dt, t) {
+  const A = FX.add, F = FX.fires, groundAt = FX.groundAt;
+  for (let i = F.length - 1; i >= 0; i--) {
+    const f = F[i]; f.life -= dt; f.age += dt;
+    if (f.life <= 0 || !f.alive) { f.alive = false; f.lI = 0; swapRemove(F, i); continue; }
+    const on = sat(f.age / .35) * sat(f.life / .6), fl = .85 + .15 * n1(t * 7 + f.seed, f.seed), gy = groundAt(f.x, f.z), r = f.r;
+    A.push(f.x, gy + .13, f.z, r * 3.2, r * 3.2, 0, 0, 1.2, .42, .08, .5 * on * fl, 2, 0, 0, 1);
+    A.push(f.x, gy + .14, f.z, r * 2.1, r * 2.1, f.seed, 0, .95, .55, .32, .75 * on, 3, f.seed, .3 + .05 * Math.sin(t * 1.7 + f.seed), 1);
+    A.push(f.x, gy + .6, f.z, r * 2.6, r * 2.2, 0, 0, 1.0, .4, .1, .14 * on * fl, 2, 0, 0, 0);
+    for (let k = 0; k < f.n; k++) {
+      const u = (k + .5) / f.n, rad = r * .62 * Math.sqrt(u), ang = k * 2.39996 + f.seed, px = f.x + Math.cos(ang) * rad, pz = f.z + Math.sin(ang) * rad;
+      const cyc = (t * (.8 + .21 * ((k * 7) % 5)) + k * .37 + f.seed) % 1, lick = Math.pow(Math.sin(cyc * PI), .6);
+      const s = (.5 + .34 * Math.sqrt(r)) * (1.1 - .4 * Math.sqrt(u)) * (.5 + .5 * lick) * on;
+      if (s < .04) continue;
+      A.push(px, groundAt(px, pz) - s * .05, pz, s * 1.45, s * 1.8, 0, 1, 2.0, 1.4, .9, on, 1, f.seed + k * 3.7, 0, 0);
+    }
+    f.acc += dt * (1.5 + 3 * r) * on;
+    while (f.acc >= 1) { f.acc -= 1; const a = frnd() * TAU, d = Math.sqrt(frnd()) * r * .8; fxPart(f.x + Math.cos(a) * d, gy + frr(.1, .5), f.z + Math.sin(a) * d, frr(-.3, .3), frr(.9, 2.2), frr(-.3, .3), frr(.7, 1.8), frr(.045, .08), frr(1.8, 3.2), frr(.7, 1.3), .22, { drag: .3, wob: 1, rise: .3 }); }
+    f.sacc += dt * (.35 + .4 * r) * on;
+    while (f.sacc >= 1) { f.sacc -= 1; fxSmoke(f.x + frr(-.4, .4) * r, gy + .5 + r * .3, f.z + frr(-.4, .4) * r, frr(-.15, .15), frr(.7, 1.3), frr(-.15, .15), frr(2, 3.6), .35 + r * .25, .7 + r * .5, .14, .12, .12, .26, { drag: .3, rise: .12 }); }
+    f.lx = f.x; f.ly = gy + .55 + r * .2; f.lz = f.z; f.lI = (16 + 9 * r) * on * fl;
+  }
+}
+
+// ---- Elite auras -------------------------------------------------------------------------------------
+// m.elite = 'burning' | 'shielded' | 'hasted' | 'splitting'. The body gets a coloured rim from the instanced
+// material (ELITE_CODE is packed into the flash attribute in drawMonster); drawElite adds a few sprites.
+const ELITE_CODE = { burning: 1, shielded: 2, hasted: 3, splitting: 4 };
+function drawElite(m, t) {
+  if (!(m.vis || m.fly) || m.dead) return;
+  const e = m.elite, A = FX.add, sc = m.scale / (m.def.scale || 1), top = m.def.top * sc, R0 = Math.max(.32, m.rad * 1.5), cy = m.y + top * .5, sd = (m.lseed || 0) * 7, dt = FX.dt;
+  if (e === 'burning') {
+    const fl = .85 + .15 * n1(t * 9 + sd, sd), lx = Math.cos(m.yaw) * R0 * .32, lz = -Math.sin(m.yaw) * R0 * .32;
+    A.push(m.x + lx, m.y + top * .12, m.z + lz, R0 * .95, R0 * 1.55, 0, 1, 3.3, 3.3, 3.3, .9, 1, sd, 0, 0);
+    A.push(m.x - lx, m.y + top * .38, m.z - lz, R0 * .8, R0 * 1.35, 0, 1, 3.3, 3.3, 3.3, .85, 1, sd + 5.3, 0, 0);
+    A.push(m.x, cy, m.z, R0 * 4, R0 * 4, 0, 0, 1.0, .42, .1, .2 * fl, 2, 0, 0, 0);
+    if (frnd() < dt * 1.6) fxSmoke(m.x, m.y + top * .9, m.z, frr(-.1, .1), frr(.6, 1), frr(-.1, .1), frr(1, 1.8), .22 + R0 * .2, .5, .12, .11, .11, .3, { drag: .4, rise: .1 });
+    if (frnd() < dt * 6) fxPart(m.x + frr(-.6, .6) * R0, m.y + frr(.2, 1) * top, m.z + frr(-.6, .6) * R0, frr(-.3, .3), frr(.8, 1.8), frr(-.3, .3), frr(.5, 1.1), frr(.04, .07), frr(2, 3.2), frr(.8, 1.2), .2, { drag: .4, wob: 1, rise: .3 });
+  } else if (e === 'shielded') {
+    const hit = m.flash || 0, d = Math.max(top * 1.02, m.rad * 2.8);
+    A.push(m.x, cy, m.z, d, d, 0, 0, .35 + hit, .62 + hit, 1.45 + hit * .5, .5 + hit * .9, 8, sd, 0, 0);
+    if (hit > .6 && frnd() < .5) fxSparks(m.x, cy, m.z, 3, 2.4, 1.2, 1.8, 3, { size: .05, grav: 3 });
+  } else if (e === 'hasted') {
+    const fx = Math.sin(m.yaw), fz = Math.cos(m.yaw), lx = fz, lz = -fx, SG = FX.segs, mv = Math.max(.35, m.mv || 0);
+    for (let k = 0; k < 3; k++) {
+      const h = m.y + top * (.22 + .25 * k), o = (k - 1) * m.rad * .8, len = (.55 + .5 * (.5 + .5 * Math.sin(t * 13 + k * 2.1 + sd))) * (.6 + R0) * mv;
+      const ax = m.x - fx * m.rad * .6 + lx * o, az = m.z - fz * m.rad * .6 + lz * o;
+      SG.push(ax, h, az, .045, ax - fx * len, h, az - fz * len, .005, 1.6, 1.25, .3, .6);
+    }
+    A.push(m.x, cy, m.z, R0 * 3.2, R0 * 3.2, 0, 0, .9, .75, .15, .16, 2, 0, 0, 0);
+  } else if (e === 'splitting') {
+    const pu = .5 + .5 * Math.sin(t * 4.2 + sd), age = (t * .8 + sd) % 1;
+    A.push(m.x, m.y + .1, m.z, R0 * 3.4, R0 * 3.4, 0, 0, .5, 2.2, .45, 1, 4, 0, age, 1);
+    A.push(m.x, cy, m.z, R0 * 3.6, R0 * 3.6, 0, 0, .3, 1.0, .25, .1 + .14 * pu, 2, 0, 0, 0);
+    if (frnd() < dt * 3) fxPart(m.x + frr(-.5, .5) * R0, m.y + top * frr(.3, .9), m.z + frr(-.5, .5) * R0, 0, frr(-.2, .3), 0, frr(.4, .8), frr(.04, .07), .5, 2.2, .45, { grav: 3, drag: .5 });
+  }
+}
 
 
 const WX = { mesh: null, u: null, fade: 1 };
@@ -2648,6 +2772,8 @@ function initKits() {
   KIT.goo = new PartBatch(S => { S.ico(.08, 0, 0, 0, COL.slime, { d: 1, rough: .3, emis: .08 }); }, 200, { shadow: false, rad: .06 });
   KIT.rubble = new PartBatch(S => { S.rock(.14, 0, 0, 0, COL.stone, {}); }, 160, { rad: .1 });
   KIT.plank = new PartBatch(S => { S.box(.12, .6, .05, 0, 0, 0, COL.wood, { l: L_WOOD }); }, 100, { rad: .08 });
+  // Neutral lump for death bits: tinted bone, gore, chitin or fur, squashed by the matrix scale.
+  KIT.bit = new PartBatch(S => { S.ico(.06, 0, 0, 0, [.8, .8, .8], { sc: [1, .7, 1.7], d: 0, jit: .05 }); S.ico(.035, 0, .01, .09, [.72, .72, .72], { d: 0 }); }, 320, { shadow: false, rad: .05 });
   initBestiary();
 }
 
@@ -2740,17 +2866,20 @@ function rigBat(e, K = KIT.bat, wx = .06, wy = .02) {
   return M0;
 }
 
-const DEB = [];
+const DEB = [], SHATTER = { a: 0, b: 0 };
 const _dq = new THREE.Quaternion(), _dax = new THREE.Vector3(), _dp = new THREE.Vector3(), _ds = new THREE.Vector3(), _dm = new THREE.Matrix4();
+// Debris cap with headroom: extra gore stops first, then body parts, so coins always fit.
+const DEB_CAP = 900, DEB_BODY = 820, DEB_EXTRA = 700;
 function addDebris(batch, mat, tint, vx, vy, vz, spin, life, o = {}) {
-  if (DEB.length > 520) return null;
-  const d = { batch, p: new THREE.Vector3(), q: new THREE.Quaternion(), s: new THREE.Vector3(), vx, vy, vz, w: new THREE.Vector3(rr(-1, 1), rr(-1, 1), rr(-1, 1)).normalize(), ws: spin, life, max: life, tint: tint ? tint.slice() : null, rad: o.rad || batch.rad, rest: false, coin: o.coin || 0, bounce: o.bounce === undefined ? .32 : o.bounce, flash: o.flash || 0, goo: o.goo || 0, hold: o.hold || 0 };
+  if (DEB.length >= (o.coin ? DEB_CAP : o.extra ? DEB_EXTRA : DEB_BODY)) return null;
+  const d = { batch, p: new THREE.Vector3(), q: new THREE.Quaternion(), s: new THREE.Vector3(), vx, vy, vz, w: new THREE.Vector3(frr(-1, 1), frr(-1, 1), frr(-1, 1)).normalize(), ws: spin, life, max: life, tint: tint ? tint.slice() : null, rad: o.rad || batch.rad, rest: false, coin: o.coin || 0, bounce: o.bounce === undefined ? .32 : o.bounce, flash: o.flash || 0, goo: o.goo || 0, hold: o.hold || 0, float: o.float || 0 };
   mat.decompose(d.p, d.q, d.s); d.rad *= Math.max(d.s.x, d.s.y); DEB.push(d); return d;
 }
 function shatter(rigFn, e, impulse, o = {}) {
   const ix = impulse[0], iy = impulse[1], iz = impulse[2], spread = o.spread === undefined ? 1.6 : o.spread;
-  RIG_CAPTURE = (batch, mat, tint) => { addDebris(batch, mat, tint, ix + rr(-spread, spread), iy + rr(.4, 2.2) * (o.up || 1), iz + rr(-spread, spread), rr(3, 11), rr(3.2, 5.5) * (o.life || 1), { hold: o.hold ? rr(0, o.hold) : 0 }); };
-  try { rigFn(e); } finally { RIG_CAPTURE = null; }
+  SHATTER.a = DEB.length;
+  RIG_CAPTURE = (batch, mat, tint) => { addDebris(batch, mat, tint, ix + frr(-spread, spread), iy + frr(.4, 2.2) * (o.up || 1), iz + frr(-spread, spread), frr(3, 11), frr(3.2, 5.5) * (o.life || 1), { hold: o.hold ? frr(0, o.hold) : 0 }); };
+  try { rigFn(e); } finally { RIG_CAPTURE = null; SHATTER.b = DEB.length; }
 }
 function updateDebris(dt, groundAt, onCoin) {
   for (let i = DEB.length - 1; i >= 0; i--) {
@@ -2758,16 +2887,21 @@ function updateDebris(dt, groundAt, onCoin) {
     if (d.life <= 0) { swapRemove(DEB, i); continue; }
     if (d.hold > 0) { d.hold -= dt; }
     else if (!d.rest) {
-      d.vy -= 13 * dt; d.p.x += d.vx * dt; d.p.y += d.vy * dt; d.p.z += d.vz * dt;
+      if (d.float) { const k = Math.exp(-2.2 * dt); d.vx *= k; d.vz *= k; d.vy = Math.max(-.9, d.vy * k - 3 * dt); } else d.vy -= 13 * dt;
+      d.p.x += d.vx * dt; d.p.y += d.vy * dt; d.p.z += d.vz * dt;
       _dq.setFromAxisAngle(d.w, d.ws * dt); d.q.premultiply(_dq);
       const gy = groundAt(d.p.x, d.p.z) + d.rad;
       if (d.p.y < gy) {
         d.p.y = gy;
-        if (d.goo) { d.life = 0; continue; }
+        if (d.goo) {
+          if (d.goo > 1 || frnd() < .35) { d.life = 0; continue; }
+          d.goo = 2; d.rest = true; d.vy = 0; d.p.y = gy - d.rad + .025; d.q.setFromAxisAngle(_dax.set(0, 1, 0), frnd() * TAU); d.s.set(d.s.x * 1.8, d.s.y * .2, d.s.z * 1.8); d.life = Math.min(d.life, frr(1.6, 3.2)); d.max = d.life; continue;
+        }
         if (Math.abs(d.vy) < 1.2) { d.rest = true; d.vy = 0; } else { d.vy = -d.vy * d.bounce; }
         d.vx *= .55; d.vz *= .55; d.ws *= .5;
       }
-    } else if (d.life < .9 && !d.coin) { d.p.y -= dt * .22; }
+    } else if (d.rest && groundAt(d.p.x, d.p.z) < d.p.y - 3) { d.rest = false; d.vy = 0; }
+    else if (d.life < .9 && !d.coin) { d.p.y -= dt * .22; }
     if (d.coin && d.max - d.life > d.coin) { onCoin(d); swapRemove(DEB, i); continue; }
     let sc = 1; if (!d.coin && d.life < .5) sc = Math.max(.01, d.life / .5);
     _dm.compose(d.p, d.q, _ds.copy(d.s).multiplyScalar(sc));
@@ -2775,6 +2909,50 @@ function updateDebris(dt, groundAt, onCoin) {
   }
 }
 function clearDebris() { DEB.length = 0; }
+
+// Extra death mayhem on top of the shatter in killMonster: loose bits (bone, gore, fur, chitin, rock), goo
+// splats and ground stains. Scales back as the debris pool fills so bodies and coins always have room.
+const _gm = new THREE.Matrix4(), _gp = new THREE.Vector3(), _gq = new THREE.Quaternion(), _gs = new THREE.Vector3();
+const GORE_C = { bone: [1.08, 1.02, .88], blood: [.5, .07, .06], dark: [.3, .04, .04], fur: [.62, .5, .45], bat: [.36, .3, .36], chitin: [.32, .28, .22], rock: [.62, .6, .58] };
+function fxGore(m, dth, kind, ix, iz, up) {
+  if (!G.B || !KIT.bit) return;
+  const hA = G.B.heightAt, sc = m.scale || 1, x = m.x, y = m.y, z = m.z, blast = kind === 'blast';
+  const load = sat(DEB.length / DEB_BODY), more = 1 - load, ext = lerp(1.5, 1, sat((load - .3) / .4));
+  const keep = k => { if (k <= 1) return; for (let i = SHATTER.a; i < SHATTER.b && i < DEB.length; i++) { const d = DEB[i]; if (!d.coin) { d.life *= k; d.max *= k; } } };
+  const bits = (n, tint, spd, upv, size, l0, l1, o = {}) => {
+    n = Math.round(n * more);
+    for (let i = 0; i < n; i++) {
+      _gm.compose(_gp.set(x + frr(-.2, .2) * sc, y + frr(.2, .7) * sc, z + frr(-.2, .2) * sc), _gq.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _gs.setScalar(size * frr(.7, 1.3) * sc));
+      if (o.flat) _gs.y *= .35;
+      const tn = o.var ? [tint[0] * frr(.8, 1.15), tint[1] * frr(.8, 1.15), tint[2] * frr(.8, 1.15)] : tint;
+      addDebris(KIT.bit, _gm, tn, ix * .6 + frr(-spd, spd), frr(upv * .45, upv) * up, iz * .6 + frr(-spd, spd), frr(4, 12), frr(l0, l1), { extra: 1, float: o.float || 0, bounce: o.bounce });
+    }
+  };
+  const stain = (dx, dz, size, c, a) => FX.decals.add(hA, x + dx, z + dz, size, c[0], c[1], c[2], a, 60);
+  const tintOf = base => m.tint ? [base[0] * m.tint[0], base[1] * m.tint[1], base[2] * m.tint[2]] : base;
+  if (dth === 'bones') {
+    keep(ext); bits(3 + (blast ? 2 : 0), GORE_C.bone, 1.7, 3.6, .9, 5, 8, { var: 1 });
+    stain(0, 0, .45 * sc + .2, [.16, .15, .14], .3);
+  } else if (dth === 'fur') {
+    keep(ext * .9); bits(6, tintOf(GORE_C.fur), 1.3, 2.8, .85, 2.4, 3.8, { flat: 1, float: 1, var: 1 }); bits(3, GORE_C.blood, 1.8, 3, .45, 3, 5);
+    stain(0, 0, .3 * sc + .22, [.055, .012, .012], .6);
+  } else if (dth === 'bat') {
+    bits(4, tintOf(GORE_C.bat), 1, 1.5, .7, 2, 3.2, { flat: 1, float: 1, var: 1 });
+  } else if (dth === 'flesh') {
+    keep(ext * .9); bits(4 + (blast ? 2 : 0), GORE_C.blood, 2, 4, 1.0, 4, 7, { var: 1 }); bits(4, GORE_C.dark, 2.5, 3.6, .4, 2.5, 4);
+    stain(ix * .22, iz * .22, .4 * sc + .2, [.05, .01, .01], .55);
+  } else if (dth === 'bug') {
+    bits(4, tintOf(GORE_C.chitin), 1.8, 3, .7, 3, 5, { var: 1 });
+    stain(ix * .18, iz * .18, .25 * sc + .12, [.03, .045, .012], .5);
+  } else if (dth === 'rock') {
+    keep(ext);
+    const n = Math.round(3 * more);
+    for (let i = 0; i < n; i++) { _gm.compose(_gp.set(x + frr(-.3, .3) * sc, y + frr(.2, 1) * sc, z + frr(-.3, .3) * sc), _gq.identity(), _gs.setScalar(frr(.4, .8))); addDebris(KIT.rubble, _gm, m.tint, frr(-2.5, 2.5) + ix, frr(2, 4.5), frr(-2.5, 2.5) + iz, frr(3, 9), frr(4, 6.5), { extra: 1 }); }
+    stain(0, 0, .6 * sc + .2, [.1, .095, .09], .45);
+  } else if (dth === 'goo') {
+    for (let i = 0; i < 3; i++) { const a = frnd() * TAU, d = frr(.5, 1.1) * sc; stain(Math.cos(a) * d + ix * .2, Math.sin(a) * d + iz * .2, frr(.15, .3) * sc + .1, [.012, .034, .014], .6); }
+  }
+}
 
 
 SPEC.golem = { hip: .5, pelvisH: .1, torsoH: .56, shX: .36, shY: .44, uArm: .26, lArm: .38, hipX: .15, uLeg: .22, lLeg: .24, stride: .42, lean: .1, stoop: .16, eyeX: .04, eyeY: .1, eyeZ: .16, top: 1.35 };
@@ -3266,7 +3444,7 @@ class Tower {
         fxTimed(5, mz.x + dx * .2, mz.y + .1, mz.z + dz * .2, 1.9, 1.9, 4, 3, 1.6, 1, .1); fxTimed(3, mz.x + dx * .3, mz.y + .12, mz.z + dz * .3, .9, .9, 4, 3.2, 2.2, 1, .2, { grow: .8 });
         for (let i = 0; i < 6; i++) fxSmoke(mz.x + dx * .3, mz.y + .1, mz.z + dz * .3, dx * rr(1, 3.4) + rr(-.5, .5), rr(.3, 1.2), dz * rr(1, 3.4) + rr(-.5, .5), rr(1.2, 2.4), rr(.35, .6), .9, .3, .29, .28, .5, { drag: 2.2, rise: .2 });
         fxSparks(mz.x + dx * .2, mz.y, mz.z + dz * .2, 8, 5, 3, 1.8, .6, { lo: 0, hi: .6 });
-        sfx('cannon', this.x, this.z, 1, lvl / 2); FX.shake = Math.min(1, FX.shake + .12);
+        sfx('cannon', this.x, this.z, 1, lvl / 2); shake(.05);
       }
     } else this.gunYaw = angDamp(this.gunYaw, this.yaw + Math.sin(G.t * .3 + this.idx) * .7, 1.2, dt);
     this.carriage.rotation.y = this.gunYaw - this.yaw;
@@ -3299,7 +3477,7 @@ class Tower {
         cur = nb;
       }
       lightFlash(tgt.x, tgt.y + 1.2, tgt.z, 0x9fd0ff, 520, .22, 16); lightFlash(cp.x, cp.y, cp.z, 0x9fd0ff, 300, .18, 12);
-      sfx('zap', this.x, this.z, 1, lvl / 2); FX.shake = Math.min(1, FX.shake + .08);
+      sfx('zap', this.x, this.z, 1, lvl / 2); shake(.04);
     }
   }
   updGuard(dt, d, lvl) {
@@ -3384,7 +3562,7 @@ function updateHazards(dt) {
   for (let i = G.chain.length - 1; i >= 0; i--) {
     const c = G.chain[i]; c.t -= dt; if (c.t > 0) continue; swapRemove(G.chain, i);
     blastAround(c, { r: c.ex.r * 1.15, dmg: c.ex.dmg, men: c.ex.men });
-    sfx('chainBoom', c.x, c.z, 1); FX.shake = Math.min(1.2, (FX.shake || 0) + .35);
+    sfx('chainBoom', c.x, c.z, 1); shake(.4);
   }
   for (let i = G.fires.length - 1; i >= 0; i--) {
     const f = G.fires[i]; f.t -= dt; f.tick -= dt;
@@ -3455,6 +3633,7 @@ function hitMonster(m, dmg, kind, dx, dz, tower) {
   if (m.eth) { if (kind === 'arrow' || kind === 'sword') { if (rnd() < .5) fxTimed(0, m.x + rr(-.2, .2), m.y + m.hitH + rr(-.2, .3), m.z + rr(-.2, .2), .5, .5, .5, .9, 1.8, .7, .18); return false; } dmg *= .5; }
   if (kind === 'arrow' && m.def.armor) { dmg *= m.def.armor; if (rnd() < .6) { fxSparks(m.x, m.y + m.hitH, m.z, 3, 3, 2.4, 2.2, 1.6, { size: .05 }); } }
   m.hp -= dmg; m.flash = 1; m.flinch = m.def.boss ? Math.max(m.flinch, .25) : 1; m.hitAt = G.t;
+  if (m.def.boss && m.hp > 0 && dmg >= m.maxHp * .05 && G.t - (m.hsT || -9) > 2.5) { m.hsT = G.t; hitStop(.045, .2); shake(.35); }
   const kb = (kind === 'blast' ? 2.6 : kind === 'sword' ? 1.3 : kind === 'arrow' ? .7 : .2) / Math.sqrt(m.mass);
   if (!m.fly && (dx || dz)) { const p = pathAt(G.B, m.s, _ap); m.ks += (dx * p.tx + dz * p.tz) * kb; m.kl += (-dx * p.tz + dz * p.tx) * kb; }
   if (tower) { tower.dealt += dmg; tower.recent += dmg; }
@@ -3470,13 +3649,13 @@ function dropCoins(x, y, z, bounty, n) {
   }
 }
 function blastAround(m, ex) {
-  fxExplosion(m.x, m.y + .3, m.z, .62); sfx('explode', m.x, m.z, .8, rnd());
+  fxExplosion(m.x, m.y + .3, m.z, .62); shake(.35); sfx('explode', m.x, m.z, .8, rnd());
   for (const o of G.mons) { if (o === m || o.dead || o.fly || o.hp <= 0) continue; const d = Math.hypot(o.x - m.x, o.z - m.z); if (d < ex.r + o.rad) hitMonster(o, ex.dmg * (1 - .5 * d / (ex.r + o.rad)), 'blast', (o.x - m.x) / (d || 1), (o.z - m.z) / (d || 1), null); }
   for (const f of G.men) { if (f.dead) continue; const d = Math.hypot(f.x - m.x, f.z - m.z); if (d < ex.r) { f.hp -= ex.men * G.dmgMul * .6; f.flash = 1; f.flinch = 1; if (f.hp <= 0) killFootman(f, (f.x - m.x) / (d || 1), (f.z - m.z) / (d || 1)); } }
 }
 function killMonster(m, kind, dx, dz, tower) {
   const B = G.B, def = m.def, t = m.type, dth = def.death; if (tower) tower.kills++;
-  if (def.boss) { m.dying = 1.9; m.hp = 0; m.foe = null; G.slowmo = 1.4; sfx('roar', m.x, m.z, 1, 1); return; }
+  if (def.boss) { m.dying = 1.9; m.hp = 0; m.foe = null; G.slowmo = 1.4; hitStop(.07, .55); shake(.8); sfx('roar', m.x, m.z, 1, 1); return; }
   G.slain++; G.waveKills++;
   const ix = (dx || 0) * 2.2, iz = (dz || 0) * 2.2, up = kind === 'blast' ? 1.7 : 1, sc = m.scale;
   if (dth === 'bones') { shatter(e => rigMonster(e), m, [ix, 1.2 * up, iz], { spread: kind === 'blast' ? 2.6 : 1.5, up }); sfx('boneRattle', m.x, m.z, .8, rnd()); fxDust(m.x, m.y + .1, m.z, 3, .6, { a: .35 }); }
@@ -3498,6 +3677,7 @@ function killMonster(m, kind, dx, dz, tower) {
     for (let i = 0; i < 5; i++) fxSmoke(m.x, m.y + .3, m.z, rr(-1, 1), rr(.5, 1.5), rr(-1, 1), rr(.4, .8), .35 * sc, .5, .12, .3, .12, .5, { drag: 3 });
     sfx('squelch', m.x, m.z, .8, big ? .8 : .2);
   }
+  fxGore(m, dth, kind, ix, iz, up);
   if (def.split && G.mons.length < MAX_ALIVE + 6) { const [ty, n] = def.split; for (let i = 0; i < n; i++) { const u = n > 1 ? i / (n - 1) * 2 - 1 : 0; spawnMonster(ty, { s: Math.max(.5, m.s - .15 - .1 * Math.abs(u)), lat: clamp(m.lat + u * .34, -.95, .95), hpMul: m.maxHp / def.hp, pop: 1 }).kl = u * 2.2; } }
   if (m.torch && m.flame) fxEmbers(m.flame.x, m.flame.y, m.flame.z, 8, .15);
   dropCoins(m.x, m.y + m.hitH * .6, m.z, Math.round(def.bounty * G.bountyMul), clamp(Math.round(def.bounty / 3), 1, 6));
@@ -3510,7 +3690,7 @@ function killMonster(m, kind, dx, dz, tower) {
 function finishBoss(m) {
   G.slain++; G.waveKills++;
   shatter(e => rigMonster(e), m, [0, 2.5, 0], { spread: 3.4, up: 1.5, life: 1.5, hold: .25 });
-  fxDust(m.x, m.y + .2, m.z, 26, 2.4, { speed: 4.5, life: 1.6 }); fxExplosion(m.x, m.y + 1, m.z, .9); FX.shake = 1.2;
+  fxDust(m.x, m.y + .2, m.z, 26, 2.4, { speed: 4.5, life: 1.6 }); fxExplosion(m.x, m.y + 1, m.z, .9); shake(1.25); hitStop(.06, .9);
   FX.decals.add(G.B.heightAt, m.x, m.z, 2.6, .02, .017, .015, .8, 60);
   sfx('bossDie', m.x, m.z, 1.2, 1);
   dropCoins(m.x, m.y + 1.4, m.z, Math.round(m.def.bounty * G.bountyMul), 26);
@@ -3544,7 +3724,9 @@ const EYES = {
   spider: BUG_EYE, scarab: BUG_EYE, brood: [.05, .055, .19, .022], queen: [.05, .055, .19, .016], wolf: [.05, .27, .63, .04], wraith: [.045, 1.04, .17, .055], toad: [.125, .345, .285, .035], gargoyle: [.045, .15, .28, .045], wisp: null,
 };
 function drawMonster(m, t) {
-  const M = rigMonster(m), ey = EYES[m.type], c = m.def.eye, sc = m.scale, tw = .8 + .2 * Math.sin(t * 9 + m.lseed * 7), ty = m.type;
+  const ec = m.elite ? ELITE_CODE[m.elite] || 0 : 0, f0 = m.flash; if (ec) m.flash = Math.min(1, f0) + ec * 4;
+  const M = rigMonster(m); m.flash = f0; if (ec) drawElite(m, t);
+  const ey = EYES[m.type], c = m.def.eye, sc = m.scale, tw = .8 + .2 * Math.sin(t * 9 + m.lseed * 7), ty = m.type;
   if (ey) {
     for (const sg of [-1, 1]) { _tv.set(sg * ey[0], ey[1], ey[2]).applyMatrix4(M); FX.add.push(_tv.x, _tv.y, _tv.z, ey[3] * sc * 1.5, ey[3] * sc * 1.5, 0, 0, c[0], c[1], c[2], tw, 0, 0, 0, 0); }
     _tv.set(0, ey[1], ey[2]).applyMatrix4(M); FX.add.push(_tv.x, _tv.y, _tv.z, ey[3] * sc * 9, ey[3] * sc * 9, 0, 0, c[0] * .3, c[1] * .3, c[2] * .3, .5 * tw, 2, 0, 0, 0);
@@ -3624,7 +3806,7 @@ function strike(a, b, dmg, byMan) {
   if (blade) fxTimed(7, mx, my, mz, big ? 4.2 : 1.55, big ? 4.2 : 1.55, byMan ? 2.2 : 2.0, byMan ? 2.2 : 1.7, byMan ? 2.4 : 1.3, .9, .2, { rot });
   if (byMan) { const metal = !!b.def.armor || (b.def.death === 'bones' && rnd() < .4); fxSparks(b.x - dx / l * b.rad, my, b.z - dz / l * b.rad, metal ? 7 : 3, 3.6, 3, 2.3, 1.2, { size: .055, grav: 7 }); sfx(metal ? 'clash' : 'slash', mx, mz, .7, rnd()); hitMonster(b, dmg, 'sword', dx / l, dz / l, a.tower); a.tower.recent += dmg * .5; }
   else {
-    if (big) { fxDust(b.x, b.y + .1, b.z, 10, 1.4, { speed: 3 }); FX.shake = Math.min(1.2, FX.shake + .5); sfx('bossStep', b.x, b.z, 1, 1); fxTimed(4, b.x, b.y + .08, b.z, 4.5, 4.5, 1.2, .9, .6, .5, .35, { ground: true }); }
+    if (big) { fxDust(b.x, b.y + .1, b.z, 10, 1.4, { speed: 3 }); shake(.55); sfx('bossStep', b.x, b.z, 1, 1); fxTimed(4, b.x, b.y + .08, b.z, 4.5, 4.5, 1.2, .9, .6, .5, .35, { ground: true }); }
     const hitList = big ? G.men.filter(f => !f.dead && Math.hypot(f.x - b.x, f.z - b.z) < 1.5) : [b];
     for (const f of hitList) {
       f.hp -= dmg; f.flash = 1; f.flinch = 1;
@@ -3676,14 +3858,14 @@ function updateUnits(dt) {
     if (def.stomp && m.vis) {
       m.stT -= dt;
       if (m.stT <= 0) {
-        const sp = def.stomp; m.stT = sp.every; FX.shake = Math.min(1.2, FX.shake + .8); sfx('bossStep', m.x, m.z, 1.2, 1); sfx('roar', m.x, m.z, .6, .4);
+        const sp = def.stomp; m.stT = sp.every; shake(1); sfx('bossStep', m.x, m.z, 1.2, 1); sfx('roar', m.x, m.z, .6, .4);
         fxTimed(4, m.x, m.y + .08, m.z, sp.r * 2, sp.r * 2, .6, 1.2, 2.2, .8, .7, { ground: true }); fxDust(m.x, m.y + .1, m.z, 16, 1.8, { speed: 4, c: [.6, .7, .85] }); lightFlash(m.x, m.y + 1.5, m.z, 0x8fc8ff, 300, .5, 16);
         for (const tw of G.towers) if (tw.alive && tw.state === 'active' && dist2(tw.x, tw.z, m.x, m.z) < sp.r * sp.r) { tw.stun = sp.stun; fxTimed(5, tw.x, tw.y + 2, tw.z, 3, 3, .6, 1.2, 2.4, .9, .3); }
       }
     }
     let want = def.spd * m.spdMul * (1 - m.slowF) * (1 + m.haste), hopMul = 1;
     if (def.frenzy) want *= 1 + def.frenzy * (1 - m.hp / m.maxHp);
-    if (def.enrage && m.hp < m.maxHp * def.enrage[0]) { want *= def.enrage[1]; if (!m.rage) { m.rage = true; sfx('roar', m.x, m.z, 1, .9); fxEmbers(m.x, m.y + 2, m.z, 40, 1.2); FX.shake = Math.min(1.2, FX.shake + .6); } }
+    if (def.enrage && m.hp < m.maxHp * def.enrage[0]) { want *= def.enrage[1]; if (!m.rage) { m.rage = true; sfx('roar', m.x, m.z, 1, .9); fxEmbers(m.x, m.y + 2, m.z, 40, 1.2); shake(.6); } }
     if (def.hop) { if (!m.foe) m.hop = (m.hop + dt * def.hop[0] * (1 - m.slowF * .6)) % 1; hopMul = (m.hop > .22 && m.hop < .62) ? def.hop[1] : .1; }
     let v = want * hopMul, obstacle = null, og = 9;
     if (def.boss) {
@@ -3725,7 +3907,7 @@ function updateUnits(dt) {
       if (m.atk >= .5 && !m.struck) { m.struck = true; const f = m.foe; if (f && !f.dead && Math.hypot(f.x - m.x, f.z - m.z) < m.rad + f.rad + (def.boss ? 1.4 : .8)) strike(m, f, def.dmg * G.dmgMul, false); }
       if (m.atk >= 1) { m.atk = -1; m.cd = def.atkT * rr(.35, .5); }
     } else if (m.foe && m.cd <= 0) { m.atk = 0; m.struck = false; if (def.boss) sfx('roar', m.x, m.z, .5, .7); }
-    if (def.boss && v > .05) { const st = Math.floor(m.ph / PI); if (st !== m.step) { m.step = st; const p = pathAt(B, m.s, _ap), sd = (st & 1) ? 1 : -1; const fxp = m.x - p.tz * sd * .5, fzp = m.z + p.tx * sd * .5; fxDust(fxp, m.y + .05, fzp, 7, 1.0, { speed: 2.2 }); FX.shake = Math.min(1.1, FX.shake + .4); sfx('bossStep', m.x, m.z, 1, .6); FX.decals.add(B.heightAt, fxp, fzp, .55, .02, .017, .015, .5, 9); } }
+    if (def.boss && v > .05) { const st = Math.floor(m.ph / PI); if (st !== m.step) { m.step = st; const p = pathAt(B, m.s, _ap), sd = (st & 1) ? 1 : -1; const fxp = m.x - p.tz * sd * .5, fzp = m.z + p.tx * sd * .5; fxDust(fxp, m.y + .05, fzp, 7, 1.0, { speed: 2.2 }); shake(.5); sfx('bossStep', m.x, m.z, 1, .6); FX.decals.add(B.heightAt, fxp, fzp, .55, .02, .017, .015, .5, 9); } }
     if (m.s >= L - .35) { leak(m); continue; }
   }
   for (const u of U) if (u.isMan) u.foes = 0;
@@ -3949,7 +4131,7 @@ function startCrumble() {
   for (const f of B.flames) removeFlame(f); B.flames.length = 0;
   for (const p of B.pieces) { p.t = 0; p.delay = .25 + rnd() * .9 + sat((36 - (p.cx + p.cz)) / 72) * 1.3 + (p.kind !== 'chunk' ? .2 : 0); p.vy = 0; }
   FX.groundAt = () => -500; clearFX(); setBoardCasting(B, true);
-  sfx('crumble', 0, 0, 1.3); FX.shake = 1.2;
+  sfx('crumble', 0, 0, 1.3); shake(1.2);
 }
 function startRise() {
   if (G.B) { for (const t of G.towers) { t.clearModel(false); } G.towers.length = 0; clearDebris(); disposeBoard(G.B); }
@@ -3994,7 +4176,7 @@ function updatePhase(dt) {
       const u = t - p.delay;
       if (u < 0) { p.mesh.position.set(p.cx + rr(-.03, .03) * sat(t * 2), p.cy, p.cz + rr(-.03, .03) * sat(t * 2)); done = false; continue; }
       const y = p.cy - 9 * u * u - u * 1.2; p.mesh.position.set(p.cx, y, p.cz); p.mesh.rotation.set(p.spin.x * u * .5, p.spin.y * u * .25, p.spin.z * u * .5);
-      if (!p.dusted) { p.dusted = true; fxDust(p.cx, 0, p.cz, 5, 2.2, { speed: 2.5, life: 1.4 }); FX.shake = Math.min(1, FX.shake + .12); }
+      if (!p.dusted) { p.dusted = true; fxDust(p.cx, 0, p.cz, 5, 2.2, { speed: 2.5, life: 1.4 }); shake(.1); }
       if (y > -60) done = false; else p.mesh.visible = false;
     }
     if (done || t > 5.2) { if (G.advance) { G.level++; G.advance = false; } setPhase('rise'); }
@@ -4004,13 +4186,13 @@ function updatePhase(dt) {
       const u = (t - p.delay) / (p.kind === 'chunk' ? 1.15 : .8);
       if (u < 0) { done = false; continue; }
       p.mesh.visible = true;
-      if (u >= 1) { p.mesh.position.set(p.cx, p.cy, p.cz); p.mesh.rotation.set(0, 0, 0); if (!p.set) { p.set = true; if (p.kind !== 'chunk') { fxDust(p.cx, p.cy + .2, p.cz, 12, 2.2, { speed: 3 }); FX.shake = Math.min(1, FX.shake + .3); sfx('hammer', p.cx, p.cz, 1, .1); } } continue; }
+      if (u >= 1) { p.mesh.position.set(p.cx, p.cy, p.cz); p.mesh.rotation.set(0, 0, 0); if (!p.set) { p.set = true; if (p.kind !== 'chunk') { fxDust(p.cx, p.cy + .2, p.cz, 12, 2.2, { speed: 3 }); shake(.25); sfx('hammer', p.cx, p.cz, 1, .1); } } continue; }
       done = false; const e = easeOut(u), k = 1 - e;
       if (p.kind === 'chunk') { p.mesh.position.set(p.cx, p.cy - 30 * k, p.cz); p.mesh.rotation.set(p.spin.x * k * .7, p.spin.y * k * .5, p.spin.z * k * .7); }
       else { const d = 1 - u * u; p.mesh.position.set(p.cx, p.cy + 16 * d, p.cz); p.mesh.rotation.set(0, 0, 0); }
     }
     if (done && !B.igniteAt) { B.igniteAt = t + .25; }
-    if (B.igniteAt && t > B.igniteAt && !B.lit) { B.lit = true; sfx('ignite', B.beacon.x, B.beacon.z, 1.3, 1); lightFlash(B.beacon.x, B.beacon.y + 1, B.beacon.z, 0xffa050, 2600, .7, 60); fxEmbers(B.beacon.x, B.beacon.y, B.beacon.z, 50, .6); FX.shake = .5; }
+    if (B.igniteAt && t > B.igniteAt && !B.lit) { B.lit = true; sfx('ignite', B.beacon.x, B.beacon.z, 1.3, 1); lightFlash(B.beacon.x, B.beacon.y + 1, B.beacon.z, 0xffa050, 2600, .7, 60); fxEmbers(B.beacon.x, B.beacon.y, B.beacon.z, 50, .6); shake(.5); }
     if (B.lit && t > B.igniteAt + .7) { setBoardCasting(B, false); beginBattle(false); }
   }
 }
@@ -5564,7 +5746,9 @@ function sfx(name, x, z, gain = 1, p = 0) {
 const _mm = new THREE.Matrix4(), _mq = new THREE.Quaternion(), _mv = new THREE.Vector3(), _ms = new THREE.Vector3(1, 1, 1), _torch = [];
 function step(rdt) {
   G.slowmo = Math.max(0, G.slowmo - rdt);
-  const dt = rdt * (G.slowmo > 0 ? lerp(1, .32, sat(G.slowmo / .35)) : 1);
+  let dt = rdt * (G.slowmo > 0 ? lerp(1, .32, sat(G.slowmo / .35)) : 1);
+  if (G.hitstop > 0) { G.hitstop = Math.max(0, G.hitstop - rdt); dt *= .03; }
+  updateShake(rdt);
   G.t += dt; SH.uTime.value = G.t;
   const B = G.B;
   beginParts(); G.hbars.length = 0;
@@ -5583,7 +5767,7 @@ function step(rdt) {
       for (let i = 0; i < B.pads.length; i++) {
         const p = B.pads[i]; if (p.tower) continue;
         _mm.compose(_mv.set(p.x, p.y, p.z), _mq.setFromAxisAngle(_upv, p.face + Math.sin(G.t * 1.3 + i * 2.1) * .3), _ms); KIT.marker.put(_mm, 0, null);
-        const w = .5 + .5 * Math.sin(G.t * 2.1 + i * 1.7), sz = 3.7 + .25 * w, a = (.55 + .45 * w) * k0;
+        const w = .5 + .5 * Math.sin(G.t * 2.1 + i * 1.7), sz = 3.7 + .25 * w, a = (.3 + .25 * w) * k0;
         FX.add.push(p.x, p.y + .07, p.z, sz, sz, 0, 0, 2.6, 1.6, .55, a, 4, 0, .52, 1);
       }
     }
@@ -5607,6 +5791,7 @@ function step(rdt) {
   for (const m of G.mons) if ((m.torch || m.glowL) && !m.dead && m.vis) _torch.push(m);
   for (const f of G.men) if (f.torch && !f.dead) _torch.push(f);
   for (const a of G.arrows) _torch.push(a);
+  for (const f of FX.fires) if (f.lI > 1) _torch.push(f);
   updateTorchLights(dt, _torch, CAM.x, CAM.z);
   collectMistLights();
   endParts(); endFX();
@@ -5619,7 +5804,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   if (now - _last < 10.5) return;
   const raw = (now - _last) / 1000, rdt = Math.min(.05, Math.max(.001, raw)); _last = now; R.frameDt = rdt;
-  if (G.paused) { updateCamera(rdt); UI.update(rdt); } else for (let i = 0; i < G.speed; i++) step(rdt);
+  if (G.paused) { FX.shake = 0; updateShake(rdt); updateCamera(rdt); UI.update(rdt); } else for (let i = 0; i < G.speed; i++) step(rdt);
   R.fade = Math.min(1, R.fade + rdt * 1.6);
   applyCamera(); renderFrame(); UI.draw();
   if (document.hidden || raw > .25) { _acc = 0; _frames = 0; return; }
@@ -5640,7 +5825,7 @@ function frame(now) {
 
 function boot() {
   if (window.matchMedia && matchMedia('(pointer: coarse)').matches && !HASH.noscale) R.quality = .85;
-  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) FX.shakeK = .25;
+  if (window.matchMedia) { const rm = matchMedia('(prefers-reduced-motion: reduce)'), upd = () => { FX.shakeK = rm.matches ? 0 : 1; FX.flashK = rm.matches ? .3 : 1; }; upd(); if (rm.addEventListener) rm.addEventListener('change', upd); }
   initRenderer(); initMaterials(); resizeRenderer(); initLights(); initFX(); initWeather(); initKits(); UI.init();
   KIT.marker = new PartBatch(S => {
     const gold = mulC(COL.gold, .85), amber = C(0xc9682a);
@@ -5662,7 +5847,7 @@ function boot() {
   document.addEventListener('visibilitychange', () => { AU.setPaused(document.hidden); UI.dropTouches(); if (!document.hidden) { _last = performance.now(); UI.keepAwake(); } });
   window.addEventListener('blur', () => UI.dropTouches());
   for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => setTimeout(resizeRenderer, 60));
-  window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, setPhase, spawnMonster, hitMonster, MAT, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
+  window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
   if (HASH.k) G.k = +HASH.k;
   if (HASH.ff) { const n = Math.round(+HASH.ff * 30); for (let i = 0; i < n; i++) step(1 / 30); CAM.sx = CAM.fx; CAM.sz = CAM.fz; R.fade = 1; }
   if (HASH.phase) setPhase(HASH.phase);
