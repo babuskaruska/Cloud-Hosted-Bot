@@ -61,11 +61,24 @@ Nothing merges unless `node tools/qa.js` passes: no page errors, no NaN, no earl
 - **Land events contract.** Forge owns them. `G.event` is `null` or `{ kind, t, ... }`, with kinds `'rockslide'` (ashen), `'blizzard'` (frost), `'bogfog'` (fen), `'lavaSurge'` (ember) and `'sandstorm'` (dunes). Echo provides a sound for each, named after its kind, plus `'eventEnd'`. Ash may add looks later.
 - **Branch purchase sound:** `'branch'` (Echo).
 
+## Round 2 results (merged)
+
+- **Mira:**
+  - Branches: Longbow / Volley, Mortar / Firebomb, Tempest / Frost, Knights / Pikes. Overcharge comes only after a branch. `U` opens the branch menu; keys 1 and 2 buy.
+  - Spells: Meteor (Q or 5), Frost (E or 6), Rally (T or 7), using mana and cooldowns.
+  - Pressure cap 2.2 + 0.3 per land; the late game is harder.
+  - Health bars hidden on unhurt monsters.
+  - Test hook: `__cw.UI.game` exposes the game actions.
+- **Ash:** `blueprint(kind, 3, branch)` builds 8 branch models; overcharge runes and embers; `FX.meteor(x, z, r, fall)` and `FX.frostNova(x, z, r, secs)`; `drawFrozen`; bombard crews.
+- **Echo:** sounds for branches, spells and events; event swells; ambience for each land; boss stings; pause and hidden-page fades; mix spread between calm and battle.
+- **Forge:** land events (`src/63-events.js`), QA checks for events, merges.
+- **QA after round 2:** no defeats in 1500 s or 4000 s sims, lives drop to 7–18 under pressure, up to 260 alive, 15–20 branches and about 45 spells per sim. Playtests of the branch menu and spell arming on desktop and iPhone 13 worked. Build published as version 3.
+
 ## Next
 
-- Round 2 in progress:
-  - **Mira:** tower branches, spells, difficulty ceiling, cleaner health bars.
-  - **Ash:** branch models, spell visuals, overcharge glow, tower crews.
-  - **Echo:** the sounds for all of the above, ambience for each land, a fix so the crowd bed pauses, and boss entrance stingers.
-  - **Forge:** land events, QA coverage for the new systems, merging.
-- After round 2: republish the build, then a round 3 polish and bug-bash.
+- Round 3: polish and bug bash.
+  - **Mira:** settings panel (volume sliders through `AU.setVolume`, quality), a run summary on defeat, the human first-time experience, balance for a human player who starts manually.
+  - **Ash:** knight and pike footman looks, frozen look, rockslide and sandstorm visual polish, boss entrance camera moments, archer crews.
+  - **Echo:** victory and defeat jingles, UI sounds for the new menus, music for each land, an iPhone speaker mix pass.
+  - **Forge:** phone performance and resolution scaling, a memory and long-run leak check, a determinism check with `record.js`, merges.
+- Ideas after that: save and continue a run, an endless-mode scoreboard, more monster kinds per land.
