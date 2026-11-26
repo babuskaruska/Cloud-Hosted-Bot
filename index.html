@@ -4856,7 +4856,7 @@ const AU = (function () {
     const ws = ctx.createWaveShaper();
     let c = shapeCurves[drive];
     if (!c) { c = new Float32Array(1024); const n = Math.tanh(drive); for (let i = 0; i < 1024; i++) c[i] = Math.tanh(drive * (i / 511.5 - 1)) / n; shapeCurves[drive] = c; }
-    ws.curve = c; ws.oversample = '2x'; if (dest) ws.connect(dest); return ws;
+    ws.curve = c; ws.oversample = 'none'; if (dest) ws.connect(dest); return ws; // inputs are already low-passed, so no oversampling
   }
   function keep(src, e) { if (V && e > V.lastT) { V.last = src; V.lastT = e; } }
   function osc(type, f, t, dur, dest) {
@@ -5368,7 +5368,7 @@ const AU = (function () {
     const t = now + 0.006 + rnd() * (0.014 + 0.035 * busy);
     const v = voice(pan, cl(g, 0, 1.5) * df[5], df[2], nSfx);
     V = v;
-    try { df[0](v.out, t, cl(+p || 0, 0, 1)); } catch (e) {}
+    try { df[0](v.out, t, cl(+p || 0, 0, 1)); } catch (e) { if (!ST.err) ST.err = name + ': ' + e.message; }
     finishVoice(v);
     act.push({ end: t + df[4], v: v, name: name, fam: fam, pri: pri, t0: now });
     ST.played++; ST.names[name] = (ST.names[name] || 0) + 1; if (act.length > ST.peak) ST.peak = act.length;
@@ -5731,7 +5731,7 @@ const AU = (function () {
   }
   function stats() {
     const L = SEQ.lay;
-    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(',') });
+    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(',') });
   }
 
   function softClip() {
