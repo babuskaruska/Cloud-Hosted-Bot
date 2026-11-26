@@ -166,6 +166,9 @@ function initKits() {
   KIT.plank = new PartBatch(S => { S.box(.12, .6, .05, 0, 0, 0, COL.wood, { l: L_WOOD }); }, 100, { rad: .08 });
   // Neutral lump for death bits: tinted bone, gore, chitin or fur, squashed by the matrix scale.
   KIT.bit = new PartBatch(S => { S.ico(.06, 0, 0, 0, [.8, .8, .8], { sc: [1, .7, 1.7], d: 0, jit: .05 }); S.ico(.035, 0, .01, .09, [.72, .72, .72], { d: 0 }); }, 320, { shadow: false, rad: .05 });
+  // Spell pieces (FX.meteor, FX.frostNova): a burning boulder with glowing cracks and a cluster of ice crystals.
+  KIT.meteor = new PartBatch(S => { S.rock(.5, 0, 0, 0, C(0x2a2422), { d: 2, sq: .9, l: L_ROCK }); for (let k = 0; k < 9; k++) { const a = k * 2.4, e = Math.sin(k * 1.7) * .9; S.box(.16, .05, .05, Math.cos(a) * Math.cos(e) * .44, Math.sin(e) * .4, Math.sin(a) * Math.cos(e) * .44, COL.ember, { emis: 1, jit: 0, r: [k, a, e] }); } }, 6, { rad: .45 });
+  KIT.ice = new PartBatch(S => { const ic = C(0x6cb8ea), wt = C(0xcfeeff); S.add(gOct(), { s: [.11, .42, .11], p: [0, .3, 0], c: ic, emis: .22, jit: .05 }); S.add(gOct(), { s: [.08, .3, .08], p: [.12, .16, .05], c: wt, emis: .35, r: [0, 0, -.55], jit: .05 }); S.add(gOct(), { s: [.07, .26, .07], p: [-.1, .13, -.06], c: ic, emis: .35, r: [.3, 0, .6], jit: .05 }); S.add(gOct(), { s: [.06, .2, .06], p: [.02, .1, -.13], c: wt, emis: .35, r: [-.65, 0, 0], jit: .05 }); }, 64, { rad: .2, shadow: false });
   initBestiary();
 }
 

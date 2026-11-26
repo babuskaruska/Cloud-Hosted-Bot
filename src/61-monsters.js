@@ -56,7 +56,7 @@ function slowMonster(m, f, t) { if (m.def.boss) { f *= .4; t *= .6; } if (m.def.
 function hitMonster(m, dmg, kind, dx, dz, tower) {
   if (m.dead || m.hp <= 0) return false;
   if (m.eth) { if (kind === 'arrow' || kind === 'sword') { if (rnd() < .5) fxTimed(0, m.x + rr(-.2, .2), m.y + m.hitH + rr(-.2, .3), m.z + rr(-.2, .2), .5, .5, .5, .9, 1.8, .7, .18); return false; } dmg *= .5; }
-  if (kind === 'arrow' && m.def.armor) { dmg *= m.def.armor; if (rnd() < .6) { fxSparks(m.x, m.y + m.hitH, m.z, 3, 3, 2.4, 2.2, 1.6, { size: .05 }); } }
+  if (kind === 'arrow' && m.def.armor) { const ap = (tower && tower.def && tower.def.ap) || 0; dmg *= m.def.armor + (1 - m.def.armor) * ap; if (rnd() < .6) { fxSparks(m.x, m.y + m.hitH, m.z, 3, 3, 2.4, 2.2, 1.6, { size: .05 }); } }
   if (tower && tower.oc) dmg *= 1 + OC_DMG * tower.oc;
   if (m.ward > 0) { const d0 = dmg; dmg = wardAbsorb(m, dmg); if (tower) tower.recent += d0 - dmg; if (dmg <= 0) { m.flash = .6; m.hitAt = G.t; return false; } }
   m.hp -= dmg; m.flash = 1; m.flinch = m.def.boss ? Math.max(m.flinch, .25) : 1; m.hitAt = G.t;
@@ -83,7 +83,7 @@ function blastAround(m, ex) {
 function killMonster(m, kind, dx, dz, tower) {
   const B = G.B, def = m.def, t = m.type, dth = def.death; if (tower) tower.kills++;
   if (def.boss) { m.dying = 1.9; m.hp = 0; m.foe = null; G.slowmo = 1.4; hitStop(.07, .55); shake(.8); sfx('roar', m.x, m.z, 1, 1); return; }
-  G.slain++; G.waveKills++;
+  G.slain++; G.waveKills++; manaFromKill(m);
   const ix = (dx || 0) * 2.2, iz = (dz || 0) * 2.2, up = kind === 'blast' ? 1.7 : 1, sc = m.scale;
   if (dth === 'bones') { shatter(e => rigMonster(e), m, [ix, 1.2 * up, iz], { spread: kind === 'blast' ? 2.6 : 1.5, up }); sfx('boneRattle', m.x, m.z, .8, rnd()); fxDust(m.x, m.y + .1, m.z, 3, .6, { a: .35 }); }
   else if (dth === 'fur') { shatter(e => rigMonster(e), m, [ix, 2.2 * up, iz], { spread: 1.2, life: .6 }); sfx('ratSqueal', m.x, m.z, .55, rnd()); fxDust(m.x, m.y + .1, m.z, 2, .4, { a: .3 }); }
@@ -117,7 +117,7 @@ function killMonster(m, kind, dx, dz, tower) {
   }
 }
 function finishBoss(m) {
-  G.slain++; G.waveKills++;
+  G.slain++; G.waveKills++; manaFromKill(m);
   shatter(e => rigMonster(e), m, [0, 2.5, 0], { spread: 3.4, up: 1.5, life: 1.5, hold: .25 });
   fxDust(m.x, m.y + .2, m.z, 26, 2.4, { speed: 4.5, life: 1.6 }); fxExplosion(m.x, m.y + 1, m.z, .9); shake(1.25); hitStop(.06, .9);
   FX.decals.add(G.B.heightAt, m.x, m.z, 2.6, .02, .017, .015, .8, 60);
@@ -166,7 +166,9 @@ function drawMonster(m, t) {
   else if (ty === 'colossus' && rnd() < (m.rage ? .5 : .12)) fxPart(m.x + rr(-.7, .7), m.y + rr(.6, 3), m.z + rr(-.7, .7), rr(-.3, .3), rr(.6, 1.8), rr(-.3, .3), rr(.6, 1.2), rr(.05, .08), 2.6, .9, .15, { drag: .3, wob: 1, rise: .3 });
   if (m.torch && m.flame) { const p = RIGOUT.torch; m.flame.x = p.x; m.flame.y = p.y; m.flame.z = p.z; m.lx = p.x; m.ly = p.y + .2; m.lz = p.z; }
   if (m.slowT > 0 && rnd() < .2) { const a = rnd() * TAU; fxBolt([m.x, m.y + m.hitH, m.z], [m.x + Math.cos(a) * m.rad * 1.4, m.y + m.hitH + rr(-.3, .4), m.z + Math.sin(a) * m.rad * 1.4], .08, [.4, .65, 1.3], .028); }
-  if (m.vis || m.fly) G.hbars.push({ x: m.x, y: m.y + m.def.top * sc / m.def.scale + .22, z: m.z, f: sat(m.hp / m.maxHp), boss: !!m.def.boss, man: false, name: m.def.boss ? m.def.name : m.elite ? eliteName(m) : null, elite: m.elite || null, sh: m.ward > 0 ? sat(m.ward / m.maxHp) : 0 });
+  if (m.frozen > 0) { drawFrozen(m, sc); const a = Math.min(1, m.frozen * 2); FX.add.push(m.x, m.y + m.hitH, m.z, (1.2 + m.rad * 2.5) * sc, (1.4 + m.rad * 2.5) * sc, 0, 0, .5, .85, 1.3, .3 * a, 2, 0, 0, 0); if (rnd() < .15) fxPart(m.x + rr(-.25, .25), m.y + rr(.1, m.hitH * 2), m.z + rr(-.25, .25), 0, rr(-.2, .3), 0, rr(.4, .8), .045, 1.2, 1.6, 2, { drag: 1 }); }
+  // Health bars only where they say something: hurt monsters, elites, warded ones and bosses. Full-health ordinary ones stay clean.
+  if ((m.vis || m.fly) && (m.hp < m.maxHp * .995 || m.def.boss || m.elite || m.ward > 0)) G.hbars.push({ x: m.x, y: m.y + m.def.top * sc / m.def.scale + .22, z: m.z, f: sat(m.hp / m.maxHp), boss: !!m.def.boss, man: false, name: m.def.boss ? m.def.name : m.elite ? eliteName(m) : null, elite: m.elite || null, sh: m.ward > 0 ? sat(m.ward / m.maxHp) : 0 });
 }
 
 function spawnFootman(tower) {
@@ -177,23 +179,30 @@ function spawnFootman(tower) {
     rad: .26, mass: 7, s: tower.pad.s, lat: 0, onRoad: false, state: 'march', target: null, cd: rr(.2, .6), torch: slot === 0, gone: false, dead: false, vf: 0, scale: .9 + lvl * .05,
     struck: false, alive: true, lI: slot === 0 ? 32 : 0, lx: 0, ly: 0, lz: 0, lseed: rnd() * 9, flame: null, leave: false, lvlUp: false, weapon: null, shield: null, age: 0, foes: 0,
   };
+  footmanTraits(f, d);
   if (f.torch) f.flame = addFlame({ x: door.x, y: -50, z: door.z, size: .34, embers: .45, glow: .8 });
   tower.men.push(f); G.men.push(f); return f;
 }
+// Branch traits for footmen: knights are armored and hold more foes, pikemen reach further and gore big monsters.
+function footmanTraits(f, d) {
+  f.armor = d.armor || 1; f.hold = d.hold || 2; f.reach = d.reach || 0; f.bigMul = d.bigMul || 1; f.kind = d.branch || (d.rally ? 'rally' : null);
+  f.scale = d.armor ? 1.12 : d.rally ? 1.0 : .9 + Math.min(2, f.tower.lvl) * .05; f.tint = d.armor ? [.86, .92, 1.12] : d.rally ? [1.25, 1.08, .72] : null;
+}
 function killFootman(f, dx, dz) {
+  G.menLost = (G.menLost || 0) + 1;
   f.dead = true; f.alive = false; f.gone = true; if (f.flame) { fxEmbers(f.flame.x, f.flame.y, f.flame.z, 6, .1); removeFlame(f.flame); f.flame = null; }
   f.weapon = KIT.item.blade; if (!f.torch) f.shield = KIT.item.shieldH;
   shatter(e => rigHuman(KIT.foot, SPEC.foot, e), f, [(dx || 0) * 1.6, .8, (dz || 0) * 1.6], { spread: .9, life: .8 });
   fxDust(f.x, f.y + .1, f.z, 3, .5, { a: .35 }); sfx('footmanDie', f.x, f.z, .8);
 }
 function slotPos(f, out) {
-  const B = G.B, n = f.tower.def.n[f.tower.lvl], lat = (n === 2 ? [-.48, .48] : [-.66, 0, .66])[f.slot % n] || 0;
+  const B = G.B, n = f.tower.def.n[f.tower.lvl], lat = (n === 2 ? [-.48, .48] : n === 3 ? [-.66, 0, .66] : [-.78, -.26, .26, .78])[f.slot % n] || 0;
   const p = pathAt(B, f.tower.pad.s, out); p.x += -p.tz * lat; p.z += p.tx * lat; return p;
 }
 const _fp = { x: 0, y: 0, z: 0, tx: 0, tz: 0 };
 function footmanThink(f, dt) {
   const B = G.B, tw = f.tower; f.age += dt;
-  if (f.lvlUp) { f.lvlUp = false; const d = tw.def, r = f.hp / f.maxHp; f.maxHp = d.hp[tw.lvl]; f.hp = f.maxHp * Math.max(r, .6); f.dmg = d.dmg[tw.lvl]; f.scale = .9 + tw.lvl * .05; }
+  if (f.lvlUp) { f.lvlUp = false; const d = tw.def, r = f.hp / f.maxHp; f.maxHp = d.hp[tw.lvl]; f.hp = f.maxHp * Math.max(r, .6); f.dmg = d.dmg[tw.lvl]; footmanTraits(f, d); if (f.slot >= d.n[tw.lvl]) f.leave = true; }
   if (!tw.alive) f.leave = true;
   let gx, gz, face = null, speed = 2.1, fighting = false;
   const rally = slotPos(f, _fp), rs = tw.pad.s;
@@ -203,10 +212,10 @@ function footmanThink(f, dt) {
   if (!m && f.state !== 'march') {
     let best = null, bd = 1e9;
     for (const q of G.mons) { if (q.dead || q.fly || q.hp <= 0 || !q.vis || q.dying || q.def.ghost) continue; if (Math.abs(q.s - rs) > 2.5) continue; const d = dist2(f.x, f.z, q.x, q.z) + q.men * 6; if (d < bd) { bd = d; best = q; } }
-    if (best) { m = f.target = best; best.men++; }
+    if (best) { m = f.target = best; best.men++; if (f.reach) { f.cd = Math.min(f.cd, 0); f.first = true; } }
   }
   if (m) {
-    const p = pathAt(B, m.s, _ap), reach = m.rad + f.rad + .14;
+    const p = pathAt(B, m.s, _ap), reach = m.rad + f.rad + .14 + f.reach;
     gx = m.x + p.tx * reach; gz = m.z + p.tz * reach;
     const d = Math.hypot(m.x - f.x, m.z - f.z);
     face = Math.atan2(m.x - f.x, m.z - f.z);
@@ -219,7 +228,7 @@ function footmanThink(f, dt) {
   f.cd -= dt;
   if (f.atk >= 0) {
     f.atk += dt / .58;
-    if (f.atk >= .5 && !f.struck) { f.struck = true; if (m && !m.dead && Math.hypot(m.x - f.x, m.z - f.z) < m.rad + f.rad + .75) strike(f, m, f.dmg, true); }
+    if (f.atk >= .5 && !f.struck) { f.struck = true; if (m && !m.dead && Math.hypot(m.x - f.x, m.z - f.z) < m.rad + f.rad + .75 + f.reach) { strike(f, m, f.dmg * (f.first ? 2 : 1) * (f.bigMul > 1 && (m.def.boss || m.mass >= 4) ? f.bigMul : 1), true); f.first = false; } }
     if (f.atk >= 1) { f.atk = -1; f.cd = rr(.3, .5); }
   } else if (fighting && f.cd <= 0) { f.atk = 0; f.struck = false; }
   f.flash = Math.max(0, f.flash - dt * 7); f.flinch = Math.max(0, f.flinch - dt * 4.5);
@@ -238,14 +247,20 @@ function strike(a, b, dmg, byMan) {
     if (big) { fxDust(b.x, b.y + .1, b.z, 10, 1.4, { speed: 3 }); shake(.55); sfx('bossStep', b.x, b.z, 1, 1); fxTimed(4, b.x, b.y + .08, b.z, 4.5, 4.5, 1.2, .9, .6, .5, .35, { ground: true }); }
     const hitList = big ? G.men.filter(f => !f.dead && Math.hypot(f.x - b.x, f.z - b.z) < 1.5) : [b];
     for (const f of hitList) {
-      f.hp -= dmg; f.flash = 1; f.flinch = 1;
+      f.hp -= dmg * (f.armor || 1); f.flash = 1; f.flinch = 1;
       if (!f.torch && rnd() < .65) { fxSparks(f.x - dx / l * .2, my, f.z - dz / l * .2, 5, 3.2, 3, 2.3, 1.3, { size: .055, grav: 7 }); if (f === b) sfx('clash', mx, mz, .6, rnd()); } else if (f === b) sfx('slash', mx, mz, .55, rnd());
       if (f.hp <= 0) killFootman(f, dx / l, dz / l);
     }
   }
 }
+function pikeKit() {
+  if (!KIT.item.pike) KIT.item.pike = new PartBatch(S => { S.seg([0, -.5, 0], [0, 1.3, 0], .022, .02, COL.woodD, { l: L_WOOD, n: 4 }); S.box(.12, .03, .03, 0, 1.28, 0, COL.iron, { l: L_METAL }); S.cone(.045, .24, 0, 1.42, 0, mulC(COL.steel, 1.15), { n: 4, l: L_METAL }); }, 24, { rad: .05, shadow: false });
+  return KIT.item.pike;
+}
 function drawFootman(f) {
-  f.weapon = KIT.item.blade; f.shield = f.torch ? null : KIT.item.shieldH; f.wScale = 1;
+  const k = f.kind;
+  f.weapon = k === 'pikes' ? pikeKit() : KIT.item.blade; f.shield = f.torch || k === 'pikes' ? null : k === 'knights' ? KIT.item.shieldR : KIT.item.shieldH; f.wScale = k === 'knights' ? 1.15 : 1;
+  f.helm = k === 'knights' || k === 'pikes'; f.plate = k === 'knights';
   rigHuman(KIT.foot, SPEC.foot, f);
   if (f.torch && f.flame) { const p = RIGOUT.torch; f.flame.x = p.x; f.flame.y = p.y; f.flame.z = p.z; f.lx = p.x; f.ly = p.y + .2; f.lz = p.z; }
   if (f.hp < f.maxHp) G.hbars.push({ x: f.x, y: f.y + 1.55 * f.scale, z: f.z, f: sat(f.hp / f.maxHp), boss: false, man: true });
@@ -264,6 +279,7 @@ function updateUnits(dt) {
     if (m.dead) continue;
     m.flash = Math.max(0, m.flash - dt * 7); m.flinch = Math.max(0, m.flinch - dt * 4.2);
     if (m.slowT > 0) { m.slowT -= dt; if (m.slowT <= 0) m.slowF = 0; }
+    if (m.frozen > 0) m.frozen -= dt;
     if (m.fly) { updateBat(m, dt); continue; }
     const def = m.def, maxLat = Math.max(0, maxLatBase - m.rad * .7);
     if (m.dying > 0) {
@@ -312,7 +328,7 @@ function updateUnits(dt) {
         if (lim < v) { v = lim; obstacle = o; og = gap; }
       }
     }
-    if (!m.foe && obstacle && obstacle.isMan && og < .3 && obstacle.foes < 2) m.foe = obstacle;
+    if (!m.foe && obstacle && obstacle.isMan && og < .3 && obstacle.foes < (obstacle.hold || 2)) m.foe = obstacle;
     if (obstacle && v < want * .55 && !m.foe) {
       if (m.laneT === undefined || m.laneT <= 0) {
         m.laneT = .35; const first = rnd() < .5 ? 1 : -1;

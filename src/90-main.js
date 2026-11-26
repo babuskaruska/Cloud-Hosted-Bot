@@ -118,6 +118,7 @@ function step(rdt) {
   for (const f of G.men) if (f.torch && !f.dead) _torch.push(f);
   for (const a of G.arrows) _torch.push(a);
   for (const f of FX.fires) if (f.lI > 1) _torch.push(f);
+  for (const o of FX.lit) if (o.lI > 1) _torch.push(o);
   updateTorchLights(dt, _torch, CAM.x, CAM.z);
   collectMistLights();
   endParts(); endFX();
