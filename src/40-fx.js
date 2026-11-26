@@ -172,6 +172,14 @@ void main(){
     vec2 g = p - vec2(-0.36, 0.4);
     a = (smoothstep(0.7, 0.97, r) * (0.45 + 0.55 * sh) + 0.06 + 0.9 * exp(-dot(g, g) * 26.0)) * inside;
   }
+  else if (type == 9) {
+    // Rune circle (overcharge): two rings with blocky glyphs between them; age = share of glyphs lit.
+    float u = atan(p.y, p.x) / 6.2832 + 0.5, cell = floor(u * 20.0), f = fract(u * 20.0);
+    float rings = smoothstep(0.04, 0.0, abs(r - 0.93)) + smoothstep(0.03, 0.0, abs(r - 0.7)) * 0.8;
+    float band = step(0.75, r) * step(r, 0.89), row = floor((r - 0.75) * 30.0);
+    float glyph = band * step(0.16, f) * step(f, 0.84) * step(hash(vec2(cell * 1.7 + row, seed)), 0.6) * step(hash(vec2(cell, seed + 3.0)), age + 0.08);
+    a = (rings + glyph * 1.3) * (0.75 + 0.25 * sin(uTime * 3.0 + cell * 1.3));
+  }
   gl_FragColor = vec4(col * a * vCol.a, 1.0);
 }`;
 const SPR_FRAG_ALPHA = `
@@ -269,9 +277,9 @@ void main(){ float r = length(vUv); float sd = floor(vCol.a) ; float al = fract(
     });
     this.mesh = new THREE.Mesh(g, m); this.mesh.frustumCulled = false; this.mesh.renderOrder = 1; this.vps = vps;
   }
-  add(heightAt, x, z, size, r, g, b, alpha, life) {
+  add(heightAt, x, z, size, r, g, b, alpha, life, minLife = DECAL_MIN_LIFE) {
     const s = this.next; this.next = (this.next + 1) % this.cap; const sl = this.slots[s];
-    sl.life = Math.max(life, DECAL_MIN_LIFE); sl.fade = Math.max(.6, Math.min(4, life * .25)); sl.a = alpha; sl.seed = Math.floor(frnd() * 90) + 1; sl.r = r; sl.g = g; sl.b = b; sl.k = -1; sl.dead = false;
+    sl.life = Math.max(life, minLife); sl.fade = Math.max(.6, Math.min(4, life * .25)); sl.a = alpha; sl.seed = Math.floor(frnd() * 90) + 1; sl.r = r; sl.g = g; sl.b = b; sl.k = -1; sl.dead = false;
     const P = this.pos.array, rot = frnd() * TAU, cs = Math.cos(rot), sn = Math.sin(rot);
     for (let j = 0; j <= this.G; j++) for (let i = 0; i <= this.G; i++) {
       const o = (s * this.vps + j * (this.G + 1) + i) * 3, lx = (i / this.G * 2 - 1) * size, lz = (j / this.G * 2 - 1) * size, wx = x + lx * cs - lz * sn, wz = z + lx * sn + lz * cs;
@@ -298,7 +306,7 @@ const DECAL_MIN_LIFE = 150;
 
 const FX = {
   add: null, alpha: null, segs: null, decals: null,
-  parts: [], smokes: [], flames: [], timed: [], bolts: [], fires: [], scorch: [], shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, shakeT: 0, flash: 0, flashK: 1, dt: 0, calm: false, groundAt: () => 0,
+  parts: [], smokes: [], flames: [], timed: [], bolts: [], fires: [], scorch: [], meteors: [], novas: [], lit: [], shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, shakeT: 0, flash: 0, flashK: 1, dt: 0, calm: false, groundAt: () => 0,
 };
 function initFX() {
   FX.add = new SpriteBatch(4000, false); FX.alpha = new SpriteBatch(800, true); FX.segs = new SegBatch(900); FX.decals = new DecalBatch(200);
@@ -406,14 +414,14 @@ function updateFX(dt, t) {
     for (let j = 0; j < b.pts.length - 1; j++) { const p = b.pts[j], q = b.pts[j + 1]; SG.push(p[0], p[1], p[2], w, q[0], q[1], q[2], w, c[0] * 4, c[1] * 4, c[2] * 4, k); SG.push(p[0], p[1], p[2], w * 3.5, q[0], q[1], q[2], w * 3.5, c[0], c[1], c[2], k * .35); }
     if (b.fork > 0) { const p = b.pts[b.fork]; SG.push(p[0], p[1], p[2], w * .7, p[0] + b.fd[0] * .7, p[1] + b.fd[1] * .7, p[2] + b.fd[2] * .7, w * .2, c[0] * 3, c[1] * 3, c[2] * 3, k); }
   }
-  updateFires(dt, t);
+  updateFires(dt, t); updateSpells(dt, t);
   const calm = G.phase === 'play' && !G.spawning && !G.mons.length;
   if (calm && !FX.calm) FX.decals.fadeAll(4.5);
   FX.calm = calm;
   FX.decals.update(dt);
 }
 function endFX() { FX.add.end(); FX.alpha.end(); FX.segs.end(); }
-function clearFX() { FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; for (const f of FX.fires) f.alive = false; FX.fires.length = 0; FX.scorch.length = 0; FX.decals.clear(); }
+function clearFX() { for (const o of FX.lit) o.alive = false; FX.lit.length = 0; FX.meteors.length = 0; FX.novas.length = 0; FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; for (const f of FX.fires) f.alive = false; FX.fires.length = 0; FX.scorch.length = 0; FX.decals.clear(); }
 
 // ---- Camera shake, hit-stop and flash ----------------------------------------------------------------
 // shake(amount): adds trauma that decays smoothly. ~.2 shell, ~.5 sapper, ~1 boss stomp; the total is capped
@@ -509,4 +517,109 @@ function drawElite(m, t) {
     A.push(m.x, cy, m.z, R0 * 3.6, R0 * 3.6, 0, 0, .3, 1.0, .25, .1 + .14 * pu, 2, 0, 0, 0);
     if (frnd() < dt * 3) fxPart(m.x + frr(-.5, .5) * R0, m.y + top * frr(.3, .9), m.z + frr(-.5, .5) * R0, 0, frr(-.2, .3), 0, frr(.4, .8), frr(.04, .07), .5, 2.2, .45, { grav: 3, drag: .5 });
   }
+}
+
+// ---- Spells ------------------------------------------------------------------------------------------
+// Draw only: the gameplay side (castSpell) deals the damage. Both are cheap: instanced pieces from KIT.meteor /
+// KIT.ice (one draw call each while visible), sprites, decals, a pooled torch light (FX.lit) and one flash.
+// FX.meteor(x, z, r) -> { delay }: a burning boulder falls from the sky for `delay` (METEOR_FALL) seconds, then a
+// big impact: fireball, shock ring, flash, shake, flung rubble and a smoking crater that glows for a few seconds.
+// To have the damage land with the rock, apply it `delay` seconds after the call.
+const METEOR_FALL = .62, RIM_TINT = [.34, .3, .28];
+FX.meteor = function (x, z, r = 2.5) {
+  if (!isFinite(x) || !isFinite(z) || G.phase === 'crumble' || G.phase === 'rise') return null;
+  r = clamp(+r || 2.5, .8, 6);
+  const gy = FX.groundAt(x, z), sy = Math.sin(CAM.yaw), cy = Math.cos(CAM.yaw), sx = x - cy * 6.5 - sy * 2, sz = z + sy * 6.5 - cy * 2;
+  const m = { x, z, r, gy, sx, sy: gy + 21, sz, t: 0, T: METEOR_FALL, hit: false, crater: 0, seed: frnd() * 100, acc: 0, alive: true, lI: 0, lx: sx, ly: gy + 21, lz: sz, lCol: 0xff8a3a, lseed: frnd() * 9, px: sx, py: gy + 21, pz: sz };
+  FX.meteors.push(m); FX.lit.push(m);
+  fxTimed(4, x, gy + .1, z, r * 2.4, r * 2.4, 1.6, .5, .12, .55, METEOR_FALL, { ground: true });
+  return { delay: METEOR_FALL };
+};
+// FX.frostNova(x, z, r, seconds = 3): an ice ring sweeps out, frost crystals grow from the ground where it passes
+// and melt after `seconds`, a frost stain fades, cold mist rolls out and a cold light lingers.
+FX.frostNova = function (x, z, r = 3, secs = 3) {
+  if (!isFinite(x) || !isFinite(z) || G.phase === 'crumble' || G.phase === 'rise') return null;
+  r = clamp(+r || 3, .8, 7); secs = clamp(+secs || 3, .6, 12);
+  const gy = FX.groundAt(x, z), n = clamp(Math.round(r * r * 1.6), 8, 30), shards = [];
+  for (let i = 0; i < n; i++) { const a = i * 2.39996 + frnd() * .6, d = r * (.18 + .82 * Math.sqrt((i + frnd()) / n)), px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d; shards.push({ x: px, z: pz, y: FX.groundAt(px, pz), at: d / r * .32, s: frr(1.1, 2.0) * (1.15 - .35 * d / r), yaw: frnd() * TAU, tx: frr(-.35, .35), tz: frr(-.35, .35), end: secs * frr(.8, 1.05) }); }
+  const o = { x, z, r, gy, t: 0, T: secs, shards, alive: true, lI: 0, lx: x, ly: gy + 1.2, lz: z, lCol: 0x8fd0ff, lseed: frnd() * 9, acc: 0 };
+  FX.novas.push(o); FX.lit.push(o);
+  lightFlash(x, gy + 1.6, z, 0x9fd8ff, 900, .5, r * 4 + 8);
+  fxTimed(4, x, gy + .12, z, r * 2.5, r * 2.5, .8, 1.5, 2.6, 1, .5, { ground: true });
+  fxTimed(4, x, gy + .14, z, r * 2.1, r * 2.1, .5, 1.0, 1.8, .8, .8, { ground: true });
+  fxTimed(5, x, gy + .9, z, r * 1.8, r * 1.8, .9, 1.5, 2.4, 1, .22);
+  fxTimed(2, x, gy + .5, z, r * 3.2, r * 2.2, .3, .6, 1.1, .5, .6);
+  FX.decals.add(FX.groundAt, x, z, r * 1.2, .8, .9, 1.0, .5, secs + 1.2, 0);
+  for (let i = 0; i < 14; i++) { const a = i / 14 * TAU + frnd() * .3, s = r * frr(1.1, 1.8); fxSmoke(x + Math.cos(a) * .4, gy + frr(.1, .4), z + Math.sin(a) * .4, Math.cos(a) * s, frr(.1, .4), Math.sin(a) * s, frr(1.2, 2.2), frr(.45, .8), 1.4, .78, .88, 1.0, .42, { drag: 2.2 }); }
+  for (let i = 0; i < 26; i++) { const a = frnd() * TAU, s = frr(2, 6.5); fxPart(x, gy + frr(.2, 1), z, Math.cos(a) * s, frr(1, 4), Math.sin(a) * s, frr(.4, .9), frr(.04, .07), .9, 1.5, 2.4, { grav: 4, drag: 1.2 }); }
+  shake(.25);
+  return o;
+};
+const _spM = new THREE.Matrix4(), _spQ = new THREE.Quaternion(), _spV = new THREE.Vector3(), _spS = new THREE.Vector3(), _spE = new THREE.Euler();
+function meteorImpact(m) {
+  const { x, z, r, gy } = m, sc = r / 2.2;
+  m.hit = true; m.crater = 7;
+  lightFlash(x, gy + 2.2, z, 0xff8a40, 900 * sc, .65, 18 + r * 4);
+  fxTimed(5, x, gy + .8, z, r * 2.1, r * 2.1, 2.2, 1.1, .35, .7, .12);
+  fxTimed(4, x, gy + .12, z, r * 4.2, r * 4.2, 2.0, 1.0, .35, 1, .55, { ground: true });
+  fxTimed(4, x, gy + .1, z, r * 2.6, r * 2.6, 1.4, .6, .2, .8, .4, { ground: true });
+  for (let i = 0; i < 5; i++) { const a = i / 5 * TAU + frnd(), d = r * frr(.25, .5); fxTimed(3, x + Math.cos(a) * d, gy + frr(.3, 1) * sc, z + Math.sin(a) * d, r * frr(.55, .8), r * frr(.55, .8), 2.0, 1.05, .38, 1, frr(.4, .6), { grow: 1.3 }); }
+  fxTimed(3, x, gy + 1.4 * sc, z, r * .8, r * 1.1, 2.0, 1.0, .35, 1, .5, { grow: .9 });
+  m.rim = []; for (let i = 0; i < 7; i++) { const a = i / 7 * TAU + frnd() * .5, d = r * frr(.42, .58), px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d; m.rim.push([px, FX.groundAt(px, pz), pz, frr(1.4, 2.4) * Math.min(1.3, sc), frnd() * TAU]); }
+  fxSparks(x, gy + .4, z, Math.round(30 * Math.min(1.6, sc)), 11 * Math.min(1.4, sc), 3.2, 1.6, .45, { size: .09, life: 1.4 });
+  for (let i = 0; i < 16; i++) { const a = i / 16 * TAU, s = r * frr(1.6, 2.6); fxSmoke(x + Math.cos(a) * r * .3, gy + .2, z + Math.sin(a) * r * .3, Math.cos(a) * s, frr(.2, .8), Math.sin(a) * s, frr(1.4, 2.6), frr(.6, 1) * sc, 1.6 * sc, .3, .27, .24, .55, { drag: 2.4 }); }
+  for (let i = 0; i < 6; i++) fxSmoke(x + frr(-.5, .5), gy + 1 + i * .5, z + frr(-.5, .5), frr(-.2, .2), frr(1.5, 2.6), frr(-.2, .2), frr(2.6, 4), .9 * sc, 2 * sc, .13, .12, .12, .6, { drag: .8, rise: .3 });
+  FX.decals.add(FX.groundAt, x, z, r * 1.25, .012, .01, .009, .95, 90);
+  FX.decals.add(FX.groundAt, x, z, r * .7, .04, .02, .012, .9, 60);
+  const nd = Math.round(8 + 4 * sc);
+  for (let i = 0; i < nd; i++) { const a = frnd() * TAU, s = frr(.6, 1.5) * sc, k = frr(1, 1.9) * Math.min(1.4, sc); _spM.compose(_spV.set(x + Math.cos(a) * .4, gy + .3, z + Math.sin(a) * .4), _spQ.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _spS.set(k, k, k)); addDebris(KIT.rubble, _spM, i & 1 ? [.42, .36, .32] : [.3, .26, .24], Math.cos(a) * s * 3.4, frr(4, 9), Math.sin(a) * s * 3.4, frr(4, 10), frr(5, 8), { extra: 1 }); }
+  for (let i = 0; i < 3; i++) { const a = frnd() * TAU, k = frr(.35, .5); _spM.compose(_spV.set(x, gy + .5, z), _spQ.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _spS.set(k, k, k)); addDebris(KIT.meteor, _spM, null, Math.cos(a) * frr(2, 4), frr(3, 6), Math.sin(a) * frr(2, 4), frr(3, 7), frr(5, 7), { extra: 1 }); }
+  shake(1.0); hitStop(.05, .2);
+}
+function updateSpells(dt, t) {
+  const A = FX.add, SG = FX.segs, M = FX.meteors;
+  for (let i = M.length - 1; i >= 0; i--) {
+    const m = M[i]; m.t += dt;
+    if (!m.hit) {
+      const u = Math.min(1, m.t / m.T), e = u * u * (.4 + .6 * u), x = lerp(m.sx, m.x, e), y = lerp(m.sy, m.gy + .4, e), z = lerp(m.sz, m.z, e);
+      const vx = x - m.px, vy = y - m.py, vz = z - m.pz, l = Math.hypot(vx, vy, vz) || 1, k = .55 + .35 * Math.min(1, m.r / 3);
+      _spE.set(m.t * 7, m.t * 5, 0); _spQ.setFromEuler(_spE); _spM.compose(_spV.set(x, y, z), _spQ, _spS.set(k, k, k)); KIT.meteor.put(_spM, .6, null);
+      A.push(x, y, z, 2.2 * k, 2.2 * k, 0, 0, 2.6, 1.2, .35, 1, 2, 0, 0, 0);
+      A.push(x - vx / l * .2, y - vy / l * .2, z - vz / l * .2, 1.4 * k, 1.4 * k, m.seed, 0, 1, 1, 1, 1, 3, m.seed + m.t * 3, .25, 0);
+      if (l > 1e-3) { SG.push(x, y, z, .55 * k, x - vx / l * 5, y - vy / l * 5, z - vz / l * 5, .02, 2.4, .9, .25, .9); SG.push(x, y, z, 1.3 * k, x - vx / l * 3, y - vy / l * 3, z - vz / l * 3, .1, .8, .25, .06, .5); }
+      m.acc += dt * 60;
+      while (m.acc >= 1) { m.acc -= 1; const q = frnd(); fxPart(lerp(m.px, x, q) + frr(-.2, .2), lerp(m.py, y, q) + frr(-.2, .2), lerp(m.pz, z, q) + frr(-.2, .2), frr(-.8, .8), frr(-.4, .8), frr(-.8, .8), frr(.3, .8), frr(.06, .12), 3, 1.3, .3, { drag: 1.5, rise: .5 }); if (q < .3) fxSmoke(x, y, z, frr(-.2, .2), frr(0, .4), frr(-.2, .2), frr(1, 1.8), .35, .9, .16, .14, .13, .45, { drag: 1, rise: .2 }); }
+      m.px = x; m.py = y; m.pz = z; m.lx = x; m.ly = y; m.lz = z; m.lI = 60;
+      if (u >= 1) meteorImpact(m);
+      continue;
+    }
+    m.crater -= dt; const k = Math.max(0, Math.min(1, m.crater / 3)), fl = .8 + .2 * n1(t * 6 + m.seed, m.seed);
+    if (m.crater <= 0) { m.alive = false; m.lI = 0; swapRemove(M, i); continue; }
+    A.push(m.x, m.gy + .12, m.z, m.r * 1.8, m.r * 1.8, 0, 0, 1.5, .5, .12, .8 * k * fl, 2, 0, 0, 1);
+    const sink = Math.max(0, .8 - m.crater) * .3;
+    for (const q of m.rim) { _spQ.setFromAxisAngle(_upv, q[4]); _spM.compose(_spV.set(q[0], q[1] - sink, q[2]), _spQ, _spS.set(q[3], q[3] * .7, q[3])); KIT.rubble.put(_spM, 0, RIM_TINT); }
+    A.push(m.x, m.gy + .13, m.z, m.r * 1.1, m.r * 1.1, m.seed, 0, .9, .45, .25, .7 * k, 3, m.seed, .45 + .1 * (1 - k), 1);
+    if (frnd() < dt * 9 * k) { const a = frnd() * TAU, d = Math.sqrt(frnd()) * m.r * .5; fxPart(m.x + Math.cos(a) * d, m.gy + .15, m.z + Math.sin(a) * d, frr(-.2, .2), frr(.8, 1.8), frr(-.2, .2), frr(.6, 1.3), frr(.04, .07), 2.6, 1.1, .2, { drag: .4, wob: 1, rise: .3 }); }
+    if (frnd() < dt * 2.5 * k) fxSmoke(m.x + frr(-.5, .5) * m.r * .4, m.gy + .3, m.z + frr(-.5, .5) * m.r * .4, frr(-.1, .1), frr(.5, 1), frr(-.1, .1), frr(2, 3.4), .4, 1.1, .15, .14, .14, .3, { drag: .4, rise: .1 });
+    m.lx = m.x; m.ly = m.gy + .8; m.lz = m.z; m.lI = 30 * k * fl;
+  }
+  const N = FX.novas;
+  for (let i = N.length - 1; i >= 0; i--) {
+    const o = N[i]; o.t += dt;
+    if (o.t >= o.T + .7) { o.alive = false; o.lI = 0; swapRemove(N, i); continue; }
+    const fade = sat((o.T + .7 - o.t) / 1.2), front = Math.min(1, o.t / .32);
+    A.push(o.x, o.gy + .1, o.z, o.r * 2.6, o.r * 2.6, 0, 0, .35, .65, 1.1, .3 * fade, 2, 0, 0, 1);
+    if (o.t < .6) A.push(o.x, o.gy + .11, o.z, o.r * 2.2 * front + .5, o.r * 2.2 * front + .5, 0, 0, .9, 1.5, 2.4, .9 * (1 - o.t / .6), 4, 0, .62, 1);
+    for (const s of o.shards) {
+      const age = o.t - s.at; if (age <= 0) continue;
+      const grow = age < .14 ? easeOutBack(age / .14) : 1, melt = sat((s.end - age) / .6), k = s.s * grow * (melt > 0 ? .35 + .65 * melt : 0);
+      if (k < .02) continue;
+      _spE.set(s.tx, s.yaw, s.tz); _spQ.setFromEuler(_spE); _spM.compose(_spV.set(s.x, s.y - (1 - melt) * .25 * s.s, s.z), _spQ, _spS.set(k, k * (.7 + .3 * melt), k)); KIT.ice.put(_spM, age < .2 ? 1 - age / .2 : 0, null);
+      if (!s.burst) { s.burst = 1; fxSparks(s.x, s.y + .2, s.z, 2, 2.2, .9, 1.4, 2.2, { size: .05, grav: 5 }); }
+    }
+    o.acc += dt * 6 * fade;
+    while (o.acc >= 1) { o.acc -= 1; const a = frnd() * TAU, d = Math.sqrt(frnd()) * o.r; fxPart(o.x + Math.cos(a) * d, o.gy + frr(.1, .9), o.z + Math.sin(a) * d, 0, frr(.1, .4), 0, frr(.5, 1), frr(.03, .055), 1.1, 1.6, 2.4, { drag: .8, wob: 1 }); }
+    o.lI = (o.t < .4 ? 70 : 34) * fade;
+  }
+  for (let i = FX.lit.length - 1; i >= 0; i--) if (!FX.lit[i].alive) swapRemove(FX.lit, i);
 }
