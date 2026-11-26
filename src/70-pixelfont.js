@@ -437,6 +437,17 @@ const PX = (() => {
       'CCCCc',
       '.ccc.',
     ],
+    gear: [
+      '....B....',
+      '.B.BBB.B.',
+      '..BBBBB..',
+      '.BBb.bBB.',
+      'BBB...BBB',
+      '.BBb.bBB.',
+      '..BBBBB..',
+      '.B.BbB.B.',
+      '....b....',
+    ],
     starEmpty: [
       '..s..',
       'sssss',
