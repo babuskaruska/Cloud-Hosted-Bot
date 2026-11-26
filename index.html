@@ -4573,7 +4573,7 @@ function endWave() {
 function updateWaves(dt) {
   if (G.phase !== 'play') return;
   const B = G.B;
-  updateElites(dt); updateSpells(dt);
+  updateElites(dt); updateSpells(dt); trackRun();
   if (G.spawning) {
     G.waveT += dt;
     while (G.queue.length && G.queue[0].t <= G.waveT) {
@@ -4601,6 +4601,9 @@ function updateWaves(dt) {
 }
 function callWaveEarly() { if (G.phase === 'play' && !G.spawning && !G.bossWave && G.nextIn > .4) { G.gold += Math.round(G.nextIn * 3); G.nextIn = .05; return true; } return false; }
 
+// Every purchase goes through pay() and every refund through refund(), so the run summary can count the gold earned.
+function pay(c) { G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); if (G.runStats) G.runStats.last -= c; }
+function refund(c) { G.gold += c; if (G.runStats) G.runStats.last += c; }
 function padCoverage(pad, range, air) {
   const B = G.B; let c = 0; const r2 = range * range;
   for (let i = 0; i < B.n; i += 2) if (dist2(pad.x, pad.z, B.px[i], B.pz[i]) < r2) c += PATH_STEP * 2;
@@ -4608,19 +4611,19 @@ function padCoverage(pad, range, air) {
 }
 function buildTower(pad, kind, byPlayer) {
   const def = TOWER[kind]; if (pad.tower || G.gold < def.cost[0] || G.phase !== 'play') return null;
-  G.gold -= def.cost[0]; UI.goldShown = Math.min(UI.goldShown, G.gold);
+  pay(def.cost[0]);
   const t = new Tower(pad, kind, G.B.pads.indexOf(pad)); G.towers.push(t); UI.ping(pad.x, pad.y, pad.z, byPlayer); return t;
 }
 function upgradeTower(t, byPlayer) {
   if (!t || t.lvl >= 2 || t.state !== 'active' || G.phase !== 'play') return false; const c = t.def.cost[t.lvl + 1]; if (G.gold < c) return false;
-  G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); t.upgrade(); UI.ping(t.x, t.y, t.z, byPlayer); return true;
+  pay(c); t.upgrade(); UI.ping(t.x, t.y, t.z, byPlayer); return true;
 }
 // Branches: a max-level tower (lvl 2) picks one of two specialisations (TOWER[kind].branches) and becomes lvl 3.
 function branchCost(t, key) { const b = t && t.def.branches && t.def.branches[key]; return b ? Math.round(b.cost * (1 + .12 * G.level) / 5) * 5 : 0; }
 function canBranch(t) { return !!(t && t.alive && t.lvl === 2 && !t.branch && t.state === 'active' && t.def.branches); }
 function branchTower(t, key, byPlayer) {
   const c = branchCost(t, key); if (!c || !canBranch(t) || G.phase !== 'play' || G.gold < c) return false;
-  G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); if (!t.specialize(key, c)) { G.gold += c; return false; }
+  pay(c); if (!t.specialize(key, c)) { refund(c); return false; }
   G.stats.branches++; G.stats[key] = (G.stats[key] || 0) + 1;
   UI.ping(t.x, t.y, t.z, byPlayer); fxEmbers(t.x, t.y + 1.5, t.z, 24, .7); fxTimed(5, t.x, t.y + 2, t.z, 5, 5, 1.6, 1.2, .6, .9, .4); sfx('branch', t.x, t.z, 1); sfx('buyout', t.x, t.z, .8);
   return true;
@@ -4630,7 +4633,7 @@ const OC_MAX = 3, OC_DMG = .25;
 function overchargeCost(t) { return t && t.lvl >= 3 && (t.oc || 0) < OC_MAX ? Math.round(t.def.cost[2] * [1, 1.4, 1.9][t.oc || 0] * (1 + .15 * G.level) / 5) * 5 : 0; }
 function overchargeTower(t, byPlayer) {
   const c = overchargeCost(t); if (!c || !t.alive || t.state !== 'active' || G.phase !== 'play' || G.gold < c) return false;
-  G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); t.oc = (t.oc || 0) + 1; t.spent += c; t.em.I = t.def.light[t.lvl] * (1 + .3 * t.oc);
+  pay(c); t.oc = (t.oc || 0) + 1; t.spent += c; t.em.I = t.def.light[t.lvl] * (1 + .3 * t.oc);
   UI.ping(t.x, t.y, t.z, byPlayer); fxTimed(5, t.x, t.y + 2, t.z, 4, 4, 1.4, 1.0, .5, .9, .35); fxEmbers(t.x, t.y + 1.5, t.z, 18, .6); sfx('buyout', t.x, t.z, 1);
   return true;
 }
@@ -4640,13 +4643,13 @@ function mendCount() { return Math.max(0, Math.min(MEND_N, G.maxLives - G.lives)
 function mendCost() { return mendCount() * (20 + 8 * G.level); }
 function mendBeacon(byPlayer) {
   const n = mendCount(), c = mendCost(); if (!n || G.phase !== 'play' || G.lives <= 0 || G.gold < c) return false;
-  G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); G.lives += n;
+  pay(c); G.lives += n;
   const b = G.B.beacon; fxEmbers(b.x, b.y, b.z, 40, .6); lightFlash(b.x, b.y + 1, b.z, 0xffa050, 900, .4, 30); sfx('ignite', b.x, b.z, 1, .5); UI.ping(b.x, b.y - .5, b.z, byPlayer);
   return true;
 }
 function sellTower(t) {
-  if (!t || !t.alive || G.phase !== 'play') return false; const refund = Math.round(t.spent * .6);
-  G.gold += refund; t.sell(); const i = G.towers.indexOf(t); if (i >= 0) G.towers.splice(i, 1); return true;
+  if (!t || !t.alive || G.phase !== 'play') return false; const back = Math.round(t.spent * .6);
+  refund(back); t.sell(); const i = G.towers.indexOf(t); if (i >= 0) G.towers.splice(i, 1); return true;
 }
 
 // Spells. Mana (G.mana up to G.manaMax) fills from kills and slowly while a wave runs; each spell also has a cooldown.
@@ -4815,10 +4818,12 @@ function aiThink(dt) {
   { const n = mendCount(), c = mendCost(); if (n >= 3 || (n > 0 && G.lives <= 8)) opts.push({ sc: (1 - G.lives / G.maxLives) * 3.2 * (110 / Math.max(40, c)) * (G.lives <= 8 ? 1.8 : 1), cost: c, act: 'mend' }); }
   if (!opts.length) return;
   opts.sort((a, b) => b.sc - a.sc);
+  // The first wave after the page opens: the commander keeps some gold back, so a newcomer who takes over has money to build with.
+  const purse = G.gold - (G.run === 1 && G.level === 0 && G.k <= 1 && !UI.everManual ? 150 : 0);
   let pick = opts[0];
-  if (pick.cost > G.gold) {
+  if (pick.cost > purse) {
     AI.wait += .5;
-    const aff = opts.find(o => o.cost <= G.gold && o.sc > pick.sc * (AI.wait > 9 ? .45 : .8));
+    const aff = opts.find(o => o.cost <= purse && o.sc > pick.sc * (AI.wait > 9 ? .45 : .8));
     if (!aff) return; pick = aff;
   }
   AI.wait = 0;
@@ -4843,10 +4848,35 @@ function aiBranch(t, towers, air, armor, swarm) {
   };
   return sc[a] / (1 + .6 * have(a)) >= sc[b] / (1 + .6 * have(b)) ? a : b;
 }
+// The run: everything since the last defeat (or the page load), for the summary on the defeat screen.
+function newRun() { G.runStats = { wave0: G.level * G.wavesPerLand, lands: 0, slain0: G.slain, earned: 0, last: G.gold, best0: G.best, tower: null, branch: {}, sum: null }; }
+function trackRun() { const RS = G.runStats; if (!RS) return; const d = G.gold - RS.last; if (d > 0) RS.earned += d; RS.last = G.gold; }
+// At the end of each battlefield, won or lost: the run's best tower, and the kills of each branch.
+function recordTowers() {
+  const RS = G.runStats; if (!RS) return;
+  for (const t of G.towers) {
+    if (!t.def) continue; const k = t.kills || 0;
+    if (t.branch) RS.branch[t.branch] = (RS.branch[t.branch] || 0) + k;
+    if (k > 0 && (!RS.tower || k > RS.tower.kills)) RS.tower = { name: t.branch && t.def.bdef ? t.def.bdef.title : t.def.name, kills: k, land: G.B.bio.name };
+  }
+}
+function runSummary() {
+  const RS = G.runStats; if (!RS) return null;
+  let bk = null, bn = -1, bname = ''; for (const k in RS.branch) if (RS.branch[k] > bn) { bn = RS.branch[k]; bk = k; }
+  if (bk) for (const kind of TOWER_KINDS) if (TOWER[kind].branches && TOWER[kind].branches[bk]) bname = TOWER[kind].branches[bk].name;
+  return { waves: Math.max(0, waveNumber() - 1 - RS.wave0), lands: RS.lands, slain: G.slain - RS.slain0, earned: Math.round(RS.earned), branch: bk ? { name: bname, kills: bn } : null, tower: RS.tower, best: G.best, newBest: G.best > RS.best0 && G.best > G.wavesPerLand };
+}
+// After a defeat: a new run from the first land. The commander restarts by itself after a while; a player restarts from the summary.
+const SUMMARY_AT = 2.6, AUTO_RESTART = 14;
+function restartRun(byPlayer) {
+  if (G.phase !== 'defeat' || G.phaseT < SUMMARY_AT) return false;
+  G.level = 0; G.press = byPlayer || UI.playerActive() ? 1 : Math.max(.8, G.press * .85); G.run++; G.newRun = true; setPhase('crumble');
+  return true;
+}
 function setPhase(p) {
   G.phase = p; G.phaseT = 0; if (p !== 'play') G.horde = false;
-  if (p === 'clear') { G.advance = true; UI.banner('The pass holds', 3.2, false); UI.closeMenu(); }
-  if (p === 'defeat') { UI.banner('The beacon is out', 4.2, true); UI.closeMenu(); sfx('beaconOut', G.B.beacon.x, G.B.beacon.z, 1.2); fxEmbers(G.B.beacon.x, G.B.beacon.y, G.B.beacon.z, 60, .8); for (let i = 0; i < 14; i++) fxSmoke(G.B.beacon.x + rr(-.4, .4), G.B.beacon.y + rr(0, 1), G.B.beacon.z + rr(-.4, .4), rr(-.3, .3), rr(.8, 2), rr(-.3, .3), rr(2, 4), 1, 2, .2, .2, .22, .6, { drag: .5, rise: .2 }); }
+  if (p === 'clear') { recordTowers(); if (G.runStats) G.runStats.lands++; G.advance = true; UI.banner('The pass holds', 3.2, false); UI.closeMenu(); }
+  if (p === 'defeat') { recordTowers(); if (G.runStats) G.runStats.sum = runSummary(); UI.banner('The beacon is out', 4.2, true); UI.closeMenu(); sfx('beaconOut', G.B.beacon.x, G.B.beacon.z, 1.2); fxEmbers(G.B.beacon.x, G.B.beacon.y, G.B.beacon.z, 60, .8); for (let i = 0; i < 14; i++) fxSmoke(G.B.beacon.x + rr(-.4, .4), G.B.beacon.y + rr(0, 1), G.B.beacon.z + rr(-.4, .4), rr(-.3, .3), rr(.8, 2), rr(-.3, .3), rr(2, 4), 1, 2, .2, .2, .22, .6, { drag: .5, rise: .2 }); }
   if (p === 'crumble') startCrumble();
   if (p === 'rise') startRise();
 }
@@ -4889,6 +4919,8 @@ function beginBattle(first) {
   G.lives = G.maxLives; G.gold = 300 + 100 * G.level + 12 * G.level * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; G.queue = []; AI.think = .15; AI.wait = 0;
   const n = 4 + Math.min(3, G.level);
   for (let i = 0; i < n; i++) spawnMonster(i === n - 1 && G.level > 0 ? 'knight' : 'skel', { s: B.cave.s + 2.2 + i * 1.15, lat: rr(-.7, .7), hpMul: 1 + .22 * G.level });
+  if (first || G.newRun || !G.runStats) { G.newRun = false; newRun(); }
+  G.runStats.last = G.gold;
   G.phase = 'play'; G.phaseT = 0;
 }
 function updatePhase(dt) {
@@ -4902,7 +4934,8 @@ function updatePhase(dt) {
   if (G.phase === 'clear') { if (t > 2.6) setPhase('crumble'); }
   else if (G.phase === 'defeat') {
     for (const tw of G.towers) { tw.em.on = damp(tw.em.on, 0, 1.5 + tw.idx * .15, dt); if (tw.flame) tw.flame.on = tw.em.on; if (tw.flame2) tw.flame2.on = tw.em.on; }
-    if (t > 4.4) { G.level = 0; G.press = Math.max(.8, G.press * .85); G.run++; setPhase('crumble'); }
+    // A player who has walked away gets the commander back for the next run.
+    if (t > SUMMARY_AT + AUTO_RESTART && (!UI.playerActive() || UI.idle > 45)) { if (UI.playerActive()) UI.setManual(false); restartRun(false); }
   } else if (G.phase === 'crumble') {
     let done = true;
     for (const p of B.pieces) {
@@ -5470,6 +5503,17 @@ const PX = (() => {
       'CCCCc',
       '.ccc.',
     ],
+    gear: [
+      '....B....',
+      '.B.BBB.B.',
+      '..BBBBB..',
+      '.BBb.bBB.',
+      'BBB...BBB',
+      '.BBb.bBB.',
+      '..BBBBB..',
+      '.B.BbB.B.',
+      '....b....',
+    ],
     starEmpty: [
       '..s..',
       'sssss',
@@ -5534,13 +5578,45 @@ const UI = (() => {
     touch: false, ptrs: new Map(), gest: null, lastTap: { t: -9, x: 0, y: 0 }, waveRect: null, followRect: null, menuRect: null, wake: null, panning: false,
     hud: [], tips: [], tip: null, keys: new Set(), sndArmed: false, vvT: 0, vvN: 0,
     spell: null, gpt: null, spellFlash: {}, spellSeen: {},
+    sets: null, panelRect: null, everManual: false, helpSeen: {}, sumT: 0,
   };
+  // Settings, remembered between visits: volumes (0..1) and the graphics mode.
+  const SET = { music: 1, sfx: 1, amb: 1, q: 'auto' }, Q0 = { noscale: HASH.noscale, quality: -1 };
+  function saveSettings() { try { localStorage.setItem('cinderwatch.settings', JSON.stringify(SET)); } catch (e) {} }
+  function applyVolumes() { AU.setVolume('music', SET.music); AU.setVolume('sfx', SET.sfx); AU.setVolume('crowd', SET.sfx); AU.setVolume('ambience', SET.amb); }
+  // Graphics: Auto lets the frame-rate watcher pick the resolution; Sharp holds full resolution; Fast holds a low one.
+  function applyQuality() {
+    if (Q0.quality < 0) Q0.quality = R.quality;
+    if (SET.q === 'auto') { HASH.noscale = Q0.noscale; R.quality = Q0.quality; } else { HASH.noscale = '1'; R.quality = SET.q === 'sharp' ? 1 : .6; }
+    if (R.renderer) resizeRenderer();
+  }
+  function loadSettings() {
+    try {
+      const o = JSON.parse(localStorage.getItem('cinderwatch.settings') || '{}') || {};
+      for (const k of ['music', 'sfx', 'amb']) if (o[k] !== undefined && isFinite(+o[k])) SET[k] = clamp(+o[k], 0, 1);
+      if (o.q === 'auto' || o.q === 'sharp' || o.q === 'fast') SET.q = o.q;
+      const h = JSON.parse(localStorage.getItem('cinderwatch.help') || '[]'); if (Array.isArray(h)) for (const k of h) U.helpSeen[k] = 1;
+    } catch (e) {}
+    applyVolumes(); if (SET.q !== 'auto') applyQuality();
+  }
+  // One-time help lines for the player's first steps (remembered, so they show once per browser).
+  function helpTip(key) {
+    if (U.helpSeen[key]) return; U.helpSeen[key] = 1; U.tips.unshift('help:' + key);
+    try { localStorage.setItem('cinderwatch.help', JSON.stringify(Object.keys(U.helpSeen))); } catch (e) {}
+  }
+  function openSettings(on) {
+    if (on === undefined) on = !U.sets; if (!!on === !!U.sets) return;
+    if (on) { U.sets = { tab: 'set', t: 0, wasPaused: G.paused }; G.paused = true; U.closeMenu(); }
+    else { G.paused = U.sets.wasPaused; U.sets = null; }
+    sfx('uiClick', CAM.x, CAM.z, .6);
+  }
   const COLR = { bg: 'rgba(9,11,17,0.86)', bg2: 'rgba(24,27,38,0.94)', bd: '#5d4c35', bdHi: '#e8b04a', tx: '#efe4cd', dim: '#a79e8a', amber: '#e8b04a', ember: '#ff8a3c', cold: '#8fc7ff', red: '#e5553c', dark: '#0b0d14', ok: '#9fd08a' };
   const _pv = new THREE.Vector3(), _o = new THREE.Vector3(), _d = new THREE.Vector3();
   function proj(x, y, z) { _pv.set(x, y, z).project(R.cam); return { x: (_pv.x * .5 + .5) * R.dw, y: (1 - (_pv.y * .5 + .5)) * R.dh }; }
   U.proj = proj;
   U.playerActive = () => U.manual;
-  U.setManual = on => { U.manual = !!on; if (!on) { U.menu = null; U.armed = null; U.spell = null; } };
+  U.setManual = on => { U.manual = !!on; if (on) takeCommand(); else { U.menu = null; U.armed = null; U.spell = null; } };
+  function takeCommand() { if (!U.everManual) { U.everManual = true; helpTip('cmd'); } }
   U.banner = (text, dur, big) => { U.msg = { text, t: 0, dur, big }; };
   U.ping = (x, y, z, byPlayer) => { fxTimed(4, x, y + .12, z, 5, 5, byPlayer ? 1.0 : 1.5, byPlayer ? 1.4 : 1.1, byPlayer ? 1.8 : .5, .7, .55, { ground: true }); };
   U.closeMenu = () => { U.menu = null; U.armed = null; U.spell = null; };
@@ -5587,6 +5663,7 @@ const UI = (() => {
         p.x = x; p.y = y; const [a, b] = [...U.ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y) || 1, cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
         camPan(cx - g.cx, cy - g.cy); camZoomAt(d / g.d, cx, cy); g.d = d; g.cx = cx; g.cy = cy; return;
       }
+      if (g && g.mode === 'tap' && g.btn && g.btn.drag) { g.btn.drag(x); p.x = x; p.y = y; return; }
       if (g && g.mode === 'tap' && !g.hud && Math.hypot(x - p.x0, y - p.y0) > (U.touch ? 10 : 6) * D()) { g.mode = 'pan'; U.press = null; }
       if (g && g.mode === 'pan') camPan(x - p.x, y - p.y);
       p.x = x; p.y = y;
@@ -5610,6 +5687,7 @@ const UI = (() => {
     document.addEventListener('touchend', e => { audioGesture(); stop(e); if (!e.touches.length && U.ptrs.size) setTimeout(() => { if (U.ptrs.size) U.dropTouches(); }, 80); }, { passive: false });
     if (window.visualViewport) for (const ev of ['resize', 'scroll']) window.visualViewport.addEventListener(ev, fixPageZoom);
     try { if (localStorage.getItem('cinderwatch.muted') === '1') AU.muted = true; G.best = +localStorage.getItem('cinderwatch.best') || 0; } catch (e) {}
+    loadSettings();
     window.addEventListener('keyup', e => { U.keys.delete(e.code); });
     window.addEventListener('blur', () => U.keys.clear());
     window.addEventListener('contextmenu', e => e.preventDefault());
@@ -5617,6 +5695,9 @@ const UI = (() => {
       if (PAN[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey) { U.keys.add(e.code); e.preventDefault(); }
       if (e.repeat) return; audioGesture(); U.keepAwake(); U.touch = false;
       const k = e.key;
+      if (k === 'o' || k === 'O' || (k === 'Escape' && U.sets)) { openSettings(); e.preventDefault(); return; }
+      if (U.sets) { if (k === 'm' || k === 'M') setMute(!AU.muted); return; }
+      if (G.phase === 'defeat' && (k === ' ' || k === 'Enter')) { if (restartRun(true)) sfx('uiClick', CAM.x, CAM.z, .8); e.preventDefault(); return; }
       const bt = U.menu && U.menu.tower;
       if ((k === '1' || k === '2') && bt && canBranch(bt)) { touchInput(); doBranch(bt, BRANCH_KEYS[bt.kind][+k - 1]); e.preventDefault(); }
       else if (k >= '1' && k <= '4') { pickKind(TOWER_KINDS[+k - 1]); e.preventDefault(); }
@@ -5645,7 +5726,13 @@ const UI = (() => {
   function soundTap() { if (AU.ready && U.sndArmed) setMute(!AU.muted); }
   U.sawMonster = type => { if (G.seen[type]) return; G.seen[type] = 1; if (MON[type].tip && U.tips.length < 4) U.tips.push(type); };
   U.sawElite = kind => { const key = 'elite:' + kind; if (G.seen[key]) return; G.seen[key] = 1; if (U.tips.length < 5) U.tips.push(key); };
-  const tipInfo = key => { if (key.startsWith('event:')) { const E = EVENTS[key.slice(6)]; return { head: E.name, tip: E.tip, bd: '#5a7a9a' }; } if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
+  const HELP = {
+    cmd: () => ['You command', U.touch ? 'Tap a pad to build. Spells: tap one, then the road. The gear button has help and sound.' : 'Click a pad to build. Q E T cast spells on the road. O opens settings and help.'],
+    mend: () => ['The beacon is hurt', U.touch ? 'Tap Mend, under your gold, to buy back lives.' : 'Mend (R, or the button under your gold) buys back lives.'],
+    branch: () => ['Choose a branch', 'A tower at its top level can take one of two branches. Open its menu to pick one.'],
+    oc: () => ['Overcharge', 'A tower with a branch can be overcharged three times, for more damage each time.'],
+  };
+  const tipInfo = key => { if (key.startsWith('help:')) { const h = HELP[key.slice(5)](); return { head: h[0], tip: h[1], bd: COLR.bdHi, dur: 7.5 }; } if (key.startsWith('event:')) { const E = EVENTS[key.slice(6)]; return { head: E.name, tip: E.tip, bd: '#5a7a9a' }; } if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
   // One line of numbers for a branch, in the words the menu uses.
   function branchStat(kind, key) {
     const b = TOWER[kind].branches[key], f = v => (Math.round(v * 10) / 10).toString();
@@ -5660,7 +5747,7 @@ const UI = (() => {
   }
   U.branchStat = branchStat;
   // For tests and tools (window.__cw.UI.game): the game actions the UI itself uses.
-  U.game = { buildTower, upgradeTower, branchTower, overchargeTower, castSpell, spellReady, branchCost, TOWER, SPELL, BRANCH_KEYS };
+  U.game = { buildTower, upgradeTower, branchTower, overchargeTower, overchargeCost, canBranch, castSpell, spellReady, branchCost, mendBeacon, mendCount, mendCost, sellTower, callWaveEarly, padCoverage, TOWER, SPELL, BRANCH_KEYS };
   U.keepAwake = () => { try { if (navigator.wakeLock && !document.hidden && (!U.wake || U.wake.released)) navigator.wakeLock.request('screen').then(w => { U.wake = w; }, () => {}); } catch (e) {} };
   U.dropTouches = () => { U.ptrs.clear(); U.gest = null; U.press = null; if (U.touch) U.inside = false; };
   function fixPageZoom() {
@@ -5681,11 +5768,15 @@ const UI = (() => {
     if (!r) return false; const m = min * (R.dpr || 1), mw = Math.max(0, m - r.w) / 2, mh = Math.max(0, m - r.h) / 2;
     return x >= r.x - mw && x <= r.x + r.w + mw && y >= r.y - mh && y <= r.y + r.h + mh;
   }
-  function btnAt(x, y) { const m = U.touch ? 44 : 0; for (const b of U.btns) if (inRect(b, x, y, m)) return b; for (const b of U.hud) if (inRect(b, x, y, m)) return b; return null; }
-  function hudAt(x, y) { return inRect(U.menuRect, x, y, 0); }
+  function btnAt(x, y) {
+    const m = U.touch ? 44 : 0; for (const b of U.btns) if (inRect(b, x, y, m)) return b;
+    if (inRect(U.panelRect, x, y, 0)) return null; // a modal plate covers the HUD buttons under it
+    for (const b of U.hud) if (inRect(b, x, y, m)) return b; return null;
+  }
+  function hudAt(x, y) { return inRect(U.menuRect, x, y, 0) || inRect(U.panelRect, x, y, 0); }
   function callWave() { touchInput(); if (callWaveEarly()) { sfx('uiClick', CAM.x, CAM.z, .8); buzz(10); } else sfx('uiDeny', CAM.x, CAM.z, .5); }
   function audioGesture() { if (!AU.ready) AU.unlock(); }
-  function touchInput() { U.idle = 0; U.manual = true; }
+  function touchInput() { U.idle = 0; if (!U.manual) { U.manual = true; takeCommand(); } }
   function toggleCommand() { U.setManual(!U.manual); U.idle = 0; sfx('uiClick', CAM.x, CAM.z, .8); }
   function deny() { U.deny = 1; sfx('uiDeny', CAM.x, CAM.z, .6); buzz([18, 40, 18]); }
   function doBuild(pad, kind) { touchInput(); if (buildTower(pad, kind, true)) { sfx('uiClick', pad.x, pad.z, .8); buzz(12); U.menu = null; U.armed = null; return true; } deny(); return false; }
@@ -5737,7 +5828,10 @@ const UI = (() => {
   }
   function onTap(x, y, held) {
     const now = performance.now();
-    const b = held && inRect(held, x, y, U.touch ? 44 : 8) ? held : btnAt(x, y); if (b) { if (!b.hud) touchInput(); b.fn(); return; }
+    const b = held && inRect(held, x, y, U.touch ? 44 : 8) ? held : btnAt(x, y); if (b) { if (!b.hud) touchInput(); b.fn(x, y); return; }
+    // Settings and the run summary are modal: a tap outside the settings closes them; nothing reaches the board underneath.
+    if (U.sets) { if (!inRect(U.panelRect, x, y, 0)) openSettings(false); return; }
+    if (U.panelRect && inRect(U.panelRect, x, y, 0)) return;
     if (U.spell) { castAt(x, y); return; }
     if (inRect(U.menuRect, x, y, 0)) return;
     const h = pickPad(x, y);
@@ -5790,12 +5884,19 @@ const UI = (() => {
     U.panning = !!(U.gest && U.gest.mode === 'pan');
     if (AU.ready && !U.ptrs.size) U.sndArmed = true;
     if (U.keys.size) { let kx = 0, ky = 0; for (const k of U.keys) { kx += PAN[k][0]; ky += PAN[k][1]; } if (kx || ky) { CAM.za = null; camPan(kx * R.dh * .9 * dt, ky * R.dh * .9 * dt); } }
-    if (U.tip) { U.tip.t += dt; if (U.tip.t > 5.2) U.tip = null; } else if (U.tips.length && U.titleT > 7.5) U.tip = { type: U.tips.shift(), t: 0 };
+    if (G.phase === 'defeat') U.tip = null;
+    else if (U.tip) { U.tip.t += dt; if (U.tip.t > U.tip.dur) U.tip = null; } else if (U.tips.length && U.titleT > 7.5) { const type = U.tips.shift(); U.tip = { type, t: 0, dur: tipInfo(type).dur || 5.2 }; }
     if (window.visualViewport && Math.abs(window.visualViewport.scale - 1) > .02) fixPageZoom();
     pollGamepad(dt);
+    if (U.sets) U.sets.t += dt;
+    // First steps for a player in command: one help line each, the first time it matters.
+    if (U.manual && G.phase === 'play') {
+      if (G.lives <= G.maxLives - 4) helpTip('mend');
+      for (const t of G.towers) if (t.alive && t.state === 'active') { if (t.lvl === 2 && !t.branch) helpTip('branch'); else if (t.branch && !t.oc) helpTip('oc'); }
+    }
     if (U.menu) { U.menu.t += dt; if ((U.menu.tower && !U.menu.tower.alive) || G.phase !== 'play') U.menu = null; else if (U.menu.pad.tower !== U.menu.tower) U.menu.tower = U.menu.pad.tower; }
     if (G.phase !== 'play') { U.armed = null; U.hover = null; U.spell = null; }
-    else U.hover = (U.inside && !U.touch && !U.hotBtn && !U.panning && !U.spell) ? pickPad(U.mx, U.my) : null;
+    else U.hover = (U.inside && !U.touch && !U.hotBtn && !U.panning && !U.spell && !U.sets) ? pickPad(U.mx, U.my) : null;
     for (const k of SPELL_KINDS) { const n = G.stats[k] || 0; if (n !== (U.spellSeen[k] || 0)) { U.spellSeen[k] = n; U.spellFlash[k] = 1; } U.spellFlash[k] = Math.max(0, (U.spellFlash[k] || 0) - dt * 1.5); }
     U.gpt = U.spell && U.inside && !U.touch && !U.hotBtn && !U.hudHot ? groundPick(U.mx, U.my) : null;
     if (U.goldShown > G.gold) U.goldShown = G.gold;
@@ -5915,9 +6016,10 @@ const UI = (() => {
     sq('pause', xl, zb, togglePause, G.paused ? 'Resume (P)' : 'Pause (P)', bars, G.paused); xl += zb + g3;
     sq('speed', xl, zb, cycleSpeed, 'Speed (Tab)', label(G.speed + 'x', G.speed > 1 ? COLR.amber : COLR.tx), G.speed > 1); xl += zb + g3;
     { const on = AU.ready && !AU.muted, icn = on ? 'sound' : 'mute', k = Math.max(s, Math.floor(zb / 14)), [iw2, ih2] = PX.iconSize(icn), lbl = tch ? 'Tap for sound' : 'Click for sound', wl = iw2 * s + 3 * s + tw(lbl) + pad * 2;
-      const wide = !AU.ready && xl + wl + g3 + rightW + 5 * s + iR <= W;
+      const wide = !AU.ready && xl + wl + g3 + zb + g3 + rightW + 5 * s + iR <= W;
       U.soundRect = sq('sound', xl, wide ? wl : zb, soundTap, AU.ready ? (AU.muted ? 'Sound is off (M)' : 'Sound is on (M)') : 'Sound', (x, y) => { if (wide) { PX.icon(c, icn, x + pad, y + Math.round((zb - ih2 * s) / 2), s, .85); text(lbl, x + pad + iw2 * s + 3 * s, y + Math.round((zb - LH) / 2) + s, COLR.tx); } else PX.icon(c, icn, x + Math.round((zb - iw2 * k) / 2), y + Math.round((zb - ih2 * k) / 2), k, AU.ready ? 1 : .8); }, !AU.ready);
       xl += (wide ? wl : zb) + g3; }
+    sq('gear', xl, zb, () => openSettings(), 'Settings and help (O)', (x, y) => { const [gw, gh] = PX.iconSize('gear'), k = Math.max(s, Math.floor(zb * .5 / gw)); PX.icon(c, 'gear', x + Math.round((zb - gw * k) / 2), y + Math.round((zb - gh * k) / 2), k, 1); }, !!U.sets); xl += zb + g3;
     let xr = Wr - 5 * s - zb; const cur = camZoomNow();
     if (nR === 3) { sq('full', xr, zb, toggleFull, 'Full screen', corners, false); xr -= zb + g3; }
     sq('zin', xr, zb, () => camZoomBy(1.5), 'Zoom in (+)', glyph('+', cur < 2.99 ? COLR.tx : '#5a5448'), false); xr -= zb + g3;
@@ -5964,14 +6066,16 @@ const UI = (() => {
     }
     if (G.paused) { const k = s + 1, t1 = 'Paused', w = PX.measure(t1) * k + pad * 4, h = PX.LINE * k + pad * 2; plate(Math.round(W / 2 - w / 2), yUp - h, w, h, { bd: COLR.bdHi }); PX.text(c, t1, W / 2, yUp - h + pad, k, COLR.amber, { align: 'c' }); yUp -= h + g3; }
     if (U.tip && !U.menu) {
-      const d = tipInfo(U.tip.type), a = sat(Math.min(U.tip.t * 4, (5.2 - U.tip.t) * 2)), head = d.head, lines = wrap(d.tip, Math.min(boxW - pad * 2, 46 * 6 * s));
+      const d = tipInfo(U.tip.type), a = sat(Math.min(U.tip.t * 4, (U.tip.dur - U.tip.t) * 2)), head = d.head, lines = wrap(d.tip, Math.min(boxW - pad * 2, 46 * 6 * s));
       let w = tw(head); for (const l of lines) w = Math.max(w, tw(l)); w += pad * 2; const h = LH * (lines.length + 1) + pad * 2 - s, x = Math.round((iL + Wr - w) / 2), y = yUp - h;
       c.globalAlpha = a; plate(x, y, w, h, { bd: d.bd }); text(head, x + w / 2, y + pad - s, COLR.amber, { align: 'c' }); lines.forEach((l, k) => text(l, x + w / 2, y + pad - s + (k + 1) * LH, COLR.tx, { align: 'c' })); c.globalAlpha = 1; yUp = y - g3;
     } else {
       const first = U.titleT < 16, a = tch ? sat(Math.min(U.titleT - 7.2, first ? 1 : 3 - U.moved, U.manual && !first ? 0 : 1, 62 - U.titleT)) : sat(Math.min(U.titleT - 7.2, 3 - Math.min(U.moved, U.idle > 20 ? U.moved : 0) + (U.titleT < 18 ? 8 : 0)));
-      if (a > .02 && !U.menu && !G.paused && !U.spell) {
-        const parts = tch ? ['Tap a pad to build', 'Drag to look around', 'Pinch or double-tap to zoom'] : ['Click a pad to build', '1-4 pick a tower', 'Q E T cast spells', 'Space calls the next wave', 'Wheel zooms, drag moves the view'];
-        let lines = [parts.join(' · ')]; if (tw(lines[0]) + pad * 2 > boxW) { lines = parts.length > 3 ? [parts.slice(0, 3).join(' · '), parts.slice(3).join(' · ')] : parts; if (lines.some(l => tw(l) + pad * 2 > boxW)) lines = parts; }
+      if (a > .02 && !U.menu && !G.paused && !U.spell && G.phase === 'play') {
+        const parts = tch ? ['Tap a pad to build', 'Tap a spell, then the road', 'Drag to look, pinch to zoom', 'The gear has help'] : ['Click a pad to build', '1-4 pick a tower', 'Q E T cast spells', 'R mends the beacon', 'Space calls the next wave', 'O settings and help'];
+        // As few lines as fit: two halves, else pairs, else one part per line.
+        const pack = n => { const out = []; for (let i = 0; i < parts.length; i += n) out.push(parts.slice(i, i + n).join(' · ')); return out; }, fits = ls => ls.every(l => tw(l) + pad * 2 <= boxW);
+        let lines = [parts.join(' · ')]; for (const n of [Math.ceil(parts.length / 2), 2, 1]) { if (fits(lines)) break; lines = pack(n); }
         let w = 0; for (const l of lines) w = Math.max(w, tw(l)); w += pad * 2; const h = LH * lines.length + pad * 2 - s, hx = Math.round((iL + Wr - w) / 2), hy = yUp - h;
         if (w <= boxW) { c.globalAlpha = a; plate(hx, hy, w, h); lines.forEach((l, k) => text(l, hx + w / 2, hy + pad - s + k * LH, COLR.dim, { align: 'c' })); c.globalAlpha = 1; }
       }
@@ -5984,7 +6088,7 @@ const UI = (() => {
     }
     if (U.msg) {
       const m = U.msg; m.t += R.frameDt; const a = sat(Math.min(m.t * 3, (m.dur - m.t) * 2));
-      if (m.t >= m.dur) U.msg = null; else { let sc = s + (m.big ? 2 : 1); while (sc > 2 && PX.measure(m.text) * sc + pad * 4 > Wr - iL - 6 * s) sc--; const w = PX.measure(m.text) * sc + pad * 4, h = PX.LINE * sc + pad * 2; c.globalAlpha = a; const yb = Math.max(Math.round(H * .2), y0 + topH + 4 * s); plate(Math.round(W / 2 - w / 2), yb, w, h, { bd: m.big ? COLR.ember : COLR.bdHi }); PX.text(c, m.text, W / 2, yb + pad, sc, m.big ? '#ffd9a8' : COLR.tx, { align: 'c' }); c.globalAlpha = 1; }
+      if (m.t >= m.dur || (G.phase === 'defeat' && G.phaseT > SUMMARY_AT)) U.msg = null; else { let sc = s + (m.big ? 2 : 1); while (sc > 2 && PX.measure(m.text) * sc + pad * 4 > Wr - iL - 6 * s) sc--; const w = PX.measure(m.text) * sc + pad * 4, h = PX.LINE * sc + pad * 2; c.globalAlpha = a; const yb = Math.max(Math.round(H * .2), y0 + topH + 4 * s); plate(Math.round(W / 2 - w / 2), yb, w, h, { bd: m.big ? COLR.ember : COLR.bdHi }); PX.text(c, m.text, W / 2, yb + pad, sc, m.big ? '#ffd9a8' : COLR.tx, { align: 'c' }); c.globalAlpha = 1; }
     }
     U.menuRect = null;
     if (U.menu && G.phase === 'play') {
@@ -6000,7 +6104,8 @@ const UI = (() => {
       if (!m.tower) {
         const bwid = 31 * s, bh = 35 * s, gapb = 3 * s, rowW = 4 * bwid + 3 * gapb;
         let lit = null; const fk = U.gp.active ? TOWER_KINDS[m.focus % 4] : null;
-        const lines = k => k ? [TOWER[k].name].concat(TOWER[k].desc) : tch ? ['Choose a tower', 'Tap one to see what it does,', 'then tap it again to build.'] : ['Choose a tower', 'Hover or press 1 to 4', 'to see what each does.'];
+        const cheap = Math.min(...TOWER_KINDS.map(k => TOWER[k].cost[0])), broke = G.gold < cheap;
+        const lines = k => k ? [TOWER[k].name].concat(TOWER[k].desc) : broke ? ['Not enough gold yet', 'Kills and each wave pay gold;', 'selling a tower gives some back.'] : tch ? ['Choose a tower', 'Tap one to see what it does,', 'then tap it again to build.'] : ['Choose a tower', 'Hover or press 1 to 4', 'to see what each does.'];
         let textW = tw('Tap again to build'); for (const k of [null].concat(TOWER_KINDS)) for (const l of lines(k)) textW = Math.max(textW, tw(l));
         const wP = Math.max(rowW, textW) + mp * 2, hP = mp * 2 + LH + 3 * s + bh + 4 * s + LH * 3 + 2 * s + (tch ? LH + s : 0), [px, py] = place(wP, hP);
         U.menuRect = { x: px, y: py, w: wP, h: hP };
@@ -6016,7 +6121,7 @@ const UI = (() => {
           if (r.lit) lit = kind;
         });
         const ls = lines(lit || fk), ty = by + bh + 4 * s;
-        text(ls[0], px + mp, ty, lit || fk ? COLR.tx : COLR.dim); text(ls[1], px + mp, ty + LH + s, COLR.dim); if (ls[2]) text(ls[2], px + mp, ty + LH * 2 + s, COLR.dim);
+        text(ls[0], px + mp, ty, lit || fk ? COLR.tx : broke ? COLR.ember : COLR.dim); text(ls[1], px + mp, ty + LH + s, COLR.dim); if (ls[2]) text(ls[2], px + mp, ty + LH * 2 + s, COLR.dim);
         if (tch && m.sel) { const can = G.gold >= TOWER[m.sel].cost[0]; text(can ? 'Tap again to build' : 'Not enough gold yet', px + mp, ty + LH * 3 + 2 * s, can ? COLR.amber : COLR.red); }
       } else if (m.tower.lvl === 2 && !m.tower.branch) {
         // Branch choice: two cards with what each does and costs. Touch: tap to see, tap again to buy. Keys 1 and 2.
@@ -6048,7 +6153,7 @@ const UI = (() => {
         PX.icon(c, 'sell', bxs + 4 * s, by + Math.round((bh - LH) / 2) + r.dy, s); text(sl, bxs + 4 * s + 12 * s, by + Math.round((bh - LH) / 2) + r.dy, m.sellArm ? COLR.ember : COLR.tx);
       } else {
         const t = m.tower, d = t.def, oc = t.oc || 0, maxed = t.lvl >= 3, occ = overchargeCost(t), full = maxed && !occ, upc = maxed ? occ : t.lvl < 2 ? d.cost[t.lvl + 1] : 0, can = !full && upc > 0 && G.gold >= upc && t.state === 'active', refund = Math.round(t.spent * .6), L1 = t.lvl + 1;
-        const ul = full ? 'Fully charged' : maxed ? 'Overcharge ' + upc : 'Upgrade ' + upc, sl = m.sellArm ? 'Confirm +' + refund : 'Sell +' + refund, iw9 = 9 * s, bw3 = Math.max(tw(ul), tw(sl), tw('Confirm +' + refund)) + iw9 + 11 * s, bh = (tch ? 24 : 15) * s, by0 = Math.round((bh - LH) / 2);
+        const building = t.state !== 'active', ul = building ? 'Building...' : full ? 'Fully charged' : maxed ? 'Overcharge ' + upc : 'Upgrade ' + upc, sl = m.sellArm ? 'Confirm +' + refund : 'Sell +' + refund, iw9 = 9 * s, bw3 = Math.max(tw(ul), tw(sl), tw('Confirm +' + refund)) + iw9 + 11 * s, bh = (tch ? 24 : 15) * s, by0 = Math.round((bh - LH) / 2);
         const name = t.branch ? d.bdef.title : d.name;
         const st = (t.branch ? branchStat(t.kind, t.branch) : t.kind === 'guard' ? d.n[t.lvl] + ' footmen · ' + d.hp[t.lvl] + ' health' : 'Range ' + d.range[t.lvl].toFixed(1) + ' · Damage ' + Math.round(d.dmg[t.lvl] * (1 + OC_DMG * oc))) + (oc ? ' · +' + Math.round(OC_DMG * oc * 100) + '%' : '');
         const nx = full ? t.kills + ' kills · fully charged' : maxed ? 'Overcharge: damage +' + Math.round(OC_DMG * (oc + 1) * 100) + '%' : t.lvl === 1 ? (t.kind === 'guard' ? 'Next: ' + d.n[L1] + ' footmen · ' + d.hp[L1] + ' health' : 'Next: range ' + d.range[L1].toFixed(1) + ' · damage ' + d.dmg[L1]) + ', then a branch' : (t.kind === 'guard' ? 'Next: ' + d.n[L1] + ' footmen · ' + d.hp[L1] + ' health' : 'Next: range ' + d.range[L1].toFixed(1) + ' · damage ' + d.dmg[L1]);
@@ -6060,7 +6165,7 @@ const UI = (() => {
         text(st, px + mp, py + mp + LH + s, COLR.tx); text(nx, px + mp, py + mp + LH * 2 + 2 * s, full ? COLR.dim : maxed ? COLR.ember : COLR.ok);
         const by = py + mp + LH * 3 + 6 * s, bwf = Math.floor((wP - mp * 2 - 3 * s) / 2);
         let r = button(px + mp, by, bwf, bh, 'up', can, () => doUpgrade(t), null, false);
-        PX.icon(c, 'upgrade', px + mp + 4 * s, by + by0 + r.dy, s, can ? 1 : .4); text(ul, px + mp + 4 * s + iw9 + 3 * s, by + by0 + r.dy, can ? COLR.tx : (full ? COLR.dim : COLR.red));
+        PX.icon(c, 'upgrade', px + mp + 4 * s, by + by0 + r.dy, s, can ? 1 : .4); text(ul, px + mp + 4 * s + iw9 + 3 * s, by + by0 + r.dy, can ? COLR.tx : (full || building ? COLR.dim : COLR.red));
         r = button(px + mp + bwf + 3 * s, by, bwf, bh, 'sell', true, () => { if (!m.sellArm) { m.sellArm = true; sfx('uiHover', t.x, t.z, .8); } else { buzz(16); doSell(t); } }, null, m.sellArm);
         PX.icon(c, 'sell', px + mp + bwf + 7 * s, by + by0 + r.dy, s); text(sl, px + mp + bwf + 7 * s + iw9 + 3 * s, by + by0 + r.dy, m.sellArm ? COLR.ember : COLR.tx);
       }
@@ -6069,15 +6174,126 @@ const UI = (() => {
     if (hot !== U.hotBtn && hot) sfx('uiHover', CAM.x, CAM.z, .5);
     U.hotBtn = hot;
     if (U.armed && mouse && G.phase === 'play') { const l = TOWER[U.armed].name + ': click a pad', w = tw(l) + pad * 2; const xx = clamp(U.mx + 10 * s, 2 * s, W - w - 2 * s), yy = clamp(U.my + 10 * s, 2 * s, H - LH - pad * 2); plate(xx, yy, w, LH + pad * 2 - s, { bd: COLR.bdHi }); text(l, xx + pad, yy + pad - s, COLR.tx); }
-    if (U.titleT < 7 && !U.menu) {
+    if (U.titleT < 7 && !U.menu && !U.sets) {
       const a = sat(Math.min((U.titleT - .4) * 1.5, (6.6 - U.titleT) * 1.2));
       if (a > 0) {
         const sc = s * 2, t1 = 'Cinderwatch', full = G.B.bio.name + ' · The commander plays until you take over.', t2 = tw(full) + pad * 4 > Wr - iL - 6 * s ? [G.B.bio.name, 'The commander plays', 'until you take over.'] : [full]; if (G.best > G.wavesPerLand) t2.push('Best run: wave ' + G.best);
-        let w = PX.measure(t1) * sc; for (const l of t2) w = Math.max(w, tw(l)); w += pad * 4; const h = PX.LINE * sc + LH * t2.length + pad * 2 + 2 * s, yy = Hb - h - 12 * s - zb;
+        let w = PX.measure(t1) * sc; for (const l of t2) w = Math.max(w, tw(l)); w += pad * 4; const h = PX.LINE * sc + LH * t2.length + pad * 2 + 2 * s, yy = Math.min(Hb - h - 12 * s - zb, yUp - h);
         c.globalAlpha = a; plate(Math.round(W / 2 - w / 2), yy, w, h); PX.text(c, t1, W / 2, yy + pad, sc, '#ffd9a8', { align: 'c' }); t2.forEach((l, k) => text(l, W / 2, yy + pad + PX.LINE * sc + s + k * LH, k === 0 && t2.length > 1 ? COLR.tx : COLR.dim, { align: 'c' })); c.globalAlpha = 1;
       }
     }
+    drawPanels(c, s, W, H, iL, iT, Wr, Hb, tch, over, pad, g3, y0 + topH);
     if (HASH.fps) { text(R.fpsText || '', 6 * s + iL, Hb - 30 * s, COLR.ok, { outline: COLR.dark }); }
+  }
+  // Settings (gear, O) and the run summary after a defeat. Both are modal plates drawn over everything,
+  // at the HUD's scale or smaller where the screen is short. Their controls go into U.btns so they win over the HUD below.
+  const HELP_KEYS = [
+    'Click a pad to build: keys 1 to 4 pick a tower.',
+    'Click a tower to upgrade it (U) or sell it (X).',
+    'At its top level a tower picks one of two branches (keys 1 and 2), then it can be overcharged.',
+    'Spells: Q meteor, E frost, T rally, then click the road. Kills fill the mana bar.',
+    'R mends the beacon: lives back for gold.',
+    'Space calls the next wave early, for a little gold.',
+    'P pause · Tab speed · C hands command to the AI · drag, arrows or the wheel move the view.',
+  ];
+  const HELP_TOUCH = [
+    'Tap a pad, then a tower twice to build.',
+    'Tap a tower to upgrade or sell it.',
+    'At its top level a tower picks one of two branches, then it can be overcharged.',
+    'Spells: tap one, then the road. Kills fill the mana bar.',
+    'Mend, under your gold, buys back lives.',
+    'Tap the wave plate to call a wave early.',
+    'Tap the commander plate to let the AI play.',
+    'Drag to look around. Pinch to zoom.',
+  ];
+  function wrapAt(str, maxW, ps) { const out = []; let cur = ''; for (const wd of str.split(' ')) { const t = cur ? cur + ' ' + wd : wd; if (cur && PX.measure(t) * ps > maxW) { out.push(cur); cur = wd; } else cur = t; } if (cur) out.push(cur); return out; }
+  function drawPanels(c, s, W, H, iL, iT, Wr, Hb, tch, over, pad, g3, topY) {
+    U.panelRect = null;
+    const dpr = R.dpr || 1, avW = Wr - iL - 8 * s, avH = Hb - iT - 8 * s;
+    const btn = (id, x, y, w, h, label, ps, on, fn, col) => {
+      const hot = over(x, y, w, h), down = U.press === id, dy = down ? s : 0, b = { id, x, y, w, h, fn, hud: true }; U.btns.push(b); if (hot) U.hudHot = true;
+      plate(x, y + dy, w, h, hot || down ? { bd: COLR.bdHi, bg: COLR.bg2 } : on ? { bd: COLR.bdHi, bg: 'rgba(60,44,22,0.95)' } : { bg: 'rgba(16,18,27,0.96)' });
+      if (label) PX.text(c, label, x + w / 2, y + dy + Math.round((h - PX.LINE * ps) / 2) + ps, ps, col || (on ? COLR.amber : COLR.tx), { align: 'c' });
+      return b;
+    };
+    const sm = G.phase === 'defeat' && G.phaseT > SUMMARY_AT && G.runStats && G.runStats.sum;
+    if (sm && !U.sets) {
+      const you = U.playerActive(), a = sat((G.phaseT - SUMMARY_AT) * 3), title = 'The beacon is out';
+      const rows = [['Waves survived', '' + sm.waves], ['Lands cleared', '' + sm.lands], ['Monsters slain', '' + sm.slain], ['Gold earned', '' + sm.earned],
+        ['Best branch', sm.branch ? sm.branch.name + ' · ' + sm.branch.kills + ' kills' : 'none this run'], ['Best tower', sm.tower ? sm.tower.name + ' · ' + sm.tower.kills + ' kills' : 'none this run']];
+      const best = sm.newBest ? 'New best: wave ' + sm.best + '!' : sm.best > G.wavesPerLand ? 'Best run: wave ' + sm.best : '';
+      const left = you ? '' : 'The commander tries again in ' + Math.max(1, Math.ceil(SUMMARY_AT + AUTO_RESTART - G.phaseT));
+      const bl = tch ? 'Play again' : 'Play again (Space)';
+      const lay = ps => {
+        const p = 5 * ps, L = PX.LINE * ps, m = t => PX.measure(t) * ps, gap = 3 * ps, bh = Math.max(L + 2 * p - ps, tch ? Math.round(40 * dpr) : 0);
+        let lw = 0, vw = 0; for (const r of rows) { lw = Math.max(lw, m(r[0])); vw = Math.max(vw, m(r[1])); }
+        const wP = Math.max(lw + 8 * ps + vw, PX.measure(title) * (ps + 1), m(best), m(left), m(bl) + 4 * p) + 2 * p;
+        const hP = p + PX.LINE * (ps + 1) + gap * 2 + rows.length * L + gap * 2 + (best ? L + gap : 0) + bh + (left ? gap + L : 0) + p;
+        return { ps, p, L, gap, bh, lw, wP, hP };
+      };
+      let Ly = lay(s); while (Ly.ps > 2 && (Ly.wP > avW || Ly.hP > avH)) Ly = lay(Ly.ps - 1);
+      const { ps, p, L, gap, bh, wP, hP } = Ly, px = Math.round(W / 2 - wP / 2), py = Math.round(clamp((H - hP) / 2, Math.min(topY + g3, Hb - hP), Hb - hP));
+      c.globalAlpha = a; U.panelRect = { x: px, y: py, w: wP, h: hP };
+      plate(px, py, wP, hP, { bd: COLR.ember });
+      let y = py + p; PX.text(c, title, px + wP / 2, y, ps + 1, '#ffd9a8', { align: 'c' }); y += PX.LINE * (ps + 1) + gap * 2;
+      for (const r of rows) { PX.text(c, r[0], px + p, y, ps, COLR.dim); PX.text(c, r[1], px + wP - p, y, ps, COLR.tx, { align: 'r' }); y += L; }
+      y += gap * 2;
+      if (best) { PX.text(c, best, px + wP / 2, y, ps, sm.newBest ? COLR.amber : COLR.dim, { align: 'c' }); y += L + gap; }
+      const bw = Math.min(wP - 2 * p, PX.measure(bl) * ps + 4 * p);
+      btn('again', Math.round(px + wP / 2 - bw / 2), y, bw, bh, bl, ps, true, () => { if (restartRun(true)) { sfx('uiClick', CAM.x, CAM.z, .8); buzz(12); } }, COLR.amber); y += bh + gap;
+      if (left) PX.text(c, left, px + wP / 2, y, ps, COLR.dim, { align: 'c' });
+      c.globalAlpha = 1;
+    }
+    if (!U.sets) return;
+    const S0 = U.sets, help = S0.tab === 'help', paras = tch ? HELP_TOUCH : HELP_KEYS;
+    const lay = (ps, tight) => {
+      const p = 5 * ps, L = PX.LINE * ps, m = t => PX.measure(t) * ps, gap = 3 * ps, rh = Math.max(L + 2 * p - ps, tch ? Math.round((tight ? 28 : 36) * dpr) : 0);
+      const labW = Math.max(m('Ambience'), m('Graphics'), m(tch ? 'Sound' : 'Sound (M)')), optW = Math.max(m('Sharp'), m('Auto'), m('Fast')) + 2 * p;
+      const tabW = m('How to play') + 2 * p, minW = Math.max(labW + gap * 2 + optW * 3 + gap * 2, m('Settings') + 2 * p + gap + tabW + gap + rh, m('Auto adapts to the device.')) + 2 * p;
+      const wP = Math.min(avW, Math.max(minW, 236 * ps)), inner = wP - 2 * p;
+      const lines = help ? paras.map(t => wrapAt(t, inner - 2 * ps, ps)) : null;
+      const body = help ? lines.reduce((a, l) => a + l.length * L + gap, 0) : 6 * (rh + gap) + L;
+      return { ps, p, L, m, gap, rh, labW, optW, tabW, wP, minW, inner, lines, hP: p + rh + gap * 3 + body + p };
+    };
+    let Ly = lay(s); if (Ly.hP > avH) Ly = lay(s, true); while (Ly.ps > 2 && (Ly.hP > avH || Ly.wP < Ly.minW)) Ly = lay(Ly.ps - 1, true);
+    const { ps, p, L, m, gap, rh, labW, optW, tabW, wP, inner, lines, hP } = Ly, px = Math.round(W / 2 - wP / 2), py = Math.round(clamp((H - hP) / 2, iT + 4 * s, Math.max(iT + 4 * s, Hb - hP)));
+    U.panelRect = { x: px, y: py, w: wP, h: hP };
+    c.globalAlpha = sat(S0.t * 8 + .3);
+    plate(px, py, wP, hP, { bd: COLR.bdHi });
+    let y = py + p;
+    btn('tabset', px + p, y, m('Settings') + 2 * p, rh, 'Settings', ps, !help, () => { S0.tab = 'set'; sfx('uiHover', CAM.x, CAM.z, .6); });
+    btn('tabhelp', px + p + m('Settings') + 2 * p + gap, y, tabW, rh, 'How to play', ps, help, () => { S0.tab = 'help'; sfx('uiHover', CAM.x, CAM.z, .6); });
+    btn('setclose', px + wP - p - rh, y, rh, rh, 'X', ps, false, () => openSettings(false));
+    y += rh + gap * 3;
+    const rowLabel = (t, yy) => PX.text(c, t, px + p, yy + Math.round((rh - L) / 2) + ps, ps, COLR.tx);
+    if (help) {
+      for (const ls of lines) { for (const l of ls) { PX.text(c, l, px + p, y, ps, COLR.tx); y += L; } y += gap; }
+    } else {
+      const xT = px + p + labW + gap * 2, valW = m('100'), xE = px + wP - p - valW - gap * 2;
+      for (const [key, name] of [['music', 'Music'], ['sfx', 'Effects'], ['amb', 'Ambience']]) {
+        const v = SET[key], set = x => { SET[key] = Math.round(sat((x - xT) / (xE - xT)) * 20) / 20; applyVolumes(); saveSettings(); if (AU.muted && SET[key] > 0) setMute(false); };
+        const b = { id: 'vol' + key, x: px + p, y, w: wP - 2 * p, h: rh, fn: x => set(x), drag: set, hud: true }; U.btns.push(b);
+        const hot = over(b.x, b.y, b.w, b.h) || U.press === b.id; if (hot) U.hudHot = true;
+        rowLabel(name, y);
+        const th = Math.max(3, Math.round(rh * .12)), ty = y + Math.round(rh / 2 - th / 2), kx = Math.round(xT + (xE - xT) * v), kw = Math.max(3 * ps, Math.round(rh * .22)), kh = Math.round(rh * .6);
+        c.fillStyle = COLR.dark; c.fillRect(xT - ps, ty - ps, xE - xT + 2 * ps, th + 2 * ps); c.fillStyle = '#3a342c'; c.fillRect(xT, ty, xE - xT, th);
+        c.fillStyle = AU.muted ? COLR.dim : COLR.amber; c.fillRect(xT, ty, kx - xT, th);
+        plate(kx - kw / 2, y + (rh - kh) / 2, kw, kh, { bd: hot ? COLR.bdHi : COLR.bd, bg: hot ? '#ffe2a0' : COLR.tx });
+        PX.text(c, '' + Math.round(v * 100), px + wP - p, y + Math.round((rh - L) / 2) + ps, ps, AU.muted ? COLR.dim : COLR.tx, { align: 'r' });
+        y += rh + gap;
+      }
+      rowLabel(tch ? 'Sound' : 'Sound (M)', y);
+      const on = !AU.muted, sw = optW * 1.5;
+      btn('setmute', px + p + labW + gap * 2, y, sw, rh, on ? 'On' : 'Off', ps, on, () => setMute(!AU.muted), on ? COLR.amber : COLR.red);
+      y += rh + gap;
+      rowLabel('Graphics', y);
+      ['auto', 'sharp', 'fast'].forEach((q, i) => btn('q' + q, px + p + labW + gap * 2 + i * (optW + gap), y, optW, rh, q[0].toUpperCase() + q.slice(1), ps, SET.q === q, () => { if (SET.q !== q) { SET.q = q; applyQuality(); saveSettings(); sfx('uiClick', CAM.x, CAM.z, .6); } }));
+      y += rh + gap;
+      const note = SET.q === 'auto' ? 'Auto adapts to the device.' : SET.q === 'sharp' ? 'Sharp: full detail.' : 'Fast: smoother, softer.';
+      PX.text(c, note, px + p, y + gap, ps, COLR.dim); y += rh + gap;
+      PX.text(c, tch ? 'Tap outside to close.' : 'O or Esc closes.', px + p, y, ps, COLR.dim);
+    }
+    c.globalAlpha = 1;
   }
   U.init = initUI; U.update = update; U.draw = draw;
   return U;

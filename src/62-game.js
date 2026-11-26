@@ -167,7 +167,7 @@ function endWave() {
 function updateWaves(dt) {
   if (G.phase !== 'play') return;
   const B = G.B;
-  updateElites(dt); updateSpells(dt);
+  updateElites(dt); updateSpells(dt); trackRun();
   if (G.spawning) {
     G.waveT += dt;
     while (G.queue.length && G.queue[0].t <= G.waveT) {
@@ -195,6 +195,9 @@ function updateWaves(dt) {
 }
 function callWaveEarly() { if (G.phase === 'play' && !G.spawning && !G.bossWave && G.nextIn > .4) { G.gold += Math.round(G.nextIn * 3); G.nextIn = .05; return true; } return false; }
 
+// Every purchase goes through pay() and every refund through refund(), so the run summary can count the gold earned.
+function pay(c) { G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); if (G.runStats) G.runStats.last -= c; }
+function refund(c) { G.gold += c; if (G.runStats) G.runStats.last += c; }
 function padCoverage(pad, range, air) {
   const B = G.B; let c = 0; const r2 = range * range;
   for (let i = 0; i < B.n; i += 2) if (dist2(pad.x, pad.z, B.px[i], B.pz[i]) < r2) c += PATH_STEP * 2;
@@ -202,19 +205,19 @@ function padCoverage(pad, range, air) {
 }
 function buildTower(pad, kind, byPlayer) {
   const def = TOWER[kind]; if (pad.tower || G.gold < def.cost[0] || G.phase !== 'play') return null;
-  G.gold -= def.cost[0]; UI.goldShown = Math.min(UI.goldShown, G.gold);
+  pay(def.cost[0]);
   const t = new Tower(pad, kind, G.B.pads.indexOf(pad)); G.towers.push(t); UI.ping(pad.x, pad.y, pad.z, byPlayer); return t;
 }
 function upgradeTower(t, byPlayer) {
   if (!t || t.lvl >= 2 || t.state !== 'active' || G.phase !== 'play') return false; const c = t.def.cost[t.lvl + 1]; if (G.gold < c) return false;
-  G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); t.upgrade(); UI.ping(t.x, t.y, t.z, byPlayer); return true;
+  pay(c); t.upgrade(); UI.ping(t.x, t.y, t.z, byPlayer); return true;
 }
 // Branches: a max-level tower (lvl 2) picks one of two specialisations (TOWER[kind].branches) and becomes lvl 3.
 function branchCost(t, key) { const b = t && t.def.branches && t.def.branches[key]; return b ? Math.round(b.cost * (1 + .12 * G.level) / 5) * 5 : 0; }
 function canBranch(t) { return !!(t && t.alive && t.lvl === 2 && !t.branch && t.state === 'active' && t.def.branches); }
 function branchTower(t, key, byPlayer) {
   const c = branchCost(t, key); if (!c || !canBranch(t) || G.phase !== 'play' || G.gold < c) return false;
-  G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); if (!t.specialize(key, c)) { G.gold += c; return false; }
+  pay(c); if (!t.specialize(key, c)) { refund(c); return false; }
   G.stats.branches++; G.stats[key] = (G.stats[key] || 0) + 1;
   UI.ping(t.x, t.y, t.z, byPlayer); fxEmbers(t.x, t.y + 1.5, t.z, 24, .7); fxTimed(5, t.x, t.y + 2, t.z, 5, 5, 1.6, 1.2, .6, .9, .4); sfx('branch', t.x, t.z, 1); sfx('buyout', t.x, t.z, .8);
   return true;
@@ -224,7 +227,7 @@ const OC_MAX = 3, OC_DMG = .25;
 function overchargeCost(t) { return t && t.lvl >= 3 && (t.oc || 0) < OC_MAX ? Math.round(t.def.cost[2] * [1, 1.4, 1.9][t.oc || 0] * (1 + .15 * G.level) / 5) * 5 : 0; }
 function overchargeTower(t, byPlayer) {
   const c = overchargeCost(t); if (!c || !t.alive || t.state !== 'active' || G.phase !== 'play' || G.gold < c) return false;
-  G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); t.oc = (t.oc || 0) + 1; t.spent += c; t.em.I = t.def.light[t.lvl] * (1 + .3 * t.oc);
+  pay(c); t.oc = (t.oc || 0) + 1; t.spent += c; t.em.I = t.def.light[t.lvl] * (1 + .3 * t.oc);
   UI.ping(t.x, t.y, t.z, byPlayer); fxTimed(5, t.x, t.y + 2, t.z, 4, 4, 1.4, 1.0, .5, .9, .35); fxEmbers(t.x, t.y + 1.5, t.z, 18, .6); sfx('buyout', t.x, t.z, 1);
   return true;
 }
@@ -234,13 +237,13 @@ function mendCount() { return Math.max(0, Math.min(MEND_N, G.maxLives - G.lives)
 function mendCost() { return mendCount() * (20 + 8 * G.level); }
 function mendBeacon(byPlayer) {
   const n = mendCount(), c = mendCost(); if (!n || G.phase !== 'play' || G.lives <= 0 || G.gold < c) return false;
-  G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); G.lives += n;
+  pay(c); G.lives += n;
   const b = G.B.beacon; fxEmbers(b.x, b.y, b.z, 40, .6); lightFlash(b.x, b.y + 1, b.z, 0xffa050, 900, .4, 30); sfx('ignite', b.x, b.z, 1, .5); UI.ping(b.x, b.y - .5, b.z, byPlayer);
   return true;
 }
 function sellTower(t) {
-  if (!t || !t.alive || G.phase !== 'play') return false; const refund = Math.round(t.spent * .6);
-  G.gold += refund; t.sell(); const i = G.towers.indexOf(t); if (i >= 0) G.towers.splice(i, 1); return true;
+  if (!t || !t.alive || G.phase !== 'play') return false; const back = Math.round(t.spent * .6);
+  refund(back); t.sell(); const i = G.towers.indexOf(t); if (i >= 0) G.towers.splice(i, 1); return true;
 }
 
 // Spells. Mana (G.mana up to G.manaMax) fills from kills and slowly while a wave runs; each spell also has a cooldown.
@@ -409,10 +412,12 @@ function aiThink(dt) {
   { const n = mendCount(), c = mendCost(); if (n >= 3 || (n > 0 && G.lives <= 8)) opts.push({ sc: (1 - G.lives / G.maxLives) * 3.2 * (110 / Math.max(40, c)) * (G.lives <= 8 ? 1.8 : 1), cost: c, act: 'mend' }); }
   if (!opts.length) return;
   opts.sort((a, b) => b.sc - a.sc);
+  // The first wave after the page opens: the commander keeps some gold back, so a newcomer who takes over has money to build with.
+  const purse = G.gold - (G.run === 1 && G.level === 0 && G.k <= 1 && !UI.everManual ? 150 : 0);
   let pick = opts[0];
-  if (pick.cost > G.gold) {
+  if (pick.cost > purse) {
     AI.wait += .5;
-    const aff = opts.find(o => o.cost <= G.gold && o.sc > pick.sc * (AI.wait > 9 ? .45 : .8));
+    const aff = opts.find(o => o.cost <= purse && o.sc > pick.sc * (AI.wait > 9 ? .45 : .8));
     if (!aff) return; pick = aff;
   }
   AI.wait = 0;
@@ -437,10 +442,35 @@ function aiBranch(t, towers, air, armor, swarm) {
   };
   return sc[a] / (1 + .6 * have(a)) >= sc[b] / (1 + .6 * have(b)) ? a : b;
 }
+// The run: everything since the last defeat (or the page load), for the summary on the defeat screen.
+function newRun() { G.runStats = { wave0: G.level * G.wavesPerLand, lands: 0, slain0: G.slain, earned: 0, last: G.gold, best0: G.best, tower: null, branch: {}, sum: null }; }
+function trackRun() { const RS = G.runStats; if (!RS) return; const d = G.gold - RS.last; if (d > 0) RS.earned += d; RS.last = G.gold; }
+// At the end of each battlefield, won or lost: the run's best tower, and the kills of each branch.
+function recordTowers() {
+  const RS = G.runStats; if (!RS) return;
+  for (const t of G.towers) {
+    if (!t.def) continue; const k = t.kills || 0;
+    if (t.branch) RS.branch[t.branch] = (RS.branch[t.branch] || 0) + k;
+    if (k > 0 && (!RS.tower || k > RS.tower.kills)) RS.tower = { name: t.branch && t.def.bdef ? t.def.bdef.title : t.def.name, kills: k, land: G.B.bio.name };
+  }
+}
+function runSummary() {
+  const RS = G.runStats; if (!RS) return null;
+  let bk = null, bn = -1, bname = ''; for (const k in RS.branch) if (RS.branch[k] > bn) { bn = RS.branch[k]; bk = k; }
+  if (bk) for (const kind of TOWER_KINDS) if (TOWER[kind].branches && TOWER[kind].branches[bk]) bname = TOWER[kind].branches[bk].name;
+  return { waves: Math.max(0, waveNumber() - 1 - RS.wave0), lands: RS.lands, slain: G.slain - RS.slain0, earned: Math.round(RS.earned), branch: bk ? { name: bname, kills: bn } : null, tower: RS.tower, best: G.best, newBest: G.best > RS.best0 && G.best > G.wavesPerLand };
+}
+// After a defeat: a new run from the first land. The commander restarts by itself after a while; a player restarts from the summary.
+const SUMMARY_AT = 2.6, AUTO_RESTART = 14;
+function restartRun(byPlayer) {
+  if (G.phase !== 'defeat' || G.phaseT < SUMMARY_AT) return false;
+  G.level = 0; G.press = byPlayer || UI.playerActive() ? 1 : Math.max(.8, G.press * .85); G.run++; G.newRun = true; setPhase('crumble');
+  return true;
+}
 function setPhase(p) {
   G.phase = p; G.phaseT = 0; if (p !== 'play') G.horde = false;
-  if (p === 'clear') { G.advance = true; UI.banner('The pass holds', 3.2, false); UI.closeMenu(); }
-  if (p === 'defeat') { UI.banner('The beacon is out', 4.2, true); UI.closeMenu(); sfx('beaconOut', G.B.beacon.x, G.B.beacon.z, 1.2); fxEmbers(G.B.beacon.x, G.B.beacon.y, G.B.beacon.z, 60, .8); for (let i = 0; i < 14; i++) fxSmoke(G.B.beacon.x + rr(-.4, .4), G.B.beacon.y + rr(0, 1), G.B.beacon.z + rr(-.4, .4), rr(-.3, .3), rr(.8, 2), rr(-.3, .3), rr(2, 4), 1, 2, .2, .2, .22, .6, { drag: .5, rise: .2 }); }
+  if (p === 'clear') { recordTowers(); if (G.runStats) G.runStats.lands++; G.advance = true; UI.banner('The pass holds', 3.2, false); UI.closeMenu(); }
+  if (p === 'defeat') { recordTowers(); if (G.runStats) G.runStats.sum = runSummary(); UI.banner('The beacon is out', 4.2, true); UI.closeMenu(); sfx('beaconOut', G.B.beacon.x, G.B.beacon.z, 1.2); fxEmbers(G.B.beacon.x, G.B.beacon.y, G.B.beacon.z, 60, .8); for (let i = 0; i < 14; i++) fxSmoke(G.B.beacon.x + rr(-.4, .4), G.B.beacon.y + rr(0, 1), G.B.beacon.z + rr(-.4, .4), rr(-.3, .3), rr(.8, 2), rr(-.3, .3), rr(2, 4), 1, 2, .2, .2, .22, .6, { drag: .5, rise: .2 }); }
   if (p === 'crumble') startCrumble();
   if (p === 'rise') startRise();
 }
@@ -483,6 +513,8 @@ function beginBattle(first) {
   G.lives = G.maxLives; G.gold = 300 + 100 * G.level + 12 * G.level * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; G.queue = []; AI.think = .15; AI.wait = 0;
   const n = 4 + Math.min(3, G.level);
   for (let i = 0; i < n; i++) spawnMonster(i === n - 1 && G.level > 0 ? 'knight' : 'skel', { s: B.cave.s + 2.2 + i * 1.15, lat: rr(-.7, .7), hpMul: 1 + .22 * G.level });
+  if (first || G.newRun || !G.runStats) { G.newRun = false; newRun(); }
+  G.runStats.last = G.gold;
   G.phase = 'play'; G.phaseT = 0;
 }
 function updatePhase(dt) {
@@ -496,7 +528,8 @@ function updatePhase(dt) {
   if (G.phase === 'clear') { if (t > 2.6) setPhase('crumble'); }
   else if (G.phase === 'defeat') {
     for (const tw of G.towers) { tw.em.on = damp(tw.em.on, 0, 1.5 + tw.idx * .15, dt); if (tw.flame) tw.flame.on = tw.em.on; if (tw.flame2) tw.flame2.on = tw.em.on; }
-    if (t > 4.4) { G.level = 0; G.press = Math.max(.8, G.press * .85); G.run++; setPhase('crumble'); }
+    // A player who has walked away gets the commander back for the next run.
+    if (t > SUMMARY_AT + AUTO_RESTART && (!UI.playerActive() || UI.idle > 45)) { if (UI.playerActive()) UI.setManual(false); restartRun(false); }
   } else if (G.phase === 'crumble') {
     let done = true;
     for (const p of B.pieces) {
