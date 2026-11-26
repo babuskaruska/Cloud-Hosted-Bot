@@ -3,3 +3,4 @@ tools/shots/
 *.video.mp4
 *.wav
 clips/
+.claude/worktrees/
