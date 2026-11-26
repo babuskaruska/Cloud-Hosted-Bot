@@ -111,7 +111,7 @@ function buildWave(k, level) {
   // (the board was just rebuilt), the last ones get the full step and a bit more.
   const lvF = .5 + .5 * (k - 1) / (W - 1), lv = 1 + .3 * level * lvF;
   // Budget ramps over the land; the boss wave carries less escort because the boss is the threat (more of it on later lands).
-  let budget = (30 + 19 * (k - 1)) * lv * G.press * (boss ? .6 + .1 * Math.min(level, 6) : 1), heavy = 0, air = budget * .42;
+  let budget = (30 + 19 * (k - 1)) * lv * G.press * (boss ? .6 + .15 * Math.min(level, 6) : 1), heavy = 0, air = budget * .42;
   const hpMul = (1 + .1 * (k - 1)) * (1 + .33 * level * lvF + .045 * level * level * lvF * lvF * lvF) * pressHp();
   // Later lands (and high pressure) also pack the monsters closer together.
   const gm = 1 / ((1 + .08 * level) * Math.pow(Math.max(1, G.press / 1.8), level ? .35 : 0));
@@ -480,7 +480,7 @@ function activateBoard(B, lit) {
 function beginBattle(first) {
   const B = G.B;
   G.mix = {}; G.mana = Math.max(G.mana * .5, 30); for (const k in G.spellCd) G.spellCd[k] = 0; G.pending.length = 0; G.rallies.length = 0;
-  G.lives = G.maxLives; G.gold = 300 + 100 * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; G.queue = []; AI.think = .15; AI.wait = 0;
+  G.lives = G.maxLives; G.gold = 300 + 100 * G.level + 12 * G.level * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; G.queue = []; AI.think = .15; AI.wait = 0;
   const n = 4 + Math.min(3, G.level);
   for (let i = 0; i < n; i++) spawnMonster(i === n - 1 && G.level > 0 ? 'knight' : 'skel', { s: B.cave.s + 2.2 + i * 1.15, lat: rr(-.7, .7), hpMul: 1 + .22 * G.level });
   G.phase = 'play'; G.phaseT = 0;

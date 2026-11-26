@@ -305,12 +305,14 @@ const UI = (() => {
       if (b.sh > 0) { c.fillStyle = '#bfe4ff'; c.fillRect(x, y - 2 * pix, Math.max(pix, Math.round(w * Math.min(1, b.sh / .6))), pix); }
       c.globalAlpha = 1;
       if (b.boss) text(b.name, p.x, y - LH - 2 * pix, COLR.tx, { align: 'c', outline: COLR.dark });
-      else if (b.elite && tags.length < 12) {
+      else if (b.elite && tags.length < (crowd > .25 ? 4 : 12)) {
         // Name tags for elites, skipped where they would pile onto one already drawn.
-        const tw2 = PX.measure(b.name) * es, ty = y - PX.LINE * es - 2 * pix, tx = p.x - tw2 / 2, th = PX.LINE * es;
-        if (!tags.some(r => tx < r[0] + r[2] && tx + tw2 > r[0] && ty < r[1] + r[3] && ty + th > r[1])) { tags.push([tx, ty, tw2, th]); PX.text(c, b.name, p.x, ty, es, ELITE[b.elite].col, { align: 'c', outline: COLR.dark }); }
+        // Smaller in a crowd (and on a phone's big UI scale), so the tags do not bury the fight.
+        const ts = Math.max(1, Math.min(es, Math.max(2, Math.floor(s * (crowd > .25 ? .45 : .55))))), tw2 = PX.measure(b.name) * ts, ty = y - PX.LINE * ts - 2 * pix, tx = p.x - tw2 / 2, th = PX.LINE * ts;
+        if (!tags.some(r => tx < r[0] + r[2] && tx + tw2 > r[0] && ty < r[1] + r[3] && ty + th > r[1])) { tags.push([tx, ty, tw2, th, b.name, p.x, ts, ELITE[b.elite].col]); }
       }
     }
+    for (const g of tags) PX.text(c, g[4], g[5], g[1], g[6], g[7], { align: 'c', outline: COLR.dark });
     const [iL, iT, iR, iB] = R.safe, Wr = W - iR, Hb = H - iB, tch = U.touch, mouse = U.inside && !tch && !U.panning;
     const over = (x, y, w, h) => mouse && U.mx >= x && U.mx <= x + w && U.my >= y && U.my <= y + h;
     const stats = [['flame', '' + G.lives, U.hurt > 0 ? COLR.red : COLR.tx], ['coin', '' + Math.floor(U.goldShown), U.deny > 0 ? COLR.red : (U.goldBump > 0 ? '#ffe2a0' : COLR.tx)], ['skull', '' + G.slain, U.slainBump > .5 ? '#ffffff' : COLR.tx]];
