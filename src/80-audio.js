@@ -9,14 +9,14 @@ const AU = (function () {
 
   let ctx = null, sr = 44100;
   let nMaster = null, nMute = null, nSfx = null, nAmb = null, nMusic = null, nRevIn = null;
-  let nPad = null, nSeq = null, nMusDuck = null, nCrowd = null, nCrowdDuck = null, nPage = null, nUi = null, nLand = null, nEvt = null;
-  const PZ = { on: false, sfx: null, amb: null, crowd: null, pad: null, seq: null, rev: null };
+  let nSting = null, nPad = null, nSeq = null, nMusDuck = null, nCrowd = null, nCrowdDuck = null, nPage = null, nUi = null, nLand = null, nEvt = null;
+  const PZ = { on: false, sfx: null, amb: null, crowd: null, pad: null, seq: null, rev: null, sting: null };
   let bufWhite = null, bufPink = null, bufBrown = null;
   let V = null;
   const shapeCurves = {};
   const tgt = { fire: 0, wind: 0, tension: 0 }, cur = { fire: 0, wind: 0, tension: 0 }, app = { fire: -1, wind: -1, tension: -1 };
   const bed = { windG: null, gustG: null, windLP: [], whG: null, whF: null, fireG: null, popBus: null, droneG: null, droneLP: null, timer: 0, popAcc: 0 };
-  const mus = { nextChord: 0, chord: 0, lastNote: -1, playing: 0, pend: 0, pendAt: 0 };
+  const mus = { nextChord: 0, chord: 0, lastNote: -1, playC: null, pendC: null, pendAt: 0 };
   // Phones get fewer simultaneous voices and a sparser crowd.
   const LOW = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
@@ -82,7 +82,7 @@ const AU = (function () {
     const out = gn(null, gain);
     const tail = panNode(pan, bus || nSfx); out.connect(tail);
     let wet = null;
-    if (send > 0) { wet = gn(nRevIn, send); tail.connect(wet); }
+    if (send > 0) { wet = gn((bus || nSfx).rv || nRevIn, send); tail.connect(wet); } // each bus's echo follows its volume
     return { out: out, tail: tail, wet: wet, last: null, lastT: 0 };
   }
   function finishVoice(v) {
@@ -176,6 +176,7 @@ const AU = (function () {
     const b = gn(sh), bf = flt(b, 'lowpass', 1200, 0.7); noi(t, 0.7, bf); sw(bf.frequency, t, 1600, 140, 0.45); ad(b.gain, t, 0.7, 0.002, 0.5);
     const c = gn(d), cf = flt(c, 'highpass', 1100); noi(t, 0.1, cf); ad(c.gain, t, 0.5, 0.0008, 0.05);
     const r = gn(d), rf = flt(r, 'lowpass', 230, 0.5); noi(t + 0.05, 1.5, rf, bufBrown); ad(r.gain, t + 0.05, 0.5, 0.12, 1.2);
+    const m = gn(d), mf = flt(m, 'bandpass', 260 * k, 1.1); noi(t, 0.45, mf, bufPink); ad(m.gain, t, 0.55, 0.002, 0.28); // a body a phone speaker can play
   };
   S.explode = (d, t, p) => {
     const k = rr(0.88, 1.12) * (1 - 0.25 * p), L = 1 + 0.5 * p, sh = shape(d, 1.8);
@@ -277,8 +278,11 @@ const AU = (function () {
     const k = rr(0.9, 1.1) * (1 - 0.2 * p), sh = shape(d, 1.6);
     const g = gn(sh), o = osc('sine', 60 * k, t, 0.5, g); sw(o.frequency, t, 66 * k, 29 * k, 0.26); ad(g.gain, t, 1.0, 0.004, 0.36);
     const n = gn(sh), nf = flt(n, 'lowpass', 150); noi(t, 0.4, nf, bufBrown); ad(n.gain, t, 0.9, 0.004, 0.25);
-    const c = gn(d), cf = flt(c, 'bandpass', 900, 0.8); noi(t + 0.015, 0.2, cf); ad(c.gain, t + 0.015, 0.1, 0.004, 0.13);
-    grains(d, t + 0.05, 4, 0.25, 0.07, 0.01, 0.03, 700, 2000, 4, 1);
+    // what a phone speaker can play: a woody body near 200 Hz and a dull crunch of earth
+    const b = gn(d), bo = osc('triangle', 220 * k, t, 0.25, flt(b, 'lowpass', 800)); sw(bo.frequency, t, 250 * k, 120 * k, 0.12); ad(b.gain, t, 0.9, 0.002, 0.17);
+    const m = gn(d), mf = flt(m, 'bandpass', 380 * k, 1.2); noi(t, 0.3, mf, bufPink); ad(m.gain, t, 1.6, 0.003, 0.2);
+    const c = gn(d), cf = flt(c, 'bandpass', 900, 0.8); noi(t + 0.015, 0.2, cf); ad(c.gain, t + 0.015, 0.16, 0.004, 0.13);
+    grains(d, t + 0.05, 5, 0.25, 0.12, 0.01, 0.03, 700, 2000, 4, 1);
   };
   S.bossDie = (d, t) => {
     const D = 1.5, k = rr(0.95, 1.05);
@@ -293,6 +297,7 @@ const AU = (function () {
     const g = gn(sh), o = osc('sine', 75, tc, 0.9, g); sw(o.frequency, tc, 80, 24, 0.5); ad(g.gain, tc, 1.0, 0.004, 0.7);
     const n = gn(sh), nf = flt(n, 'lowpass', 1800, 0.7); noi(tc, 0.9, nf); sw(nf.frequency, tc, 2200, 120, 0.6); ad(n.gain, tc, 0.75, 0.003, 0.6);
     grains(d, tc + 0.1, 16, 1.1, 0.28, 0.02, 0.07, 300, 1800, 5, 1);
+    const m = gn(d), mf = flt(m, 'bandpass', 340, 1); noi(tc, 0.8, mf, bufPink); ad(m.gain, tc, 0.6, 0.003, 0.55);
     const r = gn(d), rf = flt(r, 'lowpass', 140); noi(tc, 1.4, rf, bufBrown); ad(r.gain, tc, 0.6, 0.1, 1.2);
   };
   S.coin = (d, t, p) => {
@@ -312,6 +317,7 @@ const AU = (function () {
   S.buildDone = (d, t) => {
     const g = gn(d), o = osc('sine', 125, t, 0.25, g); sw(o.frequency, t, 130, 58, 0.14); ad(g.gain, t, 0.8, 0.003, 0.18);
     const n = gn(d), nf = flt(n, 'lowpass', 600); noi(t, 0.15, nf); ad(n.gain, t, 0.5, 0.002, 0.09);
+    const kn = gn(d), kf = flt(kn, 'bandpass', 620, 3); noi(t, 0.08, kf, bufPink); ad(kn.gain, t, 1.5, 0.001, 0.05);
     whoomp(d, t + 0.1, 0.5, 0.5);
     grains(d, t + 0.2, 7, 0.5, 0.12, 0.004, 0.02, 1800, 5000, 3, 1);
   };
@@ -344,7 +350,9 @@ const AU = (function () {
     const k = rr(0.9, 1.1);
     const g = gn(d), o = osc('sine', 115 * k, t, 0.25, g); sw(o.frequency, t, 120 * k, 50 * k, 0.14); ad(g.gain, t, 0.75, 0.003, 0.17);
     const n = gn(d), nf = flt(n, 'lowpass', 420); noi(t, 0.2, nf); ad(n.gain, t, 0.5, 0.003, 0.12);
-    grains(d, t + 0.04, 6, 0.36, 0.22, 0.02, 0.06, 1700, 3600, 10, 1);
+    const b = gn(d), bf = flt(b, 'bandpass', 360, 1.3); noi(t, 0.16, bf, bufPink); ad(b.gain, t, 1.4, 0.002, 0.11);
+    const bb = gn(d), bo = osc('triangle', 240 * k, t, 0.16, bb); sw(bo.frequency, t, 260 * k, 140 * k, 0.1); ad(bb.gain, t, 0.3, 0.002, 0.11);
+    grains(d, t + 0.04, 6, 0.36, 0.3, 0.02, 0.06, 1700, 3600, 10, 1);
   };
   S.uiHover = (d, t) => {
     const g = gn(d); osc('sine', rr(1250, 1400), t, 0.05, g); ad(g.gain, t, 0.07, 0.002, 0.03);
@@ -355,20 +363,23 @@ const AU = (function () {
     const w = gn(d); osc('sine', 300, t, 0.06, w); ad(w.gain, t, 0.15, 0.001, 0.035);
     const c = gn(d), cf = flt(c, 'bandpass', 2300, 1.5); noi(t, 0.03, cf); ad(c.gain, t, 0.2, 0.0005, 0.012);
   };
-  S.uiDeny = (d, t) => {
-    const lp = flt(d, 'lowpass', 700);
+  S.uiDeny = (d, t) => { // a soft, low "uh-uh": two muted taps falling a third, no buzz (not enough gold or mana)
+    const lp = flt(d, 'lowpass', 2200);
     for (let i = 0; i < 2; i++) {
-      const ti = t + i * 0.11, g = gn(lp); osc('triangle', i ? 128 : 158, ti, 0.1, g); osc('square', i ? 64 : 79, ti, 0.1, gn(g, 0.3));
-      g.gain.setValueAtTime(0.0001, ti); g.gain.linearRampToValueAtTime(0.3, ti + 0.008); g.gain.setValueAtTime(0.3, ti + 0.06); g.gain.linearRampToValueAtTime(0.0001, ti + 0.085);
+      const ti = t + i * 0.1, f = i ? 330 : 415, g = gn(lp), o = osc('triangle', f, ti, 0.12, g); sw(o.frequency, ti, f * 1.05, f * 0.94, 0.08);
+      osc('sine', f * 2, ti, 0.08, gn(g, 0.1)); ad(g.gain, ti, 0.24, 0.004, 0.09);
     }
+    const n = gn(lp), nf = flt(n, 'bandpass', 900, 2); noi(t, 0.03, nf); ad(n.gain, t, 0.05, 0.001, 0.015);
   };
   S.crumble = (d, t) => {
     const D = 3.0;
     const r = gn(d), rf = flt(r, 'lowpass', 130, 0.6); noi(t, D + 0.4, rf, bufBrown); sw(rf.frequency, t, 170, 60, D);
     r.gain.setValueAtTime(0.0001, t); r.gain.linearRampToValueAtTime(1.0, t + 0.35); r.gain.linearRampToValueAtTime(0.7, t + D * 0.6); r.gain.exponentialRampToValueAtTime(0.0001, t + D + 0.3);
     const s = gn(d), o = osc('sine', 44, t, D, s); sw(o.frequency, t, 48, 30, D); ad(s.gain, t, 0.5, 0.4, D - 0.4);
-    grains(d, t + 0.1, 26, D - 0.3, 0.5, 0.05, 0.2, 180, 700, 3, 0);
+    grains(d, t + 0.1, 26, D - 0.3, 0.6, 0.05, 0.2, 220, 800, 3, 0);
     grains(d, t + 0.2, 16, D - 0.5, 0.2, 0.01, 0.04, 800, 2600, 5, 0);
+    const m = gn(d), mf = flt(m, 'bandpass', 420, 0.9); noi(t, D + 0.3, mf, bufPink); sw(mf.frequency, t, 560, 260, D); // grinding stone, for small speakers
+    m.gain.setValueAtTime(0.0001, t); m.gain.linearRampToValueAtTime(0.9, t + 0.3); m.gain.linearRampToValueAtTime(0.6, t + D * 0.6); m.gain.exponentialRampToValueAtTime(0.0001, t + D + 0.3);
   };
   S.rise = (d, t) => {
     const D = 3.0;
@@ -379,6 +390,9 @@ const AU = (function () {
     grains(d, t + 0.5, 14, D - 0.5, 0.55, 0.05, 0.12, 240, 720, 8, 2);
     const tf = t + D - 0.05, g = gn(d), o2 = osc('sine', 90, tf, 0.5, g); sw(o2.frequency, tf, 95, 42, 0.25); ad(g.gain, tf, 0.9, 0.004, 0.4);
     const n = gn(d), nf = flt(n, 'lowpass', 500); noi(tf, 0.3, nf); ad(n.gain, tf, 0.5, 0.003, 0.2);
+    const m = gn(d), mf = flt(m, 'bandpass', 300, 1); noi(t, D + 0.3, mf, bufPink); sw(mf.frequency, t, 260, 620, D * 0.9); // grinding stone, for small speakers
+    m.gain.setValueAtTime(0.0001, t); m.gain.exponentialRampToValueAtTime(0.6, t + D * 0.85); m.gain.exponentialRampToValueAtTime(0.0001, t + D + 0.3);
+    const b = gn(d), bo = osc('triangle', 200, tf, 0.3, b); sw(bo.frequency, tf, 230, 110, 0.15); ad(b.gain, tf, 0.6, 0.003, 0.2);
   };
   S.beaconOut = (d, t) => {
     const w = gn(d), am = gn(w, 0.7), wf = flt(am, 'bandpass', 2400, 1.4); noi(t, 2.0, wf); sw(wf.frequency, t, 2600, 110, 1.7);
@@ -480,6 +494,7 @@ const AU = (function () {
     const sh = shape(d, 1.8);
     const g = gn(sh), o = osc('sine', 100, t, 0.7, g); sw(o.frequency, t, 150, 45, 0.3); ad(g.gain, t, 0.9, 0.003, 0.5);
     const m = gn(d), mf = flt(m, 'bandpass', 380, 1.2); noi(t, 0.3, mf); ad(m.gain, t, 0.5, 0.002, 0.2);
+    const bb = gn(d), bo = osc('triangle', 230, t, 0.3, bb); sw(bo.frequency, t, 260, 130, 0.15); ad(bb.gain, t, 0.4, 0.002, 0.2);
     const lp = flt(d, 'lowpass', 7000), R = [1, 1.51, 2.27, 2.94, 3.76];
     for (let i = 0; i < 5; i++) { const cg = gn(lp); osc(i % 2 ? 'sine' : 'triangle', 620 * R[i] * rr(0.995, 1.005), t + 0.01, 1.4, cg); ad(cg.gain, t + 0.01, 0.14 / (1 + i * 0.4), 0.001, 1.1 / (1 + i * 0.5)); }
     const t2 = t + 0.2, ch = [50, 57, 62, 66];
@@ -489,14 +504,19 @@ const AU = (function () {
     grains(lp, t + 0.25, 14, 1.2, 0.09, 0.003, 0.015, 2600, 7000, 3, 1);
     belld(lp, t + 0.75, mtof(86), 0.05, 1.6);
   };
-  const METEOR_FALL = 0.9; // seconds of whistle before the impact
+  // Seconds of whistle before the impact: the game's fall time (game seconds) at the current game speed,
+  // so the blast lands with the picture at 2x and 3x too.
+  function meteorFall() {
+    const f = typeof METEOR_FALL === 'number' ? METEOR_FALL : 0.8, sp = typeof G !== 'undefined' && G && G.speed > 0 ? G.speed : 1;
+    return cl(f / sp, 0.2, 1.2);
+  }
   S.meteor = (d, t) => {
-    const ti = t + METEOR_FALL;
+    const MF = meteorFall(), ti = t + MF;
     // the fall: a whistle that rises while a roar of torn air builds
-    const wg = gn(d), wo = osc('sine', 520, t, METEOR_FALL + 0.05, wg); wo.frequency.setValueAtTime(520, t); wo.frequency.exponentialRampToValueAtTime(1900, ti);
-    osc('sine', 7, t, METEOR_FALL, gn(wo.detune, 25));
+    const wg = gn(d), wo = osc('sine', 520, t, MF + 0.05, wg); wo.frequency.setValueAtTime(520, t); wo.frequency.exponentialRampToValueAtTime(1900, ti);
+    osc('sine', 7, t, MF, gn(wo.detune, 25));
     wg.gain.setValueAtTime(0.0001, t); wg.gain.exponentialRampToValueAtTime(0.12, ti - 0.05); wg.gain.linearRampToValueAtTime(0.0001, ti + 0.02);
-    const rg = gn(d), rf = flt(rg, 'bandpass', 600, 1.2); noi(t, METEOR_FALL + 0.05, rf, bufPink); sw(rf.frequency, t, 300, 2600, METEOR_FALL);
+    const rg = gn(d), rf = flt(rg, 'bandpass', 600, 1.2); noi(t, MF + 0.05, rf, bufPink); sw(rf.frequency, t, 300, 2600, MF);
     rg.gain.setValueAtTime(0.0001, t); rg.gain.exponentialRampToValueAtTime(0.45, ti - 0.03); rg.gain.linearRampToValueAtTime(0.0001, ti + 0.03);
     // the impact: a deep drop, a wide blast, a mid crunch for small speakers, then debris and a long rumble
     const sh = shape(d, 2.4);
@@ -594,7 +614,8 @@ const AU = (function () {
   // Boss entrance stings: short and different for each boss, played the first time one is seen.
   function stingHit(d, t, vel) { // a drum and a dull thud under each stab
     drumHit(d, t, vel, 50);
-    const m = gn(d), mf = flt(m, 'bandpass', 300, 1); noi(t, 0.25, mf); ad(m.gain, t, vel * 0.45, 0.002, 0.18);
+    const m = gn(d), mf = flt(m, 'bandpass', 300, 1); noi(t, 0.25, mf); ad(m.gain, t, vel * 0.6, 0.002, 0.18);
+    const b = gn(d), bo = osc('triangle', 190, t, 0.3, b); sw(bo.frequency, t, 220, 110, 0.14); ad(b.gain, t, vel * 0.35, 0.002, 0.2);
   }
   const STING = {
     giant: (d, t) => { // DUN... DUN: two low brass stabs, the second a semitone down, bones rattling after
@@ -640,6 +661,227 @@ const AU = (function () {
   };
   let stingKey = 'giant';
   S.bossSting = (d, t) => { (STING[stingKey] || STING.giant)(d, t); };
+
+  // ---- Round 3: music for each land, phase stingers and the menu sounds. ----
+  // Each land's base music: a mode, its chords (bass + pad notes, calm-melody notes, which chords may follow),
+  // a pad colour, a calm solo voice, a percussion kit, a lead for the motifs, and a tempo offset.
+  // semi: the land's key against D (the drone, the choir and the stingers move with it).
+  const DORIAN = [0, 2, 3, 5, 7, 9, 10], AEOLIAN = [0, 2, 3, 5, 7, 8, 10], HARMMIN = [0, 2, 3, 5, 7, 8, 11], PHRYGDOM = [0, 1, 4, 5, 7, 8, 10];
+  const LANDMUS = {
+    ashen: { semi: 0, tonic: 50, scale: DORIAN, pad: 'saw', calm: 'piano', kit: 'drums', lead: 'brass', bpm: 0, lvl: 1, // dark D Dorian, drums
+      ch: [{ n: [38, 45, 50, 53, 57], m: [62, 65, 69, 72, 74, 76], to: [1, 2, 4, 3] }, // Dm
+        { n: [31, 43, 47, 50, 55], m: [62, 67, 71, 74, 69], to: [0, 3, 4] }, // G: the Dorian major IV
+        { n: [36, 43, 48, 52, 55], m: [64, 67, 72, 76, 69], to: [0, 1, 3] }, // C
+        { n: [33, 40, 45, 48, 52], m: [64, 69, 72, 76, 67], to: [0, 1] }, // Am
+        { n: [29, 41, 45, 48, 53], m: [60, 65, 69, 72, 77, 67], to: [2, 0, 1] }], // F
+      arr: [[0, 0, 0.5], [0.45, 2, 0.5], [0.9, 4, 0.6], [1.5, 7, 1.6]] },
+    frost: { semi: 2, tonic: 52, scale: AEOLIAN, pad: 'glass', calm: 'glass', kit: 'glass', lead: 'bell', bpm: -8, lvl: 0.75, sparse: 0.5, // sparse, glassy E minor
+      ch: [{ n: [40, 47, 54, 55, 59], m: [71, 74, 76, 78, 79, 83], to: [1, 2, 3] }, // Em(add9)
+        { n: [36, 43, 52, 55, 59], m: [71, 72, 76, 79, 83], to: [0, 3, 4] }, // Cmaj7
+        { n: [43, 50, 57, 59, 62], m: [74, 79, 81, 83, 86], to: [0, 3] }, // G(add9)
+        { n: [38, 45, 50, 52, 57], m: [74, 76, 78, 81], to: [0, 1, 4] }, // Dsus2
+        { n: [35, 47, 50, 54, 57], m: [71, 74, 78, 81], to: [0, 1] }], // Bm7
+      arr: [[0, 4, 0.8], [0.35, 7, 0.8], [0.7, 9, 0.8], [1.2, 11, 2.2]] },
+    fen: { semi: 5, tonic: 55, scale: AEOLIAN, pad: 'murk', calm: 'reed', kit: 'frame', lead: 'reed', bpm: -4, lvl: 0.9, // murky G minor, woodwinds
+      ch: [{ n: [31, 43, 46, 50, 55], m: [62, 65, 67, 70, 74], to: [1, 2, 3] }, // Gm
+        { n: [39, 46, 50, 55, 58], m: [63, 67, 70, 74], to: [0, 2, 4] }, // Ebmaj7
+        { n: [36, 43, 48, 51, 55], m: [60, 63, 67, 72], to: [0, 3, 1] }, // Cm
+        { n: [32, 44, 48, 51, 56], m: [60, 63, 68, 72], to: [0, 4] }, // Ab: the dark flat II
+        { n: [38, 45, 50, 53, 57], m: [62, 65, 69, 74], to: [0, 1] }], // Dm
+      arr: [[0, 0, 0.7], [0.6, 2, 0.5], [1.05, 1, 0.5], [1.5, -1, 0.5], [2.0, 0, 1.6]] },
+    ember: { semi: -2, tonic: 48, scale: HARMMIN, pad: 'brass', calm: 'lowbrass', kit: 'heavy', lead: 'lowbrass', bpm: -6, lvl: 1.5, // heavy C harmonic minor, low brass
+      ch: [{ n: [36, 43, 48, 51, 55], m: [60, 63, 67, 72, 75], to: [1, 2, 3] }, // Cm
+        { n: [32, 44, 48, 51, 56], m: [60, 63, 68, 72], to: [0, 4, 3] }, // Ab
+        { n: [29, 41, 44, 48, 53], m: [60, 65, 68, 72], to: [3, 0, 4] }, // Fm
+        { n: [31, 43, 47, 50, 55], m: [62, 67, 71, 74], to: [0, 1] }, // G: the harsh major V
+        { n: [37, 44, 49, 53, 56], m: [61, 65, 68, 73], to: [3, 0] }], // Db: the Neapolitan
+      arr: [[0, 0, 0.9], [0.9, -1, 0.5], [1.35, 0, 0.5], [1.8, 4, 1.8]] },
+    dunes: { semi: 2, tonic: 52, scale: PHRYGDOM, pad: 'nasal', calm: 'oud', kit: 'hand', lead: 'ney', bpm: 4, lvl: 1, // E Phrygian dominant, hand drums
+      ch: [{ n: [40, 47, 52, 56, 59], m: [64, 65, 68, 71, 76], to: [1, 2, 3] }, // E
+        { n: [41, 48, 53, 57, 60], m: [65, 69, 72, 76, 77], to: [0, 2] }, // F
+        { n: [38, 45, 50, 53, 57], m: [62, 65, 69, 74], to: [1, 0, 3] }, // Dm
+        { n: [33, 45, 52, 57, 60], m: [64, 69, 72, 76], to: [0, 4, 2] }, // Am
+        { n: [40, 47, 50, 56, 59], m: [64, 68, 71, 74, 76], to: [0, 1] }], // E7
+      arr: [[0, 4, 0.3], [0.25, 5, 0.3], [0.5, 4, 0.3], [0.75, 2, 0.3], [1.0, 1, 0.4], [1.45, 0, 1.6]] },
+  };
+  const LM = { def: LANDMUS.ashen, key: 'ashen', bus: null, old: [] };
+  const deg = (L, d) => { const n = L.scale.length, o = Math.floor(d / n); return L.tonic + 12 * o + L.scale[((d % n) + n) % n]; };
+  function landNow() { // the land on screen right now (the stingers read it when they play)
+    const k = typeof G !== 'undefined' && G && G.B && G.B.bio && G.B.bio.key;
+    return LANDMUS[k] || LM.def || LANDMUS.ashen;
+  }
+
+  // Solo voices, each written to a destination node.
+  function pianoTone(d, t, m, vel) {
+    const f = mtof(m), lp = flt(d, 'lowpass', 2200, 0.4);
+    lp.frequency.setValueAtTime(Math.min(3200, f * 5), t); lp.frequency.exponentialRampToValueAtTime(Math.max(300, f * 1.3), t + 2.2);
+    const dec = 3.6 * Math.pow(440 / f, 0.35), H = [[1, 1, 1], [2.002, 0.3, 0.55], [3.006, 0.1, 0.35], [4.012, 0.04, 0.22]];
+    for (let i = 0; i < H.length; i++) { const h = H[i], g = gn(lp); osc('sine', f * h[0], t, dec * h[2] + 0.1, g); ad(g.gain, t, vel * 0.11 * h[1], 0.007, dec * h[2]); }
+    const tg = gn(lp); osc('triangle', f, t, dec * 0.5, tg); ad(tg.gain, t, vel * 0.03, 0.006, dec * 0.4);
+    const n = gn(d), nf = flt(n, 'lowpass', 900); noi(t, 0.05, nf); ad(n.gain, t, vel * 0.03, 0.002, 0.03);
+  }
+  function glassTone(d, t, m, vel) { // a struck wine glass: almost pure, a slow beat, a long ring
+    const f = mtof(m), dec = 3.2 * Math.pow(880 / f, 0.3), H = [[1, 1, 1], [1.004, 0.5, 0.9], [2.0, 0.18, 0.5], [3.01, 0.05, 0.25]];
+    for (let i = 0; i < H.length; i++) { const h = H[i], g = gn(d); osc('sine', f * h[0], t, dec * h[2] + 0.1, g); ad(g.gain, t, vel * 0.07 * h[1], 0.012, dec * h[2]); }
+    const n = gn(d), nf = flt(n, 'highpass', 5000); noi(t, 0.03, nf); ad(n.gain, t, vel * 0.015, 0.001, 0.012);
+  }
+  function reedTone(d, t, m, dur, vel) { // a woodwind: odd harmonics, a breathy onset, vibrato that comes in late
+    const f = mtof(m), env = gn(d), lp = flt(env, 'lowpass', Math.min(2600, f * 5), 0.7), pk = flt(lp, 'peaking', 1300, 1.2); pk.gain.value = 4;
+    const o = osc('square', f, t, dur + 0.3, gn(pk, 0.32)), o2 = osc('triangle', f, t, dur + 0.3, gn(pk, 0.5));
+    const vib = gn(null, 0); osc('sine', rr(4.6, 5.4), t, dur + 0.3, vib); vib.connect(o.detune); vib.connect(o2.detune);
+    vib.gain.setValueAtTime(0, t + 0.25); vib.gain.linearRampToValueAtTime(10, t + Math.max(0.3, dur * 0.8));
+    env.gain.setValueAtTime(0.0001, t); env.gain.linearRampToValueAtTime(vel * 0.13, t + 0.09); env.gain.setValueAtTime(vel * 0.13, t + dur * 0.6); env.gain.linearRampToValueAtTime(vel * 0.1, t + dur); env.gain.setTargetAtTime(0.0001, t + dur, 0.09);
+    const b = gn(d), bf = flt(b, 'bandpass', Math.min(4000, f * 3), 1.2); noi(t, dur + 0.2, bf, bufPink);
+    b.gain.setValueAtTime(0.0001, t); b.gain.linearRampToValueAtTime(vel * 0.03, t + 0.05); b.gain.linearRampToValueAtTime(vel * 0.008, t + 0.3); b.gain.setTargetAtTime(0.0001, t + dur, 0.08);
+  }
+  function oudTone(d, t, m, vel, orn) { // a plucked lute: a bright pluck that darkens fast, a body resonance, a grace note from above
+    const pl = (tt, mm, v) => {
+      const f = mtof(mm), g = gn(d), body = flt(g, 'peaking', 380, 1.5), lp = flt(body, 'lowpass', f * 8, 1.4); body.gain.value = 5;
+      const o = osc('sawtooth', f, tt, 0.9, lp); o.detune.value = rr(-4, 4); sw(lp.frequency, tt, Math.min(7000, f * 9), f * 1.6, 0.35);
+      ad(g.gain, tt, v * 0.12, 0.002, 0.75);
+    };
+    if (orn) pl(t - 0.07, m + 1, vel * 0.55);
+    pl(t, m, vel);
+    if (rnd() < 0.35) pl(t + 0.12, m, vel * 0.4);
+  }
+  function timpHit(d, t, vel, f) { // a kettle drum with partials a small speaker still plays
+    const g = gn(d), o = osc('sine', f, t, 1.0, g); sw(o.frequency, t, f * 1.08, f, 0.06); ad(g.gain, t, vel, 0.004, 0.8);
+    const g2 = gn(d); osc('sine', f * 1.5, t, 0.6, g2); ad(g2.gain, t, vel * 0.4, 0.004, 0.45);
+    const g3 = gn(d); osc('sine', f * 2.02, t, 0.4, g3); ad(g3.gain, t, vel * 0.3, 0.003, 0.3);
+    const g4 = gn(d); osc('triangle', f * 2.9, t, 0.25, g4); ad(g4.gain, t, vel * 0.18, 0.002, 0.16);
+    const n = gn(d), nf = flt(n, 'bandpass', 520, 1); noi(t, 0.1, nf, bufPink); ad(n.gain, t, vel * 0.5, 0.002, 0.06);
+  }
+  function cymbal(d, t, vel, len) {
+    const g = gn(d), f = flt(flt(g, 'highpass', 3200), 'lowpass', 11000); noi(t, len + 0.1, f);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vel, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  }
+  function calmTone(d, t, m, vel, L) { // the land's solo voice for calm melodies and stingers
+    const c = L.calm;
+    if (c === 'glass') glassTone(d, t, m + 12, vel);
+    else if (c === 'reed') reedTone(d, t, m, rr(1.3, 2.2), vel * 0.9);
+    else if (c === 'lowbrass') brassNote(d, t, mtof(m - 12), rr(1.6, 2.3), 0.1 * vel, 0.75);
+    else if (c === 'oud') oudTone(d, t, m - 12, vel, rnd() < 0.6);
+    else pianoTone(d, t, m, vel);
+  }
+  // A chord swell in the land's pad colour, for the arrival stinger.
+  function landSwell(d, t, notes, dur, peak, L) {
+    const P = PADV[L.pad] || PADV.saw, env = gn(d), lp = flt(env, 'lowpass', P.lp[0], P.q);
+    lp.frequency.setValueAtTime(P.lp[0], t); lp.frequency.linearRampToValueAtTime(P.lp[2] * 1.4, t + dur * 0.6); lp.frequency.linearRampToValueAtTime(P.lp[3], t + dur);
+    for (let i = 0; i < notes.length; i++) { const f = mtof(notes[i] + (i && P.up ? P.up : 0)); for (let s = 0; s < 2; s++) { const o = osc(P.w[0], f, t, dur + 0.3, gn(lp, 0.1)); o.detune.value = (s ? 1 : -1) * rr(P.det[0], P.det[1]); } }
+    env.gain.setValueAtTime(0.0001, t); env.gain.linearRampToValueAtTime(peak, t + dur * 0.45); env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  }
+
+  // The land is cleared (the boss falls): a timpani roll, a brass "ta-ta-ta TAAA" in the land's major key, bells and a cymbal.
+  S.fanfare = (d, t) => {
+    const T = 62 + landNow().semi, sh = shape(d, 1.2);
+    for (let i = 0; i < 10; i++) timpHit(d, t + i * 0.055, 0.12 + 0.03 * i, mtof(T - 24));
+    const cs = gn(d), cf = flt(cs, 'highpass', 4500); noi(t, 0.65, cf); cs.gain.setValueAtTime(0.0001, t); cs.gain.exponentialRampToValueAtTime(0.07, t + 0.6); cs.gain.linearRampToValueAtTime(0.0001, t + 0.66);
+    const MEL = [[0.62, -5, 0.12], [0.77, -5, 0.12], [0.92, -5, 0.12], [1.1, 0, 0.48], [1.62, 4, 0.24], [1.9, 7, 1.5]];
+    for (let i = 0; i < MEL.length; i++) { const e = MEL[i]; brassNote(sh, t + e[0], mtof(T + e[1]), e[2], 0.2, 1.3); brassNote(sh, t + e[0], mtof(T + e[1] - 12), e[2], 0.08, 1); }
+    [0, 7, 12, 16].forEach((n) => brassNote(sh, t + 1.1, mtof(T - 12 + n), 2.3, 0.075, 1.0));
+    hornNote(d, t + 1.1, mtof(T - 24), 2.2, 0.16, 0.9);
+    timpHit(d, t + 1.1, 0.55, mtof(T - 24)); timpHit(d, t + 1.9, 0.6, mtof(T - 24));
+    const lp = flt(d, 'lowpass', 9000);
+    [86, 90, 93, 98].forEach((n, i) => belld(lp, t + 1.9 + i * 0.06, mtof(n + landNow().semi), 0.045, 1.8));
+    cymbal(d, t + 1.9, 0.09, 1.8);
+  };
+  // Defeat: after the beacon goes out, a slow horn lament falls to the land's minor tonic over a low swell and a far bell.
+  S.lament = (d, t) => {
+    const T = 62 + landNow().semi, t0 = t + 0.9;
+    softChord(d, t0, [T - 24, T - 17, T - 12, T - 9], 5.4, 0.1);
+    const MEL = [[0, 7, 0.75], [0.8, 8, 0.45], [1.3, 7, 0.95], [2.35, 3, 0.65], [3.05, 2, 0.6], [3.7, 0, 1.7]];
+    for (let i = 0; i < MEL.length; i++) { const e = MEL[i]; hornNote(d, t0 + e[0], mtof(T + e[1] - 12), e[2], 0.24, 0.62); }
+    const lp = flt(d, 'lowpass', 4000);
+    belld(lp, t0 + 3.7, mtof(T - 5), 0.07, 3.2); belld(lp, t0 + 5.2, mtof(T - 5), 0.045, 3);
+    const w = gn(d), wf = flt(w, 'bandpass', 700, 0.8); noi(t0, 5.5, wf, bufPink); ad(w.gain, t0, 0.04, 2, 3.3);
+  };
+  // A new land rises: its chord swells in its own pad colour and its solo voice plays a short figure in its mode.
+  S.arrival = (d, t) => {
+    const L = landNow(), c = L.ch[0], t1 = t + 0.9;
+    landSwell(d, t + 0.2, c.n.slice(1), 4.2, 0.5, L);
+    for (let i = 0; i < L.arr.length; i++) { const e = L.arr[i], m = deg(L, e[1]) + 12;
+      if (L.calm === 'reed') reedTone(d, t1 + e[0], m, e[2], 0.9); else if (L.calm === 'lowbrass') brassNote(d, t1 + e[0], mtof(m - 12), e[2], 0.22, 0.9); else if (L.calm === 'oud') oudTone(d, t1 + e[0], m - 12, 1.5, i === 0); else calmTone(d, t1 + e[0], m, 0.9, L); }
+    const te = t1 + L.arr[L.arr.length - 1][0];
+    if (L.kit === 'hand') { dumD(d, te, 0.5); tekD(d, te + 0.18, 0.35); tekD(d, te + 0.3, 0.3); }
+    else if (L.kit === 'glass') { const lp = flt(d, 'lowpass', 9000); for (let i = 0; i < 5; i++) belld(lp, te + i * 0.05, mtof(deg(L, 7 + i * 2) + 24), 0.03, 1.4); }
+    else if (L.kit === 'frame') { frameD(d, te, 0.45); frameD(d, te + 0.36, 0.3); }
+    else timpHit(d, te, L.kit === 'heavy' ? 0.55 : 0.4, mtof(deg(L, 0) - 24));
+  };
+  // A wave is cleared: the land's voice plays a small rising figure, very soft.
+  S.waveClear = (d, t) => {
+    const L = landNow(), D = [0, 2, 4, 7];
+    for (let i = 0; i < D.length; i++) { const m = deg(L, D[i]) + 12, tt = t + i * 0.13, v = i === 3 ? 0.7 : 0.5;
+      if (L.calm === 'reed') reedTone(d, tt, m, i === 3 ? 0.7 : 0.14, v); else if (L.calm === 'lowbrass') brassNote(d, tt, mtof(m), i === 3 ? 0.7 : 0.14, 0.2 * v, 1); else if (L.calm === 'oud') oudTone(d, tt, m, v * 2.5, false); else if (L.calm === 'glass') glassTone(d, tt, m + 12, v * 1.4); else pianoTone(d, tt, m + 12, v); }
+    const a = gn(d), af = flt(a, 'bandpass', 2500, 0.7); noi(t, 0.9, af, bufPink); ad(a.gain, t, 0.025, 0.25, 0.6);
+  };
+  // Menus.
+  S.menuOpen = (d, t, p) => { // a soft wooden "tock" and a short rising swish; the branch menu (p = 1) adds a glint
+    const g = gn(d), o = osc('triangle', 520, t, 0.08, g); sw(o.frequency, t, 470, 700, 0.05); ad(g.gain, t, 0.16, 0.002, 0.06);
+    const k = gn(d), kf = flt(k, 'bandpass', 1100, 4); noi(t, 0.04, kf); ad(k.gain, t, 0.14, 0.001, 0.02);
+    const s = gn(d), sf = flt(s, 'bandpass', 1500, 1.2); noi(t, 0.14, sf, bufPink); sw(sf.frequency, t, 900, 3200, 0.1); ad(s.gain, t, 0.05, 0.03, 0.08);
+    if (p > 0.5) { const lp = flt(d, 'lowpass', 9000); belld(lp, t + 0.05, mtof(86), 0.035, 0.8); belld(lp, t + 0.11, mtof(93), 0.025, 0.9); }
+  };
+  S.uiPreview = (d, t, p) => { // one soft pluck; the two branches sit a fourth apart
+    const f = p > 0.5 ? 1046.5 : 784, g = gn(d), lp = flt(g, 'lowpass', 4000);
+    osc('triangle', f, t, 0.18, lp); osc('sine', f * 2, t, 0.1, gn(lp, 0.15)); ad(g.gain, t, 0.13, 0.002, 0.14);
+    const c = gn(d), cf = flt(c, 'bandpass', 2600, 2); noi(t, 0.02, cf); ad(c.gain, t, 0.04, 0.0005, 0.008);
+  };
+  S.spellArm = (d, t, p) => { // a short rising swish in the spell's colour: fire (0), frost (0.5), the bugle (1)
+    const s = gn(d), sf = flt(s, 'bandpass', 800, 1.4); noi(t, 0.32, sf, bufPink); sw(sf.frequency, t, 500, 2600, 0.26);
+    s.gain.setValueAtTime(0.0001, t); s.gain.exponentialRampToValueAtTime(0.12, t + 0.2); s.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+    if (p < 0.25) { const g = gn(d), o = osc('triangle', 196, t, 0.4, flt(g, 'lowpass', 900)); sw(o.frequency, t, 160, 260, 0.3); ad(g.gain, t, 0.16, 0.05, 0.3); grains(d, t + 0.05, 7, 0.3, 0.1, 0.003, 0.01, 1800, 5000, 3, 1); }
+    else if (p < 0.75) { const lp = flt(d, 'lowpass', 9000); belld(lp, t + 0.08, mtof(88), 0.05, 0.9); belld(lp, t + 0.16, mtof(95), 0.035, 1); }
+    else { brassNote(d, t + 0.04, mtof(67), 0.1, 0.12, 1.2); brassNote(d, t + 0.16, mtof(72), 0.22, 0.12, 1.25); }
+  };
+  S.spellCancel = (d, t) => { // the same swish falling away, and a soft drop
+    const s = gn(d), sf = flt(s, 'bandpass', 1800, 1.4); noi(t, 0.26, sf, bufPink); sw(sf.frequency, t, 2400, 500, 0.22); ad(s.gain, t, 0.08, 0.02, 0.2);
+    const g = gn(d), o = osc('triangle', 660, t, 0.2, g); sw(o.frequency, t, 660, 400, 0.14); ad(g.gain, t, 0.1, 0.003, 0.15);
+  };
+  S.mend = (d, t) => { // the beacon mended: a warm rising major arpeggio over a soft swell
+    const T = 74 + landNow().semi, lp = flt(d, 'lowpass', 7000);
+    [0, 4, 7, 12].forEach((n, i) => { const g = gn(lp), f = mtof(T + n); osc('sine', f, t + i * 0.08, 1.2, g); osc('sine', f * 2.0, t + i * 0.08, 0.5, gn(g, 0.12)); ad(g.gain, t + i * 0.08, 0.1, 0.004, 1.0); });
+    softChord(d, t, [T - 24, T - 17, T - 12, T - 8], 1.6, 0.09);
+    const a = gn(d), af = flt(a, 'bandpass', 1800, 0.8); noi(t, 0.9, af, bufPink); ad(a.gain, t, 0.05, 0.2, 0.6);
+  };
+  S.overcharge = (d, t, p) => { // a surge rising through a resonance, crackle, then a ringing lock; higher with each stack
+    const k = Math.pow(2, (p * 3 * 2) / 12), g = gn(d), bp = flt(g, 'bandpass', 700, 3), o = osc('sawtooth', 110 * k, t, 0.5, bp);
+    sw(o.frequency, t, 100 * k, 220 * k, 0.4); sw(bp.frequency, t, 500, 2600 * k, 0.42);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.2, t + 0.38); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.48);
+    grains(d, t + 0.1, 10, 0.35, 0.12, 0.003, 0.012, 2500, 6500, 3, 2);
+    const lp = flt(d, 'lowpass', 8000), R = [1, 2.4, 3.9];
+    for (let i = 0; i < 3; i++) { const cg = gn(lp); osc(i ? 'sine' : 'triangle', 660 * k * R[i], t + 0.42, 1.0, cg); ad(cg.gain, t + 0.42, 0.11 / (1 + i), 0.002, 0.8 / (1 + i * 0.6)); }
+    const th = gn(d), to = osc('triangle', 180 * k, t + 0.42, 0.2, th); sw(to.frequency, t + 0.42, 220 * k, 120 * k, 0.1); ad(th.gain, t + 0.42, 0.25, 0.002, 0.12);
+  };
+  // Pad colours: oscillators, lowpass [start, open min, open max, end], Q, detune and vibrato ranges, levels [root, others], attack,
+  // and extras: up (upper notes an octave higher), harm (extra sine partials), sub (an octave-down root), peak (a nasal formant).
+  const PADV = {
+    saw: { w: ['sawtooth'], lp: [380, 560, 700, 400], q: 0.5, det: [4, 8], vib: [2.5, 4], vhz: [4.4, 5.2], lv: [0.05, 0.036], att: 3.5 },
+    glass: { w: ['triangle'], lp: [1100, 1700, 2300, 1100], q: 0.4, det: [2, 4], vib: [1, 2], vhz: [3.5, 4.5], lv: [0.045, 0.034], att: 4.5, up: 12, harm: [2, 0.2, 4.01, 0.05] },
+    murk: { w: ['sawtooth'], lp: [240, 360, 440, 260], q: 1.6, det: [9, 15], vib: [5, 8], vhz: [2.2, 3.0], lv: [0.06, 0.042], att: 4 },
+    brass: { w: ['sawtooth', 'square'], lp: [300, 480, 600, 320], q: 1.3, det: [3, 6], vib: [2, 3], vhz: [4.8, 5.4], lv: [0.042, 0.028], att: 2.8, sub: 0.05 },
+    nasal: { w: ['sawtooth'], lp: [520, 800, 950, 560], q: 0.7, det: [5, 9], vib: [3, 5], vhz: [5.5, 6.5], lv: [0.04, 0.03], att: 3, peak: [1050, 1.6, 6] },
+  };
+  // Hand and frame percussion, written to a destination node.
+  function dumD(d, t, vel) { // doumbek "dum": a round low tone with a skin slap
+    const g = gn(d), o = osc('sine', 92, t, 0.4, g); sw(o.frequency, t, 118, 86, 0.06); ad(g.gain, t, vel, 0.003, 0.3);
+    const b = gn(d), bo = osc('triangle', 185, t, 0.18, b); sw(bo.frequency, t, 230, 170, 0.05); ad(b.gain, t, vel * 0.45, 0.002, 0.12);
+    const n = gn(d), nf = flt(n, 'bandpass', 420, 1.2); noi(t, 0.06, nf, bufPink); ad(n.gain, t, vel * 0.4, 0.001, 0.04);
+  }
+  function tekD(d, t, vel) { // doumbek "tek": a dry rim slap
+    const n = gn(d), nf = flt(n, 'bandpass', 2800, 2.2); noi(t, 0.05, nf); ad(n.gain, t, vel * 0.7, 0.0008, 0.035);
+    const g = gn(d); osc('sine', rr(780, 860), t, 0.05, g); ad(g.gain, t, vel * 0.3, 0.001, 0.03);
+  }
+  function riqD(d, t, vel) { grains(d, t, 4, 0.05, vel, 0.004, 0.02, 6000, 9500, 5, 0); }
+  function frameD(d, t, vel) { // a muffled frame drum
+    const g = gn(d), o = osc('sine', 66, t, 0.6, g); sw(o.frequency, t, 84, 62, 0.08); ad(g.gain, t, vel, 0.004, 0.45);
+    const b = gn(d), bo = osc('triangle', 150, t, 0.2, b); sw(bo.frequency, t, 180, 130, 0.06); ad(b.gain, t, vel * 0.4, 0.003, 0.14);
+    const n = gn(d), nf = flt(n, 'bandpass', 240, 1); noi(t, 0.08, nf, bufPink); ad(n.gain, t, vel * 0.5, 0.002, 0.06);
+  }
+  function woodD(d, t, vel) { // a hollow log tap
+    const f = rr(560, 760), g = gn(d), o = osc('sine', f, t, 0.08, g); sw(o.frequency, t, f * 1.1, f, 0.02); ad(g.gain, t, vel, 0.001, 0.05);
+    const n = gn(d), nf = flt(n, 'bandpass', f * 1.6, 6); noi(t, 0.03, nf); ad(n.gain, t, vel * 0.5, 0.0005, 0.015);
+  }
+  function glassTickD(d, t, vel) { const f = rr(4800, 7200), g = gn(d); osc('sine', f, t, 0.12, g); ad(g.gain, t, vel, 0.001, 0.09); const g2 = gn(d); osc('sine', f * 1.5, t, 0.06, g2); ad(g2.gain, t, vel * 0.3, 0.001, 0.04); }
 
   //  name: [fn, min gap s, reverb send, priority 0-3, duration s, gain, max voices of this kind]
   const DEF = Object.assign(Object.create(null), {
@@ -691,6 +933,16 @@ const AU = (function () {
     sandstorm: [S.sandstorm, 5, 0.45, 3, 4.6, 0.75, 1],
     eventEnd: [S.eventEnd, 4, 0.5, 2, 2.2, 0.6, 1],
     bossSting: [S.bossSting, 3, 0.55, 3, 2.6, 1.15, 1],
+    fanfare: [S.fanfare, 3, 0.5, 3, 4.0, 1.5, 1],
+    lament: [S.lament, 3, 0.55, 3, 7.0, 1.5, 1],
+    arrival: [S.arrival, 3, 0.55, 3, 5.6, 1.4, 1],
+    waveClear: [S.waveClear, 2, 0.5, 2, 1.6, 0.6, 1],
+    menuOpen: [S.menuOpen, 0.06, 0.05, 3, 0.3, 0.75, 2],
+    uiPreview: [S.uiPreview, 0.04, 0.05, 3, 0.2, 0.7, 2],
+    spellArm: [S.spellArm, 0.08, 0.15, 3, 0.5, 0.75, 1],
+    spellCancel: [S.spellCancel, 0.08, 0.1, 3, 0.3, 0.7, 1],
+    mend: [S.mend, 0.5, 0.4, 2, 1.7, 0.7, 1],
+    overcharge: [S.overcharge, 0.2, 0.35, 2, 1.4, 0.7, 2],
   });
   // Kinds that share a voice budget, and how hard a sound ducks the music and crowd.
   const FAM = { cannon: 'boom', explode: 'boom', chainBoom: 'boom', burn: 'fire', ignite: 'fire', ratSqueal: 'die', boneRattle: 'die', squelch: 'die', batScreech: 'die' };
@@ -698,11 +950,14 @@ const AU = (function () {
   const DUCK = { cannon: 0.3, explode: 0.4, chainBoom: 0.3, zap: 0.2, roar: 0.5, bossStep: 0.35, bossDie: 0.8, horn: 0.35, hornBoss: 0.5, horde: 0.6, crumble: 0.7, beaconOut: 0.8, rise: 0.5,
     branch: 0.4, frostNova: 0.3, rally: 0.3, rockslide: 0.4, blizzard: 0.3, bogfog: 0.3, lavaSurge: 0.4, sandstorm: 0.3, bossSting: 0.6 };
   // Ducks that land later than the call (the meteor hits after its whistle).
-  const DUCK_LATE = { meteor: [METEOR_FALL, 0.8] };
+  const DUCK_LATE = { meteor: [meteorFall, 0.8] };
   // Exact gaps, no jitter: these are one per event, and the gap is what stops a double start.
-  const NOJIT = { rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1 };
+  const NOJIT = { rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1, fanfare: 1, lament: 1, arrival: 1, waveClear: 1 };
   // UI sounds go to their own bus so they still play while the game is paused.
-  const UIS = { uiHover: 1, uiClick: 1, uiDeny: 1 };
+  const UIS = { uiHover: 1, uiClick: 1, uiDeny: 1, menuOpen: 1, uiPreview: 1, spellArm: 1, spellCancel: 1 };
+  // Stingers are music: they go to their own bus (the music volume, not ducked), and they hold the music down while they play.
+  const STB = { fanfare: 1, lament: 1, arrival: 1, waveClear: 1 };
+  const HOLD = { fanfare: [3.6, 0.75], lament: [6.6, 0.8], arrival: [4.6, 0.55], waveClear: [1.3, 0.25] }, holds = [];
   const lateDuck = [];
   // Total live voices allowed for each priority (a priority-3 sound may use all of them).
   // A sound that cuts off another (the horde alarm replaces the ordinary wave horn).
@@ -717,6 +972,8 @@ const AU = (function () {
   }
   function play(name, pan, gain, p) {
     if (!api.ready || api.muted || typeof name !== 'string' || !hasOwn(DEF, name)) return;
+    // A hover tick waits for the next frame: if that frame's menu or spell change has its own sound, the tick is dropped.
+    if (name === 'uiHover' && !W.flush && W.ui && ctx.currentTime - lastUpd < 0.1) { if (W.hover.length < 4) W.hover.push([pan, gain, p]); return; }
     const df = DEF[name];
     ST.req++;
     let g = gain === undefined ? 1 : +gain;
@@ -744,19 +1001,20 @@ const AU = (function () {
     lastAt[name] = now; gapOf[name] = NOJIT[name] ? df[1] : df[1] * rr(0.75, 1.5) * (1 + 0.8 * busy);
     g *= 1 / Math.sqrt(1 + 0.45 * nk + 0.15 * nf);
     const t = now + 0.006 + rnd() * (0.014 + 0.035 * busy);
-    const v = voice(pan, cl(g, 0, 1.5) * df[5], df[2], UIS[name] ? nUi : nSfx);
+    const v = voice(pan, cl(g, 0, 1.5) * df[5], df[2], STB[name] ? nSting : UIS[name] ? nUi : nSfx);
     V = v;
     try { df[0](v.out, t, cl(+p || 0, 0, 1)); } catch (e) { if (!ST.err) ST.err = name + ': ' + e.message; }
     finishVoice(v);
     act.push({ end: t + df[4], v: v, name: name, fam: fam, pri: pri, t0: now });
     ST.played++; ST.names[name] = (ST.names[name] || 0) + 1; if (act.length > ST.peak) ST.peak = act.length;
     if (DUCK[name]) duckE = Math.max(duckE, DUCK[name] * cl(g, 0, 1));
-    if (DUCK_LATE[name] && lateDuck.length < 8) lateDuck.push([t + DUCK_LATE[name][0], DUCK_LATE[name][1] * cl(g, 0, 1)]);
+    if (HOLD[name] && holds.length < 8) holds.push([t + HOLD[name][0], HOLD[name][1]]);
+    if (DUCK_LATE[name] && lateDuck.length < 8) lateDuck.push([t + DUCK_LATE[name][0](), DUCK_LATE[name][1] * cl(g, 0, 1)]);
     const sup = SUPER[name];
     if (sup) for (let i = 0; i < act.length - 1; i++) if (act[i].end > now && sup.indexOf(act[i].name) >= 0) steal(act[i], now);
   }
   function startBeds() {
-    bed.windG = gn(nAmb, 0); bed.windG.connect(gn(nRevIn, 0.12));
+    bed.windG = gn(nAmb, 0); bed.windG.connect(gn(RV.amb, 0.12));
     bed.gustG = gn(bed.windG, 0.7);
     for (let i = 0; i < 2; i++) { const lf = flt(flt(panNode(i ? 0.55 : -0.55, bed.gustG), 'highpass', 110, 0.5), 'lowpass', 420, 0.4); loopSrc(bufPink, gn(lf, 2.6), 0.8 + i * 0.13); bed.windLP.push(lf); }
     bed.whG = gn(bed.gustG, 0); bed.whF = flt(bed.whG, 'bandpass', 800, 7); loopSrc(bufPink, gn(bed.whF, 3), 1.0);
@@ -764,11 +1022,12 @@ const AU = (function () {
     const hiss = flt(flt(gn(bed.fireG, 0.1), 'lowpass', 4500), 'highpass', 900); loopSrc(bufWhite, hiss, 1.0);
     const roarG = gn(bed.fireG, 0.32), roarF = flt(flt(roarG, 'highpass', 75, 0.5), 'lowpass', 280, 0.5); loopSrc(bufBrown, roarF, 1.0);
     loopOsc('sine', 6.7, gn(roarG.gain, 0.1)); loopOsc('sine', 2.3, gn(roarG.gain, 0.07));
-    bed.popBus = gn(bed.fireG, 2.0); bed.popBus.connect(gn(nRevIn, 0.1));
-    bed.droneG = gn(PZ.pad, 0); bed.droneG.connect(gn(nRevIn, 0.3));
+    bed.popBus = gn(bed.fireG, 2.0); bed.popBus.connect(gn(RV.amb, 0.1));
+    bed.droneG = gn(PZ.pad, 0); bed.droneG.connect(gn(RV.music, 0.3));
     bed.droneLP = flt(bed.droneG, 'lowpass', 300, 0.6);
     const dv = gn(null, 4); loopOsc('sine', 4.9, dv);
-    [[73.42, -5, 0.5], [73.42, 6, 0.5], [36.71, 0, 0.3], [110.0, 3, 0.12]].forEach((a) => { const o = loopOsc('sawtooth', a[0], gn(bed.droneLP, a[2])); o.detune.value = a[1]; dv.connect(o.detune); });
+    bed.droneOs = [];
+    [[73.42, -5, 0.5], [73.42, 6, 0.5], [36.71, 0, 0.3], [110.0, 3, 0.12]].forEach((a) => { const o = loopOsc('sawtooth', a[0], gn(bed.droneLP, a[2])); o.detune.value = a[1]; dv.connect(o.detune); bed.droneOs.push([o, a[0]]); });
   }
   function pop() {
     const t = ctx.currentTime + rnd() * 0.08, big = rnd() < 0.12;
@@ -784,44 +1043,51 @@ const AU = (function () {
     tgt.fire = cl(+fire || 0, 0, 1); tgt.wind = cl(+wind || 0, 0, 1); tgt.tension = cl(+tension || 0, 0, 1);
   }
 
-  const CH = [
-    { n: [38, 45, 50, 53, 57], m: [62, 65, 69, 72, 74, 76], to: [1, 2, 4, 3] },
-    { n: [34, 41, 50, 53, 58], m: [62, 65, 70, 74, 69], to: [2, 0, 4] },
-    { n: [31, 43, 46, 50, 55], m: [62, 67, 70, 74, 69], to: [0, 3, 1] },
-    { n: [33, 40, 45, 48, 52], m: [64, 69, 72, 76, 67], to: [0, 1] },
-    { n: [29, 41, 45, 48, 53], m: [60, 65, 69, 72, 77, 67], to: [2, 0, 1] },
-  ];
+  // The land's music: its chords and colours (LANDMUS above). A land change fades the old pads on their own bus
+  // while the new land's first chord comes in, and moves the drone and choir to the new key.
+  function landMusic(key, now) {
+    const L = LANDMUS[key] || LANDMUS.ashen; if (L === LM.def && LM.bus) return;
+    LM.def = L; LM.key = LANDMUS[key] ? key : 'ashen';
+    if (LM.bus) { LM.bus.gain.setTargetAtTime(0, now, 1.1); LM.old.push([LM.bus, now + 12]); }
+    LM.bus = landBus();
+    mus.chord = 0; mus.nextChord = now + 0.4; mus.pendC = mus.playC = L.ch[0]; mus.pendAt = now; mus.lastNote = -1;
+    const r = Math.pow(2, L.semi / 12);
+    if (bed.droneOs) for (let i = 0; i < bed.droneOs.length; i++) bed.droneOs[i][0].frequency.setTargetAtTime(bed.droneOs[i][1] * r, now, 1.5);
+  }
+  // A land's pad bus, with its reverb send after the fade (a land change fades the old echo too).
+  function landBus() { const b = gn(nPad, 1); b.connect(gn(RV.music, 0.5)); b.rv = RV.music; return b; }
   function padChord(t, c, dur) {
-    const v = voice(0, 1, 0.5, nPad); V = v;
-    const env = gn(v.out), hp = flt(env, 'highpass', 50), sides = [], open = rr(560, 700);
+    const L = LM.def, P = PADV[L.pad] || PADV.saw, v = voice(0, 1, 0, LM.bus || nPad); V = v;
+    const env = gn(v.out), hp = flt(env, 'highpass', 50), sides = [], open = rr(P.lp[1], P.lp[2]);
+    let pre = hp; if (P.peak) { pre = flt(hp, 'peaking', P.peak[0], P.peak[1]); pre.gain.value = P.peak[2]; }
     for (let s = 0; s < 2; s++) {
-      const l = flt(panNode(s ? 0.4 : -0.4, hp), 'lowpass', 380, 0.5);
-      l.frequency.setValueAtTime(380, t); l.frequency.linearRampToValueAtTime(open, t + dur * 0.5); l.frequency.linearRampToValueAtTime(400, t + dur + 4);
+      const l = flt(panNode(s ? 0.4 : -0.4, pre), 'lowpass', P.lp[0], P.q);
+      l.frequency.setValueAtTime(P.lp[0], t); l.frequency.linearRampToValueAtTime(open, t + dur * 0.5); l.frequency.linearRampToValueAtTime(P.lp[3], t + dur + 4);
       sides.push(l);
     }
-    const vib = gn(null, rr(2.5, 4)); osc('sine', rr(4.4, 5.2), t, dur + 5.5, vib);
+    const vib = gn(null, rr(P.vib[0], P.vib[1])); osc('sine', rr(P.vhz[0], P.vhz[1]), t, dur + 5.5, vib);
     for (let i = 0; i < c.n.length; i++) {
-      const f = mtof(c.n[i]);
-      for (let s = 0; s < 2; s++) { const o = osc('sawtooth', f, t, dur + 5.5, gn(sides[s], i === 0 ? 0.05 : 0.036)); o.detune.value = (s ? 1 : -1) * rr(4, 8); vib.connect(o.detune); }
+      const f = mtof(c.n[i] + (i && P.up ? P.up : 0)), lv = (i === 0 ? P.lv[0] : P.lv[1]) * L.lvl;
+      for (let s = 0; s < 2; s++) {
+        for (let w = 0; w < P.w.length; w++) { const o = osc(P.w[w], f, t, dur + 5.5, gn(sides[s], lv / P.w.length * (w ? 0.8 : 1.2))); o.detune.value = (s ? 1 : -1) * rr(P.det[0], P.det[1]); vib.connect(o.detune); }
+        if (P.harm && i >= 2 && s === (i & 1)) for (let h = 0; h < P.harm.length; h += 2) { const o = osc('sine', f * P.harm[h], t, dur + 5.5, gn(sides[s], lv * P.harm[h + 1])); o.detune.value = (s ? 1 : -1) * 3; }
+      }
+      if (P.sub && i === 0) osc('triangle', f / 2, t, dur + 5.5, gn(sides[0], P.sub * L.lvl));
     }
-    env.gain.setValueAtTime(0.0001, t); env.gain.linearRampToValueAtTime(1, t + 3.5); env.gain.setTargetAtTime(0.0001, t + dur, 1.3);
+    env.gain.setValueAtTime(0.0001, t); env.gain.linearRampToValueAtTime(1, t + P.att); env.gain.setTargetAtTime(0.0001, t + dur, 1.3);
     finishVoice(v);
   }
-  function pianoNote(t, m, vel) {
-    const f = mtof(m), v = voice(rr(-0.3, 0.3), 1, 0.8, nPad); V = v;
-    const lp = flt(v.out, 'lowpass', 2200, 0.4);
-    lp.frequency.setValueAtTime(Math.min(3200, f * 5), t); lp.frequency.exponentialRampToValueAtTime(Math.max(300, f * 1.3), t + 2.2);
-    const dec = 3.6 * Math.pow(440 / f, 0.35), H = [[1, 1, 1], [2.002, 0.3, 0.55], [3.006, 0.1, 0.35], [4.012, 0.04, 0.22]];
-    for (let i = 0; i < H.length; i++) { const h = H[i], g = gn(lp); osc('sine', f * h[0], t, dec * h[2] + 0.1, g); ad(g.gain, t, vel * 0.11 * h[1], 0.007, dec * h[2]); }
-    const tg = gn(lp); osc('triangle', f, t, dec * 0.5, tg); ad(tg.gain, t, vel * 0.03, 0.006, dec * 0.4);
-    const n = gn(v.out), nf = flt(n, 'lowpass', 900); noi(t, 0.05, nf); ad(n.gain, t, vel * 0.03, 0.002, 0.03);
+  function calmNote(t, m, vel) {
+    const v = voice(rr(-0.3, 0.3), 1, 0.3, LM.bus || nPad); V = v;
+    calmTone(v.out, t, m, vel, LM.def);
     finishVoice(v);
   }
   function timp(t, vel) {
     const v = voice(rr(-0.15, 0.15), 1, 0.6, nSeq); V = v;
-    const g = gn(v.out), o = osc('sine', 73.4, t, 1.3, g); sw(o.frequency, t, 80, 72.5, 0.08); ad(g.gain, t, vel, 0.006, 1.1);
-    const g2 = gn(v.out); osc('sine', 110.4, t, 0.7, g2); ad(g2.gain, t, vel * 0.35, 0.005, 0.5);
-    const g3 = gn(v.out); osc('sine', 147.5, t, 0.4, g3); ad(g3.gain, t, vel * 0.15, 0.004, 0.3);
+    const f = mtof(38 + LM.def.semi);
+    const g = gn(v.out), o = osc('sine', f, t, 1.3, g); sw(o.frequency, t, f * 1.09, f * 0.99, 0.08); ad(g.gain, t, vel, 0.006, 1.1);
+    const g2 = gn(v.out); osc('sine', f * 1.504, t, 0.7, g2); ad(g2.gain, t, vel * 0.35, 0.005, 0.5);
+    const g3 = gn(v.out); osc('sine', f * 2.01, t, 0.4, g3); ad(g3.gain, t, vel * 0.15, 0.004, 0.3);
     const n = gn(v.out), nf = flt(n, 'lowpass', 200); noi(t, 0.1, nf); ad(n.gain, t, vel * 0.6, 0.003, 0.06);
     finishVoice(v);
   }
@@ -831,15 +1097,15 @@ const AU = (function () {
     mus.lastNote = m; return m;
   }
 
-  // ---- Calm layer: slow pad chords with a few piano notes. ----
+  // ---- Calm layer: slow pad chords with a few notes from the land's solo voice. ----
   function musicTick(now) {
     if (now > mus.nextChord - 0.3) {
-      const t = Math.max(mus.nextChord, now + 0.05), c = CH[mus.chord], dur = rr(11, 15);
+      const L = LM.def, t = Math.max(mus.nextChord, now + 0.05), c = L.ch[mus.chord] || L.ch[0], dur = rr(11, 15) * (L.sparse ? 1.2 : 1);
       padChord(t, c, dur);
-      mus.pend = mus.chord; mus.pendAt = t;
+      mus.pendC = c; mus.pendAt = t;
       if (rnd() < 0.75 * (1 - 0.6 * SEQ.I)) {
-        const t1 = t + rr(3, 6.5); pianoNote(t1, pickNote(c), rr(0.6, 1));
-        if (rnd() < 0.35) pianoNote(t1 + rr(2.4, 4.2), pickNote(c), rr(0.45, 0.8));
+        const t1 = t + rr(3, 6.5); calmNote(t1, pickNote(c), rr(0.6, 1));
+        if (rnd() < 0.35) calmNote(t1 + rr(2.4, 4.2), pickNote(c), rr(0.45, 0.8));
       }
       mus.nextChord = t + dur - 1.0;
       mus.chord = c.to[(rnd() * c.to.length) | 0];
@@ -847,8 +1113,8 @@ const AU = (function () {
   }
   // Bass root of the chord sounding at time t, folded into C2..B2.
   function rootAt(t) {
-    if (t >= mus.pendAt) mus.playing = mus.pend;
-    let r = CH[mus.playing].n[0]; while (r < 36) r += 12; return r;
+    if (t >= mus.pendAt && mus.pendC) mus.playC = mus.pendC;
+    let r = (mus.playC || LM.def.ch[0]).n[0]; while (r < 36) r += 12; return r;
   }
 
   // ---- Reactive layer: a 16-step sequencer whose layers follow the danger. ----
@@ -869,12 +1135,15 @@ const AU = (function () {
     [0, N, N, 0, N, N, 0, N, N, 0, N, N, 7, N, -5, N],
     [0, 0, N, 0, 0, N, 0, N, 0, 0, N, 0, 7, N, 7, N],
   ];
-  // Motifs in D minor: [step, midi, length in steps]; each spans two bars.
+  // Motifs as [step, scale degree, length in steps], played in the land's mode; each spans two bars.
   const MOTIF = [
-    [[0, 50, 6], [6, 53, 2], [8, 52, 4], [12, 50, 4], [16, 48, 8], [24, 50, 8]],
-    [[0, 45, 4], [4, 50, 4], [8, 53, 6], [14, 52, 2], [16, 50, 8], [24, 45, 8]],
-    [[0, 50, 3], [3, 50, 3], [6, 48, 2], [8, 45, 8], [16, 46, 6], [22, 45, 10]],
+    [[0, 0, 6], [6, 2, 2], [8, 1, 4], [12, 0, 4], [16, -1, 8], [24, 0, 8]],
+    [[0, -3, 4], [4, 0, 4], [8, 2, 6], [14, 1, 2], [16, 0, 8], [24, -3, 8]],
+    [[0, 0, 3], [3, 0, 3], [6, -1, 2], [8, -3, 8], [16, -2, 6], [22, -3, 10]],
   ];
+  // The dunes' hand drums: maqsum (dum tek - tek dum - tek -). Positive = dum, negative = tek.
+  const MAQ = [1, 0, -0.6, 0, 0, 0, -0.7, 0, 0.9, 0, 0, 0, -0.7, 0, 0, 0];
+  const MAQW = [1, 0, 0, -0.5, 0, 0, 0.7, 0, 1, 0, -0.5, 0, 0.8, 0, -0.5, -0.4];
   // One theme per boss: percussion colour, lead voice, motif and tempo offset.
   const BOSS = {
     giant: { perc: 'bone', lead: 'brass', bpm: 0, m: [[0, 38, 4], [4, 41, 4], [8, 40, 4], [12, 38, 4], [16, 37, 8], [24, 38, 8]] },
@@ -909,9 +1178,9 @@ const AU = (function () {
     const v = sv(pan, 0.15), n = gn(v.out), nf = flt(n, 'bandpass', f, 7); noi(t, 0.03, nf); ad(n.gain, t, vel, 0.0005, 0.016);
     finishVoice(v);
   }
-  function pluck(t, m, vel, dur) {
-    const f = mtof(m), v = sv(0, 0.12), g = gn(v.out), lp = flt(g, 'lowpass', f * 6, 2);
-    osc('sawtooth', f, t, dur + 0.1, lp); sw(lp.frequency, t, f * 7, f * 1.4, dur * 0.8); ad(g.gain, t, vel, 0.004, dur);
+  function pluck(t, m, vel, dur, br) {
+    const b = br || 6, f = mtof(m), v = sv(0, 0.12), g = gn(v.out), lp = flt(g, 'lowpass', f * b, 2);
+    osc('sawtooth', f, t, dur + 0.1, lp); sw(lp.frequency, t, f * (b + 1), f * 1.4, dur * 0.8); ad(g.gain, t, vel, 0.004, dur);
     finishVoice(v);
   }
   function bell(t, m, vel, pan) {
@@ -943,6 +1212,15 @@ const AU = (function () {
     finishVoice(v);
   }
   function timpS(t, vel) { timp(t, vel); ST.seq++; }
+  function kitHit(fn, t, vel, pan, send) { const v = sv(pan, send); fn(v.out, t, vel); finishVoice(v); }
+  function leadNote(t, m, dur, vel) { // the motif lead in the land's colour
+    const ln = LM.def.lead;
+    if (ln === 'bell') bell(t, m + 24, vel * 0.8, rr(-0.5, 0.5));
+    else if (ln === 'reed') reed(t, m + 12, dur, vel * 0.7);
+    else if (ln === 'ney') { const v = sv(rr(-0.2, 0.2), 0.5); reedTone(v.out, t, m + 12, dur, vel * 6); finishVoice(v); }
+    else if (ln === 'lowbrass') brassV(t, m, dur, vel * 1.2, false);
+    else brassV(t, m, dur, vel, false);
+  }
 
   // Horde choir: a sustained "ahh" built only while a horde is on.
   function choirOn() {
@@ -950,7 +1228,7 @@ const AU = (function () {
     const g = gn(nSeq, 0), f1 = flt(g, 'bandpass', 720, 5), f2 = flt(g, 'bandpass', 1150, 7), mix = gn(null, 1);
     mix.connect(f1); mix.connect(gn(f2, 0.6)); mix.connect(flt(gn(g, 0.4), 'lowpass', 300));
     const os = [], vib = gn(null, 6); os.push(loopOsc('sine', 5.1, vib));
-    [[50, -6], [50, 7], [57, 3], [62, -3], [38, 0]].forEach((a) => { const o = loopOsc('sawtooth', mtof(a[0]), gn(mix, 0.2)); o.detune.value = a[1]; vib.connect(o.detune); os.push(o); });
+    [[50, -6], [50, 7], [57, 3], [62, -3], [38, 0]].forEach((a) => { const o = loopOsc('sawtooth', mtof(a[0] + LM.def.semi), gn(mix, 0.2)); o.detune.value = a[1]; vib.connect(o.detune); os.push(o); });
     SEQ.choir = { g: g, os: os, off: 0 };
   }
   function choirOff(now) {
@@ -973,7 +1251,7 @@ const AU = (function () {
       SEQ.motif = I > 0.45 && SEQ.phrase % 2 === 0 ? (rnd() * MOTIF.length) | 0 : -1;
     }
     SEQ.boss = SEQ.bossKey ? BOSS[SEQ.bossKey] || BOSS.giant : null;
-    SEQ.bpm = 76 + 24 * I + (SEQ.boss ? SEQ.boss.bpm + (SEQ.rage ? 14 : 0) : 0) + (SEQ.horde > 0.5 ? 8 : 0);
+    SEQ.bpm = 76 + 24 * I + LM.def.bpm + (SEQ.boss ? SEQ.boss.bpm + (SEQ.rage ? 14 : 0) : 0) + (SEQ.horde > 0.5 ? 8 : 0);
   }
   function lead(B, t, mi, len, sd) {
     const dur = len * sd, ln = B.lead;
@@ -996,21 +1274,39 @@ const AU = (function () {
   function playStep(t) {
     const s = SEQ.step;
     if (s === 0) decideBar();
-    const I = SEQ.I, L = SEQ.lay, sd = 60 / SEQ.bpm / 4, r = rootAt(t), hv = () => rr(0.88, 1.08);
+    const I = SEQ.I, L = SEQ.lay, LD = LM.def, kit = LD.kit, sp = LD.sparse || 1, sd = 60 / SEQ.bpm / 4, r = rootAt(t), hv = () => rr(0.88, 1.08);
     if (L.pulse) {
       if (SEQ.low > 0.45) { if (s === 0 || s === 8) { drum(t, (0.3 + 0.25 * SEQ.low) * hv(), 52); drum(t + 0.17, (0.2 + 0.15 * SEQ.low) * hv(), 47); } }
-      else { const P = PULSE[SEQ.pat][s]; if (P) drum(t, P * (0.22 + 0.3 * I) * hv(), 55); }
+      else if (kit === 'hand') { const P = MAQ[s]; if (P) kitHit(P > 0 ? dumD : tekD, t, Math.abs(P) * (0.24 + 0.3 * I) * hv(), rr(-0.15, 0.15), 0.2); }
+      else {
+        const P = PULSE[SEQ.pat][s];
+        if (P && (sp >= 1 || s % 8 === 0)) {
+          const v = P * (0.22 + 0.3 * I) * hv();
+          if (kit === 'frame') kitHit(frameD, t, v * 1.1, rr(-0.1, 0.1), 0.25);
+          else if (kit === 'glass') drum(t, v * 0.6, 62);
+          else if (kit === 'heavy') { drum(t, v * 1.1, 50); kitHit(frameD, t, v, 0, 0.3); }
+          else drum(t, v, 55);
+        }
+      }
     }
-    if (L.tick && s % 2 === 1 && rnd() < 0.85) shaker(t, (s % 4 === 3 ? 0.07 : 0.045) * (0.5 + I) * hv());
-    if (L.bass && !SEQ.rest) { const o = OST[SEQ.ost][s]; if (o !== null) pluck(t, r + o, (0.09 + 0.07 * I) * hv() * (s % 4 === 0 ? 1.15 : 1), sd * 1.6); }
+    if (L.tick && s % 2 === 1 && rnd() < 0.85 * sp) {
+      const v = (s % 4 === 3 ? 0.07 : 0.045) * (0.5 + I) * hv();
+      if (kit === 'glass') kitHit(glassTickD, t, v * 0.9, rr(-0.6, 0.6), 0.5);
+      else if (kit === 'frame') kitHit(woodD, t, v * 2.2, rr(-0.4, 0.4), 0.2);
+      else if (kit === 'hand') kitHit(riqD, t, v * 1.4, rr(-0.45, 0.45), 0.1);
+      else shaker(t, v);
+    }
+    if (L.bass && !SEQ.rest && (sp >= 1 || s % 4 === 0)) { const o = OST[SEQ.ost][s]; if (o !== null) pluck(t, r + o, (0.09 + 0.07 * I) * hv() * (s % 4 === 0 ? 1.15 : 1) * (kit === 'glass' ? 0.8 : 1), sd * (kit === 'glass' ? 2.4 : 1.6), kit === 'frame' ? 3.5 : kit === 'glass' ? 3 : 6); }
     if (L.war) {
-      const w = WAR[SEQ.pat][s]; if (w) taiko(t, w * (0.25 + 0.3 * I) * hv(), 60);
+      if (kit === 'hand') { const w = MAQW[s]; if (w) { if (w > 0) taiko(t, w * (0.25 + 0.3 * I) * hv(), 70); else kitHit(tekD, t, -w * (0.3 + 0.3 * I) * hv(), rr(-0.4, 0.4), 0.3); } }
+      else { const w = WAR[SEQ.pat][s]; if (w && (sp >= 1 || s % 4 === 0)) taiko(t, w * (0.25 + 0.3 * I) * hv() * (kit === 'glass' ? 0.7 : kit === 'heavy' ? 1.15 : 1), kit === 'heavy' ? 50 : kit === 'frame' ? 54 : kit === 'glass' ? 68 : 60); }
       if (SEQ.bar === 7 && s >= 12) taiko(t + sd * 0.5, 0.18 * hv(), 78 + (s - 12) * 6);
+      if (kit === 'heavy' && I > 0.7 && (s === 4 || s === 12) && !SEQ.boss) anvil(t, 0.06);
     }
-    if (L.gong && SEQ.bar === 0 && s === 0 && SEQ.phrase % 2 === 1) gong(t, 0.09);
+    if (L.gong && SEQ.bar === 0 && s === 0 && SEQ.phrase % 2 === 1) { if (kit === 'glass') bell(t, 88, 0.06, 0); else gong(t, 0.09); }
     if (SEQ.motif >= 0 && !SEQ.boss) {
       const b2 = SEQ.bar * 16 + s, M = MOTIF[SEQ.motif], oct = SEQ.bar >= 4 ? 12 : 0, off = SEQ.bar >= 4 ? 64 : 0;
-      if (SEQ.bar < 2 || (SEQ.bar >= 4 && SEQ.bar < 6 && I > 0.75)) for (let i = 0; i < M.length; i++) if (M[i][0] === b2 - off) brassV(t, M[i][1] + oct, M[i][2] * sd * 0.92, 0.1 + 0.05 * I, false);
+      if (SEQ.bar < 2 || (SEQ.bar >= 4 && SEQ.bar < 6 && I > 0.75)) for (let i = 0; i < M.length; i++) if (M[i][0] === b2 - off) leadNote(t, deg(LD, M[i][1]) + oct, M[i][2] * sd * 0.92, 0.1 + 0.05 * I);
     }
     if (SEQ.boss) bossStepMusic(t, s, sd);
     if (SEQ.horde > 0.5 && (s % 2 === 0 || SEQ.bar === 7)) drum(t, (s % 4 === 0 ? 0.26 : 0.14) * hv(), 118 + (s % 8 === 4 ? 22 : 0));
@@ -1026,7 +1322,7 @@ const AU = (function () {
   // ---- Crowd bed: shuffling feet, murmur and skittering that follow the horde on the road. ----
   const CR = { pan: null, src: null, lvl: 0, tl: 0, p: 0, big: 0, swarm: 0, acc: 0, idle: 0, pick: [], ends: [] };
   function startCrowd() {
-    nCrowd = gn(nCrowdDuck, 0); // its reverb send is taken after the pause gain, in build()
+    nCrowd = gn(nCrowdDuck, 0); nCrowd.rv = RV.crowd; // the bed's own reverb send is taken after the pause gain, in build()
     CR.pan = panNode(0, nCrowd);
   }
   // The bed's sources only run while monsters are on the road.
@@ -1041,7 +1337,8 @@ const AU = (function () {
       appM.mur = appM.rust = -1;
     } else if (!on && CR.src) {
       const c = CR.src; CR.src = null;
-      for (let i = 0; i < c.nodes.length; i++) c.nodes[i].stop(now + 0.05);
+      c.sh.gain.setTargetAtTime(0, now, 0.02);
+      for (let i = 0; i < c.nodes.length; i++) c.nodes[i].stop(now + 0.15);
       c.nodes[0].onended = () => { try { c.sh.disconnect(); } catch (e) {} };
     }
   }
@@ -1072,7 +1369,7 @@ const AU = (function () {
   // def: { lvl, rev, bed(g) -> [sources], ev: [[fn(d, t), mean seconds between, gain, pan spread]] }
   function scapeOn(def, bus, tc) {
     const now = ctx.currentTime, g = gn(bus, 0);
-    g.connect(gn(nRevIn, def.rev === undefined ? 0.3 : def.rev)); // send after the fade, so a fading scape fades its echo too
+    g.connect(gn(RV.amb, def.rev === undefined ? 0.3 : def.rev)); // send after the fade, so a fading scape fades its echo too
     g.gain.setValueAtTime(0, now); g.gain.setTargetAtTime(def.lvl, now, tc);
     let nodes = [];
     try { nodes = def.bed ? def.bed(g) || [] : []; } catch (e) { if (!ST.err) ST.err = 'scape: ' + e.message; }
@@ -1228,6 +1525,7 @@ const AU = (function () {
     const key = G.B && G.B.bio && typeof G.B.bio.key === 'string' ? G.B.bio.key : null;
     if (key !== LS.key) { // crossfade the land beds over a few seconds
       LS.key = key; scapeOff(LS.land, 1.3); LS.land = key && LAND[key] ? scapeOn(LAND[key], nLand, 1.5) : null;
+      if (key) landMusic(key, now);
     }
     const ek = G.event && typeof G.event.kind === 'string' ? G.event.kind : null;
     if (ek !== LS.evKind) {
@@ -1244,9 +1542,77 @@ const AU = (function () {
 
   // ---- Reading the battlefield (about 8 times a second). ----
   // Same pan and distance law as sfx() in 90-main, for sounds the audio plays on its own.
-  function playAt(name, x, z, gain) {
+  function playAt(name, x, z, gain, p) {
     const dx = x - CAM.x, dz = z - CAM.z, u = dx * Math.cos(CAM.yaw) - dz * Math.sin(CAM.yaw);
-    play(name, cl(u / ((R.viewW || 40) * 0.5), -1, 1) * 0.75, gain * cl(1.12 - Math.hypot(dx, dz) / 46, 0.4, 1) * (0.72 + 0.28 * CAM.zoom), 0);
+    play(name, cl(u / ((R.viewW || 40) * 0.5), -1, 1) * 0.75, gain * cl(1.12 - Math.hypot(dx, dz) / 46, 0.4, 1) * (0.72 + 0.28 * CAM.zoom), p || 0);
+  }
+
+  // ---- Watching the game for moments without their own sfx() call: phase changes (stingers), a wave cleared,
+  // the menus and spell arming, overcharge and a mended beacon (the player and the AI share those, so both are heard). ----
+  const W = { phase: null, k: -1, waves: [], seen: typeof WeakSet === 'function' ? new WeakSet() : null, cntAt: 0, lives: -1, B: null, ui: false, spell: null, menu: null, sel: null, hover: [], flush: false, oc: typeof WeakMap === 'function' ? new WeakMap() : null, ocAt: 0 };
+  const KINDS = ['archer', 'bombard', 'spire', 'guard'];
+  function calmDown() { SEQ.I = Math.min(SEQ.I, 0.05); SEQ.tI = 0; SEQ.motif = -1; }
+  function watch(now) {
+    if (typeof G === 'undefined' || !G) return;
+    const ph = G.phase, prev = W.phase;
+    if (ph !== prev) {
+      W.phase = ph;
+      if (prev !== null) {
+        if (ph === 'clear') { play('fanfare', 0, 1, 0); calmDown(); }
+        else if (ph === 'defeat') { play('lament', 0, 1, 0); calmDown(); }
+        else if (ph === 'rise') play('arrival', 0, 1, 0);
+      }
+    }
+    if (ph === 'play') {
+      // A wave is beaten when every monster it brought is gone. Waves overlap (the next one often starts while the
+      // last is still on the road), so each wave keeps its own list; leftovers from earlier waves never count.
+      if (G.k !== W.k) {
+        W.k = G.k;
+        if (W.seen && G.mons) for (let i = 0; i < G.mons.length; i++) W.seen.add(G.mons[i]);
+        if (W.seen && G.k > 0 && !G.bossWave) { W.waves.push([]); if (W.waves.length > 3) W.waves.shift(); }
+      }
+      if (W.waves.length && G.mons && now >= W.cntAt) {
+        W.cntAt = now + 0.15; const M = G.mons, cur = W.waves[W.waves.length - 1];
+        if (G.spawning) for (let i = 0; i < M.length; i++) if (!W.seen.has(M[i])) { W.seen.add(M[i]); if (!M[i].dead) cur.push(M[i]); }
+        for (let w = 0; w < W.waves.length; w++) {
+          const L = W.waves[w]; if (w === W.waves.length - 1 && G.spawning) continue;
+          let alive = false; for (let i = 0; i < L.length; i++) if (!L[i].dead) { alive = true; break; }
+          if (!alive) { W.waves.splice(w, 1); if (L.length) play('waveClear', 0, 1, 0); break; }
+        }
+      }
+      if (prev === 'play' && W.B === G.B && W.lives >= 0 && G.lives > W.lives && G.B && G.B.beacon) playAt('mend', G.B.beacon.x, G.B.beacon.z, 1);
+    } else { W.k = -1; W.waves.length = 0; }
+    W.lives = G.lives; W.B = G.B;
+    if (W.oc && G.towers && now >= W.ocAt) {
+      W.ocAt = now + 0.12;
+      for (let i = 0; i < G.towers.length; i++) { const t = G.towers[i], oc = t.oc || 0, was = W.oc.get(t); if (was !== undefined && oc > was && ph === 'play') playAt('overcharge', t.x, t.z, 1, cl(oc / 3, 0, 1)); W.oc.set(t, oc); }
+    }
+    let voiced = false;
+    const U = typeof UI !== 'undefined' && UI ? UI : null;
+    if (U) {
+      W.ui = true;
+      const sp = typeof U.spell === 'string' ? U.spell : null;
+      if (sp !== W.spell) {
+        if (sp) { play('spellArm', 0, 0.9, sp === 'meteor' ? 0 : sp === 'frost' ? 0.5 : 1); voiced = true; }
+        else if (ph === 'play' && !(G.spellCd && G.spellCd[W.spell] > 0)) { play('spellCancel', 0, 0.8, 0); voiced = true; }
+        W.spell = sp;
+      }
+      const mn = U.menu && typeof U.menu === 'object' ? U.menu : null;
+      if (mn !== W.menu) {
+        if (mn && (!W.menu || mn.pad !== W.menu.pad)) { const t = mn.tower; play('menuOpen', 0, 0.8, t && t.lvl === 2 && !t.branch ? 1 : 0); voiced = true; }
+        W.menu = mn; W.sel = mn ? mn.sel : null;
+      } else if (mn && mn.sel !== W.sel) {
+        W.sel = mn.sel;
+        if (mn.sel) {
+          const br = mn.tower && mn.tower.def && mn.tower.def.branches ? Object.keys(mn.tower.def.branches) : null;
+          play('uiPreview', 0, 0.8, br ? (br.indexOf(mn.sel) === 1 ? 1 : 0) : cl(KINDS.indexOf(mn.sel) / 3, 0, 1)); voiced = true;
+        }
+      }
+    }
+    if (W.hover.length) {
+      if (!voiced) { W.flush = true; for (let i = 0; i < W.hover.length; i++) play('uiHover', W.hover[i][0], W.hover[i][1], W.hover[i][2]); W.flush = false; }
+      W.hover.length = 0;
+    }
   }
   function scan() {
     if (typeof G === 'undefined' || !G || !G.mons) return;
@@ -1289,7 +1655,7 @@ const AU = (function () {
   }
   function stats() {
     const L = SEQ.lay;
-    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(','), land: LS.key, event: LS.evKind, paused: PZ.on, hidden: hidden, state: ctx ? ctx.state : 'none' });
+    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(','), land: LS.key, music: LM.key || '', event: LS.evKind, paused: PZ.on, hidden: hidden, state: ctx ? ctx.state : 'none' });
   }
 
   function softClip() {
@@ -1319,16 +1685,21 @@ const AU = (function () {
     nSfx = gn(PZ.sfx, VOL.sfx); nUi = gn(glue, VOL.sfx); nAmb = gn(PZ.amb, 0.9 * VOL.ambience);
     nMusDuck = gn(nMute, 1); nMusic = gn(nMusDuck, 0.5 * VOL.music);
     PZ.pad = gn(nMusic, 1); PZ.seq = gn(nMusic, 1); nPad = gn(PZ.pad, 1); nSeq = gn(PZ.seq, 1.5);
+    PZ.sting = gn(nMute, 1); nSting = gn(PZ.sting, STING_LVL * VOL.music);
     nCrowdDuck = gn(PZ.crowd, 1);
     nLand = gn(nAmb, 1); nEvt = gn(nAmb, 1);
     makeBuffers();
     const conv = ctx.createConvolver(); conv.buffer = makeImpulse();
     PZ.rev = gn(nMute, 0.5); conv.connect(PZ.rev);
     nRevIn = gn(null, 1); nRevIn.connect(flt(conv, 'highpass', 120));
+    // Reverb sends per bus, so turning a bus down in the settings turns its echo down too.
+    RV.sfx = gn(nRevIn, VOL.sfx); RV.music = gn(nRevIn, VOL.music); RV.amb = gn(nRevIn, VOL.ambience); RV.crowd = gn(nRevIn, VOL.crowd);
+    nSfx.rv = nUi.rv = RV.sfx; nSting.rv = nPad.rv = nSeq.rv = RV.music;
+    LM.bus = landBus();
     PZ.crowd.connect(gn(nRevIn, 0.15));
     startBeds();
     try { startCrowd(); } catch (e) { ST.err = 'crowd: ' + e.message; }
-    mus.nextChord = ctx.currentTime + 1.5; mus.chord = 0;
+    mus.nextChord = ctx.currentTime + 1.5; mus.chord = 0; mus.pendC = mus.playC = LM.def.ch[0];
     SEQ.next = ctx.currentTime + 0.5; SEQ.lastNow = ctx.currentTime;
   }
   function unlock() {
@@ -1365,11 +1736,12 @@ const AU = (function () {
   function pauseMix(p, now) {
     if (p === PZ.on) return;
     PZ.on = p;
-    const tc = p ? 0.12 : 0.35, L = [[PZ.sfx, 0], [PZ.crowd, 0], [PZ.seq, 0], [PZ.pad, 0.5], [PZ.amb, 0.45], [PZ.rev, 0.25]];
+    const tc = p ? 0.12 : 0.35, L = [[PZ.sfx, 0], [PZ.crowd, 0], [PZ.seq, 0], [PZ.pad, 0.5], [PZ.amb, 0.45], [PZ.rev, 0.25], [PZ.sting, 0.6]];
     for (let i = 0; i < L.length; i++) L[i][0].gain.setTargetAtTime(p ? L[i][1] : i === 5 ? 0.5 : 1, now, tc);
   }
   // Bus levels 0..1 for a future settings menu: 'sfx', 'music', 'ambience' (wind, fire), 'crowd'.
   const VOL = { sfx: 1, music: 1, ambience: 1, crowd: 1 };
+  const STING_LVL = 0.9, RV = { sfx: null, music: null, amb: null, crowd: null };
   function setVolume(bus, v) {
     if (!hasOwn(VOL, bus)) return;
     VOL[bus] = cl(+v || 0, 0, 1);
@@ -1377,6 +1749,8 @@ const AU = (function () {
     const now = ctx.currentTime, n = { sfx: nSfx, music: nMusic, ambience: nAmb, crowd: nCrowd }[bus], base = { sfx: 1, music: 0.5, ambience: 0.9, crowd: 1 }[bus];
     if (n && bus !== 'crowd') n.gain.setTargetAtTime(base * VOL[bus], now, 0.05);
     if (bus === 'sfx') nUi.gain.setTargetAtTime(VOL.sfx, now, 0.05);
+    if (bus === 'music') nSting.gain.setTargetAtTime(STING_LVL * VOL.music, now, 0.05);
+    const rv = { sfx: RV.sfx, music: RV.music, ambience: RV.amb, crowd: RV.crowd }[bus]; if (rv) rv.gain.setTargetAtTime(VOL[bus], now, 0.05);
     if (bus === 'crowd') appM.crowd = -1;
   }
   function setMuted(b) {
@@ -1401,7 +1775,8 @@ const AU = (function () {
     setM('pad', nPad.gain, PAD_LVL * (1 - 0.3 * SEQ.I), now, 0.6);
     duckE *= Math.exp(-adt / 0.35);
     for (let i = lateDuck.length - 1; i >= 0; i--) if (now >= lateDuck[i][0]) { duckE = Math.max(duckE, lateDuck[i][1]); lateDuck.splice(i, 1); }
-    setM('dm', nMusDuck.gain, 1 - 0.45 * duckE, now, 0.04);
+    let hold = 0; for (let i = holds.length - 1; i >= 0; i--) { if (now >= holds[i][0]) { holds[i] = holds[holds.length - 1]; holds.pop(); } else if (holds[i][1] > hold) hold = holds[i][1]; }
+    setM('dm', nMusDuck.gain, Math.min(1 - 0.45 * duckE, 1 - hold), now, hold ? 0.25 : 0.04);
     setM('dc', nCrowdDuck.gain, 1 - 0.35 * duckE, now, 0.04);
     if (nCrowd) {
       CR.lvl += (CR.tl - CR.lvl) * (1 - Math.exp(-adt / 0.8));
@@ -1446,7 +1821,8 @@ const AU = (function () {
     }
     musicTick(now);
     // The reactive parts never take the game down: any fault is recorded in stats().err.
-    try { scapes(now, paused); if (!paused) reactive(now); else { SEQ.lastNow = now; SEQ.next = 0; } } catch (e) { if (!ST.err) ST.err = String(e && e.stack || e).slice(0, 300); }
+    for (let i = LM.old.length - 1; i >= 0; i--) if (now >= LM.old[i][1]) { try { LM.old[i][0].disconnect(); } catch (e) {} LM.old.splice(i, 1); }
+    try { scapes(now, paused); watch(now); if (!paused) reactive(now); else { SEQ.lastNow = now; SEQ.next = 0; } } catch (e) { if (!ST.err) ST.err = String(e && e.stack || e).slice(0, 300); }
   }
 
   if (typeof window !== 'undefined') window.__cwAudio = api;
