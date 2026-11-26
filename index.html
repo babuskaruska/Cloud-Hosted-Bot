@@ -7778,7 +7778,7 @@ const AU = (function () {
     PZ.rev = gn(nMute, 0.5); conv.connect(PZ.rev);
     nRevIn = gn(null, 1); nRevIn.connect(flt(conv, 'highpass', 120));
     // Reverb sends per bus, so turning a bus down in the settings turns its echo down too.
-    RV.sfx = gn(nRevIn, VOL.sfx); RV.music = gn(nRevIn, VOL.music); RV.amb = gn(nRevIn, VOL.ambience); RV.crowd = gn(nRevIn, 1);
+    RV.sfx = gn(nRevIn, VOL.sfx); RV.music = gn(nRevIn, VOL.music); RV.amb = gn(nRevIn, VOL.ambience); RV.crowd = gn(nRevIn, VOL.crowd);
     nSfx.rv = nUi.rv = RV.sfx; nSting.rv = nPad.rv = nSeq.rv = RV.music;
     LM.bus = landBus();
     PZ.crowd.connect(gn(nRevIn, 0.15));
@@ -7835,7 +7835,7 @@ const AU = (function () {
     if (n && bus !== 'crowd') n.gain.setTargetAtTime(base * VOL[bus], now, 0.05);
     if (bus === 'sfx') nUi.gain.setTargetAtTime(VOL.sfx, now, 0.05);
     if (bus === 'music') nSting.gain.setTargetAtTime(STING_LVL * VOL.music, now, 0.05);
-    const rv = { sfx: RV.sfx, music: RV.music, ambience: RV.amb }[bus]; if (rv) rv.gain.setTargetAtTime(VOL[bus], now, 0.05);
+    const rv = { sfx: RV.sfx, music: RV.music, ambience: RV.amb, crowd: RV.crowd }[bus]; if (rv) rv.gain.setTargetAtTime(VOL[bus], now, 0.05);
     if (bus === 'crowd') appM.crowd = -1;
   }
   function setMuted(b) {
