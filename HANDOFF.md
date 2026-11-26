@@ -74,6 +74,25 @@ Nothing merges unless `node tools/qa.js` passes: no page errors, no NaN, no earl
 - **Forge:** land events (`src/63-events.js`), QA checks for events, merges.
 - **QA after round 2:** no defeats in 1500 s or 4000 s sims, lives drop to 7–18 under pressure, up to 260 alive, 15–20 branches and about 45 spells per sim. Playtests of the branch menu and spell arming on desktop and iPhone 13 worked. Build published as version 3.
 
+## Round 3 results (merged; Echo's still pending)
+
+- **Ash:** knight, pikeman and militia footmen; rockslide boulders and rubble, and sandstorm wind and tint; boss entrance (ground cracks, flare, a 1.6 s camera push); archer spotters and quivers; the Frost Jotun tint fixed.
+- **Mira:**
+  - Settings: gear button or `O` (volumes, sound switch, graphics Auto/Sharp/Fast, a How to play tab).
+  - Run summary on defeat, with restart.
+  - First-takeover gold reserve, a "Not enough gold yet" message, a "Building..." state, one-time help lines, a fix for taps passing through panels, README controls.
+  - Human sims: battlefield 1 ends at 20/20 lives; doing nothing loses at wave 4.
+- **Forge:** checks passed. Memory is flat over 6 battlefields, `record.js` replays are identical, and the game survives the strict sandbox (blocked storage, wake lock and fullscreen).
+- The build is published as version 4.
+
+## Round 4 contracts: new monsters
+
+Mira designs and Ash models four new monsters. Mira adds a `MON` entry with `rig: '<key>'` and the behaviour. Until Ash's model lands, Mira's branch maps the key to an existing rig in `rigMonster` (a fallback table). Ash adds `RIGS.<key>` and the kit. Keys and themes:
+- `'ram'`: siege ram, a wheeled, armoured battering ram pushed by skeletons. Slow and tanky; it rams through footmen.
+- `'shaman'`: goblin shaman with a staff. It wards nearby allies (uses the elite `m.ward` system).
+- `'harpy'`: a flyer that swoops down and snatches a footman.
+- `'hound'`: a hell hound, fast, that leaves short fire trails (uses `G.fires`).
+
 ## Next
 
 - Round 3: polish and bug bash.
