@@ -9,6 +9,34 @@ const TOWER = {
   spire: { name: 'Storm spire', short: 'Spire', icon: 'spire', cost: [110, 120, 180], range: [5.5, 6.0, 6.5], dmg: [17, 25, 35], jumps: [3, 4, 6], rate: [2.3, 2.1, 1.9], slow: [.36, .42, .48], slowT: [1.3, 1.5, 1.7], air: true, ground: true, light: [16, 20, 26], desc: ['Chain lightning that slows.', 'Can hit flyers.'] },
   guard: { name: 'Guard post', short: 'Guards', icon: 'guard', cost: [80, 90, 150], range: [3.4, 3.7, 4.0], n: [2, 3, 3], hp: [62, 90, 135], dmg: [7, 10, 15], rate: [7, 6, 5], air: false, ground: true, light: [55, 70, 90], desc: ['Footmen who block', 'and duel on the road.'] },
 };
+// Branches: a max-level tower (lvl 2) can specialise into one of two branches (lvl 3, t.branch).
+// Array stats in a branch become index 3 of the tower's own stat arrays (see branchDef); other keys are traits.
+// cost is the base price; branchCost() scales it per land. title names the tower once it has the branch.
+TOWER.archer.branches = {
+  longbow: { name: 'Longbow', title: 'Longbow tower', cost: 240, desc: ['Arrows pierce three foes', 'and punch through armor.'], range: 10.2, dmg: 30, rate: 1.3, n: 2, light: 150, pierce: 3, ap: .85, heavy: true },
+  volley: { name: 'Volley', title: 'Volley tower', cost: 220, desc: ['Three arrows per shot,', 'each at its own target.'], range: 7.7, dmg: 12, rate: .8, n: 3, light: 150, multi: 3, airFirst: true },
+};
+TOWER.bombard.branches = {
+  mortar: { name: 'Mortar', title: 'Mortar', cost: 300, desc: ['Huge range. Heavy shells', 'stun the densest crowd.'], range: 13, dmg: 200, splash: 3.0, rate: 4.4, light: 95, minRange: 3.4, stun: .8, dense: true },
+  firebomb: { name: 'Firebomb', title: 'Firebomb', cost: 280, desc: ['Shells leave pools of', 'fire that keep burning.'], range: 8.6, dmg: 80, splash: 2.0, rate: 2.4, light: 110, fire: [1.9, 5, 30] },
+};
+TOWER.spire.branches = {
+  tempest: { name: 'Tempest', title: 'Tempest spire', cost: 290, desc: ['More jumps, more damage.', 'Double damage to flyers.'], range: 7.4, dmg: 50, jumps: 9, rate: 1.6, slow: .2, slowT: .8, light: 40, jumpR: 4.2, falloff: .94, airMul: 2, airFirst: true },
+  frost: { name: 'Frost', title: 'Frost spire', cost: 270, desc: ['Heavy slow. The first foe', 'hit freezes solid.'], range: 6.8, dmg: 24, jumps: 5, rate: 1.7, slow: .68, slowT: 2.8, light: 30, freeze: 1.1, chill: .3 },
+};
+TOWER.guard.branches = {
+  knights: { name: 'Knights', title: 'Knight hall', cost: 250, desc: ['Two armored knights.', 'Each holds three foes.'], n: 2, hp: 440, dmg: 32, rate: 8, range: 4.2, light: 100, armor: .45, hold: 3 },
+  pikes: { name: 'Pikes', title: 'Pike hall', cost: 240, desc: ['Four pikemen strike first', 'and gore big monsters.'], n: 4, hp: 150, dmg: 18, rate: 3.5, range: 4.2, light: 100, reach: .55, bigMul: 2.5 },
+};
+const BRANCH_KEYS = { archer: ['longbow', 'volley'], bombard: ['mortar', 'firebomb'], spire: ['tempest', 'frost'], guard: ['knights', 'pikes'] };
+// The stat table for a tower with a branch: each stat array gains index 3 (the branch value, or the lvl 2 one).
+// cost keeps its three entries, so `lvl >= cost.length - 1` still means "maxed".
+function branchDef(kind, key) {
+  const base = TOWER[kind], b = base.branches[key], d = Object.assign({}, base, { branch: key, bdef: b });
+  for (const k in base) if (Array.isArray(base[k]) && base[k].length === 3 && k !== 'cost' && k !== 'desc') d[k] = base[k].concat([b[k] !== undefined ? b[k] : base[k][2]]);
+  for (const k in b) if (!Array.isArray(base[k]) && !['name', 'title', 'cost', 'desc'].includes(k)) d[k] = b[k];
+  return d;
+}
 const TOWER_KINDS = ['archer', 'bombard', 'spire', 'guard'];
 // Most monsters alive at once. Phones get a smaller crowd.
 const MAX_ALIVE = (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 190 : 260;
@@ -18,10 +46,9 @@ const MAX_ALIVE = (window.matchMedia && matchMedia('(pointer: coarse)').matches)
 // Besides pieces, a blueprint returns mounts: where the tower's flames, gun, crystal, archers and door sit, and
 // for branches its light (intensity, colour), flame colour and crystal/bolt colours. Every per-level table here
 // has four entries, so level 3 never reads past the end.
-const BRANCH_LOOKS = { archer: ['longbow', 'volley'], bombard: ['mortar', 'firebomb'], spire: ['tempest', 'frost'], guard: ['knights', 'pikes'] };
 function blueprint(kind, lvl, branch) {
   lvl = clamp(lvl | 0, 0, 3);
-  if (lvl === 3 && !(BRANCH_LOOKS[kind] || []).includes(branch)) branch = (BRANCH_LOOKS[kind] || [])[0];
+  if (lvl === 3 && !(BRANCH_KEYS[kind] || []).includes(branch)) branch = (BRANCH_KEYS[kind] || [])[0];
   const pieces = [], mounts = {};
   const piece = (id, order, fn) => {
     const S = new Soup(); fn(S); if (!S.verts) return; let minY = 1e9; for (let i = 1; i < S.P.length; i += 3) minY = Math.min(minY, S.P[i]);
@@ -282,6 +309,45 @@ function scaffoldGeo(w, h) {
 }
 
 let TOWER_STUN = false;
+const SPIRE_STORM = [.28, .62, 1.15];
+// Freeze: a near-total slow for a moment, with a frosty flash. Bosses resist (slowMonster cuts it).
+function freezeMonster(m, t) {
+  if (m.dead || m.hp <= 0) return;
+  slowMonster(m, .96, t); m.frozen = Math.max(m.frozen || 0, m.def.boss ? t * .5 : t);
+  fxTimed(5, m.x, m.y + m.hitH, m.z, 1.4 + m.rad * 2, 1.4 + m.rad * 2, .7, 1.2, 1.8, .8, .3);
+}
+// Longbow: the toughest monster in range (armor counts double), leaders breaking ties.
+function findHeavy(x, z, range) {
+  if (G.phase !== 'play' || TOWER_STUN) return null;
+  let best = null, bp = -1; const r2 = range * range;
+  for (const m of G.mons) {
+    if (m.dead || m.hp <= 0 || !m.vis || m.dying) continue; const d = dist2(x, z, m.x, m.z); if (d > r2) continue;
+    const sc = m.hp * (m.def.armor ? 2 : 1) * (m.elite ? 1.3 : 1) + m.prog * 40; if (sc > bp) { bp = sc; best = m; }
+  }
+  return best;
+}
+// Volley: up to n more targets near the first one (repeats the first when it is alone).
+const _xt = [];
+function extraTargets(t, x, z, range, n) {
+  _xt.length = 0; const r2 = range * range;
+  for (const m of G.mons) { if (m === t || m.dead || m.hp <= 0 || !m.vis || dist2(x, z, m.x, m.z) > r2) continue; m._xd = dist2(m.x, m.z, t.x, t.z); if (m._xd > 16) continue; _xt.push(m); }
+  _xt.sort((a, b) => a._xd - b._xd); _xt.length = Math.min(_xt.length, n);
+  while (_xt.length < n) _xt.push(t);
+  return _xt;
+}
+// Mortar: the ground monster with the most neighbours inside the blast (sampled; leaders break ties).
+function findDense(x, z, range, minRange, splash) {
+  if (G.phase !== 'play' || TOWER_STUN) return null;
+  const r2 = range * range, m2 = minRange * minRange, s2 = splash * splash * .8, M = G.mons; let best = null, bs = -1, seen = 0;
+  for (let i = 0; i < M.length; i++) {
+    const m = M[i]; if (m.dead || m.hp <= 0 || m.fly || !m.vis || m.dying) continue; const d = dist2(x, z, m.x, m.z); if (d > r2 || d < m2) continue;
+    if (++seen > 70 && (i & 1)) continue;
+    let sc = m.prog + (m.def.boss ? 4 : 0);
+    for (let j = 0; j < M.length; j++) { const o = M[j]; if (o !== m && !o.dead && !o.fly && o.vis && dist2(m.x, m.z, o.x, o.z) < s2) sc += 1 + (o.elite ? .5 : 0); }
+    if (sc > bs) { bs = sc; best = m; }
+  }
+  return best;
+}
 function findTarget(x, z, range, air, ground, minRange = 0) {
   if (G.phase !== 'play' || TOWER_STUN) return null;
   let best = null, bp = -1; const r2 = range * range, m2 = minRange * minRange;
@@ -300,7 +366,7 @@ function aimPoint(m, dt, out) {
 
 const _tv = new THREE.Vector3(), _tq = new THREE.Quaternion(), _tm = new THREE.Matrix4(), _tz = new THREE.Vector3(0, 0, 1), _ts = new THREE.Vector3(1, 1, 1), _ap = { x: 0, y: 0, z: 0, tx: 0, tz: 0 };
 
-const SPIRE_COL = [.28, .62, 1.15], SPIRE_BOLT = [.5, .78, 1.6];
+const SPIRE_BOLT = [.5, .78, 1.6];
 class Tower {
   constructor(pad, kind, idx) {
     this.pad = pad; this.kind = kind; this.idx = idx; this.lvl = 0; this.def = TOWER[kind];
@@ -347,11 +413,11 @@ class Tower {
     if (mt.lightAt) { const p = this.w(mt.lightAt, {}); this.em.x = p.x; this.em.y = p.y; this.em.z = p.z; this.em.r = .45; this.em.g = .72; this.em.b = 1; }
     if (mt.lightCol) { this.em.r = mt.lightCol[0]; this.em.g = mt.lightCol[1]; this.em.b = mt.lightCol[2]; }
     this.em0 = [this.em.r, this.em.g, this.em.b];
-    // Light intensity comes from the blueprint for branches (TOWER.light has entries for levels 0-2 only).
-    this.light0 = mt.light !== undefined ? mt.light : d.light[Math.min(lvl, d.light.length - 1)];
+    // Light intensity: the stat table (a branch's def has a fourth entry), else the blueprint's, else the last entry.
+    this.light0 = d.light[lvl] !== undefined ? d.light[lvl] : mt.light !== undefined ? mt.light : d.light[d.light.length - 1];
     this.em.I = this.light0; this.em.range = this.kind === 'archer' ? 12 : 10.5;
     const tint = mt.tint || [1, .9, .7];
-    if (this.kind === 'archer') mt.archers.forEach((a, i) => this.archers.push({ l: a, yaw: this.yaw, draw: 0, cool: .4 + i * .3, e: { scale: .82, ph: 0, mv: 0, atk: -1, bow: true, draw: 0, pitch: 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0 } }));
+    if (this.kind === 'archer') mt.archers.slice(0, (d.n && d.n[lvl]) || 3).forEach((a, i) => this.archers.push({ l: a, yaw: this.yaw, draw: 0, cool: .4 + i * .3, e: { scale: .82, ph: 0, mv: 0, atk: -1, bow: true, draw: 0, pitch: 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0 } }));
     this.crew.length = 0;
     if (this.kind === 'bombard' && mt.crew) mt.crew.forEach((c, i) => this.crew.push({ l: c, side: c[0] < 0 ? -1 : 1, e: { scale: .8, ph: 0, mv: 0, atk: -1, torch: i === 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0, flinch: 0 } }));
     if (this.kind === 'bombard') this.makeGun();
@@ -385,6 +451,13 @@ class Tower {
     this.group.add(this.crystal);
   }
   upgrade() { if (this.lvl >= 2 || this.state !== 'active') return false; this.lvl++; this.spent += this.def.cost[this.lvl]; for (const m of this.men) m.lvlUp = true; this.begin(); return true; }
+  // Buy a branch (see TOWER[kind].branches): lvl 3 with the branch's stat table. Overcharge stacks carry over.
+  specialize(key, cost) {
+    if (this.lvl !== 2 || this.branch || this.state !== 'active' || !this.def.branches || !this.def.branches[key]) return false;
+    this.branch = key; this.def = branchDef(this.kind, key); this.lvl = 3; this.spent += cost;
+    for (const m of this.men) m.lvlUp = true;
+    this.begin(); return true;
+  }
   sell() {
     this.alive = false; this.em.alive = false; this.em.on = 0; LT.emitters[this.idx] = null; this.pad.tower = null;
     for (let i = 0; i < 14; i++) { _tm.compose(_tv.set(this.x + rr(-.7, .7), this.y + rr(.3, 2.4), this.z + rr(-.7, .7)), _tq.set(rr(-1, 1), rr(-1, 1), rr(-1, 1), 1).normalize(), _ts.set(1, 1, 1)); addDebris(this.kind === 'archer' || this.kind === 'guard' ? KIT.plank : KIT.rubble, _tm, null, rr(-2, 2), rr(1, 4), rr(-2, 2), rr(3, 9), rr(2, 3.5)); }
@@ -423,7 +496,7 @@ class Tower {
     TOWER_STUN = false;
   }
   updArcher(dt, d, lvl) {
-    const tgt = findTarget(this.x, this.z, d.range[lvl], true, true);
+    const tgt = d.heavy ? findHeavy(this.x, this.z, d.range[lvl]) : findTarget(this.x, this.z, d.range[lvl], true, true, 0, d.airFirst);
     for (const a of this.archers) {
       const p = this.w(a.l, _ap), e = a.e; e.x = p.x; e.y = p.y - (1 - easeOut(this.appear)) * .5; e.z = p.z; e.scale = .82 * (.3 + .7 * this.appear);
       a.cool -= dt;
@@ -434,8 +507,11 @@ class Tower {
         a.draw = a.cool < .34 ? Math.min(1, a.draw + dt * 3.6) : Math.max(0, a.draw - dt * 6);
         if (a.cool <= 0 && a.draw > .95) {
           a.cool = d.rate[lvl] * rr(.9, 1.12); a.draw = 0;
-          shootArrow(p.x + Math.sin(a.yaw) * .3, p.y + 1.0, p.z + Math.cos(a.yaw) * .3, tgt, d.dmg[lvl], this);
-          sfx('bow', p.x, p.z, .6, rnd());
+          const ax = p.x + Math.sin(a.yaw) * .3, ay = p.y + 1.0, az = p.z + Math.cos(a.yaw) * .3;
+          const ar = shootArrow(ax, ay, az, tgt, d.dmg[lvl], this); if (d.pierce) { ar.pierce = d.pierce - 1; ar.big = true; }
+          // Volley: the same archer looses extra arrows at other targets nearby (or the same one if alone).
+          if (d.multi) for (const o of extraTargets(tgt, this.x, this.z, d.range[lvl], d.multi - 1)) shootArrow(ax, ay, az, o, d.dmg[lvl], this);
+          sfx('bow', p.x, p.z, .6, d.pierce ? .1 : rnd());
         }
       } else { a.draw = Math.max(0, a.draw - dt * 3); a.yaw = angDamp(a.yaw, this.yaw + Math.sin(G.t * .5 + a.l[0] * 3) * .5, 2, dt); e.pitch = damp(e.pitch, 0, 4, dt); if (a.cool < .3) a.cool = .3; }
       e.yaw = a.yaw; e.draw = a.draw;
@@ -443,23 +519,26 @@ class Tower {
     }
   }
   updBombard(dt, d, lvl) {
-    const tgt = findTarget(this.x, this.z, d.range[lvl], false, true, d.minRange);
+    // The mortar re-picks the densest pack a few times a second; other bombards take the leader.
+    let tgt;
+    if (d.dense) { this.dT = (this.dT || 0) - dt; if (this.dT <= 0 || !this.dTgt || this.dTgt.dead || this.dTgt.hp <= 0) { this.dT = .35; this.dTgt = findDense(this.x, this.z, d.range[lvl], d.minRange, d.splash[lvl]); } tgt = this.dTgt; if (tgt && dist2(tgt.x, tgt.z, this.x, this.z) > d.range[lvl] * d.range[lvl]) tgt = this.dTgt = null; }
+    else tgt = findTarget(this.x, this.z, d.range[lvl], false, true, d.minRange);
     this.recoil = Math.max(0, this.recoil - dt * 1.6);
     let aligned = false;
     if (tgt) {
-      const dist = Math.hypot(tgt.x - this.x, tgt.z - this.z), T = clamp(dist / 7.2, .75, 1.45), q = aimPoint(tgt, T, _ap2);
+      const dist = Math.hypot(tgt.x - this.x, tgt.z - this.z), T = d.dense ? clamp(dist / 6, 1.1, 2.1) : clamp(dist / 7.2, .75, 1.45), q = aimPoint(tgt, T, _ap2);
       const want = Math.atan2(q.x - this.x, q.z - this.z); this.gunYaw = angDamp(this.gunYaw, want, 5, dt); aligned = Math.abs(angDiff(this.gunYaw, want)) < .12;
       if (aligned && this.cool <= 0) {
         this.cool = d.rate[lvl] * rr(.95, 1.08); this.recoil = 1;
         this.carriage.updateMatrixWorld(true); const mz = _tv.set(0, 0, this.mounts.gunLen - .2).applyMatrix4(this.barrel.matrixWorld);
         const gy = G.B.heightAt(q.x, q.z);
-        G.shells.push({ x0: mz.x, y0: mz.y, z0: mz.z, tx: q.x, ty: Math.max(gy, q.y - tgt.hitH) + .05, tz: q.z, t: 0, T, dmg: d.dmg[lvl], splash: d.splash[lvl], tower: this, x: mz.x, y: mz.y, z: mz.z, sm: 0, arc: (1.5 + dist * .2) * (this.branch === 'mortar' ? 1.8 : 1), look: this.lvl === 3 ? this.branch : null });
+        G.shells.push({ x0: mz.x, y0: mz.y, z0: mz.z, tx: q.x, ty: Math.max(gy, q.y - tgt.hitH) + .05, tz: q.z, t: 0, T, dmg: d.dmg[lvl], splash: d.splash[lvl], tower: this, x: mz.x, y: mz.y, z: mz.z, sm: 0, arc: (1.5 + dist * .2) * (d.dense ? 1.9 : 1), stun: d.stun || 0, fire: d.fire || (lvl === 2 ? [d.splash[lvl] * .55, 2.6, d.dmg[lvl] * .1] : null), big: !!d.dense , look: this.lvl === 3 ? this.branch : null });
         const dx = Math.sin(this.gunYaw), dz = Math.cos(this.gunYaw);
         lightFlash(mz.x, mz.y + .2, mz.z, 0xffc880, 420, .16, 15);
         fxTimed(5, mz.x + dx * .2, mz.y + .1, mz.z + dz * .2, 1.9, 1.9, 4, 3, 1.6, 1, .1); fxTimed(3, mz.x + dx * .3, mz.y + .12, mz.z + dz * .3, .9, .9, 4, 3.2, 2.2, 1, .2, { grow: .8 });
         for (let i = 0; i < 6; i++) fxSmoke(mz.x + dx * .3, mz.y + .1, mz.z + dz * .3, dx * rr(1, 3.4) + rr(-.5, .5), rr(.3, 1.2), dz * rr(1, 3.4) + rr(-.5, .5), rr(1.2, 2.4), rr(.35, .6), .9, .3, .29, .28, .5, { drag: 2.2, rise: .2 });
         fxSparks(mz.x + dx * .2, mz.y, mz.z + dz * .2, 8, 5, 3, 1.8, .6, { lo: 0, hi: .6 });
-        sfx('cannon', this.x, this.z, 1, lvl / 2); shake(.05);
+        sfx('cannon', this.x, this.z, d.dense ? 1.2 : 1, Math.min(1, lvl / 2)); shake(d.dense ? .12 : .05);
       }
     } else this.gunYaw = angDamp(this.gunYaw, this.yaw + Math.sin(G.t * .3 + this.idx) * .7, 1.2, dt);
     this.carriage.rotation.y = this.gunYaw - this.yaw;
@@ -476,24 +555,28 @@ class Tower {
     this.spin += dt * (.8 + c * 5); this.core.rotation.y = this.spin; this.core.position.y = Math.sin(G.t * 1.6 + this.idx) * .05;
     this.shards.forEach((s, i) => { const a = this.spin * .7 + i * TAU / this.shards.length; s.position.set(Math.cos(a) * .58, Math.sin(a * 1.3) * .14 - .05, Math.sin(a) * .58); s.rotation.y = -a * 2; });
     if (this.ringG) this.ringG.rotation.y = -this.spin * .25;
-    const k = (.9 + 4.5 * c * c) * pulse * this.appear * (1 + .22 * (this.oc || 0)), cc = this.mounts.crystalCol || SPIRE_COL; this.cmat.color.setRGB(cc[0] * k, cc[1] * k, cc[2] * k);
+    const k = (.9 + 4.5 * c * c) * pulse * this.appear * (1 + .22 * (this.oc || 0)), cc = this.mounts.crystalCol || SPIRE_STORM; this.cmat.color.setRGB(cc[0] * k, cc[1] * k, cc[2] * k);
     this.em.I = (this.light0 + 70 * c * c) * pulse * (1 + .3 * (this.oc || 0));
     const cp = this.w(this.mounts.crystal, _ap);
     FX.add.push(cp.x, cp.y, cp.z, 1.5 + c, 1.5 + c, 0, 0, cc[0] * .85, cc[1] * .85, cc[2] * .85, (.1 + .22 * c) * pulse, 2, 0, 0, 0);
-    const rods = this.mounts.rods;
-    if (rods && c > .25 && frnd() < dt * 7 * c) { const rp = this.w(rods[Math.floor(frnd() * rods.length)], _ap3); fxBolt([rp.x, rp.y, rp.z], [cp.x, cp.y, cp.z], .09, this.mounts.boltCol, .03); FX.add.push(rp.x, rp.y, rp.z, .8, .8, 0, 0, .8, .6, 1.6, .5, 2, 0, 0, 0); }
+    const bc = this.mounts.boltCol || SPIRE_BOLT, rods = this.mounts.rods;
+    if (rods && c > .25 && frnd() < dt * 7 * c) { const rp = this.w(rods[Math.floor(frnd() * rods.length)], _ap3); fxBolt([rp.x, rp.y, rp.z], [cp.x, cp.y, cp.z], .09, bc, .03); FX.add.push(rp.x, rp.y, rp.z, .8, .8, 0, 0, .8, .6, 1.6, .5, 2, 0, 0, 0); }
     if (this.mounts.ringIce && frnd() < dt * 2.5) fxPart(cp.x + frr(-.9, .9), cp.y + frr(-1.3, .2), cp.z + frr(-.9, .9), 0, frr(-.35, -.1), 0, frr(.8, 1.6), frr(.035, .06), .7, 1.1, 1.6, { drag: .6, wob: 1 });
-    if (c > .5 && rnd() < dt * 14 * c) { const a = rnd() * TAU; fxBolt([cp.x, cp.y, cp.z], [cp.x + Math.cos(a) * .7, cp.y + rr(-.5, .5), cp.z + Math.sin(a) * .7], .1, [.45, .7, 1.4], .035); }
+    if (c > .5 && rnd() < dt * 14 * c) { const a = rnd() * TAU; fxBolt([cp.x, cp.y, cp.z], [cp.x + Math.cos(a) * .7, cp.y + rr(-.5, .5), cp.z + Math.sin(a) * .7], .1, [bc[0] * .9, bc[1] * .9, bc[2] * .9], .035); }
+    // Frost spire: a cold field slows everything in range a little, all the time.
+    if (d.chill) { this.chT = (this.chT || 0) - dt; if (this.chT <= 0) { this.chT = .5; const r2 = d.range[lvl] * d.range[lvl]; for (const m of G.mons) if (!m.dead && m.vis && m.hp > 0 && dist2(m.x, m.z, this.x, this.z) < r2) { slowMonster(m, d.chill, .7); if (rnd() < .15) fxPart(m.x + rr(-.3, .3), m.y + rr(.1, 1), m.z + rr(-.3, .3), 0, rr(.2, .5), 0, rr(.5, .9), .05, .8, 1.3, 1.8, { drag: 1 }); } } }
     if (c >= 1 && tgt) {
-      this.charge = 0; let from = [cp.x, cp.y, cp.z], cur = tgt, dmg = d.dmg[lvl]; const hit = [];
+      this.charge = 0; let from = [cp.x, cp.y, cp.z], cur = tgt, dmg = d.dmg[lvl]; const hit = [], jr = d.jumpR || 3.0;
       for (let j = 0; j < d.jumps[lvl] && cur; j++) {
         hit.push(cur); const to = [cur.x, cur.y + cur.hitH, cur.z];
-        fxBolt(from, to, .26 - j * .015, this.mounts.boltCol || SPIRE_BOLT, .1 - j * .008);
-        fxSparks(to[0], to[1], to[2], 5, 3.5, 1.2, 2, 4, { grav: 3, size: .06 }); fxTimed(2, to[0], to[1], to[2], 1.6, 1.6, .5, .9, 2, .7, .16);
+        fxBolt(from, to, .26 - j * .015, bc, .1 - j * .008);
+        fxSparks(to[0], to[1], to[2], 5, 3.5, bc[0] * .8, bc[1] * 1.3, bc[2] * 2.5, { grav: 3, size: .06 }); fxTimed(2, to[0], to[1], to[2], 1.6, 1.6, bc[0], bc[1] * 1.15, bc[2] * 1.25, .7, .16);
         if (this.mounts.ringIce) { fxTimed(4, cur.x, cur.y + .1, cur.z, 1.8, 1.8, .5, 1.0, 1.6, .9, .35, { ground: true }); fxSparks(cur.x, cur.y + .2, cur.z, 4, 2, .8, 1.4, 2.2, { size: .05, grav: 4 }); }
-        else if (this.mounts.rods) fxBolt(to, [to[0] + frr(-1, 1), G.B.heightAt(to[0], to[2]) + .05, to[2] + frr(-1, 1)], .14, this.mounts.boltCol, .05);
-        const cx = cur.x, cz = cur.z; slowMonster(cur, d.slow[lvl], d.slowT[lvl]); hitMonster(cur, dmg, 'bolt', 0, 0, this);
-        dmg *= .86; from = to; let nb = null, nd = 3.0 * 3.0;
+        else if (this.mounts.rods) fxBolt(to, [to[0] + frr(-1, 1), G.B.heightAt(to[0], to[2]) + .05, to[2] + frr(-1, 1)], .14, bc, .05);
+        const cx = cur.x, cz = cur.z; slowMonster(cur, d.slow[lvl], d.slowT[lvl]);
+        if (d.freeze && j === 0) freezeMonster(cur, d.freeze);
+        hitMonster(cur, dmg * (d.airMul && cur.fly ? d.airMul : 1), 'bolt', 0, 0, this);
+        dmg *= d.falloff || .86; from = to; let nb = null, nd = jr * jr;
         for (const m of G.mons) { if (m.dead || m.hp <= 0 || !m.vis || hit.includes(m)) continue; const dd = dist2(cx, cz, m.x, m.z); if (dd < nd) { nd = dd; nb = m; } }
         cur = nb;
       }
@@ -548,7 +631,13 @@ const _ap2 = { x: 0, y: 0, z: 0, tx: 0, tz: 0 }, _ap3 = { x: 0, y: 0, z: 0 };
 
 function shootArrow(x, y, z, m, dmg, tower) {
   const dist = Math.hypot(m.x - x, m.z - z), T = clamp(dist / 14, .22, .62), q = aimPoint(m, T, _ap2);
-  G.arrows.push({ x0: x, y0: y, z0: z, tx: q.x, ty: q.y, tz: q.z, t: 0, T, m, dmg, tower, x, y, z, dx: 0, dy: 0, dz: 1, arc: .25 + dist * .07, alive: true, lI: 22, lCol: 0xff9040, lx: x, ly: y, lz: z, lseed: rnd() * 9, ember: 0 });
+  return pushAndReturn(G.arrows, { x0: x, y0: y, z0: z, tx: q.x, ty: q.y, tz: q.z, t: 0, T, m, dmg, tower, x, y, z, dx: 0, dy: 0, dz: 1, arc: .25 + dist * .07, alive: true, lI: 22, lCol: 0xff9040, lx: x, ly: y, lz: z, lseed: rnd() * 9, ember: 0 });
+}
+function pushAndReturn(arr, o) { arr.push(o); return o; }
+function pierceNext(m, dx, dz, skip) {
+  let best = null, bd = 3.2 * 3.2; const l = Math.hypot(dx, dz) || 1, ux = dx / l, uz = dz / l;
+  for (const o of G.mons) { if (o.dead || o.hp <= 0 || !o.vis || skip.includes(o)) continue; const ox = o.x - m.x, oz = o.z - m.z, d = ox * ox + oz * oz; if (d < bd && ox * ux + oz * uz > -.2) { bd = d; best = o; } }
+  return best;
 }
 function arrowMatrix(x, y, z, dx, dy, dz) { _tq.setFromUnitVectors(_tz, _tv.set(dx, dy, dz).normalize()); return _tm.compose(_tv.set(x, y, z), _tq, _ts.set(1, 1, 1)); }
 function updateProjectiles(dt) {
@@ -571,6 +660,8 @@ function updateProjectiles(dt) {
       if (m && !m.dead && m.hp > 0 && dist2(a.tx, a.tz, m.x, m.z) < 1.0) {
         fxSparks(a.x, a.y, a.z, 5, 3, 3, 1.5, .4, { size: .055, grav: 6 }); fxTimed(2, a.x, a.y, a.z, .9, .9, 1.6, .8, .25, .8, .12);
         sfx('arrowHit', a.x, a.z, .55, rnd()); hitMonster(m, a.dmg, 'arrow', a.dx, a.dz, a.tower);
+        // Longbow arrows fly on into the next monster behind this one.
+        if (a.pierce > 0) { const hit = a.hit || [], nx = pierceNext(m, a.dx, a.dz, hit.concat([m])); if (nx) { const b = shootArrow(a.x, a.y, a.z, nx, a.dmg * .85, a.tower); b.pierce = a.pierce - 1; b.hit = hit.concat([m]); b.big = true; } }
       } else if (!m || !m.fly) {
         const gy = B.heightAt(a.x, a.z);
         G.stuck.push({ x: a.x, y: gy + .12, z: a.z, dx: a.dx, dy: Math.min(-.5, a.dy), dz: a.dz, life: 3.2 });
@@ -593,10 +684,15 @@ function updateProjectiles(dt) {
     FX.add.push(s.x, s.y + .1, s.z, .3 * sk, .3 * sk, 0, 0, 3.2, 1.5, .3, 1, 0, 0, 0, 0);
     if (s.look === 'firebomb') { FX.add.push(s.x, s.y - .05, s.z, .55, .75, 0, 1, 3.3, 3.3, 3.3, 1, 1, i * 3.1 + s.t, 0, 0); FX.add.push(s.x, s.y, s.z, 1.6, 1.6, 0, 0, 1, .4, .1, .35, 2, 0, 0, 0); if (frnd() < dt * 40) fxPart(s.x, s.y, s.z, frr(-.4, .4), frr(-.1, .5), frr(-.4, .4), frr(.4, .8), frr(.05, .09), 3, 1.2, .25, { grav: 1.5, drag: 1 }); }
     s.sm += dt * 30; while (s.sm > 1) { s.sm -= 1; fxSmoke(s.x, s.y, s.z, rr(-.1, .1), rr(0, .2), rr(-.1, .1), rr(.5, .9), .16, .3, .26, .25, .25, .32, { drag: 1 }); if (rnd() < .5) fxPart(s.x, s.y, s.z, rr(-.5, .5), rr(-.2, .5), rr(-.5, .5), .4, .05, 2.5, 1.1, .2, { grav: 2 }); }
-    if (u >= 1) { swapRemove(Sh, i); explodeAt(s.tx, s.ty, s.tz, s.dmg, s.splash, s.tower); if (s.tower && s.tower.lvl >= 2) addGroundFire(s.tx, s.tz, s.splash * .55, 2.6, s.dmg * .1, s.tower); }
+    if (u >= 1) {
+      swapRemove(Sh, i); explodeAt(s.tx, s.ty, s.tz, s.dmg, s.splash, s.tower, s.stun);
+      if (s.big) { shake(.3); FX.decals.add(B.heightAt, s.tx, s.tz, s.splash * .9, .02, .016, .013, .9, 50); }
+      // Max-level bombards leave a small fire; the firebomb branch a big, long one.
+      if (s.fire) addGroundFire(s.tx, s.tz, s.fire[0], s.fire[1], s.fire[2], s.tower);
+    }
   }
 }
-function explodeAt(x, y, z, dmg, splash, tower) {
+function explodeAt(x, y, z, dmg, splash, tower, stun) {
   const sc = splash / 1.7;
   fxExplosion(x, y, z, sc);
   FX.decals.add(G.B.heightAt, x, z, splash * 1.2, .016, .013, .011, .85, 45);
@@ -605,6 +701,7 @@ function explodeAt(x, y, z, dmg, splash, tower) {
     if (m.dead || m.hp <= 0 || m.fly || !m.vis) continue;
     const d = Math.hypot(m.x - x, m.z - z); if (d > splash + m.rad) continue;
     const k = lerp(1, .45, sat(d / splash)), l = d || 1;
+    if (stun && !m.def.boss) slowMonster(m, .92, stun * k);
     hitMonster(m, dmg * k, 'blast', (m.x - x) / l, (m.z - z) / l, tower);
   }
   for (let i = 0; i < 5; i++) { _tm.compose(_tv.set(x + rr(-.3, .3), y + .2, z + rr(-.3, .3)), _tq.set(rr(-1, 1), rr(-1, 1), rr(-1, 1), 1).normalize(), _ts.set(.6, .6, .6)); addDebris(KIT.rubble, _tm, [.5, .45, .4], rr(-3, 3), rr(3, 6), rr(-3, 3), rr(4, 10), rr(1.6, 2.6)); }
@@ -614,7 +711,7 @@ function explodeAt(x, y, z, dmg, splash, tower) {
 // G.burns is the player's fire; G.fires (62-game.js) is elite fire that hurts footmen.
 G.chain = []; G.burns = [];
 function addGroundFire(x, z, r, secs, dps, tower) {
-  if (G.burns.length >= 24) G.burns.shift();
+  if (G.burns.length >= 32) G.burns.shift();
   G.burns.push({ x, z, r, t: secs, dps, tower, tick: 0 });
   if (typeof FX.groundFire === 'function') FX.groundFire(x, z, r, secs);
   sfx('burn', x, z, .5);

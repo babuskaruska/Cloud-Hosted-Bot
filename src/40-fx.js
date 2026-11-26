@@ -414,7 +414,7 @@ function updateFX(dt, t) {
     for (let j = 0; j < b.pts.length - 1; j++) { const p = b.pts[j], q = b.pts[j + 1]; SG.push(p[0], p[1], p[2], w, q[0], q[1], q[2], w, c[0] * 4, c[1] * 4, c[2] * 4, k); SG.push(p[0], p[1], p[2], w * 3.5, q[0], q[1], q[2], w * 3.5, c[0], c[1], c[2], k * .35); }
     if (b.fork > 0) { const p = b.pts[b.fork]; SG.push(p[0], p[1], p[2], w * .7, p[0] + b.fd[0] * .7, p[1] + b.fd[1] * .7, p[2] + b.fd[2] * .7, w * .2, c[0] * 3, c[1] * 3, c[2] * 3, k); }
   }
-  updateFires(dt, t); updateSpells(dt, t);
+  updateFires(dt, t); updateSpellFX(dt, t);
   const calm = G.phase === 'play' && !G.spawning && !G.mons.length;
   if (calm && !FX.calm) FX.decals.fadeAll(4.5);
   FX.calm = calm;
@@ -522,18 +522,18 @@ function drawElite(m, t) {
 // ---- Spells ------------------------------------------------------------------------------------------
 // Draw only: the gameplay side (castSpell) deals the damage. Both are cheap: instanced pieces from KIT.meteor /
 // KIT.ice (one draw call each while visible), sprites, decals, a pooled torch light (FX.lit) and one flash.
-// FX.meteor(x, z, r) -> { delay }: a burning boulder falls from the sky for `delay` (METEOR_FALL) seconds, then a
-// big impact: fireball, shock ring, flash, shake, flung rubble and a smoking crater that glows for a few seconds.
-// To have the damage land with the rock, apply it `delay` seconds after the call.
-const METEOR_FALL = .62, RIM_TINT = [.34, .3, .28];
-FX.meteor = function (x, z, r = 2.5) {
+// FX.meteor(x, z, r, fall = .62) -> { delay }: a burning boulder falls from the sky for `fall` seconds, then a big
+// impact: fireball, shock ring, flash, shake, flung rubble and a smoking crater that glows for a few seconds.
+// The gameplay side applies the damage `fall` (returned as delay) seconds after the call.
+const FX_METEOR_FALL = .62, RIM_TINT = [.34, .3, .28];
+FX.meteor = function (x, z, r = 2.5, fall = FX_METEOR_FALL) {
   if (!isFinite(x) || !isFinite(z) || G.phase === 'crumble' || G.phase === 'rise') return null;
-  r = clamp(+r || 2.5, .8, 6);
+  r = clamp(+r || 2.5, .8, 6); fall = clamp(+fall || FX_METEOR_FALL, .3, 2);
   const gy = FX.groundAt(x, z), sy = Math.sin(CAM.yaw), cy = Math.cos(CAM.yaw), sx = x - cy * 6.5 - sy * 2, sz = z + sy * 6.5 - cy * 2;
-  const m = { x, z, r, gy, sx, sy: gy + 21, sz, t: 0, T: METEOR_FALL, hit: false, crater: 0, seed: frnd() * 100, acc: 0, alive: true, lI: 0, lx: sx, ly: gy + 21, lz: sz, lCol: 0xff8a3a, lseed: frnd() * 9, px: sx, py: gy + 21, pz: sz };
+  const m = { x, z, r, gy, sx, sy: gy + 21, sz, t: 0, T: fall, hit: false, crater: 0, seed: frnd() * 100, acc: 0, alive: true, lI: 0, lx: sx, ly: gy + 21, lz: sz, lCol: 0xff8a3a, lseed: frnd() * 9, px: sx, py: gy + 21, pz: sz };
   FX.meteors.push(m); FX.lit.push(m);
-  fxTimed(4, x, gy + .1, z, r * 2.4, r * 2.4, 1.6, .5, .12, .55, METEOR_FALL, { ground: true });
-  return { delay: METEOR_FALL };
+  fxTimed(4, x, gy + .1, z, r * 2.4, r * 2.4, 1.6, .5, .12, .55, fall, { ground: true });
+  return { delay: fall };
 };
 // FX.frostNova(x, z, r, seconds = 3): an ice ring sweeps out, frost crystals grow from the ground where it passes
 // and melt after `seconds`, a frost stain fades, cold mist rolls out and a cold light lingers.
@@ -556,7 +556,7 @@ FX.frostNova = function (x, z, r = 3, secs = 3) {
   return o;
 };
 const _spM = new THREE.Matrix4(), _spQ = new THREE.Quaternion(), _spV = new THREE.Vector3(), _spS = new THREE.Vector3(), _spE = new THREE.Euler();
-function meteorImpact(m) {
+function fxMeteorImpact(m) {
   const { x, z, r, gy } = m, sc = r / 2.2;
   m.hit = true; m.crater = 7;
   lightFlash(x, gy + 2.2, z, 0xff8a40, 900 * sc, .65, 18 + r * 4);
@@ -576,7 +576,7 @@ function meteorImpact(m) {
   for (let i = 0; i < 3; i++) { const a = frnd() * TAU, k = frr(.35, .5); _spM.compose(_spV.set(x, gy + .5, z), _spQ.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _spS.set(k, k, k)); addDebris(KIT.meteor, _spM, null, Math.cos(a) * frr(2, 4), frr(3, 6), Math.sin(a) * frr(2, 4), frr(3, 7), frr(5, 7), { extra: 1 }); }
   shake(1.0); hitStop(.05, .2);
 }
-function updateSpells(dt, t) {
+function updateSpellFX(dt, t) {
   const A = FX.add, SG = FX.segs, M = FX.meteors;
   for (let i = M.length - 1; i >= 0; i--) {
     const m = M[i]; m.t += dt;
@@ -590,7 +590,7 @@ function updateSpells(dt, t) {
       m.acc += dt * 60;
       while (m.acc >= 1) { m.acc -= 1; const q = frnd(); fxPart(lerp(m.px, x, q) + frr(-.2, .2), lerp(m.py, y, q) + frr(-.2, .2), lerp(m.pz, z, q) + frr(-.2, .2), frr(-.8, .8), frr(-.4, .8), frr(-.8, .8), frr(.3, .8), frr(.06, .12), 3, 1.3, .3, { drag: 1.5, rise: .5 }); if (q < .3) fxSmoke(x, y, z, frr(-.2, .2), frr(0, .4), frr(-.2, .2), frr(1, 1.8), .35, .9, .16, .14, .13, .45, { drag: 1, rise: .2 }); }
       m.px = x; m.py = y; m.pz = z; m.lx = x; m.ly = y; m.lz = z; m.lI = 60;
-      if (u >= 1) meteorImpact(m);
+      if (u >= 1) fxMeteorImpact(m);
       continue;
     }
     m.crater -= dt; const k = Math.max(0, Math.min(1, m.crater / 3)), fl = .8 + .2 * n1(t * 6 + m.seed, m.seed);

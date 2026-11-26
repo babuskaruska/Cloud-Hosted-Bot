@@ -2463,7 +2463,7 @@ function updateFX(dt, t) {
     for (let j = 0; j < b.pts.length - 1; j++) { const p = b.pts[j], q = b.pts[j + 1]; SG.push(p[0], p[1], p[2], w, q[0], q[1], q[2], w, c[0] * 4, c[1] * 4, c[2] * 4, k); SG.push(p[0], p[1], p[2], w * 3.5, q[0], q[1], q[2], w * 3.5, c[0], c[1], c[2], k * .35); }
     if (b.fork > 0) { const p = b.pts[b.fork]; SG.push(p[0], p[1], p[2], w * .7, p[0] + b.fd[0] * .7, p[1] + b.fd[1] * .7, p[2] + b.fd[2] * .7, w * .2, c[0] * 3, c[1] * 3, c[2] * 3, k); }
   }
-  updateFires(dt, t); updateSpells(dt, t);
+  updateFires(dt, t); updateSpellFX(dt, t);
   const calm = G.phase === 'play' && !G.spawning && !G.mons.length;
   if (calm && !FX.calm) FX.decals.fadeAll(4.5);
   FX.calm = calm;
@@ -2571,18 +2571,18 @@ function drawElite(m, t) {
 // ---- Spells ------------------------------------------------------------------------------------------
 // Draw only: the gameplay side (castSpell) deals the damage. Both are cheap: instanced pieces from KIT.meteor /
 // KIT.ice (one draw call each while visible), sprites, decals, a pooled torch light (FX.lit) and one flash.
-// FX.meteor(x, z, r) -> { delay }: a burning boulder falls from the sky for `delay` (METEOR_FALL) seconds, then a
-// big impact: fireball, shock ring, flash, shake, flung rubble and a smoking crater that glows for a few seconds.
-// To have the damage land with the rock, apply it `delay` seconds after the call.
-const METEOR_FALL = .62, RIM_TINT = [.34, .3, .28];
-FX.meteor = function (x, z, r = 2.5) {
+// FX.meteor(x, z, r, fall = .62) -> { delay }: a burning boulder falls from the sky for `fall` seconds, then a big
+// impact: fireball, shock ring, flash, shake, flung rubble and a smoking crater that glows for a few seconds.
+// The gameplay side applies the damage `fall` (returned as delay) seconds after the call.
+const FX_METEOR_FALL = .62, RIM_TINT = [.34, .3, .28];
+FX.meteor = function (x, z, r = 2.5, fall = FX_METEOR_FALL) {
   if (!isFinite(x) || !isFinite(z) || G.phase === 'crumble' || G.phase === 'rise') return null;
-  r = clamp(+r || 2.5, .8, 6);
+  r = clamp(+r || 2.5, .8, 6); fall = clamp(+fall || FX_METEOR_FALL, .3, 2);
   const gy = FX.groundAt(x, z), sy = Math.sin(CAM.yaw), cy = Math.cos(CAM.yaw), sx = x - cy * 6.5 - sy * 2, sz = z + sy * 6.5 - cy * 2;
-  const m = { x, z, r, gy, sx, sy: gy + 21, sz, t: 0, T: METEOR_FALL, hit: false, crater: 0, seed: frnd() * 100, acc: 0, alive: true, lI: 0, lx: sx, ly: gy + 21, lz: sz, lCol: 0xff8a3a, lseed: frnd() * 9, px: sx, py: gy + 21, pz: sz };
+  const m = { x, z, r, gy, sx, sy: gy + 21, sz, t: 0, T: fall, hit: false, crater: 0, seed: frnd() * 100, acc: 0, alive: true, lI: 0, lx: sx, ly: gy + 21, lz: sz, lCol: 0xff8a3a, lseed: frnd() * 9, px: sx, py: gy + 21, pz: sz };
   FX.meteors.push(m); FX.lit.push(m);
-  fxTimed(4, x, gy + .1, z, r * 2.4, r * 2.4, 1.6, .5, .12, .55, METEOR_FALL, { ground: true });
-  return { delay: METEOR_FALL };
+  fxTimed(4, x, gy + .1, z, r * 2.4, r * 2.4, 1.6, .5, .12, .55, fall, { ground: true });
+  return { delay: fall };
 };
 // FX.frostNova(x, z, r, seconds = 3): an ice ring sweeps out, frost crystals grow from the ground where it passes
 // and melt after `seconds`, a frost stain fades, cold mist rolls out and a cold light lingers.
@@ -2605,7 +2605,7 @@ FX.frostNova = function (x, z, r = 3, secs = 3) {
   return o;
 };
 const _spM = new THREE.Matrix4(), _spQ = new THREE.Quaternion(), _spV = new THREE.Vector3(), _spS = new THREE.Vector3(), _spE = new THREE.Euler();
-function meteorImpact(m) {
+function fxMeteorImpact(m) {
   const { x, z, r, gy } = m, sc = r / 2.2;
   m.hit = true; m.crater = 7;
   lightFlash(x, gy + 2.2, z, 0xff8a40, 900 * sc, .65, 18 + r * 4);
@@ -2625,7 +2625,7 @@ function meteorImpact(m) {
   for (let i = 0; i < 3; i++) { const a = frnd() * TAU, k = frr(.35, .5); _spM.compose(_spV.set(x, gy + .5, z), _spQ.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _spS.set(k, k, k)); addDebris(KIT.meteor, _spM, null, Math.cos(a) * frr(2, 4), frr(3, 6), Math.sin(a) * frr(2, 4), frr(3, 7), frr(5, 7), { extra: 1 }); }
   shake(1.0); hitStop(.05, .2);
 }
-function updateSpells(dt, t) {
+function updateSpellFX(dt, t) {
   const A = FX.add, SG = FX.segs, M = FX.meteors;
   for (let i = M.length - 1; i >= 0; i--) {
     const m = M[i]; m.t += dt;
@@ -2639,7 +2639,7 @@ function updateSpells(dt, t) {
       m.acc += dt * 60;
       while (m.acc >= 1) { m.acc -= 1; const q = frnd(); fxPart(lerp(m.px, x, q) + frr(-.2, .2), lerp(m.py, y, q) + frr(-.2, .2), lerp(m.pz, z, q) + frr(-.2, .2), frr(-.8, .8), frr(-.4, .8), frr(-.8, .8), frr(.3, .8), frr(.06, .12), 3, 1.3, .3, { drag: 1.5, rise: .5 }); if (q < .3) fxSmoke(x, y, z, frr(-.2, .2), frr(0, .4), frr(-.2, .2), frr(1, 1.8), .35, .9, .16, .14, .13, .45, { drag: 1, rise: .2 }); }
       m.px = x; m.py = y; m.pz = z; m.lx = x; m.ly = y; m.lz = z; m.lI = 60;
-      if (u >= 1) meteorImpact(m);
+      if (u >= 1) fxMeteorImpact(m);
       continue;
     }
     m.crater -= dt; const k = Math.max(0, Math.min(1, m.crater / 3)), fl = .8 + .2 * n1(t * 6 + m.seed, m.seed);
@@ -3258,6 +3258,34 @@ const TOWER = {
   spire: { name: 'Storm spire', short: 'Spire', icon: 'spire', cost: [110, 120, 180], range: [5.5, 6.0, 6.5], dmg: [17, 25, 35], jumps: [3, 4, 6], rate: [2.3, 2.1, 1.9], slow: [.36, .42, .48], slowT: [1.3, 1.5, 1.7], air: true, ground: true, light: [16, 20, 26], desc: ['Chain lightning that slows.', 'Can hit flyers.'] },
   guard: { name: 'Guard post', short: 'Guards', icon: 'guard', cost: [80, 90, 150], range: [3.4, 3.7, 4.0], n: [2, 3, 3], hp: [62, 90, 135], dmg: [7, 10, 15], rate: [7, 6, 5], air: false, ground: true, light: [55, 70, 90], desc: ['Footmen who block', 'and duel on the road.'] },
 };
+// Branches: a max-level tower (lvl 2) can specialise into one of two branches (lvl 3, t.branch).
+// Array stats in a branch become index 3 of the tower's own stat arrays (see branchDef); other keys are traits.
+// cost is the base price; branchCost() scales it per land. title names the tower once it has the branch.
+TOWER.archer.branches = {
+  longbow: { name: 'Longbow', title: 'Longbow tower', cost: 240, desc: ['Arrows pierce three foes', 'and punch through armor.'], range: 10.2, dmg: 30, rate: 1.3, n: 2, light: 150, pierce: 3, ap: .85, heavy: true },
+  volley: { name: 'Volley', title: 'Volley tower', cost: 220, desc: ['Three arrows per shot,', 'each at its own target.'], range: 7.7, dmg: 12, rate: .8, n: 3, light: 150, multi: 3, airFirst: true },
+};
+TOWER.bombard.branches = {
+  mortar: { name: 'Mortar', title: 'Mortar', cost: 300, desc: ['Huge range. Heavy shells', 'stun the densest crowd.'], range: 13, dmg: 200, splash: 3.0, rate: 4.4, light: 95, minRange: 3.4, stun: .8, dense: true },
+  firebomb: { name: 'Firebomb', title: 'Firebomb', cost: 280, desc: ['Shells leave pools of', 'fire that keep burning.'], range: 8.6, dmg: 80, splash: 2.0, rate: 2.4, light: 110, fire: [1.9, 5, 30] },
+};
+TOWER.spire.branches = {
+  tempest: { name: 'Tempest', title: 'Tempest spire', cost: 290, desc: ['More jumps, more damage.', 'Double damage to flyers.'], range: 7.4, dmg: 50, jumps: 9, rate: 1.6, slow: .2, slowT: .8, light: 40, jumpR: 4.2, falloff: .94, airMul: 2, airFirst: true },
+  frost: { name: 'Frost', title: 'Frost spire', cost: 270, desc: ['Heavy slow. The first foe', 'hit freezes solid.'], range: 6.8, dmg: 24, jumps: 5, rate: 1.7, slow: .68, slowT: 2.8, light: 30, freeze: 1.1, chill: .3 },
+};
+TOWER.guard.branches = {
+  knights: { name: 'Knights', title: 'Knight hall', cost: 250, desc: ['Two armored knights.', 'Each holds three foes.'], n: 2, hp: 440, dmg: 32, rate: 8, range: 4.2, light: 100, armor: .45, hold: 3 },
+  pikes: { name: 'Pikes', title: 'Pike hall', cost: 240, desc: ['Four pikemen strike first', 'and gore big monsters.'], n: 4, hp: 150, dmg: 18, rate: 3.5, range: 4.2, light: 100, reach: .55, bigMul: 2.5 },
+};
+const BRANCH_KEYS = { archer: ['longbow', 'volley'], bombard: ['mortar', 'firebomb'], spire: ['tempest', 'frost'], guard: ['knights', 'pikes'] };
+// The stat table for a tower with a branch: each stat array gains index 3 (the branch value, or the lvl 2 one).
+// cost keeps its three entries, so `lvl >= cost.length - 1` still means "maxed".
+function branchDef(kind, key) {
+  const base = TOWER[kind], b = base.branches[key], d = Object.assign({}, base, { branch: key, bdef: b });
+  for (const k in base) if (Array.isArray(base[k]) && base[k].length === 3 && k !== 'cost' && k !== 'desc') d[k] = base[k].concat([b[k] !== undefined ? b[k] : base[k][2]]);
+  for (const k in b) if (!Array.isArray(base[k]) && !['name', 'title', 'cost', 'desc'].includes(k)) d[k] = b[k];
+  return d;
+}
 const TOWER_KINDS = ['archer', 'bombard', 'spire', 'guard'];
 // Most monsters alive at once. Phones get a smaller crowd.
 const MAX_ALIVE = (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 190 : 260;
@@ -3267,10 +3295,9 @@ const MAX_ALIVE = (window.matchMedia && matchMedia('(pointer: coarse)').matches)
 // Besides pieces, a blueprint returns mounts: where the tower's flames, gun, crystal, archers and door sit, and
 // for branches its light (intensity, colour), flame colour and crystal/bolt colours. Every per-level table here
 // has four entries, so level 3 never reads past the end.
-const BRANCH_LOOKS = { archer: ['longbow', 'volley'], bombard: ['mortar', 'firebomb'], spire: ['tempest', 'frost'], guard: ['knights', 'pikes'] };
 function blueprint(kind, lvl, branch) {
   lvl = clamp(lvl | 0, 0, 3);
-  if (lvl === 3 && !(BRANCH_LOOKS[kind] || []).includes(branch)) branch = (BRANCH_LOOKS[kind] || [])[0];
+  if (lvl === 3 && !(BRANCH_KEYS[kind] || []).includes(branch)) branch = (BRANCH_KEYS[kind] || [])[0];
   const pieces = [], mounts = {};
   const piece = (id, order, fn) => {
     const S = new Soup(); fn(S); if (!S.verts) return; let minY = 1e9; for (let i = 1; i < S.P.length; i += 3) minY = Math.min(minY, S.P[i]);
@@ -3531,6 +3558,45 @@ function scaffoldGeo(w, h) {
 }
 
 let TOWER_STUN = false;
+const SPIRE_STORM = [.28, .62, 1.15];
+// Freeze: a near-total slow for a moment, with a frosty flash. Bosses resist (slowMonster cuts it).
+function freezeMonster(m, t) {
+  if (m.dead || m.hp <= 0) return;
+  slowMonster(m, .96, t); m.frozen = Math.max(m.frozen || 0, m.def.boss ? t * .5 : t);
+  fxTimed(5, m.x, m.y + m.hitH, m.z, 1.4 + m.rad * 2, 1.4 + m.rad * 2, .7, 1.2, 1.8, .8, .3);
+}
+// Longbow: the toughest monster in range (armor counts double), leaders breaking ties.
+function findHeavy(x, z, range) {
+  if (G.phase !== 'play' || TOWER_STUN) return null;
+  let best = null, bp = -1; const r2 = range * range;
+  for (const m of G.mons) {
+    if (m.dead || m.hp <= 0 || !m.vis || m.dying) continue; const d = dist2(x, z, m.x, m.z); if (d > r2) continue;
+    const sc = m.hp * (m.def.armor ? 2 : 1) * (m.elite ? 1.3 : 1) + m.prog * 40; if (sc > bp) { bp = sc; best = m; }
+  }
+  return best;
+}
+// Volley: up to n more targets near the first one (repeats the first when it is alone).
+const _xt = [];
+function extraTargets(t, x, z, range, n) {
+  _xt.length = 0; const r2 = range * range;
+  for (const m of G.mons) { if (m === t || m.dead || m.hp <= 0 || !m.vis || dist2(x, z, m.x, m.z) > r2) continue; m._xd = dist2(m.x, m.z, t.x, t.z); if (m._xd > 16) continue; _xt.push(m); }
+  _xt.sort((a, b) => a._xd - b._xd); _xt.length = Math.min(_xt.length, n);
+  while (_xt.length < n) _xt.push(t);
+  return _xt;
+}
+// Mortar: the ground monster with the most neighbours inside the blast (sampled; leaders break ties).
+function findDense(x, z, range, minRange, splash) {
+  if (G.phase !== 'play' || TOWER_STUN) return null;
+  const r2 = range * range, m2 = minRange * minRange, s2 = splash * splash * .8, M = G.mons; let best = null, bs = -1, seen = 0;
+  for (let i = 0; i < M.length; i++) {
+    const m = M[i]; if (m.dead || m.hp <= 0 || m.fly || !m.vis || m.dying) continue; const d = dist2(x, z, m.x, m.z); if (d > r2 || d < m2) continue;
+    if (++seen > 70 && (i & 1)) continue;
+    let sc = m.prog + (m.def.boss ? 4 : 0);
+    for (let j = 0; j < M.length; j++) { const o = M[j]; if (o !== m && !o.dead && !o.fly && o.vis && dist2(m.x, m.z, o.x, o.z) < s2) sc += 1 + (o.elite ? .5 : 0); }
+    if (sc > bs) { bs = sc; best = m; }
+  }
+  return best;
+}
 function findTarget(x, z, range, air, ground, minRange = 0) {
   if (G.phase !== 'play' || TOWER_STUN) return null;
   let best = null, bp = -1; const r2 = range * range, m2 = minRange * minRange;
@@ -3549,7 +3615,7 @@ function aimPoint(m, dt, out) {
 
 const _tv = new THREE.Vector3(), _tq = new THREE.Quaternion(), _tm = new THREE.Matrix4(), _tz = new THREE.Vector3(0, 0, 1), _ts = new THREE.Vector3(1, 1, 1), _ap = { x: 0, y: 0, z: 0, tx: 0, tz: 0 };
 
-const SPIRE_COL = [.28, .62, 1.15], SPIRE_BOLT = [.5, .78, 1.6];
+const SPIRE_BOLT = [.5, .78, 1.6];
 class Tower {
   constructor(pad, kind, idx) {
     this.pad = pad; this.kind = kind; this.idx = idx; this.lvl = 0; this.def = TOWER[kind];
@@ -3596,11 +3662,11 @@ class Tower {
     if (mt.lightAt) { const p = this.w(mt.lightAt, {}); this.em.x = p.x; this.em.y = p.y; this.em.z = p.z; this.em.r = .45; this.em.g = .72; this.em.b = 1; }
     if (mt.lightCol) { this.em.r = mt.lightCol[0]; this.em.g = mt.lightCol[1]; this.em.b = mt.lightCol[2]; }
     this.em0 = [this.em.r, this.em.g, this.em.b];
-    // Light intensity comes from the blueprint for branches (TOWER.light has entries for levels 0-2 only).
-    this.light0 = mt.light !== undefined ? mt.light : d.light[Math.min(lvl, d.light.length - 1)];
+    // Light intensity: the stat table (a branch's def has a fourth entry), else the blueprint's, else the last entry.
+    this.light0 = d.light[lvl] !== undefined ? d.light[lvl] : mt.light !== undefined ? mt.light : d.light[d.light.length - 1];
     this.em.I = this.light0; this.em.range = this.kind === 'archer' ? 12 : 10.5;
     const tint = mt.tint || [1, .9, .7];
-    if (this.kind === 'archer') mt.archers.forEach((a, i) => this.archers.push({ l: a, yaw: this.yaw, draw: 0, cool: .4 + i * .3, e: { scale: .82, ph: 0, mv: 0, atk: -1, bow: true, draw: 0, pitch: 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0 } }));
+    if (this.kind === 'archer') mt.archers.slice(0, (d.n && d.n[lvl]) || 3).forEach((a, i) => this.archers.push({ l: a, yaw: this.yaw, draw: 0, cool: .4 + i * .3, e: { scale: .82, ph: 0, mv: 0, atk: -1, bow: true, draw: 0, pitch: 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0 } }));
     this.crew.length = 0;
     if (this.kind === 'bombard' && mt.crew) mt.crew.forEach((c, i) => this.crew.push({ l: c, side: c[0] < 0 ? -1 : 1, e: { scale: .8, ph: 0, mv: 0, atk: -1, torch: i === 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0, flinch: 0 } }));
     if (this.kind === 'bombard') this.makeGun();
@@ -3634,6 +3700,13 @@ class Tower {
     this.group.add(this.crystal);
   }
   upgrade() { if (this.lvl >= 2 || this.state !== 'active') return false; this.lvl++; this.spent += this.def.cost[this.lvl]; for (const m of this.men) m.lvlUp = true; this.begin(); return true; }
+  // Buy a branch (see TOWER[kind].branches): lvl 3 with the branch's stat table. Overcharge stacks carry over.
+  specialize(key, cost) {
+    if (this.lvl !== 2 || this.branch || this.state !== 'active' || !this.def.branches || !this.def.branches[key]) return false;
+    this.branch = key; this.def = branchDef(this.kind, key); this.lvl = 3; this.spent += cost;
+    for (const m of this.men) m.lvlUp = true;
+    this.begin(); return true;
+  }
   sell() {
     this.alive = false; this.em.alive = false; this.em.on = 0; LT.emitters[this.idx] = null; this.pad.tower = null;
     for (let i = 0; i < 14; i++) { _tm.compose(_tv.set(this.x + rr(-.7, .7), this.y + rr(.3, 2.4), this.z + rr(-.7, .7)), _tq.set(rr(-1, 1), rr(-1, 1), rr(-1, 1), 1).normalize(), _ts.set(1, 1, 1)); addDebris(this.kind === 'archer' || this.kind === 'guard' ? KIT.plank : KIT.rubble, _tm, null, rr(-2, 2), rr(1, 4), rr(-2, 2), rr(3, 9), rr(2, 3.5)); }
@@ -3672,7 +3745,7 @@ class Tower {
     TOWER_STUN = false;
   }
   updArcher(dt, d, lvl) {
-    const tgt = findTarget(this.x, this.z, d.range[lvl], true, true);
+    const tgt = d.heavy ? findHeavy(this.x, this.z, d.range[lvl]) : findTarget(this.x, this.z, d.range[lvl], true, true, 0, d.airFirst);
     for (const a of this.archers) {
       const p = this.w(a.l, _ap), e = a.e; e.x = p.x; e.y = p.y - (1 - easeOut(this.appear)) * .5; e.z = p.z; e.scale = .82 * (.3 + .7 * this.appear);
       a.cool -= dt;
@@ -3683,8 +3756,11 @@ class Tower {
         a.draw = a.cool < .34 ? Math.min(1, a.draw + dt * 3.6) : Math.max(0, a.draw - dt * 6);
         if (a.cool <= 0 && a.draw > .95) {
           a.cool = d.rate[lvl] * rr(.9, 1.12); a.draw = 0;
-          shootArrow(p.x + Math.sin(a.yaw) * .3, p.y + 1.0, p.z + Math.cos(a.yaw) * .3, tgt, d.dmg[lvl], this);
-          sfx('bow', p.x, p.z, .6, rnd());
+          const ax = p.x + Math.sin(a.yaw) * .3, ay = p.y + 1.0, az = p.z + Math.cos(a.yaw) * .3;
+          const ar = shootArrow(ax, ay, az, tgt, d.dmg[lvl], this); if (d.pierce) { ar.pierce = d.pierce - 1; ar.big = true; }
+          // Volley: the same archer looses extra arrows at other targets nearby (or the same one if alone).
+          if (d.multi) for (const o of extraTargets(tgt, this.x, this.z, d.range[lvl], d.multi - 1)) shootArrow(ax, ay, az, o, d.dmg[lvl], this);
+          sfx('bow', p.x, p.z, .6, d.pierce ? .1 : rnd());
         }
       } else { a.draw = Math.max(0, a.draw - dt * 3); a.yaw = angDamp(a.yaw, this.yaw + Math.sin(G.t * .5 + a.l[0] * 3) * .5, 2, dt); e.pitch = damp(e.pitch, 0, 4, dt); if (a.cool < .3) a.cool = .3; }
       e.yaw = a.yaw; e.draw = a.draw;
@@ -3692,23 +3768,26 @@ class Tower {
     }
   }
   updBombard(dt, d, lvl) {
-    const tgt = findTarget(this.x, this.z, d.range[lvl], false, true, d.minRange);
+    // The mortar re-picks the densest pack a few times a second; other bombards take the leader.
+    let tgt;
+    if (d.dense) { this.dT = (this.dT || 0) - dt; if (this.dT <= 0 || !this.dTgt || this.dTgt.dead || this.dTgt.hp <= 0) { this.dT = .35; this.dTgt = findDense(this.x, this.z, d.range[lvl], d.minRange, d.splash[lvl]); } tgt = this.dTgt; if (tgt && dist2(tgt.x, tgt.z, this.x, this.z) > d.range[lvl] * d.range[lvl]) tgt = this.dTgt = null; }
+    else tgt = findTarget(this.x, this.z, d.range[lvl], false, true, d.minRange);
     this.recoil = Math.max(0, this.recoil - dt * 1.6);
     let aligned = false;
     if (tgt) {
-      const dist = Math.hypot(tgt.x - this.x, tgt.z - this.z), T = clamp(dist / 7.2, .75, 1.45), q = aimPoint(tgt, T, _ap2);
+      const dist = Math.hypot(tgt.x - this.x, tgt.z - this.z), T = d.dense ? clamp(dist / 6, 1.1, 2.1) : clamp(dist / 7.2, .75, 1.45), q = aimPoint(tgt, T, _ap2);
       const want = Math.atan2(q.x - this.x, q.z - this.z); this.gunYaw = angDamp(this.gunYaw, want, 5, dt); aligned = Math.abs(angDiff(this.gunYaw, want)) < .12;
       if (aligned && this.cool <= 0) {
         this.cool = d.rate[lvl] * rr(.95, 1.08); this.recoil = 1;
         this.carriage.updateMatrixWorld(true); const mz = _tv.set(0, 0, this.mounts.gunLen - .2).applyMatrix4(this.barrel.matrixWorld);
         const gy = G.B.heightAt(q.x, q.z);
-        G.shells.push({ x0: mz.x, y0: mz.y, z0: mz.z, tx: q.x, ty: Math.max(gy, q.y - tgt.hitH) + .05, tz: q.z, t: 0, T, dmg: d.dmg[lvl], splash: d.splash[lvl], tower: this, x: mz.x, y: mz.y, z: mz.z, sm: 0, arc: (1.5 + dist * .2) * (this.branch === 'mortar' ? 1.8 : 1), look: this.lvl === 3 ? this.branch : null });
+        G.shells.push({ x0: mz.x, y0: mz.y, z0: mz.z, tx: q.x, ty: Math.max(gy, q.y - tgt.hitH) + .05, tz: q.z, t: 0, T, dmg: d.dmg[lvl], splash: d.splash[lvl], tower: this, x: mz.x, y: mz.y, z: mz.z, sm: 0, arc: (1.5 + dist * .2) * (d.dense ? 1.9 : 1), stun: d.stun || 0, fire: d.fire || (lvl === 2 ? [d.splash[lvl] * .55, 2.6, d.dmg[lvl] * .1] : null), big: !!d.dense , look: this.lvl === 3 ? this.branch : null });
         const dx = Math.sin(this.gunYaw), dz = Math.cos(this.gunYaw);
         lightFlash(mz.x, mz.y + .2, mz.z, 0xffc880, 420, .16, 15);
         fxTimed(5, mz.x + dx * .2, mz.y + .1, mz.z + dz * .2, 1.9, 1.9, 4, 3, 1.6, 1, .1); fxTimed(3, mz.x + dx * .3, mz.y + .12, mz.z + dz * .3, .9, .9, 4, 3.2, 2.2, 1, .2, { grow: .8 });
         for (let i = 0; i < 6; i++) fxSmoke(mz.x + dx * .3, mz.y + .1, mz.z + dz * .3, dx * rr(1, 3.4) + rr(-.5, .5), rr(.3, 1.2), dz * rr(1, 3.4) + rr(-.5, .5), rr(1.2, 2.4), rr(.35, .6), .9, .3, .29, .28, .5, { drag: 2.2, rise: .2 });
         fxSparks(mz.x + dx * .2, mz.y, mz.z + dz * .2, 8, 5, 3, 1.8, .6, { lo: 0, hi: .6 });
-        sfx('cannon', this.x, this.z, 1, lvl / 2); shake(.05);
+        sfx('cannon', this.x, this.z, d.dense ? 1.2 : 1, Math.min(1, lvl / 2)); shake(d.dense ? .12 : .05);
       }
     } else this.gunYaw = angDamp(this.gunYaw, this.yaw + Math.sin(G.t * .3 + this.idx) * .7, 1.2, dt);
     this.carriage.rotation.y = this.gunYaw - this.yaw;
@@ -3725,24 +3804,28 @@ class Tower {
     this.spin += dt * (.8 + c * 5); this.core.rotation.y = this.spin; this.core.position.y = Math.sin(G.t * 1.6 + this.idx) * .05;
     this.shards.forEach((s, i) => { const a = this.spin * .7 + i * TAU / this.shards.length; s.position.set(Math.cos(a) * .58, Math.sin(a * 1.3) * .14 - .05, Math.sin(a) * .58); s.rotation.y = -a * 2; });
     if (this.ringG) this.ringG.rotation.y = -this.spin * .25;
-    const k = (.9 + 4.5 * c * c) * pulse * this.appear * (1 + .22 * (this.oc || 0)), cc = this.mounts.crystalCol || SPIRE_COL; this.cmat.color.setRGB(cc[0] * k, cc[1] * k, cc[2] * k);
+    const k = (.9 + 4.5 * c * c) * pulse * this.appear * (1 + .22 * (this.oc || 0)), cc = this.mounts.crystalCol || SPIRE_STORM; this.cmat.color.setRGB(cc[0] * k, cc[1] * k, cc[2] * k);
     this.em.I = (this.light0 + 70 * c * c) * pulse * (1 + .3 * (this.oc || 0));
     const cp = this.w(this.mounts.crystal, _ap);
     FX.add.push(cp.x, cp.y, cp.z, 1.5 + c, 1.5 + c, 0, 0, cc[0] * .85, cc[1] * .85, cc[2] * .85, (.1 + .22 * c) * pulse, 2, 0, 0, 0);
-    const rods = this.mounts.rods;
-    if (rods && c > .25 && frnd() < dt * 7 * c) { const rp = this.w(rods[Math.floor(frnd() * rods.length)], _ap3); fxBolt([rp.x, rp.y, rp.z], [cp.x, cp.y, cp.z], .09, this.mounts.boltCol, .03); FX.add.push(rp.x, rp.y, rp.z, .8, .8, 0, 0, .8, .6, 1.6, .5, 2, 0, 0, 0); }
+    const bc = this.mounts.boltCol || SPIRE_BOLT, rods = this.mounts.rods;
+    if (rods && c > .25 && frnd() < dt * 7 * c) { const rp = this.w(rods[Math.floor(frnd() * rods.length)], _ap3); fxBolt([rp.x, rp.y, rp.z], [cp.x, cp.y, cp.z], .09, bc, .03); FX.add.push(rp.x, rp.y, rp.z, .8, .8, 0, 0, .8, .6, 1.6, .5, 2, 0, 0, 0); }
     if (this.mounts.ringIce && frnd() < dt * 2.5) fxPart(cp.x + frr(-.9, .9), cp.y + frr(-1.3, .2), cp.z + frr(-.9, .9), 0, frr(-.35, -.1), 0, frr(.8, 1.6), frr(.035, .06), .7, 1.1, 1.6, { drag: .6, wob: 1 });
-    if (c > .5 && rnd() < dt * 14 * c) { const a = rnd() * TAU; fxBolt([cp.x, cp.y, cp.z], [cp.x + Math.cos(a) * .7, cp.y + rr(-.5, .5), cp.z + Math.sin(a) * .7], .1, [.45, .7, 1.4], .035); }
+    if (c > .5 && rnd() < dt * 14 * c) { const a = rnd() * TAU; fxBolt([cp.x, cp.y, cp.z], [cp.x + Math.cos(a) * .7, cp.y + rr(-.5, .5), cp.z + Math.sin(a) * .7], .1, [bc[0] * .9, bc[1] * .9, bc[2] * .9], .035); }
+    // Frost spire: a cold field slows everything in range a little, all the time.
+    if (d.chill) { this.chT = (this.chT || 0) - dt; if (this.chT <= 0) { this.chT = .5; const r2 = d.range[lvl] * d.range[lvl]; for (const m of G.mons) if (!m.dead && m.vis && m.hp > 0 && dist2(m.x, m.z, this.x, this.z) < r2) { slowMonster(m, d.chill, .7); if (rnd() < .15) fxPart(m.x + rr(-.3, .3), m.y + rr(.1, 1), m.z + rr(-.3, .3), 0, rr(.2, .5), 0, rr(.5, .9), .05, .8, 1.3, 1.8, { drag: 1 }); } } }
     if (c >= 1 && tgt) {
-      this.charge = 0; let from = [cp.x, cp.y, cp.z], cur = tgt, dmg = d.dmg[lvl]; const hit = [];
+      this.charge = 0; let from = [cp.x, cp.y, cp.z], cur = tgt, dmg = d.dmg[lvl]; const hit = [], jr = d.jumpR || 3.0;
       for (let j = 0; j < d.jumps[lvl] && cur; j++) {
         hit.push(cur); const to = [cur.x, cur.y + cur.hitH, cur.z];
-        fxBolt(from, to, .26 - j * .015, this.mounts.boltCol || SPIRE_BOLT, .1 - j * .008);
-        fxSparks(to[0], to[1], to[2], 5, 3.5, 1.2, 2, 4, { grav: 3, size: .06 }); fxTimed(2, to[0], to[1], to[2], 1.6, 1.6, .5, .9, 2, .7, .16);
+        fxBolt(from, to, .26 - j * .015, bc, .1 - j * .008);
+        fxSparks(to[0], to[1], to[2], 5, 3.5, bc[0] * .8, bc[1] * 1.3, bc[2] * 2.5, { grav: 3, size: .06 }); fxTimed(2, to[0], to[1], to[2], 1.6, 1.6, bc[0], bc[1] * 1.15, bc[2] * 1.25, .7, .16);
         if (this.mounts.ringIce) { fxTimed(4, cur.x, cur.y + .1, cur.z, 1.8, 1.8, .5, 1.0, 1.6, .9, .35, { ground: true }); fxSparks(cur.x, cur.y + .2, cur.z, 4, 2, .8, 1.4, 2.2, { size: .05, grav: 4 }); }
-        else if (this.mounts.rods) fxBolt(to, [to[0] + frr(-1, 1), G.B.heightAt(to[0], to[2]) + .05, to[2] + frr(-1, 1)], .14, this.mounts.boltCol, .05);
-        const cx = cur.x, cz = cur.z; slowMonster(cur, d.slow[lvl], d.slowT[lvl]); hitMonster(cur, dmg, 'bolt', 0, 0, this);
-        dmg *= .86; from = to; let nb = null, nd = 3.0 * 3.0;
+        else if (this.mounts.rods) fxBolt(to, [to[0] + frr(-1, 1), G.B.heightAt(to[0], to[2]) + .05, to[2] + frr(-1, 1)], .14, bc, .05);
+        const cx = cur.x, cz = cur.z; slowMonster(cur, d.slow[lvl], d.slowT[lvl]);
+        if (d.freeze && j === 0) freezeMonster(cur, d.freeze);
+        hitMonster(cur, dmg * (d.airMul && cur.fly ? d.airMul : 1), 'bolt', 0, 0, this);
+        dmg *= d.falloff || .86; from = to; let nb = null, nd = jr * jr;
         for (const m of G.mons) { if (m.dead || m.hp <= 0 || !m.vis || hit.includes(m)) continue; const dd = dist2(cx, cz, m.x, m.z); if (dd < nd) { nd = dd; nb = m; } }
         cur = nb;
       }
@@ -3797,7 +3880,13 @@ const _ap2 = { x: 0, y: 0, z: 0, tx: 0, tz: 0 }, _ap3 = { x: 0, y: 0, z: 0 };
 
 function shootArrow(x, y, z, m, dmg, tower) {
   const dist = Math.hypot(m.x - x, m.z - z), T = clamp(dist / 14, .22, .62), q = aimPoint(m, T, _ap2);
-  G.arrows.push({ x0: x, y0: y, z0: z, tx: q.x, ty: q.y, tz: q.z, t: 0, T, m, dmg, tower, x, y, z, dx: 0, dy: 0, dz: 1, arc: .25 + dist * .07, alive: true, lI: 22, lCol: 0xff9040, lx: x, ly: y, lz: z, lseed: rnd() * 9, ember: 0 });
+  return pushAndReturn(G.arrows, { x0: x, y0: y, z0: z, tx: q.x, ty: q.y, tz: q.z, t: 0, T, m, dmg, tower, x, y, z, dx: 0, dy: 0, dz: 1, arc: .25 + dist * .07, alive: true, lI: 22, lCol: 0xff9040, lx: x, ly: y, lz: z, lseed: rnd() * 9, ember: 0 });
+}
+function pushAndReturn(arr, o) { arr.push(o); return o; }
+function pierceNext(m, dx, dz, skip) {
+  let best = null, bd = 3.2 * 3.2; const l = Math.hypot(dx, dz) || 1, ux = dx / l, uz = dz / l;
+  for (const o of G.mons) { if (o.dead || o.hp <= 0 || !o.vis || skip.includes(o)) continue; const ox = o.x - m.x, oz = o.z - m.z, d = ox * ox + oz * oz; if (d < bd && ox * ux + oz * uz > -.2) { bd = d; best = o; } }
+  return best;
 }
 function arrowMatrix(x, y, z, dx, dy, dz) { _tq.setFromUnitVectors(_tz, _tv.set(dx, dy, dz).normalize()); return _tm.compose(_tv.set(x, y, z), _tq, _ts.set(1, 1, 1)); }
 function updateProjectiles(dt) {
@@ -3820,6 +3909,8 @@ function updateProjectiles(dt) {
       if (m && !m.dead && m.hp > 0 && dist2(a.tx, a.tz, m.x, m.z) < 1.0) {
         fxSparks(a.x, a.y, a.z, 5, 3, 3, 1.5, .4, { size: .055, grav: 6 }); fxTimed(2, a.x, a.y, a.z, .9, .9, 1.6, .8, .25, .8, .12);
         sfx('arrowHit', a.x, a.z, .55, rnd()); hitMonster(m, a.dmg, 'arrow', a.dx, a.dz, a.tower);
+        // Longbow arrows fly on into the next monster behind this one.
+        if (a.pierce > 0) { const hit = a.hit || [], nx = pierceNext(m, a.dx, a.dz, hit.concat([m])); if (nx) { const b = shootArrow(a.x, a.y, a.z, nx, a.dmg * .85, a.tower); b.pierce = a.pierce - 1; b.hit = hit.concat([m]); b.big = true; } }
       } else if (!m || !m.fly) {
         const gy = B.heightAt(a.x, a.z);
         G.stuck.push({ x: a.x, y: gy + .12, z: a.z, dx: a.dx, dy: Math.min(-.5, a.dy), dz: a.dz, life: 3.2 });
@@ -3842,10 +3933,15 @@ function updateProjectiles(dt) {
     FX.add.push(s.x, s.y + .1, s.z, .3 * sk, .3 * sk, 0, 0, 3.2, 1.5, .3, 1, 0, 0, 0, 0);
     if (s.look === 'firebomb') { FX.add.push(s.x, s.y - .05, s.z, .55, .75, 0, 1, 3.3, 3.3, 3.3, 1, 1, i * 3.1 + s.t, 0, 0); FX.add.push(s.x, s.y, s.z, 1.6, 1.6, 0, 0, 1, .4, .1, .35, 2, 0, 0, 0); if (frnd() < dt * 40) fxPart(s.x, s.y, s.z, frr(-.4, .4), frr(-.1, .5), frr(-.4, .4), frr(.4, .8), frr(.05, .09), 3, 1.2, .25, { grav: 1.5, drag: 1 }); }
     s.sm += dt * 30; while (s.sm > 1) { s.sm -= 1; fxSmoke(s.x, s.y, s.z, rr(-.1, .1), rr(0, .2), rr(-.1, .1), rr(.5, .9), .16, .3, .26, .25, .25, .32, { drag: 1 }); if (rnd() < .5) fxPart(s.x, s.y, s.z, rr(-.5, .5), rr(-.2, .5), rr(-.5, .5), .4, .05, 2.5, 1.1, .2, { grav: 2 }); }
-    if (u >= 1) { swapRemove(Sh, i); explodeAt(s.tx, s.ty, s.tz, s.dmg, s.splash, s.tower); if (s.tower && s.tower.lvl >= 2) addGroundFire(s.tx, s.tz, s.splash * .55, 2.6, s.dmg * .1, s.tower); }
+    if (u >= 1) {
+      swapRemove(Sh, i); explodeAt(s.tx, s.ty, s.tz, s.dmg, s.splash, s.tower, s.stun);
+      if (s.big) { shake(.3); FX.decals.add(B.heightAt, s.tx, s.tz, s.splash * .9, .02, .016, .013, .9, 50); }
+      // Max-level bombards leave a small fire; the firebomb branch a big, long one.
+      if (s.fire) addGroundFire(s.tx, s.tz, s.fire[0], s.fire[1], s.fire[2], s.tower);
+    }
   }
 }
-function explodeAt(x, y, z, dmg, splash, tower) {
+function explodeAt(x, y, z, dmg, splash, tower, stun) {
   const sc = splash / 1.7;
   fxExplosion(x, y, z, sc);
   FX.decals.add(G.B.heightAt, x, z, splash * 1.2, .016, .013, .011, .85, 45);
@@ -3854,6 +3950,7 @@ function explodeAt(x, y, z, dmg, splash, tower) {
     if (m.dead || m.hp <= 0 || m.fly || !m.vis) continue;
     const d = Math.hypot(m.x - x, m.z - z); if (d > splash + m.rad) continue;
     const k = lerp(1, .45, sat(d / splash)), l = d || 1;
+    if (stun && !m.def.boss) slowMonster(m, .92, stun * k);
     hitMonster(m, dmg * k, 'blast', (m.x - x) / l, (m.z - z) / l, tower);
   }
   for (let i = 0; i < 5; i++) { _tm.compose(_tv.set(x + rr(-.3, .3), y + .2, z + rr(-.3, .3)), _tq.set(rr(-1, 1), rr(-1, 1), rr(-1, 1), 1).normalize(), _ts.set(.6, .6, .6)); addDebris(KIT.rubble, _tm, [.5, .45, .4], rr(-3, 3), rr(3, 6), rr(-3, 3), rr(4, 10), rr(1.6, 2.6)); }
@@ -3863,7 +3960,7 @@ function explodeAt(x, y, z, dmg, splash, tower) {
 // G.burns is the player's fire; G.fires (62-game.js) is elite fire that hurts footmen.
 G.chain = []; G.burns = [];
 function addGroundFire(x, z, r, secs, dps, tower) {
-  if (G.burns.length >= 24) G.burns.shift();
+  if (G.burns.length >= 32) G.burns.shift();
   G.burns.push({ x, z, r, t: secs, dps, tower, tick: 0 });
   if (typeof FX.groundFire === 'function') FX.groundFire(x, z, r, secs);
   sfx('burn', x, z, .5);
@@ -3942,7 +4039,7 @@ function slowMonster(m, f, t) { if (m.def.boss) { f *= .4; t *= .6; } if (m.def.
 function hitMonster(m, dmg, kind, dx, dz, tower) {
   if (m.dead || m.hp <= 0) return false;
   if (m.eth) { if (kind === 'arrow' || kind === 'sword') { if (rnd() < .5) fxTimed(0, m.x + rr(-.2, .2), m.y + m.hitH + rr(-.2, .3), m.z + rr(-.2, .2), .5, .5, .5, .9, 1.8, .7, .18); return false; } dmg *= .5; }
-  if (kind === 'arrow' && m.def.armor) { dmg *= m.def.armor; if (rnd() < .6) { fxSparks(m.x, m.y + m.hitH, m.z, 3, 3, 2.4, 2.2, 1.6, { size: .05 }); } }
+  if (kind === 'arrow' && m.def.armor) { const ap = (tower && tower.def && tower.def.ap) || 0; dmg *= m.def.armor + (1 - m.def.armor) * ap; if (rnd() < .6) { fxSparks(m.x, m.y + m.hitH, m.z, 3, 3, 2.4, 2.2, 1.6, { size: .05 }); } }
   if (tower && tower.oc) dmg *= 1 + OC_DMG * tower.oc;
   if (m.ward > 0) { const d0 = dmg; dmg = wardAbsorb(m, dmg); if (tower) tower.recent += d0 - dmg; if (dmg <= 0) { m.flash = .6; m.hitAt = G.t; return false; } }
   m.hp -= dmg; m.flash = 1; m.flinch = m.def.boss ? Math.max(m.flinch, .25) : 1; m.hitAt = G.t;
@@ -3969,7 +4066,7 @@ function blastAround(m, ex) {
 function killMonster(m, kind, dx, dz, tower) {
   const B = G.B, def = m.def, t = m.type, dth = def.death; if (tower) tower.kills++;
   if (def.boss) { m.dying = 1.9; m.hp = 0; m.foe = null; G.slowmo = 1.4; hitStop(.07, .55); shake(.8); sfx('roar', m.x, m.z, 1, 1); return; }
-  G.slain++; G.waveKills++;
+  G.slain++; G.waveKills++; manaFromKill(m);
   const ix = (dx || 0) * 2.2, iz = (dz || 0) * 2.2, up = kind === 'blast' ? 1.7 : 1, sc = m.scale;
   if (dth === 'bones') { shatter(e => rigMonster(e), m, [ix, 1.2 * up, iz], { spread: kind === 'blast' ? 2.6 : 1.5, up }); sfx('boneRattle', m.x, m.z, .8, rnd()); fxDust(m.x, m.y + .1, m.z, 3, .6, { a: .35 }); }
   else if (dth === 'fur') { shatter(e => rigMonster(e), m, [ix, 2.2 * up, iz], { spread: 1.2, life: .6 }); sfx('ratSqueal', m.x, m.z, .55, rnd()); fxDust(m.x, m.y + .1, m.z, 2, .4, { a: .3 }); }
@@ -4003,7 +4100,7 @@ function killMonster(m, kind, dx, dz, tower) {
   }
 }
 function finishBoss(m) {
-  G.slain++; G.waveKills++;
+  G.slain++; G.waveKills++; manaFromKill(m);
   shatter(e => rigMonster(e), m, [0, 2.5, 0], { spread: 3.4, up: 1.5, life: 1.5, hold: .25 });
   fxDust(m.x, m.y + .2, m.z, 26, 2.4, { speed: 4.5, life: 1.6 }); fxExplosion(m.x, m.y + 1, m.z, .9); shake(1.25); hitStop(.06, .9);
   FX.decals.add(G.B.heightAt, m.x, m.z, 2.6, .02, .017, .015, .8, 60);
@@ -4052,7 +4149,9 @@ function drawMonster(m, t) {
   else if (ty === 'colossus' && rnd() < (m.rage ? .5 : .12)) fxPart(m.x + rr(-.7, .7), m.y + rr(.6, 3), m.z + rr(-.7, .7), rr(-.3, .3), rr(.6, 1.8), rr(-.3, .3), rr(.6, 1.2), rr(.05, .08), 2.6, .9, .15, { drag: .3, wob: 1, rise: .3 });
   if (m.torch && m.flame) { const p = RIGOUT.torch; m.flame.x = p.x; m.flame.y = p.y; m.flame.z = p.z; m.lx = p.x; m.ly = p.y + .2; m.lz = p.z; }
   if (m.slowT > 0 && rnd() < .2) { const a = rnd() * TAU; fxBolt([m.x, m.y + m.hitH, m.z], [m.x + Math.cos(a) * m.rad * 1.4, m.y + m.hitH + rr(-.3, .4), m.z + Math.sin(a) * m.rad * 1.4], .08, [.4, .65, 1.3], .028); }
-  if (m.vis || m.fly) G.hbars.push({ x: m.x, y: m.y + m.def.top * sc / m.def.scale + .22, z: m.z, f: sat(m.hp / m.maxHp), boss: !!m.def.boss, man: false, name: m.def.boss ? m.def.name : m.elite ? eliteName(m) : null, elite: m.elite || null, sh: m.ward > 0 ? sat(m.ward / m.maxHp) : 0 });
+  if (m.frozen > 0) { const a = Math.min(1, m.frozen * 2); FX.add.push(m.x, m.y + m.hitH, m.z, (1.2 + m.rad * 2.5) * sc, (1.4 + m.rad * 2.5) * sc, 0, 0, .5, .85, 1.3, .3 * a, 2, 0, 0, 0); if (rnd() < .15) fxPart(m.x + rr(-.25, .25), m.y + rr(.1, m.hitH * 2), m.z + rr(-.25, .25), 0, rr(-.2, .3), 0, rr(.4, .8), .045, 1.2, 1.6, 2, { drag: 1 }); }
+  // Health bars only where they say something: hurt monsters, elites, warded ones and bosses. Full-health ordinary ones stay clean.
+  if ((m.vis || m.fly) && (m.hp < m.maxHp * .995 || m.def.boss || m.elite || m.ward > 0)) G.hbars.push({ x: m.x, y: m.y + m.def.top * sc / m.def.scale + .22, z: m.z, f: sat(m.hp / m.maxHp), boss: !!m.def.boss, man: false, name: m.def.boss ? m.def.name : m.elite ? eliteName(m) : null, elite: m.elite || null, sh: m.ward > 0 ? sat(m.ward / m.maxHp) : 0 });
 }
 
 function spawnFootman(tower) {
@@ -4063,23 +4162,30 @@ function spawnFootman(tower) {
     rad: .26, mass: 7, s: tower.pad.s, lat: 0, onRoad: false, state: 'march', target: null, cd: rr(.2, .6), torch: slot === 0, gone: false, dead: false, vf: 0, scale: .9 + lvl * .05,
     struck: false, alive: true, lI: slot === 0 ? 32 : 0, lx: 0, ly: 0, lz: 0, lseed: rnd() * 9, flame: null, leave: false, lvlUp: false, weapon: null, shield: null, age: 0, foes: 0,
   };
+  footmanTraits(f, d);
   if (f.torch) f.flame = addFlame({ x: door.x, y: -50, z: door.z, size: .34, embers: .45, glow: .8 });
   tower.men.push(f); G.men.push(f); return f;
 }
+// Branch traits for footmen: knights are armored and hold more foes, pikemen reach further and gore big monsters.
+function footmanTraits(f, d) {
+  f.armor = d.armor || 1; f.hold = d.hold || 2; f.reach = d.reach || 0; f.bigMul = d.bigMul || 1; f.kind = d.branch || (d.rally ? 'rally' : null);
+  f.scale = d.armor ? 1.12 : d.rally ? 1.0 : .9 + Math.min(2, f.tower.lvl) * .05; f.tint = d.armor ? [.86, .92, 1.12] : d.rally ? [1.25, 1.08, .72] : null;
+}
 function killFootman(f, dx, dz) {
+  G.menLost = (G.menLost || 0) + 1;
   f.dead = true; f.alive = false; f.gone = true; if (f.flame) { fxEmbers(f.flame.x, f.flame.y, f.flame.z, 6, .1); removeFlame(f.flame); f.flame = null; }
   f.weapon = KIT.item.blade; if (!f.torch) f.shield = KIT.item.shieldH;
   shatter(e => rigHuman(KIT.foot, SPEC.foot, e), f, [(dx || 0) * 1.6, .8, (dz || 0) * 1.6], { spread: .9, life: .8 });
   fxDust(f.x, f.y + .1, f.z, 3, .5, { a: .35 }); sfx('footmanDie', f.x, f.z, .8);
 }
 function slotPos(f, out) {
-  const B = G.B, n = f.tower.def.n[f.tower.lvl], lat = (n === 2 ? [-.48, .48] : [-.66, 0, .66])[f.slot % n] || 0;
+  const B = G.B, n = f.tower.def.n[f.tower.lvl], lat = (n === 2 ? [-.48, .48] : n === 3 ? [-.66, 0, .66] : [-.78, -.26, .26, .78])[f.slot % n] || 0;
   const p = pathAt(B, f.tower.pad.s, out); p.x += -p.tz * lat; p.z += p.tx * lat; return p;
 }
 const _fp = { x: 0, y: 0, z: 0, tx: 0, tz: 0 };
 function footmanThink(f, dt) {
   const B = G.B, tw = f.tower; f.age += dt;
-  if (f.lvlUp) { f.lvlUp = false; const d = tw.def, r = f.hp / f.maxHp; f.maxHp = d.hp[tw.lvl]; f.hp = f.maxHp * Math.max(r, .6); f.dmg = d.dmg[tw.lvl]; f.scale = .9 + tw.lvl * .05; }
+  if (f.lvlUp) { f.lvlUp = false; const d = tw.def, r = f.hp / f.maxHp; f.maxHp = d.hp[tw.lvl]; f.hp = f.maxHp * Math.max(r, .6); f.dmg = d.dmg[tw.lvl]; footmanTraits(f, d); if (f.slot >= d.n[tw.lvl]) f.leave = true; }
   if (!tw.alive) f.leave = true;
   let gx, gz, face = null, speed = 2.1, fighting = false;
   const rally = slotPos(f, _fp), rs = tw.pad.s;
@@ -4089,10 +4195,10 @@ function footmanThink(f, dt) {
   if (!m && f.state !== 'march') {
     let best = null, bd = 1e9;
     for (const q of G.mons) { if (q.dead || q.fly || q.hp <= 0 || !q.vis || q.dying || q.def.ghost) continue; if (Math.abs(q.s - rs) > 2.5) continue; const d = dist2(f.x, f.z, q.x, q.z) + q.men * 6; if (d < bd) { bd = d; best = q; } }
-    if (best) { m = f.target = best; best.men++; }
+    if (best) { m = f.target = best; best.men++; if (f.reach) { f.cd = Math.min(f.cd, 0); f.first = true; } }
   }
   if (m) {
-    const p = pathAt(B, m.s, _ap), reach = m.rad + f.rad + .14;
+    const p = pathAt(B, m.s, _ap), reach = m.rad + f.rad + .14 + f.reach;
     gx = m.x + p.tx * reach; gz = m.z + p.tz * reach;
     const d = Math.hypot(m.x - f.x, m.z - f.z);
     face = Math.atan2(m.x - f.x, m.z - f.z);
@@ -4105,7 +4211,7 @@ function footmanThink(f, dt) {
   f.cd -= dt;
   if (f.atk >= 0) {
     f.atk += dt / .58;
-    if (f.atk >= .5 && !f.struck) { f.struck = true; if (m && !m.dead && Math.hypot(m.x - f.x, m.z - f.z) < m.rad + f.rad + .75) strike(f, m, f.dmg, true); }
+    if (f.atk >= .5 && !f.struck) { f.struck = true; if (m && !m.dead && Math.hypot(m.x - f.x, m.z - f.z) < m.rad + f.rad + .75 + f.reach) { strike(f, m, f.dmg * (f.first ? 2 : 1) * (f.bigMul > 1 && (m.def.boss || m.mass >= 4) ? f.bigMul : 1), true); f.first = false; } }
     if (f.atk >= 1) { f.atk = -1; f.cd = rr(.3, .5); }
   } else if (fighting && f.cd <= 0) { f.atk = 0; f.struck = false; }
   f.flash = Math.max(0, f.flash - dt * 7); f.flinch = Math.max(0, f.flinch - dt * 4.5);
@@ -4124,14 +4230,20 @@ function strike(a, b, dmg, byMan) {
     if (big) { fxDust(b.x, b.y + .1, b.z, 10, 1.4, { speed: 3 }); shake(.55); sfx('bossStep', b.x, b.z, 1, 1); fxTimed(4, b.x, b.y + .08, b.z, 4.5, 4.5, 1.2, .9, .6, .5, .35, { ground: true }); }
     const hitList = big ? G.men.filter(f => !f.dead && Math.hypot(f.x - b.x, f.z - b.z) < 1.5) : [b];
     for (const f of hitList) {
-      f.hp -= dmg; f.flash = 1; f.flinch = 1;
+      f.hp -= dmg * (f.armor || 1); f.flash = 1; f.flinch = 1;
       if (!f.torch && rnd() < .65) { fxSparks(f.x - dx / l * .2, my, f.z - dz / l * .2, 5, 3.2, 3, 2.3, 1.3, { size: .055, grav: 7 }); if (f === b) sfx('clash', mx, mz, .6, rnd()); } else if (f === b) sfx('slash', mx, mz, .55, rnd());
       if (f.hp <= 0) killFootman(f, dx / l, dz / l);
     }
   }
 }
+function pikeKit() {
+  if (!KIT.item.pike) KIT.item.pike = new PartBatch(S => { S.seg([0, -.5, 0], [0, 1.3, 0], .022, .02, COL.woodD, { l: L_WOOD, n: 4 }); S.box(.12, .03, .03, 0, 1.28, 0, COL.iron, { l: L_METAL }); S.cone(.045, .24, 0, 1.42, 0, mulC(COL.steel, 1.15), { n: 4, l: L_METAL }); }, 24, { rad: .05, shadow: false });
+  return KIT.item.pike;
+}
 function drawFootman(f) {
-  f.weapon = KIT.item.blade; f.shield = f.torch ? null : KIT.item.shieldH; f.wScale = 1;
+  const k = f.kind;
+  f.weapon = k === 'pikes' ? pikeKit() : KIT.item.blade; f.shield = f.torch || k === 'pikes' ? null : k === 'knights' ? KIT.item.shieldR : KIT.item.shieldH; f.wScale = k === 'knights' ? 1.15 : 1;
+  f.helm = k === 'knights' || k === 'pikes'; f.plate = k === 'knights';
   rigHuman(KIT.foot, SPEC.foot, f);
   if (f.torch && f.flame) { const p = RIGOUT.torch; f.flame.x = p.x; f.flame.y = p.y; f.flame.z = p.z; f.lx = p.x; f.ly = p.y + .2; f.lz = p.z; }
   if (f.hp < f.maxHp) G.hbars.push({ x: f.x, y: f.y + 1.55 * f.scale, z: f.z, f: sat(f.hp / f.maxHp), boss: false, man: true });
@@ -4150,6 +4262,7 @@ function updateUnits(dt) {
     if (m.dead) continue;
     m.flash = Math.max(0, m.flash - dt * 7); m.flinch = Math.max(0, m.flinch - dt * 4.2);
     if (m.slowT > 0) { m.slowT -= dt; if (m.slowT <= 0) m.slowF = 0; }
+    if (m.frozen > 0) m.frozen -= dt;
     if (m.fly) { updateBat(m, dt); continue; }
     const def = m.def, maxLat = Math.max(0, maxLatBase - m.rad * .7);
     if (m.dying > 0) {
@@ -4198,7 +4311,7 @@ function updateUnits(dt) {
         if (lim < v) { v = lim; obstacle = o; og = gap; }
       }
     }
-    if (!m.foe && obstacle && obstacle.isMan && og < .3 && obstacle.foes < 2) m.foe = obstacle;
+    if (!m.foe && obstacle && obstacle.isMan && og < .3 && obstacle.foes < (obstacle.hold || 2)) m.foe = obstacle;
     if (obstacle && v < want * .55 && !m.foe) {
       if (m.laneT === undefined || m.laneT <= 0) {
         m.laneT = .35; const first = rnd() < .5 ? 1 : -1;
@@ -4325,7 +4438,8 @@ const ELITE_KINDS = ['burning', 'shielded', 'hasted', 'splitting'];
 const ELITE_BOUNTY = 2.5;
 // Elites start late on the first land (global wave 6) and grow more common up to 30%,
 // but stay rarer in the first waves of each land while the new board is still being built.
-function eliteChance(k, level) { const w = level * G.wavesPerLand + k; return w < 6 ? 0 : Math.min(.3, .045 + .016 * (w - 6)) * (k <= 2 ? .35 : k <= 4 ? .7 : 1); }
+// From the third land on the cap rises (and elites get tougher, see makeElite).
+function eliteChance(k, level) { const w = level * G.wavesPerLand + k; return w < 6 ? 0 : Math.min(.3 + .03 * Math.max(0, level - 1), .045 + .016 * (w - 6)) * (k <= 2 ? .35 : k <= 4 ? .7 : 1); }
 function pickElite(type, k, level, mul = 1) {
   const d = MON[type]; if (d.boss || type === 'scarab' || type === 'slimelet' || rnd() >= eliteChance(k, level) * mul) return undefined;
   const opts = d.fly ? ['shielded', 'hasted'] : ELITE_KINDS;
@@ -4333,8 +4447,9 @@ function pickElite(type, k, level, mul = 1) {
 }
 function makeElite(m, kind) {
   const E = ELITE[kind]; if (!E || m.def.boss) return m;
-  m.elite = kind; m.hp *= E.hp; m.maxHp *= E.hp; m.bmul = (m.bmul || 1) * ELITE_BOUNTY; m.scale *= 1.1;
-  if (kind === 'shielded') m.ward = m.wardMax = m.maxHp * .6;
+  const lv = 1 + .08 * Math.max(0, G.level - 1);
+  m.elite = kind; m.hp *= E.hp * lv; m.maxHp *= E.hp * lv; m.bmul = (m.bmul || 1) * ELITE_BOUNTY; m.scale *= 1.1;
+  if (kind === 'shielded') m.ward = m.wardMax = m.maxHp * Math.min(1, .6 + .08 * Math.max(0, G.level - 1));
   if (kind === 'hasted') m.spdMul *= 1.45;
   if (kind === 'burning') m.fireT = .3;
   sfx('elite', m.x, m.z);
@@ -4388,21 +4503,25 @@ function buildWave(k, level) {
   const q = [], boss = isBossK(k), horde = isHordeK(k, level), W = G.wavesPerLand;
   // Each land's step up in strength phases in over its waves: the first waves of a new land are gentler
   // (the board was just rebuilt), the last ones get the full step and a bit more.
-  const lvF = .55 + .45 * (k - 1) / (W - 1), lv = 1 + .3 * level * lvF;
-  // Budget ramps over the land; the boss wave carries less escort because the boss is the threat.
-  let budget = (30 + 19 * (k - 1)) * lv * G.press * (boss ? .6 : 1), heavy = 0, air = budget * .42;
-  const hpMul = (1 + .1 * (k - 1)) * (1 + .33 * level * lvF) * (.85 + .15 * G.press);
+  const lvF = .5 + .5 * (k - 1) / (W - 1), lv = 1 + .3 * level * lvF;
+  // Budget ramps over the land; the boss wave carries less escort because the boss is the threat (more of it on later lands).
+  let budget = (30 + 19 * (k - 1)) * lv * G.press * (boss ? .6 + .1 * Math.min(level, 6) : 1), heavy = 0, air = budget * .42;
+  const hpMul = (1 + .1 * (k - 1)) * (1 + .33 * level * lvF + .045 * level * level * lvF * lvF * lvF) * pressHp();
+  // Later lands (and high pressure) also pack the monsters closer together.
+  const gm = 1 / ((1 + .08 * level) * Math.pow(Math.max(1, G.press / 1.8), level ? .35 : 0));
   let t = .6;
-  if (boss) q.push({ t: 2.2, type: bossType(), hpMul: (1 + .45 * level) * Math.pow(G.press, .4) });
+  if (boss) q.push({ t: 2.2, type: bossType(), hpMul: (1 + .45 * level + .14 * level * level) * Math.pow(G.press, level >= 2 ? .55 : .4) });
   if (horde) {
     const bio = G.B.bio, menu = []; for (const ty in HORDE) { const mul = bio.mobs[ty] === undefined ? 1 : bio.mobs[ty]; if (mul > 0) menu.push([ty, HORDE[ty][1] * Math.min(mul, 2)]); }
-    const tot = menu.reduce((a, b) => a + b[1], 0), hp = hpMul * .72; let bodies = 0;
-    budget *= 1.5;
+    // Later hordes run hotter: tougher bodies, more elites, and from the third land a few fast hunters mixed in.
+    if (level >= 2) for (const ty of ['wolf', 'ghoul']) { const mul = bio.mobs[ty] === undefined ? 1 : bio.mobs[ty]; if (mul > 0) menu.push([ty, .35 * Math.min(level - 1, 3) * mul]); }
+    const tot = menu.reduce((a, b) => a + b[1], 0), hp = hpMul * (.72 + .04 * Math.min(level, 5)); let bodies = 0;
+    budget *= 1.5 + .05 * level;
     while (budget > 0 && bodies < 260) {
       let r = rnd() * tot, type = 'rat'; for (const [ty, w] of menu) { r -= w; if (r <= 0) { type = ty; break; } }
-      const n = Math.floor(rr(6, 13)), cost = HORDE[type][0];
-      for (let i = 0; i < n && budget > 0; i++) { q.push({ t, type, hpMul: hp, horde: true, elite: pickElite(type, k, level, .4) }); t += rr(.08, .2); budget -= cost; bodies++; }
-      t += rr(.5, 1.1);
+      const n = Math.floor(rr(6, 13)), cost = HORDE[type] ? HORDE[type][0] : ROSTER[type][0];
+      for (let i = 0; i < n && budget > 0; i++) { q.push({ t, type, hpMul: hp, horde: true, elite: pickElite(type, k, level, .4 + .08 * level) }); t += rr(.08, .2) * gm; budget -= cost; bodies++; }
+      t += rr(.5, 1.1) * gm;
     }
     return q;
   }
@@ -4413,12 +4532,16 @@ function buildWave(k, level) {
     if (R[0] > budget + 5 || (R[0] >= 30 && heavy >= 1 + (level >> 1)) || (MON[type].fly && air <= 0)) { type = 'skel'; R = ROSTER.skel; }
     if (R[0] >= 30) heavy++;
     const n = Math.floor(rr(R[1], R[2] + .999)), gap = R[3], el = pickElite(type, k, level);
-    for (let i = 0; i < n && budget > 0; i++) { q.push({ t, type, hpMul, elite: el && (i === 0 || rnd() < .35) ? el : undefined }); t += gap * rr(.8, 1.25); budget -= R[0]; if (MON[type].fly) air -= R[0]; }
-    t += rr(1.1, 2.3) * (boss ? 1.5 : 1);
+    for (let i = 0; i < n && budget > 0; i++) { q.push({ t, type, hpMul, elite: el && (i === 0 || rnd() < .35) ? el : undefined }); t += gap * rr(.8, 1.25) * gm; budget -= R[0]; if (MON[type].fly) air -= R[0]; }
+    t += rr(1.1, 2.3) * (boss ? 1.5 : 1) * gm;
   }
   q.sort((a, b) => a.t - b.t);
   return q;
 }
+// Pressure's share of monster health. Above the old 2.2 ceiling it counts double, so strong play meets a real fight.
+function pressHp() { const p = G.press; return .85 + .15 * Math.min(p, 2.2) + .3 * Math.max(0, p - 2.2); }
+// The ceiling for pressure rises with each land; the first land keeps the old, friendly cap.
+function pressCap() { return 2.2 + .3 * G.level; }
 function startWave() {
   const W = G.wavesPerLand;
   G.k = G.k % W + 1; G.queue = buildWave(G.k, G.level); if (waveNumber() > G.best) { G.best = waveNumber(); try { localStorage.setItem('cinderwatch.best', '' + G.best); } catch (e) {} } G.waveT = 0; G.spawning = true; G.bossWave = isBossK(G.k); G.horde = isHordeK(G.k, G.level); G.waveKills = 0; G.waveLeaks = 0; G.bossDown = false; G.trickle = 6; G.trickleN = 0;
@@ -4431,19 +4554,20 @@ function endWave() {
   const l = G.waveLeaks;
   if (l === 0) G.press *= 1.12; else if (l >= 6) G.press *= .8; else if (l >= 3) G.press *= .9;
   if (G.lives <= 6) G.press *= .9;
-  G.press = clamp(G.press, .6, 2.2);
+  G.press = clamp(G.press, .6, pressCap());
   G.gold += 22 + 7 * G.k + 8 * G.level;
   G.horde = false;
 }
 function updateWaves(dt) {
   if (G.phase !== 'play') return;
   const B = G.B;
-  updateElites(dt);
+  updateElites(dt); updateSpells(dt);
   if (G.spawning) {
     G.waveT += dt;
     while (G.queue.length && G.queue[0].t <= G.waveT) {
       if (G.mons.length >= MAX_ALIVE) break;
-      const e = G.queue.shift(), m = spawnMonster(e.type, { hpMul: e.hpMul });
+      const e = G.queue.shift(), m = spawnMonster(e.type, { hpMul: e.hpMul }), c = MON[e.type].cat || (MON[e.type].hp >= 200 ? 'big' : '');
+      if (c) G.mix[c] = (G.mix[c] || 0) + 1;
       if (e.horde) m.bmul = .6;
       if (e.elite) makeElite(m, e.elite);
     }
@@ -4451,7 +4575,7 @@ function updateWaves(dt) {
       G.bossAlive = G.mons.some(m => m.def.boss && !m.dead);
       if (G.bossWave && G.bossAlive) {
         G.trickle -= dt;
-        if (G.trickle <= 0 && G.trickleN < 9) { G.trickleN++; G.trickle = rr(3.2, 4.6); const tm = waveMenu(G.wavesPerLand, G.level).filter(e => ROSTER[e[0]][0] < 13), ty = tm[Math.floor(rnd() * tm.length)][0], n = Math.max(1, Math.min(5, Math.round(8 / ROSTER[ty][0]))), hpMul = (1 + .5) * (1 + .25 * G.level); for (let i = 0; i < n; i++) G.queue.push({ t: G.waveT + i * .4, type: ty, hpMul }); }
+        if (G.trickle <= 0 && G.trickleN < 9 + Math.min(12, 3 * G.level)) { G.trickleN++; G.trickle = rr(3.2, 4.6) / (1 + .06 * G.level); const tm = waveMenu(G.wavesPerLand, G.level).filter(e => ROSTER[e[0]][0] < 13), ty = tm[Math.floor(rnd() * tm.length)][0], n = Math.max(1, Math.min(5 + G.level, Math.round((8 + 2 * G.level) / ROSTER[ty][0]))), hpMul = (1 + .5) * (1 + .3 * G.level) * pressHp() / 1.18; for (let i = 0; i < n; i++) G.queue.push({ t: G.waveT + i * .4, type: ty, hpMul, elite: G.level >= 2 && i === 0 ? pickElite(ty, G.wavesPerLand, G.level) : undefined }); }
       } else { G.spawning = false; endWave(); G.nextIn = G.bossWave ? -1 : 6.5; G.clearT = 0; }
     }
   } else if (G.bossWave) {
@@ -4479,9 +4603,19 @@ function upgradeTower(t, byPlayer) {
   if (!t || t.lvl >= 2 || t.state !== 'active' || G.phase !== 'play') return false; const c = t.def.cost[t.lvl + 1]; if (G.gold < c) return false;
   G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); t.upgrade(); UI.ping(t.x, t.y, t.z, byPlayer); return true;
 }
-// Overcharge: a maxed tower can be pushed further, up to OC_MAX times. Each stack adds OC_DMG damage (applied in hitMonster).
+// Branches: a max-level tower (lvl 2) picks one of two specialisations (TOWER[kind].branches) and becomes lvl 3.
+function branchCost(t, key) { const b = t && t.def.branches && t.def.branches[key]; return b ? Math.round(b.cost * (1 + .12 * G.level) / 5) * 5 : 0; }
+function canBranch(t) { return !!(t && t.alive && t.lvl === 2 && !t.branch && t.state === 'active' && t.def.branches); }
+function branchTower(t, key, byPlayer) {
+  const c = branchCost(t, key); if (!c || !canBranch(t) || G.phase !== 'play' || G.gold < c) return false;
+  G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); if (!t.specialize(key, c)) { G.gold += c; return false; }
+  G.stats.branches++; G.stats[key] = (G.stats[key] || 0) + 1;
+  UI.ping(t.x, t.y, t.z, byPlayer); fxEmbers(t.x, t.y + 1.5, t.z, 24, .7); fxTimed(5, t.x, t.y + 2, t.z, 5, 5, 1.6, 1.2, .6, .9, .4); sfx('branch', t.x, t.z, 1); sfx('buyout', t.x, t.z, .8);
+  return true;
+}
+// Overcharge: a tower with a branch can be pushed further, up to OC_MAX times. Each stack adds OC_DMG damage (applied in hitMonster).
 const OC_MAX = 3, OC_DMG = .25;
-function overchargeCost(t) { return t && t.lvl >= 2 && (t.oc || 0) < OC_MAX ? Math.round(t.def.cost[2] * [1, 1.4, 1.9][t.oc || 0] * (1 + .15 * G.level) / 5) * 5 : 0; }
+function overchargeCost(t) { return t && t.lvl >= 3 && (t.oc || 0) < OC_MAX ? Math.round(t.def.cost[2] * [1, 1.4, 1.9][t.oc || 0] * (1 + .15 * G.level) / 5) * 5 : 0; }
 function overchargeTower(t, byPlayer) {
   const c = overchargeCost(t); if (!c || !t.alive || t.state !== 'active' || G.phase !== 'play' || G.gold < c) return false;
   G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); t.oc = (t.oc || 0) + 1; t.spent += c; t.em.I = t.def.light[t.lvl] * (1 + .3 * t.oc);
@@ -4503,10 +4637,126 @@ function sellTower(t) {
   G.gold += refund; t.sell(); const i = G.towers.indexOf(t); if (i >= 0) G.towers.splice(i, 1); return true;
 }
 
+// Spells. Mana (G.mana up to G.manaMax) fills from kills and slowly while a wave runs; each spell also has a cooldown.
+// castSpell(kind, x, z) is the one entry point (UI, keys and the AI commander all use it).
+const SPELL = {
+  meteor: { name: 'Meteor', key: 'Q', mana: 60, cd: 26, r: 3.2, icon: 'meteor', desc: 'A burning rock: a huge blast, then fire.' },
+  frost: { name: 'Frost', key: 'E', mana: 40, cd: 22, r: 3.6, icon: 'frost', desc: 'Freezes every monster in the circle.' },
+  rally: { name: 'Rally', key: 'T', mana: 35, cd: 20, r: 1.4, icon: 'rally', desc: 'Four militia hold the road for a while.' },
+};
+const SPELL_KINDS = ['meteor', 'frost', 'rally'];
+const METEOR_FALL = .8, RALLY_TIME = 20;
+Object.assign(G, { mana: 30, manaMax: 100, spellCd: { meteor: 0, frost: 0, rally: 0 }, spellOk: {}, pending: [], rallies: [], mix: {}, menLost: 0, stats: { branches: 0, spells: 0 } });
+function manaFromKill(m) {
+  if (G.phase !== 'play') return;
+  G.mana = Math.min(G.manaMax, G.mana + (.45 + m.def.bounty * .035) * (m.elite ? 2.5 : 1) * (m.small ? .5 : 1) * (m.def.boss ? 4 : 1));
+}
+function spellReady(kind) { const S = SPELL[kind]; return !!S && G.phase === 'play' && G.mana >= S.mana && G.spellCd[kind] <= 0; }
+// Where a spell lands on the road: the nearest road sample to (x, z).
+function roadNear(x, z) { const B = G.B; let bi = 0, bd = 1e9; for (let i = 0; i < B.n; i++) { const d = dist2(x, z, B.px[i], B.pz[i]); if (d < bd) { bd = d; bi = i; } } return { s: bi * PATH_STEP, d: Math.sqrt(bd) }; }
+function castSpell(kind, x, z, byPlayer) {
+  if (!spellReady(kind) || !isFinite(x) || !isFinite(z)) return false;
+  const S = SPELL[kind], B = G.B, L = G.level, y = B.heightAt(x, z);
+  if (kind === 'rally') { const q = roadNear(x, z); if (q.d > 4.5) return false; }
+  G.mana -= S.mana; G.spellCd[kind] = S.cd; G.stats.spells++; G.stats[kind] = (G.stats[kind] || 0) + 1;
+  if (kind === 'meteor') {
+    if (typeof FX.meteor === 'function') FX.meteor(x, z, S.r, METEOR_FALL);
+    else { fxTimed(4, x, y + .1, z, S.r * 2, S.r * 2, 1.8, .7, .2, .5, METEOR_FALL, { ground: true }); fxTimed(4, x, y + .1, z, S.r * .8, S.r * .8, 2.4, 1.1, .3, .6, METEOR_FALL, { ground: true }); }
+    G.pending.push({ kind: 'meteor', t: METEOR_FALL, x, z });
+    sfx('meteor', x, z, 1.2);
+  } else if (kind === 'frost') {
+    if (typeof FX.frostNova === 'function') FX.frostNova(x, z, S.r, 2.6);
+    else { fxTimed(4, x, y + .1, z, S.r * 2.2, S.r * 2.2, .8, 1.4, 2.2, .8, .9, { ground: true }); fxTimed(5, x, y + 1, z, S.r * 2, S.r * 2, .8, 1.3, 2, .9, .3); fxSparks(x, y + .4, z, 40, 6, 1.4, 2, 2.6, { size: .07, grav: 2 }); }
+    if (typeof FX.frostNova !== 'function') lightFlash(x, y + 1.5, z, 0x9fd8ff, 900, .5, 22);
+    const dmg = 18 * (1 + .3 * L);
+    for (const m of G.mons) {
+      if (m.dead || m.hp <= 0 || !m.vis || m.dying) continue; if (dist2(m.x, m.z, x, z) > (S.r + m.rad) * (S.r + m.rad)) continue;
+      freezeMonster(m, 2.6); hitMonster(m, dmg, 'bolt', 0, 0, null);
+    }
+    sfx('frostNova', x, z, 1.1);
+  } else {
+    const q = roadNear(x, z), s = clamp(q.s, B.cave.s + 2, B.L - 1.2), p = pathAt(B, s, {});
+    const def = { rally: true, n: [4], hp: [180 * (1 + .3 * L)], dmg: [16 * (1 + .35 * L)], range: [3] };
+    const t = { kind: 'rally', def, lvl: 0, alive: true, pad: { s }, men: [], mounts: { door: [0, 0, 0] }, x: p.x, y: p.y, z: p.z, yaw: Math.atan2(-p.tx, -p.tz), oc: 0, recent: 0, dealt: 0, kills: 0, t: RALLY_TIME,
+      w(l, out) { out.x = this.x + rr(-.3, .3); out.y = this.y; out.z = this.z + rr(-.3, .3); return out; } };
+    for (let i = 0; i < 4; i++) { const f = spawnFootman(t); f.state = 'ready'; }
+    G.rallies.push(t);
+    fxTimed(4, p.x, p.y + .1, p.z, 4.5, 4.5, 2, 1.5, .6, .7, .7, { ground: true }); fxTimed(5, p.x, p.y + 1, p.z, 3.4, 3.4, 2, 1.6, .7, .9, .3); fxDust(p.x, p.y + .1, p.z, 12, 1.4, { speed: 2.6 }); fxEmbers(p.x, p.y + .5, p.z, 16, .6);
+    lightFlash(p.x, p.y + 1.5, p.z, 0xffc070, 700, .4, 18);
+    sfx('rally', p.x, p.z, 1.1);
+  }
+  if (byPlayer) UI.ping(x, y, z, true);
+  return true;
+}
+function meteorImpact(x, z) {
+  const B = G.B, L = G.level, y = B.heightAt(x, z), r = SPELL.meteor.r, dmg = 280 * (1 + .35 * L + .03 * L * L);
+  if (typeof FX.meteor !== 'function') { fxExplosion(x, y, z, 1.9); FX.decals.add(B.heightAt, x, z, r * 1.1, .02, .015, .012, .95, 60); for (let i = 0; i < 10; i++) { _tm.compose(_tv.set(x + rr(-.5, .5), y + .3, z + rr(-.5, .5)), _tq.set(rr(-1, 1), rr(-1, 1), rr(-1, 1), 1).normalize(), _ts.set(.9, .9, .9)); addDebris(KIT.rubble, _tm, [.45, .35, .3], rr(-5, 5), rr(4, 9), rr(-5, 5), rr(4, 10), rr(2, 3.4)); } }
+  if (typeof FX.meteor !== 'function') { lightFlash(x, y + 2, z, 0xff9040, 2200, .6, 34); shake(1); hitStop(.05, .5); }
+  for (const m of G.mons) {
+    if (m.dead || m.hp <= 0 || !m.vis || m.dying) continue; const d = Math.hypot(m.x - x, m.z - z); if (d > r + m.rad) continue;
+    const k = lerp(1, .5, sat(d / r)) * (m.fly || m.def.boss ? .5 : 1), l = d || 1;
+    if (!m.def.boss && !m.fly) slowMonster(m, .9, .7);
+    hitMonster(m, dmg * k, 'blast', (m.x - x) / l, (m.z - z) / l, null);
+  }
+  addGroundFire(x, z, r * .65, 6, 22 * (1 + .3 * L), null);
+}
+function updateSpells(dt) {
+  if (G.spawning) G.mana = Math.min(G.manaMax, G.mana + dt * .35);
+  for (const k of SPELL_KINDS) {
+    G.spellCd[k] = Math.max(0, G.spellCd[k] - dt);
+    const ok = spellReady(k); if (ok && !G.spellOk[k] && UI.playerActive()) sfx('spellReady', CAM.x, CAM.z, .7); G.spellOk[k] = ok;
+  }
+  for (let i = G.pending.length - 1; i >= 0; i--) { const p = G.pending[i]; p.t -= dt; if (p.t <= 0) { swapRemove(G.pending, i); if (p.kind === 'meteor') meteorImpact(p.x, p.z); } }
+  for (let i = G.rallies.length - 1; i >= 0; i--) {
+    const t = G.rallies[i]; t.t -= dt;
+    if (t.t <= 0 && t.alive) { t.alive = false; for (const f of t.men) if (!f.dead) fxDust(f.x, f.y + .3, f.z, 5, .7); }
+    for (let j = t.men.length - 1; j >= 0; j--) if (t.men[j].gone) t.men.splice(j, 1);
+    if (!t.alive && !t.men.length) swapRemove(G.rallies, i);
+  }
+}
+// The commander's spells: a meteor into the densest pack (or onto a boss), frost when the leaders near the beacon,
+// rally when footmen are falling or something has broken through. Frost and rally keep mana back for the meteor unless urgent.
+const AIS = { lost: 0, lostT: -99, lostN: 0 };
+function aiSpells() {
+  const B = G.B, M = G.mons;
+  if (G.menLost !== AIS.lost) { AIS.lostN = (G.t - AIS.lostT < 8 ? AIS.lostN : 0) + Math.max(0, G.menLost - AIS.lost); AIS.lostT = G.t; AIS.lost = G.menLost; }
+  let lead = null, front = 0, fx = 0, fz = 0, fw = 0, boss = null;
+  for (const m of M) {
+    if (m.dead || m.hp <= 0 || !m.vis || m.dying) continue;
+    if (m.def.boss) boss = m;
+    if (!lead || m.prog > lead.prog) lead = m;
+    if (m.prog > .76) { front++; const w = m.prog * m.prog * (m.def.boss ? 4 : 1); fx += m.x * w; fz += m.z * w; fw += w; }
+  }
+  if (!lead) return false;
+  if (spellReady('meteor')) {
+    let best = null, bs = 0, n = 0;
+    for (const m of M) {
+      if (m.dead || m.fly || !m.vis || m.hp <= 0 || m.dying) continue; if (++n > 90 && (n & 1)) continue;
+      let sc = m.def.boss ? 6 + 8 * m.prog : 0;
+      for (const o of M) if (!o.dead && !o.fly && o.vis && !o.def.boss && dist2(o.x, o.z, m.x, m.z) < 8) sc += (o.elite ? 1.8 : 1) * (.6 + Math.min(1.4, o.maxHp / 250)) * (.7 + .6 * o.prog);
+      if (sc > bs) { bs = sc; best = m; }
+    }
+    if (best && bs >= (G.horde ? 14 : 10)) { const q = aimPoint(best, METEOR_FALL, {}); if (castSpell('meteor', q.x, q.z)) return true; }
+  }
+  const save = G.spellCd.meteor < 6 && G.mana < SPELL.meteor.mana + 25;
+  if (spellReady('frost') && fw > 0 && (front >= 5 || (boss && boss.prog > .72) || (front >= 2 && lead.prog > .9)) && (!save || lead.prog > .86)) {
+    if (castSpell('frost', fx / fw, fz / fw)) return true;
+  }
+  if (spellReady('rally') && !G.rallies.length) {
+    const urgent = lead.prog > .84 && !lead.fly, falling = AIS.lostN >= 2 && G.t - AIS.lostT < 6;
+    if ((urgent || falling) && (!save || urgent)) {
+      let tgt = lead; if (falling && !urgent) { let bp = 0; for (const m of M) if (!m.dead && !m.fly && m.vis && m.prog > bp && m.prog < .95) { bp = m.prog; tgt = m; } }
+      if (!tgt.fly) { const p = pathAt(B, Math.min(B.L - 1.2, tgt.s + 2.4), {}); if (castSpell('rally', p.x, p.z)) { AIS.lostN = 0; return true; } }
+    }
+  }
+  return false;
+}
+
 const AI = { think: .15, wait: 0, last: '' };
 function aiThink(dt) {
   if (G.phase !== 'play' || UI.playerActive()) return;
   AI.think -= dt; if (AI.think > 0) return; AI.think = .5;
+  aiSpells();
   const B = G.B, towers = G.towers.filter(t => t.alive), empty = B.pads.filter(p => !p.tower), N = towers.length;
   const cnt = { archer: 0, bombard: 0, spire: 0, guard: 0 }; for (const t of towers) cnt[t.kind]++;
   const ideal = { archer: .36, bombard: .22, spire: .2, guard: .22 };
@@ -4538,7 +4788,12 @@ function aiThink(dt) {
     if (t.kind === 'archer') sc *= 1 + air * .06; if (t.kind === 'spire') sc *= 1 + armor * .05;
     opts.push({ sc, cost: c, act: 'up', t });
   }
-  // Overcharge maxed towers, mostly once the board is full; busy towers first.
+  // Branch maxed towers (the choice follows what this land throws at us), then overcharge them; busy towers first.
+  for (const t of towers) {
+    if (!canBranch(t)) continue;
+    const key = aiBranch(t, towers, air, armor, swarm), c = branchCost(t, key), use = sat(t.recent / 60);
+    opts.push({ sc: (.45 + use * .9) * (empty.length === 0 ? 1.45 : .6) * (110 / c) * 1.6, cost: c, act: 'branch', t, key });
+  }
   for (const t of towers) {
     const c = overchargeCost(t); if (!c || t.state !== 'active') continue;
     const use = sat(t.recent / 60);
@@ -4555,10 +4810,27 @@ function aiThink(dt) {
     if (!aff) return; pick = aff;
   }
   AI.wait = 0;
-  if (pick.act === 'build') buildTower(pick.pad, pick.kind, false); else if (pick.act === 'up') upgradeTower(pick.t, false); else if (pick.act === 'oc') overchargeTower(pick.t, false); else if (pick.act === 'mend') mendBeacon(false);
+  if (pick.act === 'build') buildTower(pick.pad, pick.kind, false); else if (pick.act === 'up') upgradeTower(pick.t, false); else if (pick.act === 'oc') overchargeTower(pick.t, false); else if (pick.act === 'branch') branchTower(pick.t, pick.key, false); else if (pick.act === 'mend') mendBeacon(false);
   AI.think = N < 3 ? .12 : .8;
 }
 
+// Which branch suits this tower: what leaked (counts most) and what this land has sent so far, plus a nudge
+// towards variety so the board does not end up all one kind.
+function aiBranch(t, towers, air, armor, swarm) {
+  const mx = G.mix, tot = Math.max(1, (mx.air || 0) + (mx.armor || 0) + (mx.swarm || 0) + (mx.big || 0) + 20);
+  const fA = ((mx.air || 0) / tot) * 3 + air * .5, fR = ((mx.armor || 0) / tot) * 4 + ((mx.big || 0) / tot) * 3 + armor * .5 + (G.bossWave || isBossK(G.k % G.wavesPerLand + 1) ? .4 : 0);
+  const fS = ((mx.swarm || 0) / tot) * 2.5 + swarm * .4 + (isHordeK(G.k % G.wavesPerLand + 1, G.level) ? .6 : 0), rel = t.pad.s / G.B.L;
+  const [a, b] = BRANCH_KEYS[t.kind], have = k => towers.filter(o => o.branch === k).length, br = t.def.branches;
+  // How much more road the branch's range would cover from this pad (long-range branches shine on central pads).
+  const c0 = padCoverage(t.pad, t.def.range[2]) + 1, gain = k => br[k] && br[k].range ? (padCoverage(t.pad, br[k].range) - c0) / c0 : 0, lk = G.leaks > 3 ? .3 : 0;
+  const sc = {
+    longbow: .55 + fR * 1.2 + gain('longbow') * .6, volley: .5 + fA * 1.3 + fS * .5,
+    mortar: .5 + fR * .6 + fS * .4 + gain('mortar') * .6, firebomb: .5 + fS * 1.0 + rel * .2,
+    tempest: .5 + fA * 1.5 + fR * .2, frost: .5 + rel * .5 + fS * .3 + lk,
+    knights: .5 + fS * .6 + lk, pikes: .55 + fR * 1.1 + (mx.big ? .2 : 0),
+  };
+  return sc[a] / (1 + .6 * have(a)) >= sc[b] / (1 + .6 * have(b)) ? a : b;
+}
 function setPhase(p) {
   G.phase = p; G.phaseT = 0; if (p !== 'play') G.horde = false;
   if (p === 'clear') { G.advance = true; UI.banner('The pass holds', 3.2, false); UI.closeMenu(); }
@@ -4570,7 +4842,7 @@ function startCrumble() {
   const B = G.B;
   for (const m of G.mons) if (!m.dead) { shatter(e => rigMonster(e), m, [0, 1, 0], { spread: 1.2, life: 1 }); removeMonster(m); }
   for (const f of G.men) if (!f.dead) { f.weapon = KIT.item.blade; shatter(e => rigHuman(KIT.foot, SPEC.foot, e), f, [0, 1, 0], { spread: 1, life: 1 }); f.dead = f.gone = true; f.alive = false; if (f.flame) removeFlame(f.flame); }
-  G.mons.length = 0; G.men.length = 0; G.arrows.length = 0; G.shells.length = 0; G.stuck.length = 0; G.fires.length = 0; G.horde = false;
+  G.mons.length = 0; G.men.length = 0; G.arrows.length = 0; G.shells.length = 0; G.stuck.length = 0; G.fires.length = 0; G.horde = false; G.pending.length = 0; G.rallies.length = 0;
   for (const t of G.towers) {
     t.em.alive = false; LT.emitters[t.idx] = null; removeFlame(t.flame); removeFlame(t.flame2); t.flame = t.flame2 = null; t.archers.length = 0; t.alive = false; t.state = 'gone';
     let best = null, bd = 1e9; for (const p of B.pieces) if (p.kind === 'chunk') { const d = dist2(p.cx, p.cz, t.x, t.z); if (d < bd) { bd = d; best = p; } }
@@ -4601,7 +4873,8 @@ function activateBoard(B, lit) {
 }
 function beginBattle(first) {
   const B = G.B;
-  G.lives = G.maxLives; G.gold = 300 + 90 * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .55); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; G.queue = []; AI.think = .15; AI.wait = 0;
+  G.mix = {}; G.mana = Math.max(G.mana * .5, 30); for (const k in G.spellCd) G.spellCd[k] = 0; G.pending.length = 0; G.rallies.length = 0;
+  G.lives = G.maxLives; G.gold = 300 + 100 * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; G.queue = []; AI.think = .15; AI.wait = 0;
   const n = 4 + Math.min(3, G.level);
   for (let i = 0; i < n; i++) spawnMonster(i === n - 1 && G.level > 0 ? 'knight' : 'skel', { s: B.cave.s + 2.2 + i * 1.15, lat: rr(-.7, .7), hpMul: 1 + .22 * G.level });
   G.phase = 'play'; G.phaseT = 0;
@@ -5043,6 +5316,47 @@ const PX = (() => {
       'GG.Gg',
       'G...g',
     ],
+    meteor: [
+      '........E.',
+      '.......EY.',
+      '......EYE.',
+      '.....EYE..',
+      '..oooYE...',
+      '.oSSSo....',
+      'oSSSkko...',
+      'oSSkkko...',
+      '.oskko....',
+      '..ooo.....',
+    ],
+    frost: [
+      '....C....',
+      '.C..C..C.',
+      '..C.C.C..',
+      '...CBC...',
+      'CCCBBBCCC',
+      '...CBC...',
+      '..C.C.C..',
+      '.C..C..C.',
+      '....C....',
+    ],
+    rally: [
+      'B.......B',
+      '.B.....B.',
+      '..B...B..',
+      '...B.B...',
+      '....B....',
+      '...B.B...',
+      '.GB...BG.',
+      '.W.....W.',
+      'W.......W',
+    ],
+    mana: [
+      '..C..',
+      '.CCc.',
+      'CBCCc',
+      'CCCCc',
+      '.ccc.',
+    ],
     starEmpty: [
       '..s..',
       'sssss',
@@ -5106,16 +5420,17 @@ const UI = (() => {
     btns: [], hotBtn: null, press: null, gp: { sel: -1, t: 0, prev: [] , active: false }, goldBump: 0, deny: 0, hintT: 0, titleT: 0, rangeMesh: null, padMesh: null, soundRect: null, cmdRect: null, manual: false, moved: 99, focus: 0, slainBump: 0, lastSlain: 0,
     touch: false, ptrs: new Map(), gest: null, lastTap: { t: -9, x: 0, y: 0 }, waveRect: null, followRect: null, menuRect: null, wake: null, panning: false,
     hud: [], tips: [], tip: null, keys: new Set(), sndArmed: false, vvT: 0, vvN: 0,
+    spell: null, gpt: null, spellFlash: {}, spellSeen: {},
   };
   const COLR = { bg: 'rgba(9,11,17,0.86)', bg2: 'rgba(24,27,38,0.94)', bd: '#5d4c35', bdHi: '#e8b04a', tx: '#efe4cd', dim: '#a79e8a', amber: '#e8b04a', ember: '#ff8a3c', cold: '#8fc7ff', red: '#e5553c', dark: '#0b0d14', ok: '#9fd08a' };
   const _pv = new THREE.Vector3(), _o = new THREE.Vector3(), _d = new THREE.Vector3();
   function proj(x, y, z) { _pv.set(x, y, z).project(R.cam); return { x: (_pv.x * .5 + .5) * R.dw, y: (1 - (_pv.y * .5 + .5)) * R.dh }; }
   U.proj = proj;
   U.playerActive = () => U.manual;
-  U.setManual = on => { U.manual = !!on; if (!on) { U.menu = null; U.armed = null; } };
+  U.setManual = on => { U.manual = !!on; if (!on) { U.menu = null; U.armed = null; U.spell = null; } };
   U.banner = (text, dur, big) => { U.msg = { text, t: 0, dur, big }; };
   U.ping = (x, y, z, byPlayer) => { fxTimed(4, x, y + .12, z, 5, 5, byPlayer ? 1.0 : 1.5, byPlayer ? 1.4 : 1.1, byPlayer ? 1.8 : .5, .7, .55, { ground: true }); };
-  U.closeMenu = () => { U.menu = null; U.armed = null; };
+  U.closeMenu = () => { U.menu = null; U.armed = null; U.spell = null; };
   U.coinFrom = (x, y, z, value) => {
     if (U.coins.length > 70) { U.goldShown += value; return; }
     const p = proj(x, y, z); U.coins.push({ sx: p.x, sy: p.y, t: 0, T: rr(.55, .8), value, cx: p.x + rr(-60, 60) * U.s, cy: p.y - rr(30, 70) * U.s });
@@ -5189,7 +5504,13 @@ const UI = (() => {
       if (PAN[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey) { U.keys.add(e.code); e.preventDefault(); }
       if (e.repeat) return; audioGesture(); U.keepAwake(); U.touch = false;
       const k = e.key;
-      if (k >= '1' && k <= '4') { pickKind(TOWER_KINDS[+k - 1]); e.preventDefault(); }
+      const bt = U.menu && U.menu.tower;
+      if ((k === '1' || k === '2') && bt && canBranch(bt)) { touchInput(); doBranch(bt, BRANCH_KEYS[bt.kind][+k - 1]); e.preventDefault(); }
+      else if (k >= '1' && k <= '4') { pickKind(TOWER_KINDS[+k - 1]); e.preventDefault(); }
+      else if (k >= '5' && k <= '7') { pickSpell(SPELL_KINDS[+k - 5]); e.preventDefault(); }
+      else if (k === 'q' || k === 'Q') { pickSpell('meteor'); }
+      else if (k === 'e' || k === 'E') { pickSpell('frost'); }
+      else if (k === 't' || k === 'T') { pickSpell('rally'); }
       else if (k === ' ' || k === 'Enter') { callWave(); e.preventDefault(); }
       else if (k === 'Escape') { U.closeMenu(); }
       else if (k === 'u' || k === 'U') { const t = (U.menu && U.menu.tower) || (U.hover && U.hover.tower); if (t) { touchInput(); doUpgrade(t); } }
@@ -5212,6 +5533,21 @@ const UI = (() => {
   U.sawMonster = type => { if (G.seen[type]) return; G.seen[type] = 1; if (MON[type].tip && U.tips.length < 4) U.tips.push(type); };
   U.sawElite = kind => { const key = 'elite:' + kind; if (G.seen[key]) return; G.seen[key] = 1; if (U.tips.length < 5) U.tips.push(key); };
   const tipInfo = key => { if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
+  // One line of numbers for a branch, in the words the menu uses.
+  function branchStat(kind, key) {
+    const b = TOWER[kind].branches[key], f = v => (Math.round(v * 10) / 10).toString();
+    if (key === 'longbow') return 'Range ' + f(b.range) + ' · Damage ' + b.dmg;
+    if (key === 'volley') return 'Range ' + f(b.range) + ' · Damage ' + b.dmg + 'x' + b.multi;
+    if (key === 'mortar') return 'Range ' + f(b.range) + ' · Damage ' + b.dmg;
+    if (key === 'firebomb') return 'Damage ' + b.dmg + ' · Fire ' + b.fire[2] + '/s';
+    if (key === 'tempest') return 'Damage ' + b.dmg + ' · ' + b.jumps + ' jumps';
+    if (key === 'frost') return 'Slow ' + Math.round(b.slow * 100) + '% · Freeze ' + f(b.freeze) + 's';
+    if (key === 'knights') return b.n + ' knights · ' + b.hp + ' health';
+    return b.n + ' pikemen · ' + b.hp + ' health';
+  }
+  U.branchStat = branchStat;
+  // For tests and tools (window.__cw.UI.game): the game actions the UI itself uses.
+  U.game = { buildTower, upgradeTower, branchTower, overchargeTower, castSpell, spellReady, branchCost, TOWER, SPELL, BRANCH_KEYS };
   U.keepAwake = () => { try { if (navigator.wakeLock && !document.hidden && (!U.wake || U.wake.released)) navigator.wakeLock.request('screen').then(w => { U.wake = w; }, () => {}); } catch (e) {} };
   U.dropTouches = () => { U.ptrs.clear(); U.gest = null; U.press = null; if (U.touch) U.inside = false; };
   function fixPageZoom() {
@@ -5240,7 +5576,30 @@ const UI = (() => {
   function toggleCommand() { U.setManual(!U.manual); U.idle = 0; sfx('uiClick', CAM.x, CAM.z, .8); }
   function deny() { U.deny = 1; sfx('uiDeny', CAM.x, CAM.z, .6); buzz([18, 40, 18]); }
   function doBuild(pad, kind) { touchInput(); if (buildTower(pad, kind, true)) { sfx('uiClick', pad.x, pad.z, .8); buzz(12); U.menu = null; U.armed = null; return true; } deny(); return false; }
-  function doUpgrade(t) { if (t.lvl >= 2 ? overchargeTower(t, true) : upgradeTower(t, true)) { sfx('uiClick', t.x, t.z, .8); buzz(12); U.menu = null; return true; } deny(); return false; }
+  function doUpgrade(t) {
+    // A max-level tower needs a branch choice first: open its menu instead of guessing.
+    if (t.lvl === 2 && !t.branch) { if (!U.menu || U.menu.tower !== t) { U.menu = { pad: t.pad, tower: t, t: 0, focus: 0, sel: null, sellArm: false }; sfx('uiHover', t.x, t.z, .8); } else deny(); return false; }
+    if (t.lvl >= 3 ? overchargeTower(t, true) : upgradeTower(t, true)) { sfx('uiClick', t.x, t.z, .8); buzz(12); U.menu = null; return true; } deny(); return false;
+  }
+  function doBranch(t, key) { if (branchTower(t, key, true)) { sfx('uiClick', t.x, t.z, .8); buzz([12, 30, 20]); U.menu = null; return true; } deny(); return false; }
+  // Spells: pick one (key, button), then click or tap the ground. Picking it again, Esc or Cancel puts it away.
+  function pickSpell(kind) {
+    if (G.phase !== 'play') return; touchInput();
+    if (U.spell === kind) { U.spell = null; sfx('uiHover', CAM.x, CAM.z, .6); return; }
+    if (!spellReady(kind)) { deny(); return; }
+    U.spell = kind; U.menu = null; U.armed = null; sfx('uiHover', CAM.x, CAM.z, .9); buzz(8);
+  }
+  function groundPick(mx, my) {
+    if (!G.B) return null; const cam = R.cam; _o.set(mx / R.dw * 2 - 1, 1 - my / R.dh * 2, -1).unproject(cam); cam.getWorldDirection(_d);
+    if (Math.abs(_d.y) < 1e-4) return null; let t = -_o.y / _d.y;
+    for (let i = 0; i < 6; i++) t = (G.B.heightAt(_o.x + _d.x * t, _o.z + _d.z * t) - _o.y) / _d.y;
+    const x = _o.x + _d.x * t, z = _o.z + _d.z * t; return isFinite(x) && isFinite(z) && Math.abs(x) < 40 && Math.abs(z) < 40 ? { x, z } : null;
+  }
+  function castAt(x, y) {
+    const k = U.spell, g = groundPick(x, y); touchInput();
+    if (g && castSpell(k, g.x, g.z, true)) { U.spell = null; buzz(20); return true; }
+    deny(); return false;
+  }
   function doMend() { touchInput(); if (mendBeacon(true)) { sfx('uiClick', CAM.x, CAM.z, .8); buzz(12); return true; } deny(); return false; }
   function doSell(t) { if (sellTower(t)) { U.menu = null; return true; } return false; }
   function pickKind(kind) {
@@ -5266,6 +5625,7 @@ const UI = (() => {
   function onTap(x, y, held) {
     const now = performance.now();
     const b = held && inRect(held, x, y, U.touch ? 44 : 8) ? held : btnAt(x, y); if (b) { if (!b.hud) touchInput(); b.fn(); return; }
+    if (U.spell) { castAt(x, y); return; }
     if (inRect(U.menuRect, x, y, 0)) return;
     const h = pickPad(x, y);
     if (h) {
@@ -5321,28 +5681,39 @@ const UI = (() => {
     if (window.visualViewport && Math.abs(window.visualViewport.scale - 1) > .02) fixPageZoom();
     pollGamepad(dt);
     if (U.menu) { U.menu.t += dt; if ((U.menu.tower && !U.menu.tower.alive) || G.phase !== 'play') U.menu = null; else if (U.menu.pad.tower !== U.menu.tower) U.menu.tower = U.menu.pad.tower; }
-    if (G.phase !== 'play') { U.armed = null; U.hover = null; }
-    else U.hover = (U.inside && !U.touch && !U.hotBtn && !U.panning) ? pickPad(U.mx, U.my) : null;
+    if (G.phase !== 'play') { U.armed = null; U.hover = null; U.spell = null; }
+    else U.hover = (U.inside && !U.touch && !U.hotBtn && !U.panning && !U.spell) ? pickPad(U.mx, U.my) : null;
+    for (const k of SPELL_KINDS) { const n = G.stats[k] || 0; if (n !== (U.spellSeen[k] || 0)) { U.spellSeen[k] = n; U.spellFlash[k] = 1; } U.spellFlash[k] = Math.max(0, (U.spellFlash[k] || 0) - dt * 1.5); }
+    U.gpt = U.spell && U.inside && !U.touch && !U.hotBtn && !U.hudHot ? groundPick(U.mx, U.my) : null;
     if (U.goldShown > G.gold) U.goldShown = G.gold;
     if (!U.coins.length && U.goldShown < G.gold) U.goldShown = Math.min(G.gold, U.goldShown + Math.max(1, (G.gold - U.goldShown) * 6 * dt));
     const tgt = U.menu ? U.menu : (U.gp.active && U.gp.sel >= 0 && G.phase === 'play' ? { pad: G.B.pads[U.gp.sel], tower: G.B.pads[U.gp.sel].tower } : U.hover);
-    if (tgt && G.B && G.phase === 'play') {
+    if (U.gpt) {
+      const r = SPELL[U.spell].r, pulse = .5 + .5 * Math.sin(G.t * 6), col = U.spell === 'frost' ? [.9, 1.4, 2.2] : U.spell === 'rally' ? [2.2, 1.8, .9] : [2.4, 1.1, .4];
+      setRing(U.rangeMesh, U.gpt.x, U.gpt.z, r, .12); U.rangeMesh.material.opacity = .45 + .25 * pulse; U.rangeMesh.material.color.setRGB(col[0], col[1], col[2]);
+      setRing(U.padMesh, U.gpt.x, U.gpt.z, .35, .1); U.padMesh.material.opacity = .6;
+    } else if (tgt && G.B && G.phase === 'play') {
       const pad = tgt.pad, pulse = .5 + .5 * Math.sin(G.t * 5);
+      U.rangeMesh.material.color.setRGB(1.5, 1.15, .6);
       setRing(U.padMesh, pad.x, pad.z, 1.5, .1); U.padMesh.material.opacity = .45 + .25 * pulse;
-      let range = 0; if (tgt.tower) range = tgt.tower.range; else { const kind = (U.menu && (U.menu.sel || (U.hotBtn && U.hotBtn.kind))) || U.armed || (U.menu && U.btns[U.menu.focus] && U.gp.active && U.btns[U.menu.focus].kind) || 'archer'; range = TOWER[kind].range[0]; }
+      let range = 0; const bk = tgt.tower && U.menu && U.menu.tower === tgt.tower && canBranch(tgt.tower) ? (U.menu.sel || (U.hotBtn && U.hotBtn.branch)) : null;
+      if (bk) range = tgt.tower.def.branches[bk].range || tgt.tower.range; else if (tgt.tower) range = tgt.tower.range; else { const kind = (U.menu && (U.menu.sel || (U.hotBtn && U.hotBtn.kind))) || U.armed || (U.menu && U.btns[U.menu.focus] && U.gp.active && U.btns[U.menu.focus].kind) || 'archer'; range = TOWER[kind].range[0]; }
       setRing(U.rangeMesh, pad.x, pad.z, range, .07); U.rangeMesh.material.opacity = .34;
     } else { U.padMesh.visible = false; U.rangeMesh.visible = false; }
-    R.canvas.style.cursor = U.panning ? 'grabbing' : (U.hotBtn || U.hover || U.hudHot) ? 'pointer' : 'default';
+    R.canvas.style.cursor = U.panning ? 'grabbing' : U.spell && !U.hotBtn && !U.hudHot ? 'crosshair' : (U.hotBtn || U.hover || U.hudHot) ? 'pointer' : 'default';
   }
 
   function draw() {
     const c = U.ctx, s = U.s, W = R.dw, H = R.dh, pad = 5 * s, LH = PX.LINE * s;
     c.clearRect(0, 0, W, H); U.btns.length = 0; let hot = null;
     const pix = Math.max(1, Math.round(R.dh / R.ih)), es = Math.max(1, s - 1), tags = [];
+    // Crowds: ordinary bars shrink and fade a little as the count of bars grows, so a big fight stays readable.
+    let nOrd = 0; for (const b of G.hbars) if (!b.boss && !b.elite && !b.man) nOrd++;
+    const crowd = sat((nOrd - 30) / 90), ordW = Math.round(9 - 3 * crowd), ordA = .95 - .3 * crowd;
     for (const b of G.hbars) {
-      const p = proj(b.x, b.y, b.z), w = (b.boss ? 34 : b.man ? 8 : b.elite ? 12 : 9) * pix, h = (b.boss ? 2 : 1) * pix, x = Math.round(p.x - w / 2), y = Math.round(p.y);
+      const ord = !b.boss && !b.elite && !b.man, p = proj(b.x, b.y, b.z), w = (b.boss ? 34 : b.man ? 8 : b.elite ? 12 : ordW) * pix, h = (b.boss ? 2 : 1) * pix, x = Math.round(p.x - w / 2), y = Math.round(p.y);
       if (x < -w || x > W || y < 0 || y > H) continue;
-      c.globalAlpha = b.f >= .999 && !b.elite ? .4 : .95;
+      c.globalAlpha = b.f >= .999 && !b.elite ? .4 : ord ? ordA : .95;
       c.fillStyle = b.elite ? ELITE[b.elite].col : COLR.dark; c.fillRect(x - pix, y - pix, w + 2 * pix, h + 2 * pix);
       if (b.elite) { c.fillStyle = COLR.dark; c.fillRect(x, y, w, h); }
       c.fillStyle = b.man ? '#7fb6ea' : (b.f > .5 ? '#d9a13c' : b.f > .25 ? '#e0762c' : '#e04a32'); c.fillRect(x, y, Math.max(pix, Math.round(w * b.f)), h);
@@ -5436,15 +5807,46 @@ const UI = (() => {
     if (nR === 3) { sq('full', xr, zb, toggleFull, 'Full screen', corners, false); xr -= zb + g3; }
     sq('zin', xr, zb, () => camZoomBy(1.5), 'Zoom in (+)', glyph('+', cur < 2.99 ? COLR.tx : '#5a5448'), false); xr -= zb + g3;
     sq('zout', xr, zb, () => camZoomBy(1 / 1.5), 'Zoom out (-)', glyph('-', cur > camZoomMin() + .01 ? COLR.tx : '#5a5448'), false);
-    let yUp = yB - g3;
+    let yUp = yB - g3, rightTop = yB;
+    if (G.phase === 'play') {
+      // Spells: three buttons under a mana bar. Bottom centre when there is room, else left of the zoom buttons, else stacked above them.
+      const n = SPELL_KINDS.length, gw = n * zb + (n - 1) * g3, mh = 4 * s;
+      let xs = Math.round((iL + Wr) / 2 - gw / 2), ys = yB, stacked = false;
+      if (xs < xl || xs + gw > xr - g3) { xs = xr - g3 - gw; if (xs < xl) { xs = Wr - 5 * s - gw; ys = yB - g3 - zb - mh - s; stacked = true; rightTop = ys - mh - s; } }
+      if (!stacked) { yUp = Math.min(yUp, yB - mh - s - g3); xr = xs; } else yUp = Math.min(yUp, rightTop - g3);
+      const my = ys - mh - s; c.fillStyle = COLR.dark; c.fillRect(xs, my, gw, mh); c.fillStyle = '#2a3446'; c.fillRect(xs + s, my + s, gw - 2 * s, mh - 2 * s);
+      c.fillStyle = G.mana >= G.manaMax - .01 ? '#bfe4ff' : '#5fa2e6'; c.fillRect(xs + s, my + s, Math.round((gw - 2 * s) * sat(G.mana / G.manaMax)), mh - 2 * s);
+      c.fillStyle = 'rgba(239,228,205,0.55)'; for (const k of SPELL_KINDS) c.fillRect(xs + s + Math.round((gw - 2 * s) * SPELL[k].mana / G.manaMax), my, s, mh);
+      SPELL_KINDS.forEach((k, i) => {
+        const S = SPELL[k], x = xs + i * (zb + g3), id = 'sp' + k, ready = spellReady(k), armed = U.spell === k, hot = over(x, ys, zb, zb), down = U.press === id, dy = down ? s : 0, fl = U.spellFlash[k] || 0;
+        U.hud.push({ id, x, y: ys, w: zb, h: zb, fn: () => pickSpell(k), hud: true }); if (hot) { U.hudHot = true; tipB = { x: x + zb / 2, y: my - g3 - hB, tip: S.name + ' (' + S.key + ') · ' + S.mana + ' mana' }; }
+        plate(x, ys + dy, zb, zb, armed || hot || down ? { bd: COLR.bdHi, bg: COLR.bg2 } : fl > .5 && fl % .5 > .25 ? { bd: COLR.ember } : ready ? { bd: '#5f86b0' } : {});
+        const [iw, ih] = PX.iconSize(S.icon), kk = Math.max(s, Math.floor(zb * .6 / Math.max(iw, ih)));
+        PX.icon(c, S.icon, x + Math.round((zb - iw * kk) / 2), ys + dy + Math.round((zb - ih * kk) / 2), kk, ready || armed ? 1 : .35);
+        const cdF = G.spellCd[k] / S.cd; if (cdF > 0) { c.globalAlpha = .6; c.fillStyle = COLR.dark; const hh = Math.round((zb - 4 * s) * cdF); c.fillRect(x + 2 * s, ys + dy + zb - 2 * s - hh, zb - 4 * s, hh); c.globalAlpha = 1; }
+        if (!tch) PX.text(c, S.key, x + 3 * s, ys + dy + 2 * s, es, ready ? COLR.tx : COLR.dim);
+        if (G.mana < S.mana && cdF <= 0) PX.text(c, '' + S.mana, x + zb - 3 * s, ys + dy + zb - PX.LINE * es - s, es, COLR.cold, { align: 'r' });
+      });
+    }
     if (CAM.man && play) {
-      const lbl = 'Follow the fight', w = tw(lbl) + pad * 2, fits = xr - g3 - w >= xl, xf2 = fits ? xr - g3 - w : Wr - w - 5 * s, yf = fits ? yB + Math.round((zb - hB) / 2) : yB - g3 - hB, hotF = over(xf2, yf, w, hB);
+      const lbl = 'Follow the fight', w = tw(lbl) + pad * 2, fits = xr - g3 - w >= xl, xf2 = fits ? xr - g3 - w : Wr - w - 5 * s, yf = fits ? yB + Math.round((zb - hB) / 2) : rightTop - g3 - hB, hotF = over(xf2, yf, w, hB);
       plate(xf2, yf, w, hB, hotF ? { bd: COLR.bdHi, bg: COLR.bg2 } : { bd: '#8a6a3a' }); text(lbl, xf2 + pad, yf + pad - s, COLR.tx);
       U.followRect = { id: 'follow', x: xf2, y: yf, w, h: hB, hot: hotF, fn: () => { camReset(); sfx('uiClick', CAM.x, CAM.z, .6); }, hud: true }; U.hud.push(U.followRect); if (hotF) U.hudHot = true; if (!fits) yUp = yf - g3;
     } else U.followRect = null;
-    if (tipB && !tch) { const w = tw(tipB.tip) + pad * 2, x = clamp(Math.round(tipB.x - w / 2), 4 * s + iL, Wr - w - 4 * s); plate(x, yB - g3 - hB, w, hB, { bd: COLR.bdHi }); text(tipB.tip, x + pad, yB - g3 - hB + pad - s, COLR.tx); yUp = Math.min(yUp, yB - g3 - hB - g3); }
+    if (tipB && !tch) { const w = tw(tipB.tip) + pad * 2, x = clamp(Math.round(tipB.x - w / 2), 4 * s + iL, Wr - w - 4 * s), ty = tipB.y || yB - g3 - hB; plate(x, ty, w, hB, { bd: COLR.bdHi }); text(tipB.tip, x + pad, ty + pad - s, COLR.tx); yUp = Math.min(yUp, ty - g3); }
     const wrap = (str, maxW) => { const out = []; let cur2 = ''; for (const wd of str.split(' ')) { const t = cur2 ? cur2 + ' ' + wd : wd; if (cur2 && tw(t) > maxW) { out.push(cur2); cur2 = wd; } else cur2 = t; } if (cur2) out.push(cur2); return out; };
     const boxW = Wr - iL - 10 * s;
+    if (U.spell && G.phase === 'play') {
+      // The armed spell: what to do next, and a Cancel button.
+      const S = SPELL[U.spell], l1 = S.name + ': ' + (tch ? 'tap the ground' : 'click the ground'), cl = 'Cancel', cbw = tw(cl) + pad * 2, cbh = LH + pad * 2 - s;
+      let l2 = tch ? S.desc : S.desc + ' Esc cancels.'; if (Math.max(tw(l1), tw(l2)) + pad * 3 + cbw > boxW) l2 = tw(S.desc) + pad * 3 + cbw <= boxW ? S.desc : '';
+      const w = Math.max(tw(l1), tw(l2)) + pad * 3 + cbw, nl = l2 ? 2 : 1, h = Math.max(cbh + 2 * s, LH * nl + pad * 2 - s), x = Math.round((iL + Wr - w) / 2), y = yUp - h, ty0 = y + Math.round((h - LH * nl) / 2) + s;
+      plate(x, y, w, h, { bd: COLR.bdHi }); text(l1, x + pad, ty0, COLR.amber); if (l2) text(l2, x + pad, ty0 + LH, COLR.dim);
+      const cx = x + w - pad - cbw, cy = y + Math.round((h - cbh) / 2), hotX = over(cx, cy, cbw, cbh), downX = U.press === 'spcancel';
+      U.hud.push({ id: 'spcancel', x: cx, y: cy, w: cbw, h: cbh, fn: () => { U.spell = null; sfx('uiHover', CAM.x, CAM.z, .6); }, hud: true }); if (hotX) U.hudHot = true;
+      plate(cx, cy + (downX ? s : 0), cbw, cbh, hotX || downX ? { bd: COLR.bdHi, bg: COLR.bg2 } : { bd: COLR.ember }); text(cl, cx + pad, cy + pad - s + (downX ? s : 0), COLR.tx);
+      yUp = y - g3;
+    }
     if (G.paused) { const k = s + 1, t1 = 'Paused', w = PX.measure(t1) * k + pad * 4, h = PX.LINE * k + pad * 2; plate(Math.round(W / 2 - w / 2), yUp - h, w, h, { bd: COLR.bdHi }); PX.text(c, t1, W / 2, yUp - h + pad, k, COLR.amber, { align: 'c' }); yUp -= h + g3; }
     if (U.tip && !U.menu) {
       const d = tipInfo(U.tip.type), a = sat(Math.min(U.tip.t * 4, (5.2 - U.tip.t) * 2)), head = d.head, lines = wrap(d.tip, Math.min(boxW - pad * 2, 46 * 6 * s));
@@ -5452,9 +5854,9 @@ const UI = (() => {
       c.globalAlpha = a; plate(x, y, w, h, { bd: d.bd }); text(head, x + w / 2, y + pad - s, COLR.amber, { align: 'c' }); lines.forEach((l, k) => text(l, x + w / 2, y + pad - s + (k + 1) * LH, COLR.tx, { align: 'c' })); c.globalAlpha = 1; yUp = y - g3;
     } else {
       const first = U.titleT < 16, a = tch ? sat(Math.min(U.titleT - 7.2, first ? 1 : 3 - U.moved, U.manual && !first ? 0 : 1, 62 - U.titleT)) : sat(Math.min(U.titleT - 7.2, 3 - Math.min(U.moved, U.idle > 20 ? U.moved : 0) + (U.titleT < 18 ? 8 : 0)));
-      if (a > .02 && !U.menu && !G.paused) {
-        const parts = tch ? ['Tap a pad to build', 'Drag to look around', 'Pinch or double-tap to zoom'] : ['Click a pad to build', '1-4 pick a tower', 'Space calls the next wave', 'Wheel zooms, drag moves the view'];
-        let lines = [parts.join(' · ')]; if (tw(lines[0]) + pad * 2 > boxW) { lines = parts.length > 3 ? [parts.slice(0, 2).join(' · '), parts.slice(2).join(' · ')] : parts; if (lines.some(l => tw(l) + pad * 2 > boxW)) lines = parts; }
+      if (a > .02 && !U.menu && !G.paused && !U.spell) {
+        const parts = tch ? ['Tap a pad to build', 'Drag to look around', 'Pinch or double-tap to zoom'] : ['Click a pad to build', '1-4 pick a tower', 'Q E T cast spells', 'Space calls the next wave', 'Wheel zooms, drag moves the view'];
+        let lines = [parts.join(' · ')]; if (tw(lines[0]) + pad * 2 > boxW) { lines = parts.length > 3 ? [parts.slice(0, 3).join(' · '), parts.slice(3).join(' · ')] : parts; if (lines.some(l => tw(l) + pad * 2 > boxW)) lines = parts; }
         let w = 0; for (const l of lines) w = Math.max(w, tw(l)); w += pad * 2; const h = LH * lines.length + pad * 2 - s, hx = Math.round((iL + Wr - w) / 2), hy = yUp - h;
         if (w <= boxW) { c.globalAlpha = a; plate(hx, hy, w, h); lines.forEach((l, k) => text(l, hx + w / 2, hy + pad - s + k * LH, COLR.dim, { align: 'c' })); c.globalAlpha = 1; }
       }
@@ -5501,14 +5903,43 @@ const UI = (() => {
         const ls = lines(lit || fk), ty = by + bh + 4 * s;
         text(ls[0], px + mp, ty, lit || fk ? COLR.tx : COLR.dim); text(ls[1], px + mp, ty + LH + s, COLR.dim); if (ls[2]) text(ls[2], px + mp, ty + LH * 2 + s, COLR.dim);
         if (tch && m.sel) { const can = G.gold >= TOWER[m.sel].cost[0]; text(can ? 'Tap again to build' : 'Not enough gold yet', px + mp, ty + LH * 3 + 2 * s, can ? COLR.amber : COLR.red); }
-      } else {
-        const t = m.tower, d = t.def, oc = t.oc || 0, maxed = t.lvl >= 2, occ = overchargeCost(t), full = maxed && !occ, upc = maxed ? occ : d.cost[t.lvl + 1], can = !full && G.gold >= upc && t.state === 'active', refund = Math.round(t.spent * .6), L1 = t.lvl + 1;
-        const ul = full ? 'Fully charged' : maxed ? 'Overcharge ' + upc : 'Upgrade ' + upc, sl = m.sellArm ? 'Confirm +' + refund : 'Sell +' + refund, iw9 = 9 * s, bw3 = Math.max(tw(ul), tw(sl), tw('Confirm +' + refund)) + iw9 + 11 * s, bh = (tch ? 24 : 15) * s, by0 = Math.round((bh - LH) / 2);
-        const st = (t.kind === 'guard' ? d.n[t.lvl] + ' footmen · ' + d.hp[t.lvl] + ' health' : 'Range ' + d.range[t.lvl].toFixed(1) + ' · Damage ' + Math.round(d.dmg[t.lvl] * (1 + OC_DMG * oc))) + (oc ? ' · +' + Math.round(OC_DMG * oc * 100) + '%' : '');
-        const nx = full ? t.kills + ' kills · fully charged' : maxed ? 'Overcharge: damage +' + Math.round(OC_DMG * (oc + 1) * 100) + '%' : (t.kind === 'guard' ? 'Next: ' + d.n[L1] + ' footmen · ' + d.hp[L1] + ' health' : 'Next: range ' + d.range[L1].toFixed(1) + ' · damage ' + d.dmg[L1]);
-        const fiw = PX.iconSize('flame')[0] * s, wP = Math.max(bw3 * 2 + 3 * s, tw(d.name) + 26 * s + oc * (fiw + s), tw(st), tw(nx)) + mp * 2, hP = mp * 2 + LH * 3 + 6 * s + bh, [px, py] = place(wP, hP);
+      } else if (m.tower.lvl === 2 && !m.tower.branch) {
+        // Branch choice: two cards with what each does and costs. Touch: tap to see, tap again to buy. Keys 1 and 2.
+        const t = m.tower, d = t.def, keys = BRANCH_KEYS[t.kind], active = t.state === 'active', refund = Math.round(t.spent * .6), cp = 4 * s;
+        const card = k => { const b = d.branches[k]; return { k, b, cost: branchCost(t, k), lines: b.desc, stat: branchStat(t.kind, k) }; }, cards = keys.map(card);
+        let cw = 0; for (const q of cards) cw = Math.max(cw, tw((tch ? '' : '1 ') + q.b.name) + 14 * s + tw('' + q.cost), tw(q.stat), ...q.lines.map(tw));
+        cw += cp * 2 + 2 * s; const ch = LH * 4 + cp * 2 - s, gapC = 4 * s, sideBySide = cw * 2 + gapC + mp * 2 <= Wr - iL - 8 * s;
+        const head = active ? 'Choose a branch' : 'Building...', hint = tch ? (m.sel ? (G.gold >= branchCost(t, m.sel) ? 'Tap it again to buy' : 'Not enough gold yet') : 'Tap a branch to see it') : 'Click to buy · keys 1 and 2';
+        const sl = m.sellArm ? 'Confirm +' + refund : 'Sell +' + refund, bh = (tch ? 22 : 14) * s;
+        const rowW = sideBySide ? cw * 2 + gapC : cw, wP = Math.max(rowW, tw(d.name) + 26 * s, tw(head), tw(hint), tw('Confirm +' + refund) + 20 * s) + mp * 2;
+        const hP = mp * 2 + LH * 2 + 3 * s + (sideBySide ? ch : ch * 2 + gapC) + 4 * s + bh + 3 * s + LH, [px, py] = place(wP, hP);
         U.menuRect = { x: px, y: py, w: wP, h: hP };
-        plate(px, py, wP, hP, oc ? { bd: COLR.ember } : {}); text(d.name, px + mp, py + mp - s, COLR.amber);
+        plate(px, py, wP, hP, { bd: COLR.bdHi }); text(d.name, px + mp, py + mp - s, COLR.amber);
+        for (let i = 0; i < 3; i++) PX.icon(c, 'star', px + wP - mp - (3 - i) * 6 * s, py + mp, s);
+        text(head, px + mp, py + mp + LH, active ? COLR.tx : COLR.dim);
+        const y0c = py + mp + LH * 2 + 3 * s, x0c = px + Math.round((wP - rowW) / 2);
+        cards.forEach((q, i) => {
+          const cx = sideBySide ? x0c + i * (cw + gapC) : x0c, cy = sideBySide ? y0c : y0c + i * (ch + gapC), can = active && G.gold >= q.cost;
+          const r = button(cx, cy, cw, ch, 'br' + q.k, can, () => { if (U.touch && m.sel !== q.k) { m.sel = q.k; sfx('uiHover', t.x, t.z, .8); } else doBranch(t, q.k); }, null, m.sel === q.k);
+          U.btns[U.btns.length - 1].branch = q.k;
+          const tx = cx + cp, ty = cy + cp - s + r.dy;
+          text((tch ? '' : (i + 1) + ' ') + q.b.name, tx, ty, r.lit ? '#ffd9a8' : COLR.amber);
+          const cwid = tw('' + q.cost); text('' + q.cost, cx + cw - cp - cwid, ty, can ? COLR.amber : COLR.red); PX.icon(c, 'coin', cx + cw - cp - cwid - 10 * s, ty, s, can ? 1 : .5);
+          text(q.lines[0], tx, ty + LH, COLR.tx); text(q.lines[1], tx, ty + LH * 2, COLR.tx); text(q.stat, tx, ty + LH * 3, COLR.ok);
+        });
+        const by = y0c + (sideBySide ? ch : ch * 2 + gapC) + 4 * s, bws = Math.min(wP - mp * 2, tw('Confirm +' + refund) + 20 * s), bxs = px + mp;
+        text(hint, px + mp, by + bh + 3 * s, tch && m.sel ? (G.gold >= branchCost(t, m.sel) ? COLR.amber : COLR.red) : COLR.dim);
+        const r = button(bxs, by, bws, bh, 'sell', true, () => { if (!m.sellArm) { m.sellArm = true; sfx('uiHover', t.x, t.z, .8); } else { buzz(16); doSell(t); } }, null, m.sellArm);
+        PX.icon(c, 'sell', bxs + 4 * s, by + Math.round((bh - LH) / 2) + r.dy, s); text(sl, bxs + 4 * s + 12 * s, by + Math.round((bh - LH) / 2) + r.dy, m.sellArm ? COLR.ember : COLR.tx);
+      } else {
+        const t = m.tower, d = t.def, oc = t.oc || 0, maxed = t.lvl >= 3, occ = overchargeCost(t), full = maxed && !occ, upc = maxed ? occ : t.lvl < 2 ? d.cost[t.lvl + 1] : 0, can = !full && upc > 0 && G.gold >= upc && t.state === 'active', refund = Math.round(t.spent * .6), L1 = t.lvl + 1;
+        const ul = full ? 'Fully charged' : maxed ? 'Overcharge ' + upc : 'Upgrade ' + upc, sl = m.sellArm ? 'Confirm +' + refund : 'Sell +' + refund, iw9 = 9 * s, bw3 = Math.max(tw(ul), tw(sl), tw('Confirm +' + refund)) + iw9 + 11 * s, bh = (tch ? 24 : 15) * s, by0 = Math.round((bh - LH) / 2);
+        const name = t.branch ? d.bdef.title : d.name;
+        const st = (t.branch ? branchStat(t.kind, t.branch) : t.kind === 'guard' ? d.n[t.lvl] + ' footmen · ' + d.hp[t.lvl] + ' health' : 'Range ' + d.range[t.lvl].toFixed(1) + ' · Damage ' + Math.round(d.dmg[t.lvl] * (1 + OC_DMG * oc))) + (oc ? ' · +' + Math.round(OC_DMG * oc * 100) + '%' : '');
+        const nx = full ? t.kills + ' kills · fully charged' : maxed ? 'Overcharge: damage +' + Math.round(OC_DMG * (oc + 1) * 100) + '%' : t.lvl === 1 ? (t.kind === 'guard' ? 'Next: ' + d.n[L1] + ' footmen · ' + d.hp[L1] + ' health' : 'Next: range ' + d.range[L1].toFixed(1) + ' · damage ' + d.dmg[L1]) + ', then a branch' : (t.kind === 'guard' ? 'Next: ' + d.n[L1] + ' footmen · ' + d.hp[L1] + ' health' : 'Next: range ' + d.range[L1].toFixed(1) + ' · damage ' + d.dmg[L1]);
+        const fiw = PX.iconSize('flame')[0] * s, wP = Math.max(bw3 * 2 + 3 * s, tw(name) + 26 * s + oc * (fiw + s), tw(st), tw(nx)) + mp * 2, hP = mp * 2 + LH * 3 + 6 * s + bh, [px, py] = place(wP, hP);
+        U.menuRect = { x: px, y: py, w: wP, h: hP };
+        plate(px, py, wP, hP, oc ? { bd: COLR.ember } : t.branch ? { bd: COLR.bdHi } : {}); text(name, px + mp, py + mp - s, COLR.amber);
         for (let i = 0; i < 3; i++) PX.icon(c, i <= t.lvl ? 'star' : 'starEmpty', px + wP - mp - (3 - i) * 6 * s, py + mp, s);
         for (let i = 0; i < oc; i++) PX.icon(c, 'flame', px + wP - mp - 19 * s - (oc - i) * (fiw + s), py + mp - s, s);
         text(st, px + mp, py + mp + LH + s, COLR.tx); text(nx, px + mp, py + mp + LH * 2 + 2 * s, full ? COLR.dim : maxed ? COLR.ember : COLR.ok);
