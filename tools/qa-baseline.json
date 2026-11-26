@@ -2,144 +2,118 @@
  "smoke": {
   "ashen": {
    "lives": 20,
-   "mons": 11,
+   "mons": 22,
    "towers": 4,
    "phase": "play"
   },
   "frost": {
    "lives": 20,
-   "mons": 11,
+   "mons": 13,
    "towers": 4,
    "phase": "play"
   },
   "fen": {
    "lives": 20,
-   "mons": 14,
+   "mons": 29,
    "towers": 4,
    "phase": "play"
   },
   "ember": {
    "lives": 20,
-   "mons": 11,
+   "mons": 12,
    "towers": 4,
    "phase": "play"
   },
   "dunes": {
    "lives": 20,
-   "mons": 13,
+   "mons": 16,
    "towers": 4,
    "phase": "play"
   },
   "boss": {
    "phase": "play",
-   "k": 5,
-   "mons": 14
+   "k": 8,
+   "mons": 13
   }
  },
  "sims": {
   "3": {
-   "maxMons": 50,
-   "maxWave": 30,
+   "maxMons": 85,
+   "maxWave": 32,
    "upgrades": 0,
    "builds": 0,
-   "bossKills": 5,
+   "bossKills": 3,
    "defeats": 0,
-   "minLives": 5,
-   "goldEarned": 16472,
+   "minLives": 18,
+   "goldEarned": 14510,
    "lands": [
     "ashen",
     "frost",
     "fen",
-    "ember",
-    "dunes"
+    "ember"
    ],
    "nanSeen": false,
    "phases": {
-    "clear": 5,
-    "crumble": 5,
-    "rise": 5,
-    "play": 5
+    "clear": 3,
+    "crumble": 3,
+    "rise": 3,
+    "play": 3
    },
    "boards": [
     {
-     "towers": 9,
-     "levels": 7,
-     "maxed": 0,
+     "towers": 11,
+     "levels": 15,
+     "maxed": 4,
      "pads": 11
     },
+    {
+     "towers": 11,
+     "levels": 22,
+     "maxed": 11,
+     "pads": 11
+    },
+    {
+     "towers": 11,
+     "levels": 22,
+     "maxed": 11,
+     "pads": 11
+    }
+   ],
+   "towers": 11,
+   "towerLevels": 17,
+   "maxedTowers": 6,
+   "lives": 18,
+   "gold": 65,
+   "slain": 2306,
+   "level": 3
+  },
+  "11": {
+   "maxMons": 91,
+   "maxWave": 32,
+   "upgrades": 0,
+   "builds": 0,
+   "bossKills": 3,
+   "defeats": 0,
+   "minLives": 20,
+   "goldEarned": 15047,
+   "lands": [
+    "ashen",
+    "frost",
+    "fen",
+    "ember"
+   ],
+   "nanSeen": false,
+   "phases": {
+    "clear": 3,
+    "crumble": 3,
+    "rise": 3,
+    "play": 3
+   },
+   "boards": [
     {
      "towers": 11,
      "levels": 13,
-     "maxed": 2,
-     "pads": 11
-    },
-    {
-     "towers": 11,
-     "levels": 18,
-     "maxed": 7,
-     "pads": 11
-    },
-    {
-     "towers": 11,
-     "levels": 21,
-     "maxed": 10,
-     "pads": 11
-    },
-    {
-     "towers": 11,
-     "levels": 22,
-     "maxed": 11,
-     "pads": 11
-    }
-   ],
-   "towers": 9,
-   "towerLevels": 8,
-   "maxedTowers": 0,
-   "lives": 20,
-   "gold": 67,
-   "slain": 1421,
-   "level": 5
-  },
-  "11": {
-   "maxMons": 44,
-   "maxWave": 30,
-   "upgrades": 0,
-   "builds": 0,
-   "bossKills": 5,
-   "defeats": 0,
-   "minLives": 8,
-   "goldEarned": 15677,
-   "lands": [
-    "ashen",
-    "frost",
-    "fen",
-    "ember",
-    "dunes"
-   ],
-   "nanSeen": false,
-   "phases": {
-    "clear": 5,
-    "crumble": 5,
-    "rise": 5,
-    "play": 5
-   },
-   "boards": [
-    {
-     "towers": 10,
-     "levels": 5,
-     "maxed": 0,
-     "pads": 11
-    },
-    {
-     "towers": 11,
-     "levels": 12,
-     "maxed": 1,
-     "pads": 11
-    },
-    {
-     "towers": 11,
-     "levels": 17,
-     "maxed": 6,
+     "maxed": 3,
      "pads": 11
     },
     {
@@ -155,44 +129,37 @@
      "pads": 11
     }
    ],
-   "towers": 8,
-   "towerLevels": 3,
-   "maxedTowers": 0,
+   "towers": 11,
+   "towerLevels": 19,
+   "maxedTowers": 8,
    "lives": 20,
-   "gold": 40,
-   "slain": 1391,
-   "level": 5
+   "gold": 146,
+   "slain": 2403,
+   "level": 3
   },
   "27": {
-   "maxMons": 46,
-   "maxWave": 30,
+   "maxMons": 87,
+   "maxWave": 32,
    "upgrades": 0,
    "builds": 0,
-   "bossKills": 5,
+   "bossKills": 3,
    "defeats": 0,
-   "minLives": 14,
-   "goldEarned": 15630,
+   "minLives": 11,
+   "goldEarned": 14822,
    "lands": [
     "ashen",
     "frost",
     "fen",
-    "ember",
-    "dunes"
+    "ember"
    ],
    "nanSeen": false,
    "phases": {
-    "clear": 5,
-    "crumble": 5,
-    "rise": 5,
-    "play": 5
+    "clear": 3,
+    "crumble": 3,
+    "rise": 3,
+    "play": 3
    },
    "boards": [
-    {
-     "towers": 9,
-     "levels": 7,
-     "maxed": 0,
-     "pads": 11
-    },
     {
      "towers": 11,
      "levels": 14,
@@ -201,12 +168,6 @@
     },
     {
      "towers": 11,
-     "levels": 18,
-     "maxed": 7,
-     "pads": 11
-    },
-    {
-     "towers": 11,
      "levels": 21,
      "maxed": 10,
      "pads": 11
@@ -218,18 +179,18 @@
      "pads": 11
     }
    ],
-   "towers": 7,
-   "towerLevels": 0,
-   "maxedTowers": 0,
-   "lives": 20,
-   "gold": 60,
-   "slain": 1414,
-   "level": 5
+   "towers": 11,
+   "towerLevels": 21,
+   "maxedTowers": 10,
+   "lives": 17,
+   "gold": 14,
+   "slain": 2202,
+   "level": 3
   }
  },
  "perf": {
-  "msPerFrame": 364.85,
-  "calls": 164,
-  "mons": 16
+  "msPerFrame": 331.91,
+  "calls": 153,
+  "mons": 13
  }
 }
