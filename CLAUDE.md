@@ -1,11 +1,14 @@
 # Cinderwatch
 
+New session? Read `HANDOFF.md` first.
+
 A self-playing 3D isometric tower defense in one HTML file (three.js r170, everything generated in code). Imported from kevintngo/cinderwatch (MIT). The plan for future work is in `ROADMAP.md`.
 
 ## Build and test
 
 - Edit `src/*.js` (and `src/shell.html`), never `index.html` directly. Then run `python3 tools/build.py`, which writes `index.html`. Commit both.
 - Screenshot / inspect: `node tools/cdp.js "seed=4&ff=30" wait:3000 shot:name eval:"__cw.G.lives"`. Shots go to `tools/shots/` (ignored by git).
+- Full regression check: `node tools/qa.js` (about 90 s; `--quick` for faster, `--save` to update the baseline after an intended change).
 - Deterministic run log: `node tools/record.js scan <seed> <seconds>`. Use the same seed before and after a balance change and compare.
 - `tools/chrome.js` picks the browser (set `CHROME` to override). On Linux it uses software GL, so frame-rate numbers here are pessimistic.
 - URL flags (`seed`, `biome`, `level`, `k`, `ff`, `fps`, ...) are listed in `README.md`.
