@@ -559,7 +559,7 @@ const _spM = new THREE.Matrix4(), _spQ = new THREE.Quaternion(), _spV = new THRE
 function fxMeteorImpact(m) {
   const { x, z, r, gy } = m, sc = r / 2.2;
   m.hit = true; m.crater = 7;
-  lightFlash(x, gy + 2.2, z, 0xff8a40, 900 * sc, .65, 18 + r * 4);
+  lightFlash(x, gy + 2.2, z, 0xff8a40, 600 * sc, .6, 18 + r * 4);
   fxTimed(5, x, gy + .8, z, r * 2.1, r * 2.1, 2.2, 1.1, .35, .7, .12);
   fxTimed(4, x, gy + .12, z, r * 4.2, r * 4.2, 2.0, 1.0, .35, 1, .55, { ground: true });
   fxTimed(4, x, gy + .1, z, r * 2.6, r * 2.6, 1.4, .6, .2, .8, .4, { ground: true });
@@ -622,4 +622,14 @@ function updateSpellFX(dt, t) {
     o.lI = (o.t < .4 ? 70 : 34) * fade;
   }
   for (let i = FX.lit.length - 1; i >= 0; i--) if (!FX.lit[i].alive) swapRemove(FX.lit, i);
+}
+
+// Ice around the feet of a frozen monster (m.frozen seconds left): two crystal clusters that grow in and sink away.
+function drawFrozen(m, sc) {
+  if (!(m.vis || m.fly) || m.dead || m.fly) return;
+  const k = Math.min(1, m.frozen * 3) * Math.max(.5, m.rad * 2.6) * Math.min(1.6, sc || 1), sd = (m.lseed || 0) * 13;
+  for (let i = 0; i < 2; i++) {
+    const a = sd + i * 2.6 + m.yaw, d = m.rad * .55, kk = k * (i ? .8 : 1.05);
+    _spE.set(i ? .35 : -.25, a, i ? -.2 : .3); _spQ.setFromEuler(_spE); _spM.compose(_spV.set(m.x + Math.cos(a) * d, m.y - .05, m.z + Math.sin(a) * d), _spQ, _spS.set(kk, kk, kk)); KIT.ice.put(_spM, 0, null);
+  }
 }
