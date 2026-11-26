@@ -24,7 +24,8 @@ async function page(browser, hash, errs) {
 
 // Simulates `secs` of game time at 1/30 s steps, sampling stats as it goes.
 const SIM = (secs) => {
-  const { G, step, MON } = window.__cw; const st = { maxMons: 0, maxWave: 0, upgrades: 0, builds: 0, bossKills: 0, defeats: 0, minLives: G.lives, goldEarned: 0, lands: new Set(), nanSeen: false, phases: {}, boards: [] };
+  const { G, step, MON } = window.__cw; const st = { maxMons: 0, maxWave: 0, upgrades: 0, builds: 0, bossKills: 0, defeats: 0, minLives: G.lives, goldEarned: 0, lands: new Set(), nanSeen: false, phases: {}, boards: [], events: 0 };
+  let lastEv = null;
   let lastGold = G.gold, lastPhase = G.phase;
   for (let i = 0; i < secs * 30; i++) {
     step(1 / 30);
@@ -33,6 +34,7 @@ const SIM = (secs) => {
     if (G.gold > lastGold) st.goldEarned += G.gold - lastGold; lastGold = G.gold;
     if (G.phase !== lastPhase) { st.phases[G.phase] = (st.phases[G.phase] || 0) + 1; if (G.phase === 'defeat') st.defeats++; if (G.phase === 'clear') { st.bossKills++; const tw = G.towers.filter(t => t.alive); st.boards.push({ towers: tw.length, levels: tw.reduce((a, t) => a + t.lvl, 0), maxed: tw.filter(t => t.lvl >= t.def.cost.length - 1).length, pads: G.B.pads.length }); } lastPhase = G.phase; }
     if (G.lives < st.minLives) st.minLives = G.lives;
+    const ek = G.event ? G.event.kind : null; if (ek && ek !== lastEv) st.events++; lastEv = ek;
     st.lands.add(G.B.bio && G.B.bio.key);
     if (i % 300 === 0) for (const m of G.mons) if (!isFinite(m.x) || !isFinite(m.z) || !isFinite(m.hp)) st.nanSeen = true;
   }
@@ -64,6 +66,7 @@ const SIM = (secs) => {
     const st = await p.evaluate(SIM, SIM_SECONDS);
     out.sims[seed] = st;
     if (st.nanSeen) fails.push('seed ' + seed + ': NaN monster position or hp');
+    if (st.bossKills >= 2 && st.events < st.bossKills) fails.push('seed ' + seed + ': only ' + st.events + ' land events over ' + st.bossKills + ' battlefields');
     await p.close();
   }
   // 3. Render cost (relative only; software GL here).
@@ -78,7 +81,7 @@ const SIM = (secs) => {
   console.log('Sims (' + SIM_SECONDS + ' s each, AI commander):');
   for (const s in out.sims) { const a = out.sims[s], b = base && base.sims && base.sims[s];
     const f = k => a[k] + (b && b[k] !== undefined && b[k] !== a[k] ? ' (was ' + b[k] + ')' : '');
-    console.log(`  seed ${s}: wave ${f('maxWave')}, lives ${f('lives')} (min ${f('minLives')}), defeats ${f('defeats')}, bosses ${f('bossKills')}, towers ${f('towers')}, levels ${f('towerLevels')}, maxed ${f('maxedTowers')}, gold earned ${f('goldEarned')}, max alive ${f('maxMons')}`);
+    console.log(`  seed ${s}: wave ${f('maxWave')}, lives ${f('lives')} (min ${f('minLives')}), defeats ${f('defeats')}, bosses ${f('bossKills')}, towers ${f('towers')}, levels ${f('towerLevels')}, maxed ${f('maxedTowers')}, gold earned ${f('goldEarned')}, max alive ${f('maxMons')}, land events ${f('events')}`);
     console.log('    end of each battlefield (towers/levels/maxed of pads): ' + a.boards.map(x => x.towers + '/' + x.levels + '/' + x.maxed + ' of ' + x.pads).join('  ')); }
   console.log('Perf:', JSON.stringify(out.perf), base && base.perf ? '(baseline ' + JSON.stringify(base.perf) + ')' : '');
   if (errs.length) { console.log('\nPAGE ERRORS:'); for (const e of [...new Set(errs)].slice(0, 20)) console.log('  ' + e); fails.push(errs.length + ' page errors'); }

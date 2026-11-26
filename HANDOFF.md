@@ -57,7 +57,8 @@ Nothing merges unless `node tools/qa.js` passes: no page errors, no NaN, no earl
   - `castSpell('rally', x, z)`: temporary footmen
 
   Mira owns the rules, the UI, the keys and the AI. Ash provides the visuals: `FX.meteor(x, z, r)` (the fall, impact and crater) and `FX.frostNova(x, z, r)`; the gameplay side calls them if present. Echo provides the sounds `'meteor'`, `'frostNova'`, `'rally'` and `'spellReady'`.
-- **Land events.** Forge owns them. `G.event` is `null` or `{ kind, t, ... }`, with kinds `'rockslide'` (ashen), `'blizzard'` (frost), `'bogfog'` (fen), `'lavaSurge'` (ember) and `'sandstorm'` (dunes). Echo provides a sound for each, named after its kind, plus `'eventEnd'`. Ash may add looks later.
+- **Land events (Forge, done in `src/63-events.js`).** One per battlefield on a mid wave (`G.evWave`), 14–17 s. Effects: `G.rangeMul`, `m.evMul`, boulders, lava eruptions (`addGroundFire` plus tower stun), extra wisps or scarabs, mist and weather overlay through `eventLook()`. Test hook: `window.__cwEvents.startEvent(kind)`. Visual polish wanted: the rockslide and sandstorm are subtle.
+- **Land events contract.** Forge owns them. `G.event` is `null` or `{ kind, t, ... }`, with kinds `'rockslide'` (ashen), `'blizzard'` (frost), `'bogfog'` (fen), `'lavaSurge'` (ember) and `'sandstorm'` (dunes). Echo provides a sound for each, named after its kind, plus `'eventEnd'`. Ash may add looks later.
 - **Branch purchase sound:** `'branch'` (Echo).
 
 ## Next
