@@ -33,19 +33,19 @@
   "boss": {
    "phase": "play",
    "k": 8,
-   "mons": 32
+   "mons": 31
   }
  },
  "sims": {
   "3": {
-   "maxMons": 132,
+   "maxMons": 191,
    "maxWave": 32,
    "upgrades": 0,
    "builds": 0,
    "bossKills": 3,
    "defeats": 0,
-   "minLives": 19,
-   "goldEarned": 14799,
+   "minLives": 18,
+   "goldEarned": 19094,
    "lands": [
     "ashen",
     "frost",
@@ -63,133 +63,179 @@
     {
      "towers": 11,
      "levels": 13,
-     "maxed": 2,
-     "pads": 11
-    },
-    {
-     "towers": 11,
-     "levels": 22,
-     "maxed": 11,
-     "pads": 11
-    },
-    {
-     "towers": 11,
-     "levels": 22,
-     "maxed": 11,
-     "pads": 11
-    }
-   ],
-   "towers": 11,
-   "towerLevels": 20,
-   "maxedTowers": 9,
-   "lives": 19,
-   "gold": 165,
-   "slain": 2335,
-   "level": 3
-  },
-  "11": {
-   "maxMons": 146,
-   "maxWave": 32,
-   "upgrades": 0,
-   "builds": 0,
-   "bossKills": 3,
-   "defeats": 0,
-   "minLives": 15,
-   "goldEarned": 15746,
-   "lands": [
-    "ashen",
-    "frost",
-    "fen",
-    "ember"
-   ],
-   "nanSeen": false,
-   "phases": {
-    "clear": 3,
-    "crumble": 3,
-    "rise": 3,
-    "play": 3
-   },
-   "boards": [
-    {
-     "towers": 11,
-     "levels": 14,
      "maxed": 3,
      "pads": 11
     },
     {
      "towers": 11,
-     "levels": 22,
+     "levels": 24,
      "maxed": 11,
      "pads": 11
     },
     {
      "towers": 11,
-     "levels": 22,
+     "levels": 30,
      "maxed": 11,
      "pads": 11
     }
    ],
    "towers": 11,
-   "towerLevels": 22,
-   "maxedTowers": 11,
-   "lives": 20,
-   "gold": 25,
-   "slain": 2376,
-   "level": 3
-  },
-  "27": {
-   "maxMons": 143,
-   "maxWave": 32,
-   "upgrades": 0,
-   "builds": 0,
-   "bossKills": 3,
-   "defeats": 0,
-   "minLives": 15,
-   "goldEarned": 15748,
-   "lands": [
-    "ashen",
-    "frost",
-    "fen",
-    "ember"
-   ],
-   "nanSeen": false,
-   "phases": {
-    "clear": 3,
-    "crumble": 3,
-    "rise": 3,
-    "play": 3
-   },
-   "boards": [
-    {
-     "towers": 11,
-     "levels": 14,
-     "maxed": 3,
-     "pads": 11
-    },
-    {
-     "towers": 11,
-     "levels": 22,
-     "maxed": 11,
-     "pads": 11
-    },
-    {
-     "towers": 11,
-     "levels": 22,
-     "maxed": 11,
-     "pads": 11
-    }
-   ],
-   "towers": 11,
-   "towerLevels": 22,
+   "towerLevels": 29,
    "maxedTowers": 11,
    "lives": 18,
-   "gold": 145,
-   "slain": 2293,
-   "level": 3
+   "gold": 116,
+   "slain": 2895,
+   "level": 3,
+   "branches": 17,
+   "spells": 43,
+   "statDetail": {
+    "branches": 17,
+    "spells": 43,
+    "rally": 13,
+    "meteor": 27,
+    "frost": 5,
+    "volley": 5,
+    "longbow": 5,
+    "knights": 2,
+    "pikes": 2,
+    "firebomb": 1
+   },
+   "press": 3.1
+  },
+  "11": {
+   "maxMons": 196,
+   "maxWave": 32,
+   "upgrades": 0,
+   "builds": 0,
+   "bossKills": 3,
+   "defeats": 0,
+   "minLives": 18,
+   "goldEarned": 18466,
+   "lands": [
+    "ashen",
+    "frost",
+    "fen",
+    "ember"
+   ],
+   "nanSeen": false,
+   "phases": {
+    "clear": 3,
+    "crumble": 3,
+    "rise": 3,
+    "play": 3
+   },
+   "boards": [
+    {
+     "towers": 11,
+     "levels": 15,
+     "maxed": 4,
+     "pads": 11
+    },
+    {
+     "towers": 11,
+     "levels": 24,
+     "maxed": 11,
+     "pads": 11
+    },
+    {
+     "towers": 11,
+     "levels": 30,
+     "maxed": 11,
+     "pads": 11
+    }
+   ],
+   "towers": 11,
+   "towerLevels": 26,
+   "maxedTowers": 11,
+   "lives": 18,
+   "gold": 196,
+   "slain": 2622,
+   "level": 3,
+   "branches": 14,
+   "spells": 40,
+   "statDetail": {
+    "branches": 14,
+    "spells": 40,
+    "meteor": 29,
+    "rally": 11,
+    "volley": 6,
+    "longbow": 2,
+    "knights": 2,
+    "pikes": 1,
+    "frost": 1,
+    "firebomb": 1,
+    "mortar": 1
+   },
+   "press": 3.03
+  },
+  "27": {
+   "maxMons": 178,
+   "maxWave": 32,
+   "upgrades": 0,
+   "builds": 0,
+   "bossKills": 3,
+   "defeats": 0,
+   "minLives": 18,
+   "goldEarned": 19544,
+   "lands": [
+    "ashen",
+    "frost",
+    "fen",
+    "ember"
+   ],
+   "nanSeen": false,
+   "phases": {
+    "clear": 3,
+    "crumble": 3,
+    "rise": 3,
+    "play": 3
+   },
+   "boards": [
+    {
+     "towers": 11,
+     "levels": 15,
+     "maxed": 4,
+     "pads": 11
+    },
+    {
+     "towers": 11,
+     "levels": 25,
+     "maxed": 11,
+     "pads": 11
+    },
+    {
+     "towers": 11,
+     "levels": 29,
+     "maxed": 11,
+     "pads": 11
+    }
+   ],
+   "towers": 11,
+   "towerLevels": 29,
+   "maxedTowers": 11,
+   "lives": 19,
+   "gold": 341,
+   "slain": 2896,
+   "level": 3,
+   "branches": 17,
+   "spells": 44,
+   "statDetail": {
+    "branches": 17,
+    "spells": 44,
+    "rally": 16,
+    "meteor": 28,
+    "volley": 7,
+    "longbow": 3,
+    "knights": 2,
+    "firebomb": 2,
+    "tempest": 2,
+    "frost": 1
+   },
+   "press": 3.1
   }
  },
  "perf": {
-  "msPerFrame": 385.19,
+  "msPerFrame": 365.92,
   "calls": 142,
   "mons": 8
  }
