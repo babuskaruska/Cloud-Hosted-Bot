@@ -124,8 +124,8 @@ function eventLook() {
 
 // ---- Event effects (drawing only) -------------------------------------------------------------------------
 // Rockslide: boulders drop from high behind the road with a dust trail and a growing shadow, land with a burst of
-// chips, dust and a crack, and stay on the road as rubble while the slow lasts, then sink away. Sandstorm, blizzard
-// and bog fog: wide sheets of sand, snow or fog stream across the view, plus low grit streaks. Lava surge: ember rain.
+// chips, dust and a crack, and stay on the road as rubble while the slow lasts, then sink away. Sandstorm and
+// blizzard: wide sheets and gusts of sand or snow stream across the view, plus grit streaks. Lava surge: ember rain.
 const EVFX = { rubble: [], gusts: [], acc: 0, gacc: 0, level: -1 }, _evfx = { x: 0, z: 0 };
 const _eq = new THREE.Quaternion(), _eq2 = new THREE.Quaternion(), _ev3 = new THREE.Vector3(), _es = new THREE.Vector3(), _em = new THREE.Matrix4(), _eax = new THREE.Vector3(0, 1, 0);
 const RUBBLE_TINT = [[1.2, 1.08, .92], [1.02, .94, .84], [1.3, 1.18, 1]], ROCK_FALL = .5;

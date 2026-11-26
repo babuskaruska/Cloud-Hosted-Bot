@@ -174,6 +174,8 @@ function initKits() {
   KIT.giant = humanKit('giant', 2);
   KIT.ogre = humanKit('ogre', 30);
   KIT.knight = humanKit('knight', 16); KIT.pike = humanKit('pike', 16); KIT.militia = humanKit('militia', 16);
+  // Branch footmen are few and small: only the torso casts a shadow (each caster is drawn again per shadow map).
+  for (const k of [KIT.knight, KIT.pike, KIT.militia]) for (const p of ['pelvis', 'head']) k[p].mesh.castShadow = false;
   for (const k of ['uArm', 'lArm', 'uLeg', 'lLeg']) KIT.giant[k].mesh.castShadow = true;
   const E = KIT.item = {};
   E.sword = new PartBatch(S => { S.box(.035, .13, .035, 0, 0, 0, COL.woodD, {}); S.box(.17, .03, .05, 0, .075, 0, iron, { l: L_METAL }); S.box(.055, .5, .018, 0, .34, 0, rust, { l: L_METAL, rough: .5 }); S.cone(.03, .08, 0, .63, 0, rust, { n: 4, l: L_METAL, rough: .5, rz: .012 }); }, 100, { rad: .05, shadow: false });
