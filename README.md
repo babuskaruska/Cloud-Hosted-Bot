@@ -25,7 +25,7 @@ A handful of firelit towers hold the great beacon of a ruined keep against endle
 - **Light as the main character.** A flickering beacon, a brazier on every tower, flaming arrows, cannon flashes and chain lightning, with moving shadows.
 - **A miniature look.** The scene is drawn at about half resolution, then given an ordered dither, a depth-aware tilt-shift blur, a vignette and film grain.
 - **No asset files.** Every model, texture and sound is generated in code.
-- **Small comforts.** The first time each monster appears, a line says what it does. Tower menus show what the next level brings. The wave plate shows the gold for calling a wave early. Your best wave and your mute setting are remembered.
+- **Small comforts.** The first time each monster appears, a line says what it does. Tower menus show what the next level brings. The wave plate shows the gold for calling a wave early. Your best wave, your mute setting, volumes and graphics choice are remembered. A lost run ends with a summary: waves, lands, monsters slain, gold earned, best branch and best tower.
 
 ![Frostfall, Mirefen, Emberscar and Duskmesa](media/biomes.jpg)
 
@@ -41,7 +41,11 @@ The game needs no input. Your first command puts you in charge, and the AI comma
 | Click or tap an empty pad | Open the build menu |
 | Click or tap a tower | Upgrade or sell |
 | `1` to `4` | Pick a tower kind |
-| `U` | Upgrade the hovered or selected tower |
+| `U` | Upgrade the hovered or selected tower; on a top-level tower, open its branch choice, then overcharge it |
+| `1` and `2` in a branch menu | Buy that branch |
+| `Q`, `E`, `T` (or `5` to `7`), then click the road | Cast Meteor, Frost or Rally (mana fills from kills) |
+| `R` | Mend the beacon: buy back lives |
+| `O` | Settings and help: volumes, sound, graphics, how to play |
 | `X` | Sell the selected tower (press twice, or click Sell twice, to confirm) |
 | `Space` | Call the next wave early |
 | `C`, or click the commander plate | Hand command back to the AI, or take it |
@@ -67,6 +71,9 @@ The game plays in portrait and in landscape, and follows the screen when it turn
 | Tap an empty pad | Open the build menu |
 | Tap a tower in the menu | Show what it does and its range; tap it again to build |
 | Tap a built tower | Upgrade, or sell (sell asks for a second tap) |
+| Tap a spell, then the road | Cast it (tap the spell again, or Cancel, to put it away) |
+| Tap Mend, under your gold | Buy back lives for the beacon |
+| Tap the gear | Settings and help: volumes, sound, graphics, how to play |
 | Tap the wave plate | Call the next wave early |
 | Tap the commander plate | Hand command back to the AI, or take it |
 | Drag | Move the view |

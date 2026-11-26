@@ -5677,7 +5677,7 @@ const UI = (() => {
     window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
     window.addEventListener('pointerleave', () => { if (!U.ptrs.size) U.inside = false; });
     document.addEventListener('mouseleave', () => { if (!U.ptrs.size) U.inside = false; });
-    window.addEventListener('wheel', e => { const [x, y] = pos(e), d = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY; camZoomTo(camZoomNow() * Math.exp(-clamp(d, -160, 160) * (e.ctrlKey ? .012 : .0024)), x, y, 16); e.preventDefault(); }, { passive: false });
+    window.addEventListener('wheel', e => { if (U.sets) { e.preventDefault(); return; } const [x, y] = pos(e), d = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY; camZoomTo(camZoomNow() * Math.exp(-clamp(d, -160, 160) * (e.ctrlKey ? .012 : .0024)), x, y, 16); e.preventDefault(); }, { passive: false });
     const stop = e => { if (e.cancelable) e.preventDefault(); };
     for (const ev of ['touchmove', 'touchcancel', 'dblclick', 'gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, stop, { passive: false });
     document.addEventListener('touchstart', e => {
@@ -5730,6 +5730,7 @@ const UI = (() => {
     cmd: () => ['You command', U.touch ? 'Tap a pad to build. Spells: tap one, then the road. The gear button has help and sound.' : 'Click a pad to build. Q E T cast spells on the road. O opens settings and help.'],
     mend: () => ['The beacon is hurt', U.touch ? 'Tap Mend, under your gold, to buy back lives.' : 'Mend (R, or the button under your gold) buys back lives.'],
     branch: () => ['Choose a branch', 'A tower at its top level can take one of two branches. Open its menu to pick one.'],
+    idle: () => ['Need a hand?', (U.touch ? 'Tap' : 'Click') + ' the commander plate, top right, and the AI plays again.'],
     oc: () => ['Overcharge', 'A tower with a branch can be overcharged three times, for more damage each time.'],
   };
   const tipInfo = key => { if (key.startsWith('help:')) { const h = HELP[key.slice(5)](); return { head: h[0], tip: h[1], bd: COLR.bdHi, dur: 7.5 }; } if (key.startsWith('event:')) { const E = EVENTS[key.slice(6)]; return { head: E.name, tip: E.tip, bd: '#5a7a9a' }; } if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
@@ -5828,9 +5829,10 @@ const UI = (() => {
   }
   function onTap(x, y, held) {
     const now = performance.now();
-    const b = held && inRect(held, x, y, U.touch ? 44 : 8) ? held : btnAt(x, y); if (b) { if (!b.hud) touchInput(); b.fn(x, y); return; }
-    // Settings and the run summary are modal: a tap outside the settings closes them; nothing reaches the board underneath.
-    if (U.sets) { if (!inRect(U.panelRect, x, y, 0)) openSettings(false); return; }
+    const b = held && inRect(held, x, y, U.touch ? 44 : 8) ? held : btnAt(x, y);
+    // Settings and the run summary are modal: a tap outside the settings closes them; nothing reaches the board or the HUD underneath.
+    if (U.sets && !(b && U.btns.some(o => o.id === b.id))) { if (!inRect(U.panelRect, x, y, 0) || (b && b.id === 'gear')) openSettings(false); return; }
+    if (b) { if (!b.hud) touchInput(); b.fn(x, y); return; }
     if (U.panelRect && inRect(U.panelRect, x, y, 0)) return;
     if (U.spell) { castAt(x, y); return; }
     if (inRect(U.menuRect, x, y, 0)) return;
@@ -5885,13 +5887,14 @@ const UI = (() => {
     if (AU.ready && !U.ptrs.size) U.sndArmed = true;
     if (U.keys.size) { let kx = 0, ky = 0; for (const k of U.keys) { kx += PAN[k][0]; ky += PAN[k][1]; } if (kx || ky) { CAM.za = null; camPan(kx * R.dh * .9 * dt, ky * R.dh * .9 * dt); } }
     if (G.phase === 'defeat') U.tip = null;
-    else if (U.tip) { U.tip.t += dt; if (U.tip.t > U.tip.dur) U.tip = null; } else if (U.tips.length && U.titleT > 7.5) { const type = U.tips.shift(); U.tip = { type, t: 0, dur: tipInfo(type).dur || 5.2 }; }
+    else if (U.tip) { if (!U.menu) U.tip.t += dt; if (U.tip.t > U.tip.dur) U.tip = null; } else if (U.tips.length && U.titleT > 7.5) { const type = U.tips.shift(); U.tip = { type, t: 0, dur: tipInfo(type).dur || 5.2 }; }
     if (window.visualViewport && Math.abs(window.visualViewport.scale - 1) > .02) fixPageZoom();
     pollGamepad(dt);
     if (U.sets) U.sets.t += dt;
     // First steps for a player in command: one help line each, the first time it matters.
     if (U.manual && G.phase === 'play') {
       if (G.lives <= G.maxLives - 4) helpTip('mend');
+      if (G.lives <= 8 && U.idle > 20) helpTip('idle');
       for (const t of G.towers) if (t.alive && t.state === 'active') { if (t.lvl === 2 && !t.branch) helpTip('branch'); else if (t.branch && !t.oc) helpTip('oc'); }
     }
     if (U.menu) { U.menu.t += dt; if ((U.menu.tower && !U.menu.tower.alive) || G.phase !== 'play') U.menu = null; else if (U.menu.pad.tower !== U.menu.tower) U.menu.tower = U.menu.pad.tower; }
@@ -6064,7 +6067,7 @@ const UI = (() => {
       plate(cx, cy + (downX ? s : 0), cbw, cbh, hotX || downX ? { bd: COLR.bdHi, bg: COLR.bg2 } : { bd: COLR.ember }); text(cl, cx + pad, cy + pad - s + (downX ? s : 0), COLR.tx);
       yUp = y - g3;
     }
-    if (G.paused) { const k = s + 1, t1 = 'Paused', w = PX.measure(t1) * k + pad * 4, h = PX.LINE * k + pad * 2; plate(Math.round(W / 2 - w / 2), yUp - h, w, h, { bd: COLR.bdHi }); PX.text(c, t1, W / 2, yUp - h + pad, k, COLR.amber, { align: 'c' }); yUp -= h + g3; }
+    if (G.paused && !U.sets) { const k = s + 1, t1 = 'Paused', w = PX.measure(t1) * k + pad * 4, h = PX.LINE * k + pad * 2; plate(Math.round(W / 2 - w / 2), yUp - h, w, h, { bd: COLR.bdHi }); PX.text(c, t1, W / 2, yUp - h + pad, k, COLR.amber, { align: 'c' }); yUp -= h + g3; }
     if (U.tip && !U.menu) {
       const d = tipInfo(U.tip.type), a = sat(Math.min(U.tip.t * 4, (U.tip.dur - U.tip.t) * 2)), head = d.head, lines = wrap(d.tip, Math.min(boxW - pad * 2, 46 * 6 * s));
       let w = tw(head); for (const l of lines) w = Math.max(w, tw(l)); w += pad * 2; const h = LH * (lines.length + 1) + pad * 2 - s, x = Math.round((iL + Wr - w) / 2), y = yUp - h;
