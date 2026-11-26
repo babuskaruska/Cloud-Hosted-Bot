@@ -110,7 +110,7 @@ const UI = (() => {
   function soundTap() { if (AU.ready && U.sndArmed) setMute(!AU.muted); }
   U.sawMonster = type => { if (G.seen[type]) return; G.seen[type] = 1; if (MON[type].tip && U.tips.length < 4) U.tips.push(type); };
   U.sawElite = kind => { const key = 'elite:' + kind; if (G.seen[key]) return; G.seen[key] = 1; if (U.tips.length < 5) U.tips.push(key); };
-  const tipInfo = key => { if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
+  const tipInfo = key => { if (key.startsWith('event:')) { const E = EVENTS[key.slice(6)]; return { head: E.name, tip: E.tip, bd: '#5a7a9a' }; } if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
   U.keepAwake = () => { try { if (navigator.wakeLock && !document.hidden && (!U.wake || U.wake.released)) navigator.wakeLock.request('screen').then(w => { U.wake = w; }, () => {}); } catch (e) {} };
   U.dropTouches = () => { U.ptrs.clear(); U.gest = null; U.press = null; if (U.touch) U.inside = false; };
   function fixPageZoom() {

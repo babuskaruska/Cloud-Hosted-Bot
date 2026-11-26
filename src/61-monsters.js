@@ -292,7 +292,7 @@ function updateUnits(dt) {
         for (const tw of G.towers) if (tw.alive && tw.state === 'active' && dist2(tw.x, tw.z, m.x, m.z) < sp.r * sp.r) { tw.stun = sp.stun; fxTimed(5, tw.x, tw.y + 2, tw.z, 3, 3, .6, 1.2, 2.4, .9, .3); }
       }
     }
-    let want = def.spd * m.spdMul * (1 - m.slowF) * (1 + m.haste), hopMul = 1;
+    let want = def.spd * m.spdMul * (1 - m.slowF) * (1 + m.haste) * (m.evMul || 1), hopMul = 1;
     if (def.frenzy) want *= 1 + def.frenzy * (1 - m.hp / m.maxHp);
     if (def.enrage && m.hp < m.maxHp * def.enrage[0]) { want *= def.enrage[1]; if (!m.rage) { m.rage = true; sfx('roar', m.x, m.z, 1, .9); fxEmbers(m.x, m.y + 2, m.z, 40, 1.2); shake(.6); } }
     if (def.hop) { if (!m.foe) m.hop = (m.hop + dt * def.hop[0] * (1 - m.slowF * .6)) % 1; hopMul = (m.hop > .22 && m.hop < .62) ? def.hop[1] : .1; }

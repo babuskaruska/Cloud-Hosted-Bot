@@ -98,5 +98,5 @@ function updateBiomeLook(dt) {
   if (!LOOK.cur) return;
   const k = 1 - Math.exp(-dt * 1.6), a = LOOK.cur, b = LOOK.to;
   for (const key in a) { const x = a[key], y = b[key]; for (let i = 0; i < x.length; i++) x[i] += (y[i] - x[i]) * k; }
-  applyLook(a); WX.fade = Math.min(1, WX.fade + dt * .5); WX.u.uFade.value = WX.fade;
+  applyLook(a); if (typeof eventLook === 'function') eventLook(); WX.fade = Math.min(1, WX.fade + dt * .5); WX.u.uFade.value = WX.fade;
 }
