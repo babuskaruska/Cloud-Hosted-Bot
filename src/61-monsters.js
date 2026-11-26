@@ -23,7 +23,7 @@ const MON = {
   brood: { name: 'Brood mother', tip: 'Bursts into spiders when it falls.', hp: 230, spd: .92, rad: .55, mass: 5, bounty: 24, lives: 2, hitH: .45, top: 1.05, dmg: 14, atkT: 1.0, eye: [3.4, .3, .2], scale: 2.3, split: ['spider', 5], death: 'bug', tint: [.7, .5, .6] },
   giant: { name: 'Bone Giant', tip: 'Slow and enormous. Hit it with everything.', hp: 1250, spd: .88, rad: .92, mass: 40, bounty: 200, lives: 5, hitH: 2.2, top: 4.0, dmg: 46, atkT: 1.7, eye: [5, .9, .2], scale: 2.7, boss: true, death: 'bones', blade: true, cat: 'armor' },
   ogre: { name: 'Ogre', tip: 'Smashes footmen aside.', hp: 1400, spd: .8, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 1.9, top: 3.4, dmg: 52, atkT: 1.8, eye: [4.5, 2.2, .3], scale: 2.6, boss: true, death: 'flesh', blade: true, cat: 'armor' },
-  jotun: { name: 'Frost Jotun', tip: 'Its stomp freezes nearby towers.', hp: 1150, spd: .8, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 1.9, top: 3.6, dmg: 52, atkT: 1.8, eye: [.8, 2.4, 4], scale: 2.75, boss: true, stomp: { every: 10, r: 5.2, stun: 1.8 }, death: 'flesh', blade: true, cat: 'armor', tint: [1.0, 1.25, 3.4] },
+  jotun: { name: 'Frost Jotun', tip: 'Its stomp freezes nearby towers.', hp: 1150, spd: .8, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 1.9, top: 3.6, dmg: 52, atkT: 1.8, eye: [.8, 2.4, 4], scale: 2.75, boss: true, stomp: { every: 10, r: 5.2, stun: 1.8 }, death: 'flesh', blade: true, cat: 'armor', tint: [.55, .85, 2.5] },
   queen: { name: 'Brood Queen', tip: 'Keeps hatching spiders.', hp: 1150, spd: .85, rad: 1.1, mass: 40, bounty: 200, lives: 5, hitH: 1.0, top: 2.0, dmg: 40, atkT: 1.5, eye: [3.8, .3, .9], scale: 4.2, boss: true, summon: { type: 'spider', n: 2, every: 8, max: 99, hp: 1 }, death: 'bug', cat: 'armor', tint: [.85, .55, 1.0] },
   colossus: { name: 'Magma Colossus', tip: 'Speeds up when it is nearly dead.', hp: 1250, spd: .7, rad: 1.05, mass: 60, bounty: 200, lives: 5, hitH: 2.2, top: 4.3, dmg: 60, atkT: 2.0, eye: [4, 1.6, .3], scale: 3.0, boss: true, armor: .85, slowRes: .3, enrage: [.3, 1.25], death: 'rock', cat: 'armor', tint: [1.5, .5, .26] },
   king: { name: 'The Buried King', tip: 'Summons mummies to walk with him.', hp: 1250, spd: .86, rad: .92, mass: 40, bounty: 200, lives: 5, hitH: 2.2, top: 4.2, dmg: 46, atkT: 1.7, eye: [.6, 3.0, 2.6], scale: 2.7, boss: true, summon: { type: 'mummy', n: 1, every: 9, max: 99, hp: .7 }, death: 'bones', blade: true, cat: 'armor', tint: [1.2, 1.0, .55] },
@@ -155,6 +155,7 @@ const EYES = {
 function drawMonster(m, t) {
   const ec = m.elite ? ELITE_CODE[m.elite] || 0 : 0, f0 = m.flash; if (ec) m.flash = Math.min(1, f0) + ec * 4;
   const M = rigMonster(m); m.flash = f0; if (ec) drawElite(m, t);
+  if (m.def.boss && m.vis && !m.entered && !m.dying && !m.fly && m.s > G.B.cave.s + 3) { m.entered = true; bossEntrance(m); }
   const ey = EYES[m.type], c = m.def.eye, sc = m.scale, tw = .8 + .2 * Math.sin(t * 9 + m.lseed * 7), ty = m.type;
   if (ey) {
     for (const sg of [-1, 1]) { _tv.set(sg * ey[0], ey[1], ey[2]).applyMatrix4(M); FX.add.push(_tv.x, _tv.y, _tv.z, ey[3] * sc * 1.5, ey[3] * sc * 1.5, 0, 0, c[0], c[1], c[2], tw, 0, 0, 0, 0); }
@@ -186,13 +187,13 @@ function spawnFootman(tower) {
 // Branch traits for footmen: knights are armored and hold more foes, pikemen reach further and gore big monsters.
 function footmanTraits(f, d) {
   f.armor = d.armor || 1; f.hold = d.hold || 2; f.reach = d.reach || 0; f.bigMul = d.bigMul || 1; f.kind = d.branch || (d.rally ? 'rally' : null);
-  f.scale = d.armor ? 1.12 : d.rally ? 1.0 : .9 + Math.min(2, f.tower.lvl) * .05; f.tint = d.armor ? [.86, .92, 1.12] : d.rally ? [1.25, 1.08, .72] : null;
+  f.scale = d.armor ? 1.12 : d.rally ? 1.0 : .9 + Math.min(2, f.tower.lvl) * .05; f.tint = d.rally ? MILITIA_TINT[f.slot % MILITIA_TINT.length] : null;
 }
 function killFootman(f, dx, dz) {
   G.menLost = (G.menLost || 0) + 1;
   f.dead = true; f.alive = false; f.gone = true; if (f.flame) { fxEmbers(f.flame.x, f.flame.y, f.flame.z, 6, .1); removeFlame(f.flame); f.flame = null; }
-  f.weapon = KIT.item.blade; if (!f.torch) f.shield = KIT.item.shieldH;
-  shatter(e => rigHuman(KIT.foot, SPEC.foot, e), f, [(dx || 0) * 1.6, .8, (dz || 0) * 1.6], { spread: .9, life: .8 });
+  const kit = footGear(f); f.pike = false;
+  shatter(e => rigHuman(kit, SPEC.foot, e), f, [(dx || 0) * 1.6, .8, (dz || 0) * 1.6], { spread: .9, life: .8 });
   fxDust(f.x, f.y + .1, f.z, 3, .5, { a: .35 }); sfx('footmanDie', f.x, f.z, .8);
 }
 function slotPos(f, out) {
@@ -253,15 +254,21 @@ function strike(a, b, dmg, byMan) {
     }
   }
 }
-function pikeKit() {
-  if (!KIT.item.pike) KIT.item.pike = new PartBatch(S => { S.seg([0, -.5, 0], [0, 1.3, 0], .022, .02, COL.woodD, { l: L_WOOD, n: 4 }); S.box(.12, .03, .03, 0, 1.28, 0, COL.iron, { l: L_METAL }); S.cone(.045, .24, 0, 1.42, 0, mulC(COL.steel, 1.15), { n: 4, l: L_METAL }); }, 24, { rad: .05, shadow: false });
-  return KIT.item.pike;
+// Footman looks per guard-post branch (gear only; the stats live in footmanTraits). Returns the body kit.
+// Knights: plate, great helm, blue tabard, heater shield and a longer sword. Pikes: kettle helm, red and black
+// doublet, a long pike held level to fight. Rally militia: peasants with pitchforks or cudgels, some in straw hats.
+function footGear(f) {
+  const k = f.kind, I = KIT.item; f.helm = f.plate = false; f.pike = false; f.hat = null; f.wScale = 1; f.shieldTint = null;
+  if (k === 'knights') { f.weapon = I.blade; f.wScale = 1.2; f.shield = f.torch ? null : I.kShield; return KIT.knight; }
+  if (k === 'pikes') { f.weapon = I.pike; f.shield = null; f.pike = true; return KIT.pike; }
+  if (k === 'rally') { const fork = f.slot % 2 === 0; f.weapon = fork ? I.fork : I.cudgel; f.pike = fork; f.shield = null; f.hat = f.slot % 4 < 2 ? I.straw : null; return KIT.militia; }
+  f.weapon = I.blade; f.shield = f.torch ? null : I.shieldH; return KIT.foot;
 }
+const MILITIA_TINT = [[1, 1, 1], [.92, 1.04, .86], [1.1, .96, .86], [.95, .93, 1.02], [1.06, 1.02, .9]];
 function drawFootman(f) {
-  const k = f.kind;
-  f.weapon = k === 'pikes' ? pikeKit() : KIT.item.blade; f.shield = f.torch || k === 'pikes' ? null : k === 'knights' ? KIT.item.shieldR : KIT.item.shieldH; f.wScale = k === 'knights' ? 1.15 : 1;
-  f.helm = k === 'knights' || k === 'pikes'; f.plate = k === 'knights';
-  rigHuman(KIT.foot, SPEC.foot, f);
+  const kit = footGear(f);
+  if (f.pike) f.lv = damp(f.lv || 0, f.target || f.atk >= 0 ? 1 : 0, 5, FX.dt || 0);
+  rigHuman(kit, SPEC.foot, f);
   if (f.torch && f.flame) { const p = RIGOUT.torch; f.flame.x = p.x; f.flame.y = p.y; f.flame.z = p.z; f.lx = p.x; f.ly = p.y + .2; f.lz = p.z; }
   if (f.hp < f.maxHp) G.hbars.push({ x: f.x, y: f.y + 1.55 * f.scale, z: f.z, f: sat(f.hp / f.maxHp), boss: false, man: true });
 }

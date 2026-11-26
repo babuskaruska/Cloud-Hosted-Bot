@@ -144,6 +144,8 @@ function blueprint(kind, lvl, branch) {
     mounts.top = lb ? H + 2.1 : H + 1.7;
     mounts.archers = [[[.12, H + .1, .28]], [[-.3, H + .1, .42], [.42, H + .1, .1]], [[-.35, H + .1, .5], [.5, H + .1, .3], [.25, H + .1, -.4]],
       lb ? [[-.35, H + .1, .5], [.5, H + .1, .3], [.25, H + .1, -.4]] : [[-.5, H + .1, .55], [.55, H + .1, .5], [.05, H + .1, .15]]][lvl];
+    // Spotter (archer crew): stands clear of the archers, the brazier and the ladder, and points out the target.
+    mounts.spotter = [null, [.38, H + .1, -.36], [-.44, H + .1, -.02], lb ? [-.44, H + .1, -.02] : [.52, H + .1, -.3]][lvl];
     if (lvl === 3) { mounts.light = lb ? 150 : 175; mounts.flameCol = lb ? [1, 1.08, .8] : [1.12, .82, .6]; mounts.lightCol = lb ? [1, .74, .42] : [1, .48, .2]; mounts.tint = lb ? [.62, .95, .62] : [1.15, .62, .55]; }
   } else if (kind === 'bombard') {
     const mo = lvl === 3 && branch === 'mortar', fb = lvl === 3 && !mo;
@@ -400,7 +402,7 @@ class Tower {
     for (const k of ['staticMesh', 'scaf', 'carriage', 'crystal']) if (this[k]) { this.group.remove(this[k]); this[k].traverse(o => { if (o.geometry) o.geometry.dispose(); }); this[k] = null; }
     this.barrel = null; this.shards = null; this.ringG = null;
     removeFlame(this.flame); removeFlame(this.flame2); this.flame = this.flame2 = null; this.em.on = keepLights ? this.em.on * .4 : 0;
-    this.archers.length = 0; this.crew.length = 0;
+    this.archers.length = 0; this.crew.length = 0; this.spotter = null;
   }
   finish() {
     const M = new Soup(); for (const p of this.pieces) M.merge(p.soup, { p: [0, p.y, 0], ao: [0, 1.0, .72] });
@@ -418,7 +420,8 @@ class Tower {
     this.light0 = d.light[lvl] !== undefined ? d.light[lvl] : mt.light !== undefined ? mt.light : d.light[d.light.length - 1];
     this.em.I = this.light0; this.em.range = this.kind === 'archer' ? 12 : 10.5;
     const tint = mt.tint || [1, .9, .7];
-    if (this.kind === 'archer') mt.archers.slice(0, (d.n && d.n[lvl]) || 3).forEach((a, i) => this.archers.push({ l: a, yaw: this.yaw, draw: 0, cool: .4 + i * .3, e: { scale: .82, ph: 0, mv: 0, atk: -1, bow: true, draw: 0, pitch: 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0 } }));
+    if (this.kind === 'archer') mt.archers.slice(0, (d.n && d.n[lvl]) || 3).forEach((a, i) => this.archers.push({ l: a, yaw: this.yaw, draw: 0, cool: .4 + i * .3, e: { scale: .82, ph: 0, mv: 0, atk: -1, bow: true, quiver: true, draw: 0, pitch: 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0 } }));
+    this.spotter = this.kind === 'archer' && mt.spotter ? { l: mt.spotter, yaw: this.yaw, e: { scale: .8, ph: 0, mv: 0, atk: -1, point: 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0, flinch: 0 } } : null;
     this.crew.length = 0;
     if (this.kind === 'bombard' && mt.crew) mt.crew.forEach((c, i) => this.crew.push({ l: c, side: c[0] < 0 ? -1 : 1, e: { scale: .8, ph: 0, mv: 0, atk: -1, torch: i === 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0, flinch: 0 } }));
     if (this.kind === 'bombard') this.makeGun();
@@ -516,6 +519,15 @@ class Tower {
         }
       } else { a.draw = Math.max(0, a.draw - dt * 3); a.yaw = angDamp(a.yaw, this.yaw + Math.sin(G.t * .5 + a.l[0] * 3) * .5, 2, dt); e.pitch = damp(e.pitch, 0, 4, dt); if (a.cool < .3) a.cool = .3; }
       e.yaw = a.yaw; e.draw = a.draw;
+      rigHuman(KIT.foot, SPEC.foot, e);
+    }
+    // The spotter turns to the target and points it out; idle, he scans the road. Drawing only (no random draws).
+    const sp = this.spotter;
+    if (sp) {
+      const p = this.w(sp.l, _ap), e = sp.e; e.x = p.x; e.y = p.y - (1 - easeOut(this.appear)) * .5; e.z = p.z; e.scale = .8 * (.3 + .7 * this.appear);
+      if (tgt) sp.yaw = angDamp(sp.yaw, Math.atan2(tgt.x - p.x, tgt.z - p.z), 5, dt); else sp.yaw = angDamp(sp.yaw, this.yaw + Math.sin(G.t * .4 + this.idx * 2) * 1.1, 1.5, dt);
+      e.point = damp(e.point, tgt ? 1 : 0, 4, dt); e.yaw = sp.yaw; e.ph += dt * 2; e.mv = 0;
+      if (TOWER_STUN) e.point = 0;
       rigHuman(KIT.foot, SPEC.foot, e);
     }
   }

@@ -2463,14 +2463,14 @@ function updateFX(dt, t) {
     for (let j = 0; j < b.pts.length - 1; j++) { const p = b.pts[j], q = b.pts[j + 1]; SG.push(p[0], p[1], p[2], w, q[0], q[1], q[2], w, c[0] * 4, c[1] * 4, c[2] * 4, k); SG.push(p[0], p[1], p[2], w * 3.5, q[0], q[1], q[2], w * 3.5, c[0], c[1], c[2], k * .35); }
     if (b.fork > 0) { const p = b.pts[b.fork]; SG.push(p[0], p[1], p[2], w * .7, p[0] + b.fd[0] * .7, p[1] + b.fd[1] * .7, p[2] + b.fd[2] * .7, w * .2, c[0] * 3, c[1] * 3, c[2] * 3, k); }
   }
-  updateFires(dt, t); updateSpellFX(dt, t);
+  updateFires(dt, t); updateSpellFX(dt, t); updateBossIn(dt);
   const calm = G.phase === 'play' && !G.spawning && !G.mons.length;
   if (calm && !FX.calm) FX.decals.fadeAll(4.5);
   FX.calm = calm;
   FX.decals.update(dt);
 }
 function endFX() { FX.add.end(); FX.alpha.end(); FX.segs.end(); }
-function clearFX() { for (const o of FX.lit) o.alive = false; FX.lit.length = 0; FX.meteors.length = 0; FX.novas.length = 0; FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; for (const f of FX.fires) f.alive = false; FX.fires.length = 0; FX.scorch.length = 0; FX.decals.clear(); }
+function clearFX() { for (const o of FX.lit) o.alive = false; FX.lit.length = 0; FX.bossIn.length = 0; FX.meteors.length = 0; FX.novas.length = 0; FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; for (const f of FX.fires) f.alive = false; FX.fires.length = 0; FX.scorch.length = 0; FX.decals.clear(); }
 
 // ---- Camera shake, hit-stop and flash ----------------------------------------------------------------
 // shake(amount): adds trauma that decays smoothly. ~.2 shell, ~.5 sapper, ~1 boss stomp; the total is capped
@@ -2683,6 +2683,57 @@ function drawFrozen(m, sc) {
   }
 }
 
+// ---- Boss entrance -------------------------------------------------------------------------------------
+// bossEntrance(m): called once when a boss first steps into view (drawMonster). The ground splits in glowing
+// cracks with heaved slabs, a dust ring rolls out, a light flare in the boss's colour, a short flash and shake,
+// and the camera is asked to frame the boss for a moment (CAM.ent, read by updateCamera; skipped while the
+// player holds the view). Visual only: effects random stream, no hit-stop, so the simulation is unchanged.
+const BOSS_GLOW = { giant: [1.2, .95, .6], ogre: [1.3, .8, .45], jotun: [.55, .9, 1.5], queen: [1.1, .45, 1.4], colossus: [1.8, .6, .18], king: [.45, 1.4, 1.15] };
+FX.bossIn = [];
+function bossEntrance(m) {
+  if (!G.B || G.phase !== 'play') return;
+  const x = m.x, z = m.z, gy = FX.groundAt(x, z), c = BOSS_GLOW[m.type] || [1.2, .9, .6], sc = Math.max(1, m.scale || 1), cracks = [], slabs = [];
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * TAU + frr(-.35, .35), len = frr(2.2, 3.8), pts = [[x, gy + .13, z]];
+    let px = x, pz = z, ang = a;
+    for (let k = 1; k <= 4; k++) { ang += frr(-.45, .45); px += Math.cos(ang) * len / 4; pz += Math.sin(ang) * len / 4; pts.push([px, FX.groundAt(px, pz) + .13, pz]); }
+    cracks.push(pts);
+    for (let k = 1; k <= 3; k++) { const p = pts[k], q = pts[k + 1]; FX.decals.add(FX.groundAt, (p[0] + q[0]) / 2, (p[2] + q[2]) / 2, .42 - k * .07, .015, .012, .012, .8, 7, 0); }
+    for (let k = 1; k <= 3; k++) { const p = pts[k]; slabs.push({ x: p[0] + frr(-.2, .2), z: p[2] + frr(-.2, .2), y: p[1], s: frr(1.4, 2.4) * (1.2 - k * .2), q: new THREE.Quaternion().setFromEuler(new THREE.Euler(frr(-.6, .6), frnd() * TAU, frr(-.6, .6))), at: k * .06 }); }
+  }
+  FX.bossIn.push({ x, z, gy, t: 0, c, cracks, slabs, seed: frnd() * 50 });
+  lightFlash(x, gy + 2.5, z, new THREE.Color(Math.min(1, c[0] * .7), Math.min(1, c[1] * .7), Math.min(1, c[2] * .7)).getHex(), 600, .8, 24);
+  FX.flash = Math.max(FX.flash, .25 * FX.flashK); shake(.9);
+  fxTimed(4, x, gy + .1, z, 9 * sc, 9 * sc, c[0], c[1], c[2], 1, .8, { ground: true });
+  fxTimed(4, x, gy + .12, z, 5.5 * sc, 5.5 * sc, c[0] * .8, c[1] * .8, c[2] * .8, .8, .55, { ground: true });
+  fxTimed(5, x, gy + 1.4, z, 5, 5, c[0], c[1], c[2], .8, .3);
+  for (let i = 0; i < 22; i++) { const a = i / 22 * TAU + frnd() * .2, s = frr(3, 5.5); fxSmoke(x + Math.cos(a) * .8, gy + frr(.1, .4), z + Math.sin(a) * .8, Math.cos(a) * s, frr(.2, .8), Math.sin(a) * s, frr(1.4, 2.4), frr(.6, 1), 1.8, .34, .3, .27, .55, { drag: 2.2 }); }
+  for (let i = 0; i < 10; i++) { _spM.compose(_spV.set(x + frr(-.8, .8), gy + .3, z + frr(-.8, .8)), _spQ.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _spS.setScalar(frr(.6, 1.2))); addDebris(KIT.rubble, _spM, [.5, .46, .42], frr(-3, 3), frr(3, 7), frr(-3, 3), frr(4, 10), frr(1.5, 2.6), { extra: 1 }); }
+  FX.decals.add(FX.groundAt, x, z, 2.6, .02, .017, .015, .7, 40);
+  if (!CAM.man) CAM.ent = { m, t: 0, dur: 1.6 };
+}
+function updateBossIn(dt) {
+  const L = FX.bossIn, A = FX.add, SG = FX.segs;
+  for (let i = L.length - 1; i >= 0; i--) {
+    const o = L[i]; o.t += dt; if (o.t > 4.5) { swapRemove(L, i); continue; }
+    const glow = Math.max(0, 1 - o.t / 2.2), grow = Math.min(1, o.t / .3), c = o.c, sink = Math.max(0, o.t - 3.2) * .5;
+    for (const pts of o.cracks) {
+      const n = (pts.length - 1) * grow;
+      for (let k = 0; k < Math.ceil(n); k++) {
+        const a = pts[k], b = pts[k + 1], f = Math.min(1, n - k), bx = a[0] + (b[0] - a[0]) * f, by = a[1] + (b[1] - a[1]) * f, bz = a[2] + (b[2] - a[2]) * f, w = .13 * (1 - k * .2);
+        SG.push(a[0], a[1], a[2], w, bx, by, bz, w * .7, c[0] * 1.6, c[1] * 1.6, c[2] * 1.6, glow * (1 - k * .15));
+        if (glow > .05) SG.push(a[0], a[1] + .02, a[2], w * 4, bx, by + .02, bz, w * 3, c[0] * .5, c[1] * .5, c[2] * .5, glow * .45);
+      }
+    }
+    for (const s of o.slabs) {
+      const u = sat((o.t - s.at) / .18); if (u <= 0) continue;
+      const k = s.s * easeOutBack(u) * (o.t > 3.6 ? Math.max(0, 1 - (o.t - 3.6) / .9) : 1);
+      _spM.compose(_spV.set(s.x, s.y - .05 - sink * .3, s.z), s.q, _spS.set(k, k * .45, k)); KIT.rubble.put(_spM, 0, RIM_TINT);
+    }
+    if (glow > 0) A.push(o.x, o.gy + .12, o.z, 4, 4, 0, 0, c[0] * .6, c[1] * .6, c[2] * .6, .5 * glow, 2, 0, 0, 1);
+  }
+}
+
 
 const WX = { mesh: null, u: null, fade: 1 };
 function initWeather() {
@@ -2820,6 +2871,63 @@ function humanKit(style, cap) {
     k.lArm = new PartBatch(S => { S.box(.085, .24, .085, 0, -.12, 0, lea, {}); S.box(.09, .08, .09, 0, -.27, 0, COL.skin, {}); }, limb, { rad: .07, shadow: false });
     k.uLeg = new PartBatch(S => { S.box(.115, .28, .115, 0, -.14, 0, mulC(COL.clothD, 1.5), { l: L_CLOTH }); }, limb, { rad: .08, shadow: false });
     k.lLeg = new PartBatch(S => { S.box(.1, .28, .1, 0, -.14, 0, mulC(lea, .7), {}); S.box(.11, .06, .2, 0, -.29, .045, mulC(lea, .6), {}); }, limb, { rad: .08, shadow: false });
+  } else if (style === 'knight') {
+    // Guard-post knights: plate harness under a blue tabard with a white cross, a flat-topped great helm with a
+    // blue crest. Upper arms reuse the footman's mail sleeves (shared batch, no extra draw call).
+    const F = KIT.foot, pl = mulC(COL.steel, 1.08), plD = mulC(COL.steel, .72), blue = C(0x3762b4), blueD = C(0x203c78), wht = C(0xe2ddd0), trim = mulC(COL.gold, .85), m = () => ({ l: L_METAL, rough: .38, jit: .03 });
+    k.pelvis = new PartBatch(S => { S.box(.3, .14, .21, 0, 0, 0, plD, m()); S.box(.32, .05, .22, 0, .06, 0, COL.leather, {}); for (const z of [.11, -.11]) S.box(.22, .22, .025, 0, -.1, z, blue, { l: L_CLOTH, jit: 0 }); S.box(.22, .025, .03, 0, -.2, .11, trim, { jit: 0 }); }, cap, { rad: .12 });
+    k.torso = new PartBatch(S => {
+      S.box(.36, .4, .24, 0, .21, 0, blue, { l: L_CLOTH, jit: 0 }); S.box(.37, .06, .25, 0, .02, 0, blueD, { l: L_CLOTH, jit: 0 });
+      S.box(.06, .3, .02, 0, .22, .125, wht, { l: L_CLOTH, jit: 0 }); S.box(.24, .06, .02, 0, .27, .125, wht, { l: L_CLOTH, jit: 0 });
+      S.box(.34, .42, .03, 0, .2, -.14, blueD, { l: L_CLOTH, jit: 0 });
+      for (const s of [-1, 1]) { S.sph(.115, s * .22, .41, 0, pl, { l: L_METAL, rough: .35, w: 6, h: 4, smooth: false, sc: [1.05, .75, 1.15] }); S.box(.13, .025, .2, s * .23, .345, 0, trim, { jit: 0 }); }
+      S.cyl(.1, .09, 0, .46, 0, pl, { n: 8, l: L_METAL, rough: .38 });
+    }, cap, { rad: .17 });
+    k.head = new PartBatch(S => {
+      S.cyl(.125, .25, 0, .125, .005, pl, { n: 8, l: L_METAL, rough: .32, jit: 0 }); S.cyl(.128, .025, 0, .255, .005, plD, { n: 8, l: L_METAL, rough: .4, jit: 0 });
+      S.box(.2, .028, .04, 0, .155, .11, COL.black, { jit: 0 }); S.box(.035, .14, .03, 0, .1, .122, trim, { l: L_METAL, rough: .35, jit: 0 });
+      for (let i = 0; i < 3; i++) S.box(.016, .016, .02, .05, .07 - i * .03, .12, COL.black, { jit: 0 });
+      S.box(.035, .09, .2, 0, .31, -.01, blue, { l: L_CLOTH, jit: 0 }); S.box(.025, .05, .16, 0, .37, -.03, blueD, { l: L_CLOTH, jit: 0 });
+    }, cap, { rad: .15 });
+    k.uArm = F.uArm;
+    k.lArm = new PartBatch(S => { S.box(.095, .24, .095, 0, -.12, 0, pl, m()); S.box(.12, .07, .12, 0, -.02, 0, plD, m()); S.box(.1, .09, .1, 0, -.27, 0, plD, m()); }, limb, { rad: .07, shadow: false });
+    k.uLeg = new PartBatch(S => { S.box(.125, .28, .125, 0, -.14, 0, pl, m()); S.box(.13, .07, .14, 0, -.28, .01, plD, m()); }, limb, { rad: .08, shadow: false });
+    k.lLeg = new PartBatch(S => { S.box(.11, .28, .11, 0, -.14, 0, pl, m()); S.box(.12, .06, .21, 0, -.29, .045, plD, m()); }, limb, { rad: .08, shadow: false });
+  } else if (style === 'pike') {
+    // Pikemen: a quartered red and black doublet over mail, an open kettle helm with a wide brim (face showing),
+    // red and black striped hose. Arms and boots reuse the footman's batches.
+    const F = KIT.foot, red = C(0xb02a20), blk = C(0x231f24), mail = COL.steel;
+    k.pelvis = new PartBatch(S => { for (const s of [-1, 1]) S.box(.15, .15, .2, s * .075, -.01, 0, s > 0 ? blk : red, { l: L_CLOTH, jit: 0 }); S.box(.31, .05, .21, 0, .06, 0, COL.leather, {}); S.box(.05, .05, .02, 0, .06, .108, COL.brass, { l: L_METAL, jit: 0 }); }, cap, { rad: .12 });
+    k.torso = new PartBatch(S => {
+      for (const s of [-1, 1]) { S.box(.17, .19, .22, s * .085, .1, 0, s > 0 ? red : blk, { l: L_CLOTH, jit: 0 }); S.box(.17, .19, .22, s * .085, .29, 0, s > 0 ? blk : red, { l: L_CLOTH, jit: 0 }); }
+      for (const y of [.16, .24, .32]) S.box(.012, .05, .02, .0, y, .112, COL.brass, { l: L_METAL, jit: 0 });
+      S.box(.4, .08, .24, 0, .41, 0, mail, { l: L_METAL, rough: .5 }); S.box(.16, .08, .16, 0, .45, 0, COL.skin, {});
+    }, cap, { rad: .17 });
+    k.head = new PartBatch(S => {
+      S.box(.19, .2, .19, 0, .12, 0, COL.skin, { jit: .04 }); S.box(.18, .06, .04, 0, .04, .085, mulC(COL.leather, .55), {});
+      S.add(gDome(8, 3), { s: [.15, .14, .15], p: [0, .19, 0], c: mail, l: L_METAL, rough: .36 }); S.cyl(.24, .022, 0, .19, 0, mulC(mail, .8), { n: 10, l: L_METAL, rough: .36, jit: 0 });
+      S.box(.02, .1, .14, 0, .3, 0, mulC(mail, 1.1), { l: L_METAL, rough: .36, jit: 0 }); S.box(.03, .12, .03, .08, .38, -.04, red, { r: [-.5, 0, .3], jit: 0 });
+      for (const s of [-1, 1]) S.box(.03, .03, .02, s * .05, .14, .098, COL.black, { jit: 0 });
+    }, cap, { rad: .15 });
+    k.uArm = F.uArm; k.lArm = F.lArm; k.lLeg = F.lLeg;
+    k.uLeg = new PartBatch(S => { for (let i = 0; i < 4; i++) S.box(.118, .07, .118, 0, -.035 - i * .07, 0, i & 1 ? blk : red, { l: L_CLOTH, jit: 0 }); }, limb, { rad: .08, shadow: false });
+  } else if (style === 'militia') {
+    // Rally militia: undyed linen shirts, a brown jerkin, rolled sleeves, bare heads with hair; varied per man by tint.
+    const F = KIT.foot, lin = C(0xa89a78), jerk = C(0x6a4a30), brown = C(0x5a4632), hair = C(0x3a2a1c);
+    k.pelvis = new PartBatch(S => { S.box(.28, .14, .19, 0, 0, 0, brown, { l: L_CLOTH }); S.box(.3, .04, .2, 0, .06, 0, mulC(COL.rope, .8), { jit: 0 }); }, cap, { rad: .12 });
+    k.torso = new PartBatch(S => {
+      S.box(.32, .38, .21, 0, .2, 0, lin, { l: L_CLOTH, jit: 0 });
+      for (const s of [-1, 1]) S.box(.11, .36, .225, s * .1, .19, 0, jerk, { l: L_CLOTH, jit: 0 });
+      S.box(.34, .05, .225, 0, .06, 0, mulC(COL.leather, .8), {}); S.box(.16, .08, .16, 0, .44, 0, COL.skin, {});
+    }, cap, { rad: .17 });
+    k.head = new PartBatch(S => {
+      S.box(.19, .2, .19, 0, .12, 0, COL.skin, { jit: .04 }); S.box(.2, .07, .2, 0, .22, -.005, hair, { jit: .05 }); S.box(.2, .14, .06, 0, .15, -.075, hair, { jit: .05 });
+      for (const s of [-1, 1]) S.box(.03, .03, .02, s * .05, .14, .098, COL.black, { jit: 0 });
+      S.box(.12, .04, .02, 0, .065, .097, mulC(hair, 1.2), { jit: 0 });
+    }, cap, { rad: .14 });
+    k.uArm = new PartBatch(S => { S.box(.1, .2, .1, 0, -.1, 0, lin, { l: L_CLOTH }); S.box(.085, .07, .085, 0, -.235, 0, COL.skin, {}); }, limb, { rad: .07, shadow: false });
+    k.lArm = F.lArm; k.lLeg = F.lLeg;
+    k.uLeg = new PartBatch(S => { S.box(.115, .28, .115, 0, -.14, 0, brown, { l: L_CLOTH }); }, limb, { rad: .08, shadow: false });
   } else {
     const sk = COL.ogre, sdk = COL.ogreD, o = () => ({ jit: .06, d: 1 });
     k.pelvis = new PartBatch(S => { S.ico(.2, 0, 0, 0, sdk, { sc: [1.15, .6, .95], d: 1 }); clothPanel(S, { x0: -.15, x1: .15, yTop: .02, len: .3, z: .17, col: COL.leather, rng: makeRng(3), sway: 0, nx: 3, ny: 4 }); clothPanel(S, { x0: -.14, x1: .14, yTop: .02, len: .24, z: -.17, col: mulC(COL.leather, .7), rng: makeRng(4), sway: 0, nx: 3, ny: 3 }); S.box(.44, .05, .36, 0, .03, 0, mulC(COL.leather, .6), {}); }, cap, { rad: .2 });
@@ -2847,6 +2955,7 @@ function initKits() {
   KIT.foot = humanKit('foot', 40);
   KIT.giant = humanKit('giant', 2);
   KIT.ogre = humanKit('ogre', 30);
+  KIT.knight = humanKit('knight', 16); KIT.pike = humanKit('pike', 16); KIT.militia = humanKit('militia', 16);
   for (const k of ['uArm', 'lArm', 'uLeg', 'lLeg']) KIT.giant[k].mesh.castShadow = true;
   const E = KIT.item = {};
   E.sword = new PartBatch(S => { S.box(.035, .13, .035, 0, 0, 0, COL.woodD, {}); S.box(.17, .03, .05, 0, .075, 0, iron, { l: L_METAL }); S.box(.055, .5, .018, 0, .34, 0, rust, { l: L_METAL, rough: .5 }); S.cone(.03, .08, 0, .63, 0, rust, { n: 4, l: L_METAL, rough: .5, rz: .012 }); }, 100, { rad: .05, shadow: false });
@@ -2856,6 +2965,28 @@ function initKits() {
   E.shieldH = new PartBatch(S => { const sc = mulC(COL.clothB, 1.6); S.box(.36, .3, .045, 0, .08, 0, sc, { l: L_WOOD, jit: 0 }); S.box(.26, .12, .045, 0, -.12, 0, sc, { l: L_WOOD, jit: 0 }); S.box(.14, .1, .045, 0, -.22, 0, sc, { l: L_WOOD, jit: 0 }); S.box(.07, .5, .05, 0, -.02, .004, mulC(COL.gold, .8), { l: L_METAL, rough: .45, jit: 0 }); S.box(.36, .06, .05, 0, .1, .004, mulC(COL.gold, .8), { l: L_METAL, rough: .45, jit: 0 }); }, 40, { rad: .2, shadow: false });
   E.helm = new PartBatch(S => { S.add(gDome(8, 3), { s: [.18, .175, .195], p: [0, .16, 0], c: iron, l: L_METAL, rough: .5 }); S.box(.035, .13, .03, 0, .15, .185, COL.ironL, { l: L_METAL }); for (const s of [-1, 1]) S.box(.03, .14, .13, s * .165, .1, .03, iron, { l: L_METAL }); S.cone(.03, .16, 0, .4, 0, COL.ironL, { n: 4, l: L_METAL }); }, 60, { rad: .16, shadow: false });
   E.plate = new PartBatch(S => { S.box(.35, .31, .25, 0, .27, 0, iron, { l: L_METAL, rough: .5 }); S.box(.2, .2, .26, 0, .29, .005, COL.ironL, { l: L_METAL, rough: .45 }); for (const s of [-1, 1]) S.sph(.1, s * .21, .44, 0, COL.ironL, { l: L_METAL, w: 6, h: 4, smooth: false, sc: [1, .8, 1.1] }); }, 60, { rad: .2, shadow: false });
+  // Footman branch gear: the knight's heater shield (blue field, white cross, steel rim), the pike (held at y = 0,
+  // a long shaft with a leaf head and a red tassel), the militia's pitchfork and cudgel, a straw hat and a quiver.
+  {
+    const blue = C(0x3762b4), wht = C(0xe2ddd0), rim = mulC(COL.steel, .9), o = { l: L_METAL, rough: .38, jit: 0 };
+    E.kShield = new PartBatch(S => {
+      S.box(.38, .3, .05, 0, .08, 0, rim, o); S.box(.28, .12, .05, 0, -.12, 0, rim, o); S.box(.15, .1, .05, 0, -.22, 0, rim, o);
+      S.box(.34, .27, .055, 0, .08, .004, blue, { l: L_CLOTH, jit: 0 }); S.box(.24, .11, .055, 0, -.11, .004, blue, { l: L_CLOTH, jit: 0 }); S.box(.12, .08, .055, 0, -.2, .004, blue, { l: L_CLOTH, jit: 0 });
+      S.box(.06, .44, .06, 0, -.01, .006, wht, { l: L_CLOTH, jit: 0 }); S.box(.3, .06, .06, 0, .1, .006, wht, { l: L_CLOTH, jit: 0 });
+    }, 32, { rad: .2, shadow: false });
+    E.pike = new PartBatch(S => {
+      S.seg([0, -.78, 0], [0, 1.62, 0], .024, .02, COL.woodD, { l: L_WOOD, n: 4 }); S.box(.05, .14, .05, 0, 1.6, 0, COL.iron, { l: L_METAL });
+      S.add(gOct(), { s: [.05, .2, .025], p: [0, 1.82, 0], c: mulC(COL.steel, 1.2), l: L_METAL, rough: .3, jit: 0 });
+      S.box(.07, .06, .07, 0, 1.52, 0, C(0xb02a20), { l: L_CLOTH, jit: 0 });
+    }, 32, { rad: .06, shadow: false });
+    E.fork = new PartBatch(S => {
+      S.seg([0, -.8, 0], [0, 1.05, 0], .022, .02, COL.woodL, { l: L_WOOD, n: 4 }); S.box(.2, .03, .03, 0, 1.06, 0, COL.iron, { l: L_METAL });
+      for (const x of [-.09, 0, .09]) S.seg([x, 1.06, 0], [x * 1.1, 1.36, 0], .011, .006, COL.ironL, { l: L_METAL, n: 3, jit: 0 });
+    }, 16, { rad: .05, shadow: false });
+    E.cudgel = new PartBatch(S => { S.seg([0, -.1, 0], [0, .5, 0], .028, .055, COL.wood, { l: L_WOOD, n: 5 }); S.ico(.07, 0, .52, 0, COL.woodD, { d: 0 }); for (let a = 0; a < 3; a++) S.box(.02, .02, .02, Math.cos(a * 2.1) * .06, .45, Math.sin(a * 2.1) * .06, COL.ironL, { jit: 0 }); }, 16, { rad: .06, shadow: false });
+    E.straw = new PartBatch(S => { const st = C(0xb7a05e); S.cyl(.24, .02, 0, .2, 0, st, { n: 10, l: L_THATCH, rough: .9 }); S.cyl(.12, .1, 0, .26, 0, st, { n: 8, rt: .7, l: L_THATCH, rough: .9 }); S.cyl(.125, .025, 0, .225, 0, C(0x6a3a22), { n: 8, jit: 0 }); }, 16, { rad: .15, shadow: false });
+    E.quiver = new PartBatch(S => { S.cyl(.055, .3, .07, .25, -.14, COL.leather, { n: 6, r: [0, 0, -.35] }); for (let i = 0; i < 4; i++) S.box(.035, .05, .012, .14 + i * .012 - .02, .42 + (i & 1) * .02, -.14 + (i - 1.5) * .015, COL.bone, { jit: 0, r: [0, 0, -.35] }); }, 48, { rad: .08, shadow: false });
+  }
   E.bow = new PartBatch(S => { let p = [0, -.36, 0]; for (let i = 1; i <= 6; i++) { const t = i / 6 * 2 - 1, q = [0, t * .36, (1 - t * t) * .12]; S.seg(p, q, .016, .016, COL.woodL, { n: 4, l: L_WOOD }); p = q; } S.seg([0, -.36, 0], [0, .36, 0], .005, .005, COL.bone, { n: 3, jit: 0 }); }, 40, { rad: .1, shadow: false });
   E.club = new PartBatch(S => { S.seg([0, -.12, 0], [0, .62, 0], .045, .11, COL.wood, { l: L_WOOD, n: 6 }); S.cyl(.12, .1, 0, .6, 0, iron, { n: 6, l: L_METAL }); for (let a = 0; a < 6; a++) S.cone(.03, .12, Math.cos(a * 1.05) * .13, .45 + (a % 2) * .14, Math.sin(a * 1.05) * .13, COL.ironL, { n: 4, l: L_METAL, r: [Math.sin(a * 1.05) * 1.57, 0, -Math.cos(a * 1.05) * 1.57] }); }, 10, { rad: .1 });
   E.greatsword = new PartBatch(S => {
@@ -2917,12 +3048,25 @@ function rigHuman(kit, sp, e) {
   if (e.shamble) { shR = -1.0 + .12 * Math.sin(ph); elR = -.7; shL = -.75 + .2 * Math.sin(ph + 1); elL = -.5; bladeA = .2; }
   if (e.shield) { shL = -.55; elL = -1.25; rzL = .2; }
   if (e.torch) { shL = -1.25 + .06 * Math.sin(ph * 2); elL = -.5; }
+  if (e.point > 0) { const u = e.point, b = Math.sin((e.ph || 0) * 1.3) * .08; shR = lerp(shR, -1.95 + b, u); elR = lerp(elR, -.1, u); rzR = lerp(rzR, -.18, u); shL = lerp(shL, -.25, u); elL = lerp(elL, -1.6, u); rzL = lerp(rzL, .55, u); }
   if (e.heavy) { shR = -.3 + .3 * sw; elR = -.5; bladeA = 1.9; shL = -.2 - .5 * sw; elL = -.6; }
   if (e.claw) { shR = -1.25 + .45 * sw; elR = -.55; shL = -1.25 - .45 * sw; elL = -.55; }
   if (e.staff) { shR = -.75; elR = -.95; bladeA = .12; }
   if (e.cast > 0) { const u = easeInOut(Math.min(1, e.cast * 1.6)); shR = lerp(shR, -2.7, u); elR = lerp(elR, -.25, u); shL = lerp(shL, -2.3, u); elL = lerp(elL, -.4, u); }
   if (e.drum) { const b = Math.sin(e.beat || 0); shR = -.95 - .5 * Math.max(0, b); elR = -1.15; shL = -.95 - .5 * Math.max(0, -b); elL = -1.15; bladeA = .9; }
   let atk = e.atk;
+  // Pole arms (pikes, pitchforks): carried upright on the march, lowered level in both hands to fight (e.lv 0-1),
+  // and the attack is a draw-back and thrust instead of the overhead cut.
+  if (e.pike) {
+    const lv = e.lv || 0, two = !e.torch;
+    shR = lerp(-.3 + .15 * sw, -.72, lv); elR = lerp(-1.05, -.6, lv); rzR = lerp(-.05, .32, lv); bladeA = lerp(.1, 1.36, lv);
+    if (two) { shL = lerp(shL, -1.02, lv); elL = lerp(elL, -.42, lv); rzL = lerp(rzL, -.42, lv); }
+    if (atk >= 0) {
+      const t = atk, k = t < .4 ? -.7 * easeInOut(t / .4) : t < .54 ? lerp(-.7, 1, easeIn((t - .4) / .14)) : 1 - easeOut((t - .54) / .46);
+      shR -= .32 * k; elR += .4 * k; if (two) { shL -= .3 * k; elL += .3 * k; }
+      lunge = .17 * Math.max(0, k) - .05 * Math.max(0, -k); lean += .12 * k; twist = -.18 * k; dip = .03 * Math.max(0, k); atk = -1;
+    }
+  }
   if (e.bow) {
     const d = e.draw || 0; shL = -HPI + (e.pitch || 0); elL = -.05; rzL = .05; shR = -HPI + (e.pitch || 0) + .1; elR = -.2 - d * 1.9; twist = .2 + d * .25; atk = -1;
   }
@@ -2951,6 +3095,7 @@ function rigHuman(kit, sp, e) {
   if (e.torch) { const M9 = xf(_M[9], M5, 0, -sp.lArm, 0, .25 - psiL, 0, 0); I.torch.put(M9, 0, null); RIGOUT.torch.set(0, .46, 0).applyMatrix4(M9); }
   if (e.bow) { const M9 = xf(_M[9], M5, 0, -sp.lArm, 0, HPI + .0, 0, 0); I.bow.put(M9, fl, null); }
   if (e.helm) I.helm.put(M3, fl, null);
+  if (e.hat) e.hat.put(M3, fl, e.tint || null); if (e.quiver) I.quiver.put(M2, fl, null);
   if (e.plate) I.plate.put(M2, fl, null);
   if (e.hood) I.hood.put(M3, fl, null); if (e.robe) I.robe.put(M2, fl, null); if (e.drum) I.drum.put(M2, fl, null); if (e.standard) I.standard.put(M2, 0, null);
   if (e.keg) I.keg.put(M2, fl, null); if (e.wraps) { I.wraps.put(M2, fl, null); I.wrapHead.put(M3, fl, null); } if (e.crown) I.crown.put(M3, fl, null);
@@ -3403,6 +3548,8 @@ function blueprint(kind, lvl, branch) {
     mounts.top = lb ? H + 2.1 : H + 1.7;
     mounts.archers = [[[.12, H + .1, .28]], [[-.3, H + .1, .42], [.42, H + .1, .1]], [[-.35, H + .1, .5], [.5, H + .1, .3], [.25, H + .1, -.4]],
       lb ? [[-.35, H + .1, .5], [.5, H + .1, .3], [.25, H + .1, -.4]] : [[-.5, H + .1, .55], [.55, H + .1, .5], [.05, H + .1, .15]]][lvl];
+    // Spotter (archer crew): stands clear of the archers, the brazier and the ladder, and points out the target.
+    mounts.spotter = [null, [.38, H + .1, -.36], [-.44, H + .1, -.02], lb ? [-.44, H + .1, -.02] : [.52, H + .1, -.3]][lvl];
     if (lvl === 3) { mounts.light = lb ? 150 : 175; mounts.flameCol = lb ? [1, 1.08, .8] : [1.12, .82, .6]; mounts.lightCol = lb ? [1, .74, .42] : [1, .48, .2]; mounts.tint = lb ? [.62, .95, .62] : [1.15, .62, .55]; }
   } else if (kind === 'bombard') {
     const mo = lvl === 3 && branch === 'mortar', fb = lvl === 3 && !mo;
@@ -3659,7 +3806,7 @@ class Tower {
     for (const k of ['staticMesh', 'scaf', 'carriage', 'crystal']) if (this[k]) { this.group.remove(this[k]); this[k].traverse(o => { if (o.geometry) o.geometry.dispose(); }); this[k] = null; }
     this.barrel = null; this.shards = null; this.ringG = null;
     removeFlame(this.flame); removeFlame(this.flame2); this.flame = this.flame2 = null; this.em.on = keepLights ? this.em.on * .4 : 0;
-    this.archers.length = 0; this.crew.length = 0;
+    this.archers.length = 0; this.crew.length = 0; this.spotter = null;
   }
   finish() {
     const M = new Soup(); for (const p of this.pieces) M.merge(p.soup, { p: [0, p.y, 0], ao: [0, 1.0, .72] });
@@ -3677,7 +3824,8 @@ class Tower {
     this.light0 = d.light[lvl] !== undefined ? d.light[lvl] : mt.light !== undefined ? mt.light : d.light[d.light.length - 1];
     this.em.I = this.light0; this.em.range = this.kind === 'archer' ? 12 : 10.5;
     const tint = mt.tint || [1, .9, .7];
-    if (this.kind === 'archer') mt.archers.slice(0, (d.n && d.n[lvl]) || 3).forEach((a, i) => this.archers.push({ l: a, yaw: this.yaw, draw: 0, cool: .4 + i * .3, e: { scale: .82, ph: 0, mv: 0, atk: -1, bow: true, draw: 0, pitch: 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0 } }));
+    if (this.kind === 'archer') mt.archers.slice(0, (d.n && d.n[lvl]) || 3).forEach((a, i) => this.archers.push({ l: a, yaw: this.yaw, draw: 0, cool: .4 + i * .3, e: { scale: .82, ph: 0, mv: 0, atk: -1, bow: true, quiver: true, draw: 0, pitch: 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0 } }));
+    this.spotter = this.kind === 'archer' && mt.spotter ? { l: mt.spotter, yaw: this.yaw, e: { scale: .8, ph: 0, mv: 0, atk: -1, point: 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0, flinch: 0 } } : null;
     this.crew.length = 0;
     if (this.kind === 'bombard' && mt.crew) mt.crew.forEach((c, i) => this.crew.push({ l: c, side: c[0] < 0 ? -1 : 1, e: { scale: .8, ph: 0, mv: 0, atk: -1, torch: i === 0, tint, x: 0, y: 0, z: 0, yaw: 0, flash: 0, flinch: 0 } }));
     if (this.kind === 'bombard') this.makeGun();
@@ -3775,6 +3923,15 @@ class Tower {
         }
       } else { a.draw = Math.max(0, a.draw - dt * 3); a.yaw = angDamp(a.yaw, this.yaw + Math.sin(G.t * .5 + a.l[0] * 3) * .5, 2, dt); e.pitch = damp(e.pitch, 0, 4, dt); if (a.cool < .3) a.cool = .3; }
       e.yaw = a.yaw; e.draw = a.draw;
+      rigHuman(KIT.foot, SPEC.foot, e);
+    }
+    // The spotter turns to the target and points it out; idle, he scans the road. Drawing only (no random draws).
+    const sp = this.spotter;
+    if (sp) {
+      const p = this.w(sp.l, _ap), e = sp.e; e.x = p.x; e.y = p.y - (1 - easeOut(this.appear)) * .5; e.z = p.z; e.scale = .8 * (.3 + .7 * this.appear);
+      if (tgt) sp.yaw = angDamp(sp.yaw, Math.atan2(tgt.x - p.x, tgt.z - p.z), 5, dt); else sp.yaw = angDamp(sp.yaw, this.yaw + Math.sin(G.t * .4 + this.idx * 2) * 1.1, 1.5, dt);
+      e.point = damp(e.point, tgt ? 1 : 0, 4, dt); e.yaw = sp.yaw; e.ph += dt * 2; e.mv = 0;
+      if (TOWER_STUN) e.point = 0;
       rigHuman(KIT.foot, SPEC.foot, e);
     }
   }
@@ -4018,7 +4175,7 @@ const MON = {
   brood: { name: 'Brood mother', tip: 'Bursts into spiders when it falls.', hp: 230, spd: .92, rad: .55, mass: 5, bounty: 24, lives: 2, hitH: .45, top: 1.05, dmg: 14, atkT: 1.0, eye: [3.4, .3, .2], scale: 2.3, split: ['spider', 5], death: 'bug', tint: [.7, .5, .6] },
   giant: { name: 'Bone Giant', tip: 'Slow and enormous. Hit it with everything.', hp: 1250, spd: .88, rad: .92, mass: 40, bounty: 200, lives: 5, hitH: 2.2, top: 4.0, dmg: 46, atkT: 1.7, eye: [5, .9, .2], scale: 2.7, boss: true, death: 'bones', blade: true, cat: 'armor' },
   ogre: { name: 'Ogre', tip: 'Smashes footmen aside.', hp: 1400, spd: .8, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 1.9, top: 3.4, dmg: 52, atkT: 1.8, eye: [4.5, 2.2, .3], scale: 2.6, boss: true, death: 'flesh', blade: true, cat: 'armor' },
-  jotun: { name: 'Frost Jotun', tip: 'Its stomp freezes nearby towers.', hp: 1150, spd: .8, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 1.9, top: 3.6, dmg: 52, atkT: 1.8, eye: [.8, 2.4, 4], scale: 2.75, boss: true, stomp: { every: 10, r: 5.2, stun: 1.8 }, death: 'flesh', blade: true, cat: 'armor', tint: [1.0, 1.25, 3.4] },
+  jotun: { name: 'Frost Jotun', tip: 'Its stomp freezes nearby towers.', hp: 1150, spd: .8, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 1.9, top: 3.6, dmg: 52, atkT: 1.8, eye: [.8, 2.4, 4], scale: 2.75, boss: true, stomp: { every: 10, r: 5.2, stun: 1.8 }, death: 'flesh', blade: true, cat: 'armor', tint: [.55, .85, 2.5] },
   queen: { name: 'Brood Queen', tip: 'Keeps hatching spiders.', hp: 1150, spd: .85, rad: 1.1, mass: 40, bounty: 200, lives: 5, hitH: 1.0, top: 2.0, dmg: 40, atkT: 1.5, eye: [3.8, .3, .9], scale: 4.2, boss: true, summon: { type: 'spider', n: 2, every: 8, max: 99, hp: 1 }, death: 'bug', cat: 'armor', tint: [.85, .55, 1.0] },
   colossus: { name: 'Magma Colossus', tip: 'Speeds up when it is nearly dead.', hp: 1250, spd: .7, rad: 1.05, mass: 60, bounty: 200, lives: 5, hitH: 2.2, top: 4.3, dmg: 60, atkT: 2.0, eye: [4, 1.6, .3], scale: 3.0, boss: true, armor: .85, slowRes: .3, enrage: [.3, 1.25], death: 'rock', cat: 'armor', tint: [1.5, .5, .26] },
   king: { name: 'The Buried King', tip: 'Summons mummies to walk with him.', hp: 1250, spd: .86, rad: .92, mass: 40, bounty: 200, lives: 5, hitH: 2.2, top: 4.2, dmg: 46, atkT: 1.7, eye: [.6, 3.0, 2.6], scale: 2.7, boss: true, summon: { type: 'mummy', n: 1, every: 9, max: 99, hp: .7 }, death: 'bones', blade: true, cat: 'armor', tint: [1.2, 1.0, .55] },
@@ -4150,6 +4307,7 @@ const EYES = {
 function drawMonster(m, t) {
   const ec = m.elite ? ELITE_CODE[m.elite] || 0 : 0, f0 = m.flash; if (ec) m.flash = Math.min(1, f0) + ec * 4;
   const M = rigMonster(m); m.flash = f0; if (ec) drawElite(m, t);
+  if (m.def.boss && m.vis && !m.entered && !m.dying && !m.fly && m.s > G.B.cave.s + 3) { m.entered = true; bossEntrance(m); }
   const ey = EYES[m.type], c = m.def.eye, sc = m.scale, tw = .8 + .2 * Math.sin(t * 9 + m.lseed * 7), ty = m.type;
   if (ey) {
     for (const sg of [-1, 1]) { _tv.set(sg * ey[0], ey[1], ey[2]).applyMatrix4(M); FX.add.push(_tv.x, _tv.y, _tv.z, ey[3] * sc * 1.5, ey[3] * sc * 1.5, 0, 0, c[0], c[1], c[2], tw, 0, 0, 0, 0); }
@@ -4181,13 +4339,13 @@ function spawnFootman(tower) {
 // Branch traits for footmen: knights are armored and hold more foes, pikemen reach further and gore big monsters.
 function footmanTraits(f, d) {
   f.armor = d.armor || 1; f.hold = d.hold || 2; f.reach = d.reach || 0; f.bigMul = d.bigMul || 1; f.kind = d.branch || (d.rally ? 'rally' : null);
-  f.scale = d.armor ? 1.12 : d.rally ? 1.0 : .9 + Math.min(2, f.tower.lvl) * .05; f.tint = d.armor ? [.86, .92, 1.12] : d.rally ? [1.25, 1.08, .72] : null;
+  f.scale = d.armor ? 1.12 : d.rally ? 1.0 : .9 + Math.min(2, f.tower.lvl) * .05; f.tint = d.rally ? MILITIA_TINT[f.slot % MILITIA_TINT.length] : null;
 }
 function killFootman(f, dx, dz) {
   G.menLost = (G.menLost || 0) + 1;
   f.dead = true; f.alive = false; f.gone = true; if (f.flame) { fxEmbers(f.flame.x, f.flame.y, f.flame.z, 6, .1); removeFlame(f.flame); f.flame = null; }
-  f.weapon = KIT.item.blade; if (!f.torch) f.shield = KIT.item.shieldH;
-  shatter(e => rigHuman(KIT.foot, SPEC.foot, e), f, [(dx || 0) * 1.6, .8, (dz || 0) * 1.6], { spread: .9, life: .8 });
+  const kit = footGear(f); f.pike = false;
+  shatter(e => rigHuman(kit, SPEC.foot, e), f, [(dx || 0) * 1.6, .8, (dz || 0) * 1.6], { spread: .9, life: .8 });
   fxDust(f.x, f.y + .1, f.z, 3, .5, { a: .35 }); sfx('footmanDie', f.x, f.z, .8);
 }
 function slotPos(f, out) {
@@ -4248,15 +4406,21 @@ function strike(a, b, dmg, byMan) {
     }
   }
 }
-function pikeKit() {
-  if (!KIT.item.pike) KIT.item.pike = new PartBatch(S => { S.seg([0, -.5, 0], [0, 1.3, 0], .022, .02, COL.woodD, { l: L_WOOD, n: 4 }); S.box(.12, .03, .03, 0, 1.28, 0, COL.iron, { l: L_METAL }); S.cone(.045, .24, 0, 1.42, 0, mulC(COL.steel, 1.15), { n: 4, l: L_METAL }); }, 24, { rad: .05, shadow: false });
-  return KIT.item.pike;
+// Footman looks per guard-post branch (gear only; the stats live in footmanTraits). Returns the body kit.
+// Knights: plate, great helm, blue tabard, heater shield and a longer sword. Pikes: kettle helm, red and black
+// doublet, a long pike held level to fight. Rally militia: peasants with pitchforks or cudgels, some in straw hats.
+function footGear(f) {
+  const k = f.kind, I = KIT.item; f.helm = f.plate = false; f.pike = false; f.hat = null; f.wScale = 1; f.shieldTint = null;
+  if (k === 'knights') { f.weapon = I.blade; f.wScale = 1.2; f.shield = f.torch ? null : I.kShield; return KIT.knight; }
+  if (k === 'pikes') { f.weapon = I.pike; f.shield = null; f.pike = true; return KIT.pike; }
+  if (k === 'rally') { const fork = f.slot % 2 === 0; f.weapon = fork ? I.fork : I.cudgel; f.pike = fork; f.shield = null; f.hat = f.slot % 4 < 2 ? I.straw : null; return KIT.militia; }
+  f.weapon = I.blade; f.shield = f.torch ? null : I.shieldH; return KIT.foot;
 }
+const MILITIA_TINT = [[1, 1, 1], [.92, 1.04, .86], [1.1, .96, .86], [.95, .93, 1.02], [1.06, 1.02, .9]];
 function drawFootman(f) {
-  const k = f.kind;
-  f.weapon = k === 'pikes' ? pikeKit() : KIT.item.blade; f.shield = f.torch || k === 'pikes' ? null : k === 'knights' ? KIT.item.shieldR : KIT.item.shieldH; f.wScale = k === 'knights' ? 1.15 : 1;
-  f.helm = k === 'knights' || k === 'pikes'; f.plate = k === 'knights';
-  rigHuman(KIT.foot, SPEC.foot, f);
+  const kit = footGear(f);
+  if (f.pike) f.lv = damp(f.lv || 0, f.target || f.atk >= 0 ? 1 : 0, 5, FX.dt || 0);
+  rigHuman(kit, SPEC.foot, f);
   if (f.torch && f.flame) { const p = RIGOUT.torch; f.flame.x = p.x; f.flame.y = p.y; f.flame.z = p.z; f.lx = p.x; f.ly = p.y + .2; f.lz = p.z; }
   if (f.hp < f.maxHp) G.hbars.push({ x: f.x, y: f.y + 1.55 * f.scale, z: f.z, f: sat(f.hp / f.maxHp), boss: false, man: true });
 }
@@ -4965,13 +5129,13 @@ function endEvent() {
 function rockAt(ev) {
   const B = G.B, s = clamp(ev.s0 + rr(-ev.span, ev.span), .5, B.L - .5), lat = rr(-1, 1), p = pathAt(B, s, _evp);
   const x = p.x - p.tz * lat, z = p.z + p.tx * lat, y = p.y;
-  _tm.compose(_tv.set(x + rr(-.4, .4), y + 7, z + rr(-.4, .4)), _tq.set(rr(-1, 1), rr(-1, 1), rr(-1, 1), 1).normalize(), _ts.setScalar(rr(1.6, 2.8)));
-  addDebris(KIT.rubble, _tm, [.55, .5, .45], rr(-.5, .5), -13, rr(-.5, .5), rr(3, 8), 1.1);
-  ev.rocks.push({ x, z, y, t: .5 });
+  // The same nine draws from the game's random stream as before (the falling boulder is drawn by drawEventFX).
+  const ox = rr(-.4, .4), oz = rr(-.4, .4), q = [rr(-1, 1), rr(-1, 1), rr(-1, 1)], sc = rr(1.6, 2.8); rr(-.5, .5); rr(-.5, .5); const spin = rr(3, 8);
+  ev.rocks.push({ x, z, y, t: .5, ox, oz, q, sc, spin });
 }
 function rockLands(r) {
   const B = G.B, dmg = 70 * (1 + .3 * G.level);
-  fxDust(r.x, r.y + .1, r.z, 8, 1.1, { speed: 3 }); shake(.22); sfx('hammer', r.x, r.z, .8, rnd());
+  fxDust(r.x, r.y + .1, r.z, 8, 1.1, { speed: 3 }); shake(.22); sfx('hammer', r.x, r.z, .8, rnd()); rockLandFX(r);
   FX.decals.add(B.heightAt, r.x, r.z, .9, .02, .018, .016, .7, 30);
   for (const m of G.mons) { if (m.dead || m.hp <= 0 || m.fly) continue; const d = Math.hypot(m.x - r.x, m.z - r.z); if (d < 1.1 + m.rad) hitMonster(m, dmg * (1 - .4 * d / 1.6), 'blast', (m.x - r.x) / (d || 1), (m.z - r.z) / (d || 1), null); }
 }
@@ -5016,10 +5180,23 @@ function updateEvents(dt) {
 }
 
 // Called after the land's look is applied each frame: thicker mist, tinted, and stronger weather while an event runs.
+// Also darkens and tints the light per kind (LOOK_EV) and draws the event's own effects (drawEventFX). Visual only:
+// everything here uses the effects' random stream (frnd/frr), never the game's.
 let _evLookOn = false;
+// Per kind: exposure, moon and hemisphere light multipliers, a saturation multiplier, a shadow tint added to the
+// lift, light colour multipliers, and weather overrides (size, colour, alpha/streak), restored when the event ends.
+const LOOK_EV = {
+  rockslide: { expo: .9, moon: .8, hemi: .9, sat: .9, lift: [.012, .008, .004] },
+  blizzard: { expo: 1.04, moon: .6, hemi: 1.15, sat: .72, lift: [.02, .03, .05], hemiCol: [.75, .85, 1.1], wx: { sizeB: [.03, .07], alB: [.75, 0, .9] }, wind: 5 },
+  bogfog: { expo: .86, moon: .6, hemi: .95, sat: .85, lift: [.004, .016, .008], hemiCol: [.7, 1, .8] },
+  lavaSurge: { expo: 1, moon: .75, hemi: .9, sat: 1.05, lift: [.05, .012, 0], hemiCol: [1.3, .7, .5], pulse: 1 },
+  sandstorm: { expo: .74, moon: .4, hemi: .8, sat: .78, lift: [.05, .028, .006], hemiCol: [1.35, .95, .6], moonCol: [1.3, .85, .5], wx: { sizeA: [.04, .08], sizeB: [.035, .07], colA: [1, .78, .5, .55], colB: [.95, .72, .45, .55], alA: [.55, 0, .35], alB: [.65, 0, .7] }, wind: 8 },
+};
+const WX_KEYS = ['sizeA', 'sizeB', 'colA', 'colB', 'alA', 'alB'], wxU = k => WX.u['u' + k[0].toUpperCase() + k.slice(1)].value;
 function eventLook() {
   const ev = G.event, B = G.B; if (!B || !WX.u) return;
-  if (!ev || ev.amt <= 0) { if (_evLookOn) { _evLookOn = false; const w = B.bio.wx; WX.u.uN.value.fromArray(w.n); WX.u.uVelA.value.fromArray(w.velA); WX.u.uVelB.value.fromArray(w.velB); } return; }
+  drawEventFX(ev, B);
+  if (!ev || ev.amt <= 0) { if (_evLookOn) { _evLookOn = false; const w = B.bio.wx; WX.u.uN.value.fromArray(w.n); WX.u.uVelA.value.fromArray(w.velA); WX.u.uVelB.value.fromArray(w.velB); for (const k of WX_KEYS) wxU(k).fromArray(w[k]); } return; }
   _evLookOn = true;
   const E = ev.def, a = ev.amt, u = R.mats.atmo.uniforms, mi = u.uMist.value, ma = u.uMistAmb.value;
   mi.z *= 1 + E.mist * a; mi.y *= 1 + .6 * E.mist * a; mi.w = lerp(mi.w, Math.max(mi.w, .28), a * Math.min(1, E.mist));
@@ -5028,8 +5205,92 @@ function eventLook() {
   n.set(Math.min(1, w.n[0] * k), Math.min(1 - Math.min(1, w.n[0] * k), w.n[1] * Math.max(1, k * .7)));
   WX.u.uVelA.value.set(w.velA[0] * k + 2.2 * (k - 1), w.velA[1] * Math.max(1, k * .6), w.velA[2] * k + 1.2 * (k - 1));
   WX.u.uVelB.value.set(w.velB[0] * k + 1.5 * (k - 1), w.velB[1], w.velB[2] * k);
+  const L = LOOK_EV[ev.kind]; if (!L) return;
+  if (L.wx) for (const key in L.wx) { const d = wxU(key), f = w[key], t = L.wx[key]; d.fromArray(f.map((v, i) => lerp(v, t[i], a))); }
+  // A gale across the screen (along the camera's right), so the storm reads as wind rather than rain.
+  if (L.wind) { const rx = Math.cos(CAM.yaw), rz = -Math.sin(CAM.yaw), va = WX.u.uVelA.value, vb = WX.u.uVelB.value, s = L.wind * a; va.set(lerp(va.x, rx * s * .7, a), va.y, lerp(va.z, rz * s * .7, a)); vb.set(lerp(vb.x, rx * s, a), lerp(vb.y, -.15, a), lerp(vb.z, rz * s, a)); }
+  // Light: darker and tinted, with a slow red pulse for the lava. The lift tints the shadows (added in the comp pass).
+  const pul = L.pulse ? .75 + .25 * Math.sin(G.t * 5.3) * Math.sin(G.t * 2.1 + 1) : 1, c = R.mats.comp.uniforms, lf = c.uLift.value;
+  R.exposure *= lerp(1, L.expo, a); c.uGrade.value.y *= lerp(1, L.sat, a);
+  lf.set(lf.x + L.lift[0] * a * pul, lf.y + L.lift[1] * a * pul, lf.z + L.lift[2] * a * pul);
+  LT.moon.intensity *= lerp(1, L.moon, a); LT.hemi.intensity *= lerp(1, L.hemi, a);
+  if (L.hemiCol) { const h = LT.hemi.color, hc = L.hemiCol; h.setRGB(h.r * lerp(1, hc[0], a), h.g * lerp(1, hc[1], a), h.b * lerp(1, hc[2], a)); }
+  if (L.moonCol) { const m = LT.moon.color, mc = L.moonCol; m.setRGB(m.r * lerp(1, mc[0], a), m.g * lerp(1, mc[1], a), m.b * lerp(1, mc[2], a)); }
 }
-window.__cwEvents = { startEvent, endEvent, EVENTS };
+
+// ---- Event effects (drawing only) -------------------------------------------------------------------------
+// Rockslide: boulders drop from high behind the road with a dust trail and a growing shadow, land with a burst of
+// chips, dust and a crack, and stay on the road as rubble while the slow lasts, then sink away. Sandstorm, blizzard
+// and bog fog: wide sheets of sand, snow or fog stream across the view, plus low grit streaks. Lava surge: ember rain.
+const EVFX = { rubble: [], gusts: [], acc: 0, gacc: 0, level: -1 }, _evfx = { x: 0, z: 0 };
+const _eq = new THREE.Quaternion(), _eq2 = new THREE.Quaternion(), _ev3 = new THREE.Vector3(), _es = new THREE.Vector3(), _em = new THREE.Matrix4(), _eax = new THREE.Vector3(0, 1, 0);
+const RUBBLE_TINT = [[1.2, 1.08, .92], [1.02, .94, .84], [1.3, 1.18, 1]], ROCK_FALL = .5;
+function rockLandFX(r) {
+  const B = G.B, sc = (r.sc || 2) * 1.45, gy = Math.max(B.heightAt(r.x, r.z), r.y || 0);
+  const piece = (x, z, s, q) => EVFX.rubble.push({ x, z, y: gy, q, sc: s, life: -1, tint: RUBBLE_TINT[Math.floor(frnd() * 3)], sink: 0, squash: frr(.65, .85) });
+  piece(r.x, r.z, sc, new THREE.Quaternion(r.q ? r.q[0] : 0, r.q ? r.q[1] : 0, r.q ? r.q[2] : 0, 1).normalize());
+  // Broken-off chunks scattered around the boulder, so the road reads as a rubble field.
+  for (let i = 0; i < 3; i++) { const a = frnd() * TAU, d = frr(.45, .9); piece(r.x + Math.cos(a) * d, r.z + Math.sin(a) * d, sc * frr(.3, .5), new THREE.Quaternion(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize()); }
+  while (EVFX.rubble.length > 120) EVFX.rubble.shift();
+  for (let i = 0; i < 5; i++) { const a = frnd() * TAU, s = frr(1.5, 3.5); _em.compose(_ev3.set(r.x + Math.cos(a) * .2, gy + .3, r.z + Math.sin(a) * .2), _eq.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _es.setScalar(frr(.4, .8))); addDebris(KIT.rubble, _em, [.55, .5, .45], Math.cos(a) * s, frr(2.5, 5), Math.sin(a) * s, frr(4, 10), frr(1.4, 2.4), { extra: 1 }); }
+  fxTimed(4, r.x, gy + .08, r.z, 3.2, 3.2, .7, .6, .5, .6, .35, { ground: true });
+  for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + frnd() * .5; fxSmoke(r.x + Math.cos(a) * .3, gy + .15, r.z + Math.sin(a) * .3, Math.cos(a) * frr(2, 3.6), frr(.3, .9), Math.sin(a) * frr(2, 3.6), frr(1.2, 2), frr(.5, .8), 1.6, .36, .32, .28, .55, { drag: 2.6 }); }
+  FX.decals.add(B.heightAt, r.x + frr(-.2, .2), r.z + frr(-.2, .2), 1.3, .03, .026, .022, .65, 40);
+}
+function drawEventFX(ev, B) {
+  const dt = FX.dt || 0, AL = FX.alpha;
+  if (EVFX.level !== G.level || G.phase === 'crumble' || G.phase === 'rise') { EVFX.rubble.length = 0; EVFX.gusts.length = 0; EVFX.level = G.level; }
+  const slide = !!ev && ev.kind === 'rockslide';
+  // Falling boulders: a quadratic drop from high behind the road (away from the camera) onto the impact point.
+  if (slide) for (const r of ev.rocks) {
+    if (r.sc === undefined) continue;
+    const u = sat(1 - r.t / ROCK_FALL), gy = B.heightAt(r.x, r.z), sc = r.sc * 1.45, rad = .14 * sc;
+    const bx = -Math.sin(CAM.yaw) * 5.5 + r.ox * 6, bz = -Math.cos(CAM.yaw) * 5.5 + r.oz * 6, h = 11 * (1 - u * u);
+    const x = r.x + bx * (1 - u), z = r.z + bz * (1 - u), y = gy + rad * .8 + h;
+    _eq.set(r.q[0], r.q[1], r.q[2], 1).normalize().multiply(_eq2.setFromAxisAngle(_eax, r.spin * (1 - u)));
+    _em.compose(_ev3.set(x, y, z), _eq, _es.setScalar(sc)); KIT.rubble.put(_em, 0, RUBBLE_TINT[0]);
+    const sh = (.35 + .9 * u * u) * sc * .55; AL.push(r.x, gy + .05, r.z, sh, sh, 0, 0, .03, .025, .02, .55 * u, 0, r.spin, 0, 1);
+    if (frnd() < dt * 45) fxSmoke(x + frr(-.15, .15), y + frr(0, .3), z + frr(-.15, .15), frr(-.2, .2), frr(.2, .6), frr(-.2, .2), frr(.6, 1.1), .14 * sc, .9, .42, .38, .33, .5, { drag: 1.2 });
+  }
+  // Rubble stays while the event runs, then sinks into the road.
+  const RB = EVFX.rubble;
+  for (let i = RB.length - 1; i >= 0; i--) {
+    const q = RB[i];
+    if (!slide && q.life < 0) q.life = frr(1.2, 1.8);
+    if (q.life >= 0) { q.life -= dt; q.sink += dt * .35; if (q.life <= 0) { swapRemove(RB, i); continue; } }
+    const k = q.life >= 0 ? Math.min(1, q.life / .8) : 1;
+    _em.compose(_ev3.set(q.x, q.y - q.sink + .03, q.z), q.q, _es.set(q.sc * k, q.sc * q.squash * k, q.sc * k)); KIT.rubble.put(_em, 0, q.tint);
+  }
+  const GU = EVFX.gusts;
+  for (let i = GU.length - 1; i >= 0; i--) { const g = GU[i]; g.life -= dt; if (g.life <= 0) { swapRemove(GU, i); continue; } g.x += g.vx * dt; g.z += g.vz * dt; }
+  if (!ev || ev.amt <= .02) return;
+  const a = ev.amt, kind = ev.kind;
+  // Sheets: wide alpha sprites blown across the view from upwind (the weather's direction), low over the ground.
+  const vw = (R.viewW || 30) * .55, cx = CAM.x, cz = CAM.z, ca = Math.cos(CAM.yaw), sa = Math.sin(CAM.yaw);
+  const spot = (o) => { const s1 = frr(-1, 1) * vw, s2 = frr(-.6, .6) * vw; o.x = cx + ca * s1 + sa * s2; o.z = cz - sa * s1 + ca * s2; return o; }, P = _evfx;
+  const S = { sandstorm: [16, [.62, .44, .26], 7, 3.4, .32, 1.4, 2.2], blizzard: [9, [.78, .86, 1], 5, 3, .26, 1.2, 2.4], rockslide: [ev.t < 4 ? 3 : 0, [.36, .33, .3], 1.2, 3, .25, 1, 3] }[kind];
+  if (S && S[0]) {
+    const [rate, col, spd, size, alpha, yy, life] = S, wv = WX.u.uVelB.value, wl = Math.hypot(wv.x, wv.z) || 1, dx = wv.x / wl, dz = wv.z / wl;
+    EVFX.acc += dt * rate * a;
+    while (EVFX.acc >= 1) {
+      EVFX.acc -= 1; spot(P);
+      const px = P.x - dx * spd * life * .45, pz = P.z - dz * spd * life * .45, v = spd * frr(.8, 1.2), j = frr(.85, 1.1);
+      fxSmoke(px, B.heightAt(px, pz) + yy * frr(.5, 1.3), pz, dx * v, frr(-.05, .15), dz * v, life * frr(.8, 1.2), size * frr(.7, 1.3), size * .8, col[0] * j, col[1] * j, col[2] * j, alpha, { drag: 0 });
+    }
+  }
+  if (kind === 'sandstorm' || kind === 'blizzard') {
+    // Gusts: long soft additive streaks racing across the screen low over the ground (they read in the dark),
+    // plus fast grit or snow sparks.
+    const sand = kind === 'sandstorm', wv = WX.u.uVelB.value, c = sand ? [.5, .3, .13] : [.42, .5, .62];
+    EVFX.gacc = (EVFX.gacc || 0) + dt * (sand ? 26 : 16) * a;
+    while (EVFX.gacc >= 1 && EVFX.gusts.length < 90) { EVFX.gacc -= 1; spot(P); const k = frr(.7, 1.4); EVFX.gusts.push({ x: P.x - wv.x * .5, z: P.z - wv.z * .5, y: B.heightAt(P.x, P.z) + frr(.15, 1.8), vx: wv.x * frr(1.1, 1.7), vz: wv.z * frr(1.1, 1.7), life: frr(.7, 1.3), max: 1, w: frr(2.2, 4.5) * k, h: frr(.18, .4) * k, al: frr(.5, 1) }); EVFX.gusts[EVFX.gusts.length - 1].max = EVFX.gusts[EVFX.gusts.length - 1].life; }
+    const n = Math.floor(dt * (sand ? 50 : 30) * a + frnd());
+    for (let i = 0; i < n; i++) { spot(P); fxPart(P.x, B.heightAt(P.x, P.z) + frr(.1, 1.6), P.z, wv.x * 1.6, frr(-.2, .2), wv.z * 1.6, frr(.3, .7), frr(.03, .05), sand ? 1.1 : 1.2, sand ? .8 : 1.3, sand ? .45 : 1.7, { streak: 1 }); }
+    for (const g of EVFX.gusts) { const u = 1 - g.life / g.max, f = Math.sin(u * PI); FX.add.push(g.x, g.y, g.z, g.w, g.h, 0, 0, c[0], c[1], c[2], g.al * f * a * .75, 6, 0, 0, 0); }
+  }
+  if (kind === 'lavaSurge' && frnd() < dt * 22 * a) { spot(P); fxPart(P.x, B.heightAt(P.x, P.z) + frr(2, 6), P.z, frr(-.4, .4), frr(-1.2, -.4), frr(-.4, .4), frr(1.5, 3), frr(.04, .07), frr(1.8, 3), frr(.5, .9), .1, { drag: .3, wob: 1 }); }
+}
+window.__cwEvents = { startEvent, endEvent, EVENTS, EVFX };
 
 const PX = (() => {
   const LINE = 9, CAP = 7, GAP = 1, CACHE_MAX = 500;
@@ -7539,7 +7800,7 @@ const AU = (function () {
 })();
 
 
-const CAM = { yaw: PI / 4, elev: 38 * PI / 180, dist: 90, x: 0, y: 0, z: 0, zoom: 1, fx: 0, fz: 0, sx: 0, sz: 0, man: false, mx: 0, mz: 0, mzoom: 1, base: 27, aspect: 1.6, za: null };
+const CAM = { yaw: PI / 4, elev: 38 * PI / 180, dist: 90, x: 0, y: 0, z: 0, zoom: 1, fx: 0, fz: 0, sx: 0, sz: 0, man: false, mx: 0, mz: 0, mzoom: 1, base: 27, aspect: 1.6, za: null, ent: null };
 const _cr = new THREE.Vector3(), _cu = new THREE.Vector3(), _cd = new THREE.Vector3(), _ct = new THREE.Vector3();
 function applyCamera() {
   const cam = R.cam, e = CAM.elev, sy = Math.sin(CAM.yaw), cy = Math.cos(CAM.yaw);
@@ -7571,15 +7832,20 @@ function updateCamera(dt) {
   let tx = wx / ws, tz = wz / ws; const l = Math.hypot(tx, tz), lim = lerp(10.5, 6.5, smooth(.62, 1.15, CAM.aspect)); if (l > lim) { tx *= lim / l; tz *= lim / l; }
   const away = G.phase === 'clear' || G.phase === 'crumble' || G.phase === 'rise';
   if (away) { tx = 0; tz = 0; }
-  CAM.fx = damp(CAM.fx, tx, .9, dt); CAM.fz = damp(CAM.fz, tz, .9, dt);
-  CAM.sx = damp(CAM.sx, CAM.fx, .8, dt); CAM.sz = damp(CAM.sz, CAM.fz, .8, dt);
+  // Boss entrance (CAM.ent, set by bossEntrance): for about 1.6 s the follow camera pushes in on the boss, then
+  // eases back. Skipped, and dropped at once, whenever the player has the view.
+  const en = CAM.ent; let ek = 0;
+  if (en) { en.t += dt; if (en.t >= en.dur || CAM.man || away || G.phase !== 'play') CAM.ent = null; else { ek = Math.min(1, en.t / .35, (en.dur - en.t) / .6); ek = ek * ek * (3 - 2 * ek); const bm = en.m, bl = Math.hypot(bm.x, bm.z), bk = bl > 14 ? 14 / bl : 1; tx = lerp(tx, bm.x * bk, ek); tz = lerp(tz, bm.z * bk, ek); } }
+  const fr = 1 + 2.6 * ek;
+  CAM.fx = damp(CAM.fx, tx, .9 * fr, dt); CAM.fz = damp(CAM.fz, tz, .9 * fr, dt);
+  CAM.sx = damp(CAM.sx, CAM.fx, .8 * fr, dt); CAM.sz = damp(CAM.sz, CAM.fz, .8 * fr, dt);
   if (away) { CAM.man = false; CAM.za = null; }
   if (CAM.za) { const a = CAM.za, z0 = CAM.man ? CAM.mzoom : CAM.zoom, r = a.to / z0; camZoomAt(Math.pow(r, 1 - Math.exp(-dt * (a.rate || 9))), a.px, a.py); if (Math.abs(Math.log(a.to / CAM.mzoom)) < .012 || Math.abs(CAM.mzoom - z0) < 1e-5) CAM.za = null; }
   if (CAM.man) { CAM.x = CAM.sx = CAM.mx; CAM.z = CAM.sz = CAM.mz; CAM.zoom = CAM.mzoom; }
   else {
     CAM.x = CAM.sx; CAM.z = CAM.sz;
-    const zt = away ? .62 : (G.phase === 'defeat' ? .92 : (boss ? 1.14 : 1));
-    CAM.zoom = damp(CAM.zoom, zt, zt < CAM.zoom ? 1.1 : .7, dt);
+    const zt = lerp(away ? .62 : (G.phase === 'defeat' ? .92 : (boss ? 1.14 : 1)), 1.42, ek);
+    CAM.zoom = damp(CAM.zoom, zt, (zt < CAM.zoom ? 1.1 : .7) * fr, dt);
   }
   CAM.y = damp(CAM.y, away ? -2.2 : .4, 1, dt);
   const lk = window.__cw && window.__cw.lock; if (lk) { CAM.x = lk[0]; CAM.z = lk[1]; CAM.zoom = lk[2] || 1; }

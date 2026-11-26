@@ -1,5 +1,5 @@
 
-const CAM = { yaw: PI / 4, elev: 38 * PI / 180, dist: 90, x: 0, y: 0, z: 0, zoom: 1, fx: 0, fz: 0, sx: 0, sz: 0, man: false, mx: 0, mz: 0, mzoom: 1, base: 27, aspect: 1.6, za: null };
+const CAM = { yaw: PI / 4, elev: 38 * PI / 180, dist: 90, x: 0, y: 0, z: 0, zoom: 1, fx: 0, fz: 0, sx: 0, sz: 0, man: false, mx: 0, mz: 0, mzoom: 1, base: 27, aspect: 1.6, za: null, ent: null };
 const _cr = new THREE.Vector3(), _cu = new THREE.Vector3(), _cd = new THREE.Vector3(), _ct = new THREE.Vector3();
 function applyCamera() {
   const cam = R.cam, e = CAM.elev, sy = Math.sin(CAM.yaw), cy = Math.cos(CAM.yaw);
@@ -31,15 +31,20 @@ function updateCamera(dt) {
   let tx = wx / ws, tz = wz / ws; const l = Math.hypot(tx, tz), lim = lerp(10.5, 6.5, smooth(.62, 1.15, CAM.aspect)); if (l > lim) { tx *= lim / l; tz *= lim / l; }
   const away = G.phase === 'clear' || G.phase === 'crumble' || G.phase === 'rise';
   if (away) { tx = 0; tz = 0; }
-  CAM.fx = damp(CAM.fx, tx, .9, dt); CAM.fz = damp(CAM.fz, tz, .9, dt);
-  CAM.sx = damp(CAM.sx, CAM.fx, .8, dt); CAM.sz = damp(CAM.sz, CAM.fz, .8, dt);
+  // Boss entrance (CAM.ent, set by bossEntrance): for about 1.6 s the follow camera pushes in on the boss, then
+  // eases back. Skipped, and dropped at once, whenever the player has the view.
+  const en = CAM.ent; let ek = 0;
+  if (en) { en.t += dt; if (en.t >= en.dur || CAM.man || away || G.phase !== 'play') CAM.ent = null; else { ek = Math.min(1, en.t / .35, (en.dur - en.t) / .6); ek = ek * ek * (3 - 2 * ek); const bm = en.m, bl = Math.hypot(bm.x, bm.z), bk = bl > 14 ? 14 / bl : 1; tx = lerp(tx, bm.x * bk, ek); tz = lerp(tz, bm.z * bk, ek); } }
+  const fr = 1 + 2.6 * ek;
+  CAM.fx = damp(CAM.fx, tx, .9 * fr, dt); CAM.fz = damp(CAM.fz, tz, .9 * fr, dt);
+  CAM.sx = damp(CAM.sx, CAM.fx, .8 * fr, dt); CAM.sz = damp(CAM.sz, CAM.fz, .8 * fr, dt);
   if (away) { CAM.man = false; CAM.za = null; }
   if (CAM.za) { const a = CAM.za, z0 = CAM.man ? CAM.mzoom : CAM.zoom, r = a.to / z0; camZoomAt(Math.pow(r, 1 - Math.exp(-dt * (a.rate || 9))), a.px, a.py); if (Math.abs(Math.log(a.to / CAM.mzoom)) < .012 || Math.abs(CAM.mzoom - z0) < 1e-5) CAM.za = null; }
   if (CAM.man) { CAM.x = CAM.sx = CAM.mx; CAM.z = CAM.sz = CAM.mz; CAM.zoom = CAM.mzoom; }
   else {
     CAM.x = CAM.sx; CAM.z = CAM.sz;
-    const zt = away ? .62 : (G.phase === 'defeat' ? .92 : (boss ? 1.14 : 1));
-    CAM.zoom = damp(CAM.zoom, zt, zt < CAM.zoom ? 1.1 : .7, dt);
+    const zt = lerp(away ? .62 : (G.phase === 'defeat' ? .92 : (boss ? 1.14 : 1)), 1.42, ek);
+    CAM.zoom = damp(CAM.zoom, zt, (zt < CAM.zoom ? 1.1 : .7) * fr, dt);
   }
   CAM.y = damp(CAM.y, away ? -2.2 : .4, 1, dt);
   const lk = window.__cw && window.__cw.lock; if (lk) { CAM.x = lk[0]; CAM.z = lk[1]; CAM.zoom = lk[2] || 1; }

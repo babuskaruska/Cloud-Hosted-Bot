@@ -414,14 +414,14 @@ function updateFX(dt, t) {
     for (let j = 0; j < b.pts.length - 1; j++) { const p = b.pts[j], q = b.pts[j + 1]; SG.push(p[0], p[1], p[2], w, q[0], q[1], q[2], w, c[0] * 4, c[1] * 4, c[2] * 4, k); SG.push(p[0], p[1], p[2], w * 3.5, q[0], q[1], q[2], w * 3.5, c[0], c[1], c[2], k * .35); }
     if (b.fork > 0) { const p = b.pts[b.fork]; SG.push(p[0], p[1], p[2], w * .7, p[0] + b.fd[0] * .7, p[1] + b.fd[1] * .7, p[2] + b.fd[2] * .7, w * .2, c[0] * 3, c[1] * 3, c[2] * 3, k); }
   }
-  updateFires(dt, t); updateSpellFX(dt, t);
+  updateFires(dt, t); updateSpellFX(dt, t); updateBossIn(dt);
   const calm = G.phase === 'play' && !G.spawning && !G.mons.length;
   if (calm && !FX.calm) FX.decals.fadeAll(4.5);
   FX.calm = calm;
   FX.decals.update(dt);
 }
 function endFX() { FX.add.end(); FX.alpha.end(); FX.segs.end(); }
-function clearFX() { for (const o of FX.lit) o.alive = false; FX.lit.length = 0; FX.meteors.length = 0; FX.novas.length = 0; FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; for (const f of FX.fires) f.alive = false; FX.fires.length = 0; FX.scorch.length = 0; FX.decals.clear(); }
+function clearFX() { for (const o of FX.lit) o.alive = false; FX.lit.length = 0; FX.bossIn.length = 0; FX.meteors.length = 0; FX.novas.length = 0; FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; for (const f of FX.fires) f.alive = false; FX.fires.length = 0; FX.scorch.length = 0; FX.decals.clear(); }
 
 // ---- Camera shake, hit-stop and flash ----------------------------------------------------------------
 // shake(amount): adds trauma that decays smoothly. ~.2 shell, ~.5 sapper, ~1 boss stomp; the total is capped
@@ -631,5 +631,56 @@ function drawFrozen(m, sc) {
   for (let i = 0; i < 2; i++) {
     const a = sd + i * 2.6 + m.yaw, d = m.rad * .55, kk = k * (i ? .8 : 1.05);
     _spE.set(i ? .35 : -.25, a, i ? -.2 : .3); _spQ.setFromEuler(_spE); _spM.compose(_spV.set(m.x + Math.cos(a) * d, m.y - .05, m.z + Math.sin(a) * d), _spQ, _spS.set(kk, kk, kk)); KIT.ice.put(_spM, 0, null);
+  }
+}
+
+// ---- Boss entrance -------------------------------------------------------------------------------------
+// bossEntrance(m): called once when a boss first steps into view (drawMonster). The ground splits in glowing
+// cracks with heaved slabs, a dust ring rolls out, a light flare in the boss's colour, a short flash and shake,
+// and the camera is asked to frame the boss for a moment (CAM.ent, read by updateCamera; skipped while the
+// player holds the view). Visual only: effects random stream, no hit-stop, so the simulation is unchanged.
+const BOSS_GLOW = { giant: [1.2, .95, .6], ogre: [1.3, .8, .45], jotun: [.55, .9, 1.5], queen: [1.1, .45, 1.4], colossus: [1.8, .6, .18], king: [.45, 1.4, 1.15] };
+FX.bossIn = [];
+function bossEntrance(m) {
+  if (!G.B || G.phase !== 'play') return;
+  const x = m.x, z = m.z, gy = FX.groundAt(x, z), c = BOSS_GLOW[m.type] || [1.2, .9, .6], sc = Math.max(1, m.scale || 1), cracks = [], slabs = [];
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * TAU + frr(-.35, .35), len = frr(2.2, 3.8), pts = [[x, gy + .13, z]];
+    let px = x, pz = z, ang = a;
+    for (let k = 1; k <= 4; k++) { ang += frr(-.45, .45); px += Math.cos(ang) * len / 4; pz += Math.sin(ang) * len / 4; pts.push([px, FX.groundAt(px, pz) + .13, pz]); }
+    cracks.push(pts);
+    for (let k = 1; k <= 3; k++) { const p = pts[k], q = pts[k + 1]; FX.decals.add(FX.groundAt, (p[0] + q[0]) / 2, (p[2] + q[2]) / 2, .42 - k * .07, .015, .012, .012, .8, 7, 0); }
+    for (let k = 1; k <= 3; k++) { const p = pts[k]; slabs.push({ x: p[0] + frr(-.2, .2), z: p[2] + frr(-.2, .2), y: p[1], s: frr(1.4, 2.4) * (1.2 - k * .2), q: new THREE.Quaternion().setFromEuler(new THREE.Euler(frr(-.6, .6), frnd() * TAU, frr(-.6, .6))), at: k * .06 }); }
+  }
+  FX.bossIn.push({ x, z, gy, t: 0, c, cracks, slabs, seed: frnd() * 50 });
+  lightFlash(x, gy + 2.5, z, new THREE.Color(Math.min(1, c[0] * .7), Math.min(1, c[1] * .7), Math.min(1, c[2] * .7)).getHex(), 600, .8, 24);
+  FX.flash = Math.max(FX.flash, .25 * FX.flashK); shake(.9);
+  fxTimed(4, x, gy + .1, z, 9 * sc, 9 * sc, c[0], c[1], c[2], 1, .8, { ground: true });
+  fxTimed(4, x, gy + .12, z, 5.5 * sc, 5.5 * sc, c[0] * .8, c[1] * .8, c[2] * .8, .8, .55, { ground: true });
+  fxTimed(5, x, gy + 1.4, z, 5, 5, c[0], c[1], c[2], .8, .3);
+  for (let i = 0; i < 22; i++) { const a = i / 22 * TAU + frnd() * .2, s = frr(3, 5.5); fxSmoke(x + Math.cos(a) * .8, gy + frr(.1, .4), z + Math.sin(a) * .8, Math.cos(a) * s, frr(.2, .8), Math.sin(a) * s, frr(1.4, 2.4), frr(.6, 1), 1.8, .34, .3, .27, .55, { drag: 2.2 }); }
+  for (let i = 0; i < 10; i++) { _spM.compose(_spV.set(x + frr(-.8, .8), gy + .3, z + frr(-.8, .8)), _spQ.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _spS.setScalar(frr(.6, 1.2))); addDebris(KIT.rubble, _spM, [.5, .46, .42], frr(-3, 3), frr(3, 7), frr(-3, 3), frr(4, 10), frr(1.5, 2.6), { extra: 1 }); }
+  FX.decals.add(FX.groundAt, x, z, 2.6, .02, .017, .015, .7, 40);
+  if (!CAM.man) CAM.ent = { m, t: 0, dur: 1.6 };
+}
+function updateBossIn(dt) {
+  const L = FX.bossIn, A = FX.add, SG = FX.segs;
+  for (let i = L.length - 1; i >= 0; i--) {
+    const o = L[i]; o.t += dt; if (o.t > 4.5) { swapRemove(L, i); continue; }
+    const glow = Math.max(0, 1 - o.t / 2.2), grow = Math.min(1, o.t / .3), c = o.c, sink = Math.max(0, o.t - 3.2) * .5;
+    for (const pts of o.cracks) {
+      const n = (pts.length - 1) * grow;
+      for (let k = 0; k < Math.ceil(n); k++) {
+        const a = pts[k], b = pts[k + 1], f = Math.min(1, n - k), bx = a[0] + (b[0] - a[0]) * f, by = a[1] + (b[1] - a[1]) * f, bz = a[2] + (b[2] - a[2]) * f, w = .13 * (1 - k * .2);
+        SG.push(a[0], a[1], a[2], w, bx, by, bz, w * .7, c[0] * 1.6, c[1] * 1.6, c[2] * 1.6, glow * (1 - k * .15));
+        if (glow > .05) SG.push(a[0], a[1] + .02, a[2], w * 4, bx, by + .02, bz, w * 3, c[0] * .5, c[1] * .5, c[2] * .5, glow * .45);
+      }
+    }
+    for (const s of o.slabs) {
+      const u = sat((o.t - s.at) / .18); if (u <= 0) continue;
+      const k = s.s * easeOutBack(u) * (o.t > 3.6 ? Math.max(0, 1 - (o.t - 3.6) / .9) : 1);
+      _spM.compose(_spV.set(s.x, s.y - .05 - sink * .3, s.z), s.q, _spS.set(k, k * .45, k)); KIT.rubble.put(_spM, 0, RIM_TINT);
+    }
+    if (glow > 0) A.push(o.x, o.gy + .12, o.z, 4, 4, 0, 0, c[0] * .6, c[1] * .6, c[2] * .6, .5 * glow, 2, 0, 0, 1);
   }
 }
