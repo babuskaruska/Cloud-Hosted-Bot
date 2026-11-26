@@ -223,7 +223,17 @@ ${world ? `if (uCover.x > 0.001) {
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += diffuseColor.rgb * vSurf.w * 6.0;
 ${water ? 'if (uWat.x > 1.5 && uWat.x < 2.5) totalEmissiveRadiance += mix(vec3(0.7, 0.07, 0.008), vec3(1.45, 0.42, 0.05), wHeat * wHeat) * (1.0 - wMask) + vec3(0.1, 0.012, 0.0) * wMask * (0.3 + wn2);' : ''}
-${inst ? 'totalEmissiveRadiance += vec3(1.0, 0.8, 0.55) * vFlash * 0.55;' : ''}`)
+${inst ? `{
+  float cwEc = floor(vFlash * 0.25 + 0.002), cwFl = vFlash - cwEc * 4.0;
+  totalEmissiveRadiance += vec3(1.0, 0.8, 0.55) * cwFl * 0.55;
+  if (cwEc > 0.5) {
+    vec3 cwRc = cwEc < 1.5 ? vec3(1.7, 0.55, 0.1) : cwEc < 2.5 ? vec3(0.55, 0.9, 1.7) : cwEc < 3.5 ? vec3(1.5, 1.2, 0.18) : vec3(0.4, 1.6, 0.35);
+    float cwPu = cwEc > 3.5 ? 0.45 + 0.55 * sin(uTime * 4.2 + vViewPosition.x * 0.7) : 0.8 + 0.2 * sin(uTime * 7.0 + vViewPosition.x);
+    float cwFr = pow(1.0 - clamp(abs(normal.z), 0.0, 1.0), 2.0);
+    totalEmissiveRadiance += cwRc * (cwFr * 0.85 + 0.07) * cwPu;
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * cwRc * 0.75, 0.25);
+  }
+}` : ''}`)
       .replace('#include <opaque_fragment>', `${water ? 'outgoingLight += uSky * (0.4 + 4.0 * pow(1.0 - clamp(normal.z, 0.0, 1.0), 2.0)) * (1.5 - 0.6 * min(vSurf.z, 1.0)) * (1.0 - wMask * 0.8);' : ''}
 #include <opaque_fragment>`);
   };

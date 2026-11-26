@@ -72,7 +72,9 @@ function sfx(name, x, z, gain = 1, p = 0) {
 const _mm = new THREE.Matrix4(), _mq = new THREE.Quaternion(), _mv = new THREE.Vector3(), _ms = new THREE.Vector3(1, 1, 1), _torch = [];
 function step(rdt) {
   G.slowmo = Math.max(0, G.slowmo - rdt);
-  const dt = rdt * (G.slowmo > 0 ? lerp(1, .32, sat(G.slowmo / .35)) : 1);
+  let dt = rdt * (G.slowmo > 0 ? lerp(1, .32, sat(G.slowmo / .35)) : 1);
+  if (G.hitstop > 0) { G.hitstop = Math.max(0, G.hitstop - rdt); dt *= .03; }
+  updateShake(rdt);
   G.t += dt; SH.uTime.value = G.t;
   const B = G.B;
   beginParts(); G.hbars.length = 0;
@@ -91,7 +93,7 @@ function step(rdt) {
       for (let i = 0; i < B.pads.length; i++) {
         const p = B.pads[i]; if (p.tower) continue;
         _mm.compose(_mv.set(p.x, p.y, p.z), _mq.setFromAxisAngle(_upv, p.face + Math.sin(G.t * 1.3 + i * 2.1) * .3), _ms); KIT.marker.put(_mm, 0, null);
-        const w = .5 + .5 * Math.sin(G.t * 2.1 + i * 1.7), sz = 3.7 + .25 * w, a = (.55 + .45 * w) * k0;
+        const w = .5 + .5 * Math.sin(G.t * 2.1 + i * 1.7), sz = 3.7 + .25 * w, a = (.3 + .25 * w) * k0;
         FX.add.push(p.x, p.y + .07, p.z, sz, sz, 0, 0, 2.6, 1.6, .55, a, 4, 0, .52, 1);
       }
     }
@@ -115,6 +117,7 @@ function step(rdt) {
   for (const m of G.mons) if ((m.torch || m.glowL) && !m.dead && m.vis) _torch.push(m);
   for (const f of G.men) if (f.torch && !f.dead) _torch.push(f);
   for (const a of G.arrows) _torch.push(a);
+  for (const f of FX.fires) if (f.lI > 1) _torch.push(f);
   updateTorchLights(dt, _torch, CAM.x, CAM.z);
   collectMistLights();
   endParts(); endFX();
@@ -127,7 +130,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   if (now - _last < 10.5) return;
   const raw = (now - _last) / 1000, rdt = Math.min(.05, Math.max(.001, raw)); _last = now; R.frameDt = rdt;
-  if (G.paused) { updateCamera(rdt); UI.update(rdt); } else for (let i = 0; i < G.speed; i++) step(rdt);
+  if (G.paused) { FX.shake = 0; updateShake(rdt); updateCamera(rdt); UI.update(rdt); } else for (let i = 0; i < G.speed; i++) step(rdt);
   R.fade = Math.min(1, R.fade + rdt * 1.6);
   applyCamera(); renderFrame(); UI.draw();
   if (document.hidden || raw > .25) { _acc = 0; _frames = 0; return; }
@@ -148,7 +151,7 @@ function frame(now) {
 
 function boot() {
   if (window.matchMedia && matchMedia('(pointer: coarse)').matches && !HASH.noscale) R.quality = .85;
-  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) FX.shakeK = .25;
+  if (window.matchMedia) { const rm = matchMedia('(prefers-reduced-motion: reduce)'), upd = () => { FX.shakeK = rm.matches ? 0 : 1; FX.flashK = rm.matches ? .3 : 1; }; upd(); if (rm.addEventListener) rm.addEventListener('change', upd); }
   initRenderer(); initMaterials(); resizeRenderer(); initLights(); initFX(); initWeather(); initKits(); UI.init();
   KIT.marker = new PartBatch(S => {
     const gold = mulC(COL.gold, .85), amber = C(0xc9682a);
@@ -170,7 +173,7 @@ function boot() {
   document.addEventListener('visibilitychange', () => { AU.setPaused(document.hidden); UI.dropTouches(); if (!document.hidden) { _last = performance.now(); UI.keepAwake(); } });
   window.addEventListener('blur', () => UI.dropTouches());
   for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => setTimeout(resizeRenderer, 60));
-  window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, setPhase, spawnMonster, hitMonster, MAT, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
+  window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
   if (HASH.k) G.k = +HASH.k;
   if (HASH.ff) { const n = Math.round(+HASH.ff * 30); for (let i = 0; i < n; i++) step(1 / 30); CAM.sx = CAM.fx; CAM.sz = CAM.fz; R.fade = 1; }
   if (HASH.phase) setPhase(HASH.phase);
