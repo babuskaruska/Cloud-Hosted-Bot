@@ -6,13 +6,9 @@ A dark-fantasy 3D isometric tower defense in a single HTML file.
 
 The Hollowing has risen: a creeping dark that wakes the dead, and every beacon from the mountains to the sea has gone out. You are the Lanternkeeper, guided by the ghost of the old keeper, and your work is to light them again. Play the six-land **Campaign** and its story, then carry the lantern into **The Long Night**, an endless road of changing lands. Every run banks **embers** for the **Keeper's Tree**, and **Heat** tiers make the road harder for those who want more.
 
-Lanternhold grew out of **Cinderwatch** by kevintngo (MIT): a handful of firelit towers hold the great beacon of a ruined keep against endless columns of monsters, across six lands from a dark mountain pass to a snowfield, a bog, a lava scar, a desert at dusk and a storm-lashed sea cliff. An AI commander plays from the moment the page loads, and you can take over at any time.
 
-**[Play it in your browser](https://kevintngo.github.io/cinderwatch/)** · [Watch 20 seconds of gameplay](https://kevintngo.github.io/cinderwatch/media/gameplay-20s.mp4)
 
-> Built on [kevintngo/cinderwatch](https://github.com/kevintngo/cinderwatch) (MIT). All credit for the original game to its author.
 
-The play link above is the original Cinderwatch. Open `index.html` in this repository to play Lanternhold.
 
 ## What's new in this build
 
@@ -198,4 +194,4 @@ URL flags, for example `index.html#seed=4&fps=1`. Any of `seed`, `manual`, `ff`,
 
 ## License
 
-[MIT](LICENSE), from the original Cinderwatch by kevintngo. The build includes [three.js](https://threejs.org) r170, also MIT ([notice](vendor/LICENSE-three.txt)).
+[MIT](LICENSE). The build includes [three.js](https://threejs.org) r170, also MIT ([notice](vendor/LICENSE-three.txt)).

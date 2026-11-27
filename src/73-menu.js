@@ -326,7 +326,7 @@ const MENU = (() => {
     let y = by;
     for (const it of list) { const h = it.sub ? bh2 : bh1; button(it.id, bx, y, colW, h, it.label, ps, it.fn, { sub: it.sub, col: it.col, icon: it.icon }); y += h + gap; }
     // Footer: credit to the original.
-    const fs = Math.max(1, ps - 1), ft = 'After Cinderwatch by kevintngo · MIT · ' + BUILD;
+    const fs = Math.max(1, ps - 1), ft = '';
     if (mw(ft, fs) < avW) tx(ft, W / 2, E.Hb - PX.LINE * fs - 3 * s, fs, 'rgba(167,158,138,0.7)', { align: 'c' });
   }
   function drawTitleCompact(list) {
@@ -364,7 +364,7 @@ const MENU = (() => {
     }
     ctx.globalAlpha = 1;
     // The credit, small, just above the sheet.
-    const fs = Math.max(1, ps - 1), ft = 'After Cinderwatch by kevintngo · MIT · ' + BUILD;
+    const fs = Math.max(1, ps - 1), ft = '';
     if (mw(ft, fs) < E.Wr - E.iL - 8 * s) tx(ft, W / 2, sy - PX.LINE * fs - 3 * s, fs, 'rgba(167,158,138,0.6)', { align: 'c' });
   }
   // The logo: LANTERNHOLD in the pixel font, big, with an ember glow and sparks rising from it.
