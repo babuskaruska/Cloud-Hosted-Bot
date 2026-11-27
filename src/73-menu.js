@@ -670,9 +670,13 @@ const MENU = (() => {
     while (k > 2 && PX.measure(txt) * k > (E.Wr - E.iL) * .9) k--;
     const a = n > 0 ? .65 + .35 * sat((1 - f) * 2) : sat((COUNT_FROM + .9 - G.countT) * 3);
     const w = PX.measure(txt) * k, h = PX.LINE * k, cx = Math.round((E.iL + E.Wr) / 2), cy = Math.round((E.iT + E.Hb) / 2 - h * .8);
-    ctx.save(); ctx.globalAlpha = a; ctx.shadowColor = n > 0 ? 'rgba(255,150,60,0.8)' : 'rgba(255,215,130,0.9)'; ctx.shadowBlur = k * 4;
-    PX.text(ctx, txt, cx, cy, k, n > 0 ? '#ffc870' : '#ffe2a0', { align: 'c', outline: '#2a0c04' });
-    ctx.restore();
+    // Ash (round 13): chunky bevelled digits with a glow, a pop and sparks each second, a burst on "Alusta!" (44-juice.js).
+    if (typeof drawCountBig === 'function') drawCountBig(ctx, n, f, cx, cy, k, a);
+    else {
+      ctx.save(); ctx.globalAlpha = a; ctx.shadowColor = n > 0 ? 'rgba(255,150,60,0.8)' : 'rgba(255,215,130,0.9)'; ctx.shadowBlur = k * 4;
+      PX.text(ctx, txt, cx, cy, k, n > 0 ? '#ffc870' : '#ffe2a0', { align: 'c', outline: '#2a0c04' });
+      ctx.restore();
+    }
     if (n > 0) {
       const hs = Math.max(2, s - 1), hint = E.tch ? 'Puuduta, et kohe alustada' : 'Tühik alustab kohe';
       ctx.globalAlpha = .85; tx(hint, cx, cy + h + 4 * s, hs, c.tx, { align: 'c', outline: c.dark }); ctx.globalAlpha = 1;

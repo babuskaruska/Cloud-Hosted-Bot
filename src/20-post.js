@@ -363,8 +363,13 @@ function renderFrame() {
     u = M.blur.uniforms;
   }
   if (P.bloom > 0) {
-    u.tColor.value = T.bB.texture; u.uDir.value.set(1.6 / T.bB.width, 0); fsPass(M.blur, T.bB2);
-    u.tColor.value = T.bB2.texture; u.uDir.value.set(0, 1.6 / T.bB.height); fsPass(M.blur, T.bB);
+    // Low has no half-size level, so its quarter-size glow gets a second, wider blur: one narrow 9-tap blur of a
+    // very bright beacon left the corners of the kernel visible as a square (round 13). Quarter size: cheap.
+    const steps = P.bloom > 1 ? [1.6] : [1, 2.6];
+    for (const k of steps) {
+      u.tColor.value = T.bB.texture; u.uDir.value.set(k / T.bB.width, 0); fsPass(M.blur, T.bB2);
+      u.tColor.value = T.bB2.texture; u.uDir.value.set(0, k / T.bB.height); fsPass(M.blur, T.bB);
+    }
   }
   u = M.comp.uniforms; u.tColor.value = img.texture; u.tBloomA.value = P.bloom > 1 ? T.bA.texture : null; u.tBloomB.value = P.bloom > 0 ? T.bB.texture : null;
   u.uGrade.value.x = R.exposure * (1 + FX.flash * .5); u.uGrade.value.w = R.fade; u.uGrade.value.z = .55 + .2 * mk; u.uRes.value.set(R.iw, R.ih); CINE.post(u);

@@ -244,7 +244,7 @@ function frame(now) {
   if (G.paused) { FX.shake = 0; updateShake(rdt); updateCamera(rdt); UI.update(rdt); AU.update(rdt); } else { for (let i = 0; i < G.speed; i++) { R.skipDraw = i < G.speed - 1; step(rdt); } R.skipDraw = false; }
   R.fade = Math.min(1, R.fade + rdt * 1.6);
   CINE.update(rdt);
-  applyCamera(); renderFrame(); UI.draw(); CINE.drawHud(); CINE.restore();
+  applyCamera(); renderFrame(); UI.draw(); drawJuiceHud(UI.ctx); CINE.drawHud(); CINE.restore();
   // The frame-time watcher skips the quiet 20 fps frames; under a 30 cap a frame counts as its time halved, so
   // holding 30 reads as "fast" and the resolution may rise until the cap can no longer be held.
   if (document.hidden || raw > .25 || R.quiet) { _acc = 0; _frames = 0; return; }
@@ -259,7 +259,7 @@ function frame(now) {
 
 function boot() {
   if (window.matchMedia) { const rm = matchMedia('(prefers-reduced-motion: reduce)'), upd = () => { FX.shakeK = rm.matches ? 0 : 1; FX.flashK = rm.matches ? .3 : 1; }; upd(); if (rm.addEventListener) rm.addEventListener('change', upd); }
-  initRenderer(); initMaterials(); resizeRenderer(); initLights(); initFX(); initWeather(); GFX.init(); initKits(); UI.init();
+  initRenderer(); initMaterials(); resizeRenderer(); initLights(); initFX(); initWeather(); GFX.init(); initKits(); UI.init(); UI.drawStars = drawStars; UI.drawCountBig = drawCountBig;
   for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']) window.addEventListener(ev, () => { R.inputAt = performance.now(); }, { passive: true, capture: true });
   KIT.marker = new PartBatch(S => {
     const gold = mulC(COL.gold, .85), amber = C(0xc9682a);
@@ -287,9 +287,9 @@ function boot() {
   window.addEventListener('blur', () => UI.dropTouches());
   window.addEventListener('pagehide', saveOnHide);
   for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => setTimeout(resizeRenderer, 60));
-  window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, GFX, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, render() { applyCamera(); renderFrame(); }, autoScale, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, save: { SAVE, snapshot, write: writeSave, read: continueOffer, valid: validSave, clear: clearSave, restore: restoreRun, onHide: saveOnHide }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
-  window.__cw.CINE = CINE; window.__cw.cineRun = (sec, dt = 1 / 30) => { for (let i = 0, n = Math.round(sec / dt); i < n; i++) { R.frameDt = dt; step(dt); CINE.update(dt); if (i === n - 1) { R.fade = 1; applyCamera(); renderFrame(); UI.draw(); CINE.drawHud(); } CINE.restore(); } return CINE.cur ? CINE.cur.t : -1; }; window.__cw.bossPortrait = bossPortrait; window.__cw.BOSSCARD = BOSSCARD;
-  window.__cw.META = META; window.__cw.STORY = STORY; window.__cw.MENU = MENU; window.__cw.TUT = TUT;
+  window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, GFX, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, render() { applyCamera(); renderFrame(); }, autoScale, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); drawJuiceHud(UI.ctx); }, save: { SAVE, snapshot, write: writeSave, read: continueOffer, valid: validSave, clear: clearSave, restore: restoreRun, onHide: saveOnHide }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
+  window.__cw.CINE = CINE; window.__cw.cineRun = (sec, dt = 1 / 30) => { for (let i = 0, n = Math.round(sec / dt); i < n; i++) { R.frameDt = dt; step(dt); CINE.update(dt); if (i === n - 1) { R.fade = 1; applyCamera(); renderFrame(); UI.draw(); drawJuiceHud(UI.ctx); CINE.drawHud(); } CINE.restore(); } return CINE.cur ? CINE.cur.t : -1; }; window.__cw.bossPortrait = bossPortrait; window.__cw.BOSSCARD = BOSSCARD;
+  window.__cw.JUICE = JUICE; window.__cw.TOWER = TOWER; window.__cw.drawStars = drawStars; window.__cw.drawCountBig = drawCountBig; window.__cw.META = META; window.__cw.STORY = STORY; window.__cw.MENU = MENU; window.__cw.TUT = TUT;
   window.__cw.meta = { startRun, startDemo, abandonRun, bankRun, buyUpgrade, applyMeta, embersFor, heatRules, UPGRADES, HEAT, saveMeta, loadMeta, rerollMods, activeMods };
   // The main menu over the AI demo (Continue there replaces the old "Welcome back" offer), except in test sessions:
   // their URL flags set up a run of their own and play exactly as before.

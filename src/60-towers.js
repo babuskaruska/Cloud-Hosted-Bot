@@ -247,6 +247,95 @@ function blueprint(kind, lvl, branch) {
       mounts.light = tp ? 34 : 30; mounts.lightCol = tp ? [.78, .62, 1] : [.5, .86, 1]; mounts.crystalCol = tp ? [.62, .45, 1.2] : [.42, .86, 1.15]; mounts.boltCol = tp ? [.82, .66, 1.7] : [.6, .95, 1.6];
       mounts.ringCol = fr ? mixC(ice, snow, .3) : basL; mounts.ringIce = fr; mounts.groundGlow = tp ? [.5, .35, 1.0] : [.35, .7, 1.0];
     }
+  } else if (kind === 'mine') {
+    // Gold mine (Kullakaevandus, round 13; TOWER.mine is Mira's): a mine mouth cut into a rocky knoll, a timber
+    // frame and a hanging lantern, rails running out to a cart heaped with glinting gold. Level 1 adds a second
+    // frame, an ore heap and a plank roof; level 2 a headframe with a winding wheel, a gold crate and a banner.
+    // The front faces +z like the other towers. mounts.ore lists nugget spots for the glints (mineGlint in 44-juice).
+    const lv = Math.min(lvl, 2), k = [1, 1.12, 1.24][lv], r9 = makeRng(4711 + lv);
+    const gold = COL.gold, goldD = mulC(COL.gold, .7), earth = COL.earth, hole = COL.black, rail = COL.ironL;
+    const nug = (S, x, y, z, s, e = .32) => S.ico(s, x, y, z, r9() < .3 ? goldD : gold, { d: 0, l: L_METAL, rough: .28, emis: e, jit: .08, r: [r9() * 3, r9() * 3, 0] });
+    const ore = [];
+    piece('yard', 0, S => {
+      S.box(2.1, .12, 2.1, 0, .06, 0, mixC(earth, COL.stoneD, .35), { l: L_DIRT });
+      for (let i = 0; i < 7; i++) { const a = i / 7 * TAU + .3; S.rock(.16 + r9() * .1, Math.cos(a) * .98, .1, Math.sin(a) * .98, mixC(COL.stoneD, COL.stone, r9()), { sq: .55 }); }
+    });
+    piece('knoll', 1, S => {
+      // Rocks heaped behind the mouth: a back wall, two shoulders, and smaller stones on top; taller with level.
+      const H = 1.05 * k;
+      S.box(1.7 * k, H * .8, .9, 0, H * .4, -.62, mixC(COL.stoneD, earth, .4), { l: L_ROCK });
+      for (const [x, y, z, r] of [[-.62, .45, -.55, .55], [.62, .42, -.6, .52], [0, .8, -.72, .58], [-.4, .95, -.8, .42], [.42, .9, -.78, .44], [-.86, .25, -.15, .36], [.86, .25, -.2, .34], [0, 1.2, -.85, .36]])
+        S.rock(r * k, x * k, y * k, z, mixC(COL.stoneD, COL.stone, r9() * .6), { sq: .8 });
+      if (lv >= 1) for (const [x, z] of [[-.75, -.85], [.7, -.9]]) S.rock(.3, x * k, 1.15 * k, z, mixC(COL.stoneD, COL.basaltL, r9()), { sq: .7 });
+      // The mouth: a dark recess with a darker throat.
+      S.box(.78, .9 * k, .1, 0, .45 * k + .06, -.16, hole, { jit: 0 });
+      S.box(.62, .74 * k, .1, 0, .38 * k + .06, -.24, mulC(hole, .5), { jit: 0 });
+      // Gold seams in the rock face (they glint).
+      for (const [x, y] of [[-.55, .62], [.6, .5], [-.3, 1.0], [.35, .95]]) { const px = x * k, py = y * k, pz = -.2 - Math.abs(x) * .05; nug(S, px, py, pz, .05, .4); ore.push([px, py, pz + .05]); }
+    });
+    piece('frame', 2, S => {
+      const fh = .98 * k, fx = .44, wdd = mulC(wd, .95);
+      const frame = z => {
+        for (const s of [-1, 1]) S.box(.12, fh, .12, s * fx, fh / 2 + .1, z, wdd, { l: L_WOOD });
+        S.box(fx * 2 + .3, .14, .16, 0, fh + .15, z, w, { l: L_WOOD });
+        for (const s of [-1, 1]) S.seg([s * fx, fh - .18, z], [s * (fx - .2), fh + .1, z], .035, .035, wd, { l: L_WOOD, n: 4 });
+      };
+      frame(-.08); if (lv >= 1) frame(.28);
+      if (lv >= 1) { for (let i = 0; i < 4; i++) S.box(1.32, .05, .14, 0, fh + .26 + i * .015, -.12 + i * .13, i & 1 ? wl : w, { l: L_WOOD, r: [-.12, 0, 0] }); }
+      // A sign over the mouth with a painted gold coin.
+      const sy = fh + (lv >= 1 ? .46 : .32);
+      S.box(.42, .2, .04, 0, sy, .02, wl, { l: L_WOOD }); S.cyl(.07, .02, 0, sy, .05, gold, { n: 8, r: [HPI, 0, 0], l: L_METAL, emis: .2 });
+    });
+    piece('rails', 3, S => {
+      const z0 = -.25, z1 = 1.02;
+      for (let z = z0 + .06; z < z1; z += .19) S.box(.56, .04, .09, 0, .14, z, mulC(wd, .9 + .2 * r9()), { l: L_WOOD, r: [0, (r9() - .5) * .12, 0] });
+      for (const s of [-1, 1]) S.box(.035, .045, z1 - z0, s * .19, .18, (z0 + z1) / 2, rail, { l: L_METAL, rough: .35, jit: 0 });
+    });
+    const cz = .66, cy = .2;
+    piece('cart', 4, S => {
+      // Mine cart: a tapered iron-banded tub on four small wheels, heaped with gold ore.
+      const body = mulC(wd, 1.05);
+      S.cyl(.34, .3, 0, cy + .25, cz, body, { n: 4, rt: 1.22, r: [0, PI / 4, 0], l: L_WOOD, rz: .42 });
+      for (const y of [.14, .36]) S.cyl(.36 + y * .2, .04, 0, cy + .1 + y, cz, COL.iron, { n: 4, r: [0, PI / 4, 0], l: L_METAL, rz: .46 + y * .2 });
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) S.cyl(.075, .045, sx * .19, cy + .06, cz + sz * .2, COL.iron, { n: 8, r: [0, 0, HPI], l: L_METAL });
+      S.ico(.27, 0, cy + .44, cz, mulC(COL.stoneD, .9), { sc: [1, .45, 1.2], d: 1, l: L_ROCK });
+      for (let i = 0; i < 12; i++) { const a = i * 2.4, rr2 = i ? .07 + .13 * r9() : 0, x = Math.cos(a) * rr2, z = cz + Math.sin(a) * rr2 * 1.2, y = cy + .55 + (.2 - rr2) * .7; nug(S, x, y, z, .065 + r9() * .035); if (i % 3 === 0) ore.push([x, y + .04, z]); }
+    });
+    piece('lantern', 5, S => {
+      const lx = -.72, lz = .42, lh = 1.15 * k;
+      S.seg([lx, .1, lz], [lx, lh, lz], .04, .035, wd, { l: L_WOOD, n: 4 }); S.seg([lx, lh, lz], [lx + .26, lh, lz], .03, .03, wd, { l: L_WOOD, n: 4 });
+      S.box(.16, .04, .16, lx + .26, lh - .1, lz, COL.iron, { l: L_METAL }); S.box(.12, .16, .12, lx + .26, lh - .21, lz, COL.ember, { emis: .8, jit: 0 }); S.box(.16, .03, .16, lx + .26, lh - .31, lz, COL.iron, { l: L_METAL });
+      for (const [a, b] of corners) S.box(.02, .18, .02, lx + .26 + a * .07, lh - .21, lz + b * .07, COL.iron, { l: L_METAL });
+      // Tools by the post: a pick and a shovel leaning on it.
+      S.seg([lx + .1, .12, lz + .12], [lx + .02, .8, lz + .04], .022, .02, wl, { l: L_WOOD, n: 4 }); S.box(.34, .05, .05, lx + .02, .8, lz + .04, COL.ironL, { l: L_METAL, r: [0, .5, .25] });
+      S.seg([lx + .14, .12, lz - .1], [lx + .03, .75, lz - .05], .02, .02, wl, { l: L_WOOD, n: 4 }); S.box(.13, .17, .03, lx + .15, .2, lz - .11, COL.iron, { l: L_METAL, r: [-.2, .4, -.15] });
+    });
+    if (lv >= 1) piece('heap', 6, S => {
+      // Ore heap and a sack of coins beside the rails.
+      const hx = .7, hz = .45;
+      S.ico(.32, hx, .12, hz, mixC(COL.stoneD, earth, .3), { sc: [1, .55, 1.1], d: 1, l: L_ROCK });
+      for (let i = 0; i < 6; i++) { const a = i * 1.9, x = hx + Math.cos(a) * .17, z = hz + Math.sin(a) * .2; nug(S, x, .26, z, .05 + r9() * .02); if (i & 1) ore.push([x, .3, z]); }
+      S.ico(.16, hx - .05, .2, hz + .42, COL.clothT, { sc: [1, 1.15, 1], d: 1, l: L_CLOTH }); S.cyl(.05, .07, hx - .05, .38, hz + .42, COL.rope, { n: 6 });
+      nug(S, hx + .1, .12, hz + .58, .045); nug(S, hx - .18, .1, hz + .6, .04);
+    });
+    if (lv >= 2) piece('headframe', 7, S => {
+      // Headframe: two legs over the mouth carry a winding wheel; a rope runs down into the shaft.
+      const top = 2.05, wz = -.4;
+      for (const s of [-1, 1]) { S.seg([s * .62, .1, -.1], [s * .1, top, wz], .06, .05, wd, { l: L_WOOD, n: 4 }); S.seg([s * .62, .1, -.95], [s * .1, top, wz], .055, .05, wd, { l: L_WOOD, n: 4 }); }
+      S.box(.36, .1, .12, 0, top, wz, w, { l: L_WOOD });
+      const T = new Soup(); T.add(gTorus(12, .1, 4), { s: .32, c: COL.iron, l: L_METAL, r: [0, HPI, 0] }); for (let i = 0; i < 3; i++) T.box(.04, .6, .04, 0, 0, 0, w, { l: L_WOOD, r: [i * PI / 3, 0, 0] });
+      S.merge(T, { p: [0, top + .22, wz] });
+      S.seg([0, top + .5, wz + .02], [0, .9, -.18], .012, .012, COL.rope, { n: 3 });
+      // A crate of gold bars and a small banner.
+      PROP.crate(S, .72, .12, -.05, .34, r9, .3);
+      for (let i = 0; i < 3; i++) { const x = .66 + i * .08, y = .48, z = -.05; S.box(.06, .04, .16, x, y, z, gold, { l: L_METAL, rough: .3, emis: .3, r: [0, .3, 0] }); if (i === 1) ore.push([x, y + .03, z]); }
+      const px = .78, pz = -.72, ptop = 2.0;
+      S.seg([px, .1, pz], [px, ptop, pz], .03, .025, wd, { l: L_WOOD, n: 4 }); S.sph(.05, px, ptop + .03, pz, gold, { l: L_METAL, w: 6, h: 4, smooth: false, emis: .2 });
+      banner(S, px + .02, ptop - .06, pz, 0, .4, .5, C(0x7a1e18), mulC(gold, .8), .8);
+    });
+    mounts.flame = [-.46, 1.15 * k - .24, .42]; mounts.flameSize = .2 + lv * .03; mounts.top = lv >= 2 ? 2.5 : 1.5 * k + .3;
+    mounts.lightCol = [1, .7, .32]; mounts.light = [60, 75, 95][lv]; mounts.tint = [1.1, .95, .7];
+    mounts.ore = ore; mounts.cart = [0, cy + .55, cz]; mounts.mouth = [0, .5, -.1];
   } else {
     const kn = lvl === 3 && branch === 'knights', pk = lvl === 3 && !kn;
     const W = [1.5, 1.7, 1.9, kn ? 2.0 : 1.9][lvl], D = [1.3, 1.4, 1.5, kn ? 1.55 : 1.5][lvl], wh = [1.05, 1.25, 1.5, kn ? 1.7 : 1.5][lvl], stoneWalls = L2;
@@ -607,6 +696,7 @@ class Tower {
     if (this.em0) { this.em.r = this.em0[0]; this.em.g = lerp(this.em0[1], .82, hot * .45); this.em.b = lerp(this.em0[2], .62, hot * .45); }
     for (const f of [this.flame, this.flame2]) if (f) { const base = f === this.flame2 && mt.flame2Size ? mt.flame2Size : mt.flameSize; f.size = base * (1 + .1 * a); f.r = fc[0]; f.g = fc[1] * (1 + .05 * a); f.b = fc[2] * (1 + .22 * a); f.embers = 1 + .7 * a; f.layers = base > .7 || a > 2.5 ? 2 : 1; }
     const on = this.em.on * this.appear;
+    if (mt.ore && on > .05 && typeof mineGlint === 'function') mineGlint(this, on, dt);
     if (mt.groundGlow && on > .05) { const g = mt.groundGlow, p = .85 + .15 * Math.sin(G.t * 2.3 + this.idx); FX.add.push(this.x, this.y + .12, this.z, 4.2, 4.2, 0, 0, g[0], g[1], g[2], .16 * on * p * (1 + this.charge), 2, 0, 0, 1); }
     if (a < .03 || on < .05) return;
     const A = FX.add, t = G.t, gy = this.y + .1, i = this.idx, sk = Math.min(1, a);

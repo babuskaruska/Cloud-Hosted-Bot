@@ -378,6 +378,7 @@ function fxExplosion(x, y, z, sc = 1) {
   fxSparks(x, y + .2, z, Math.round(22 * sc), 7.5 * sc, 3.2, 1.7, .5, { size: .08 });
   for (let i = 0; i < 9 * sc; i++) { const a = frnd() * TAU, s = frr(.4, 1.6) * sc; fxSmoke(x + Math.cos(a) * .3, y + frr(.2, .7), z + Math.sin(a) * .3, Math.cos(a) * s, frr(.6, 1.7), Math.sin(a) * s, frr(1.6, 3.4), frr(.7, 1.1) * sc, 1.5 * sc, .2, .19, .19, .62, { drag: 1.5, rise: .25 }); }
   fxDust(x, y, z, 6, .9 * sc, { speed: 2.6 });
+  if (FX.impact) FX.impact(x, y, z, sc); // round 13: shockwave, hot debris and a dust skirt (by tier, 44-juice.js)
   shake(.2 * sc);
 }
 function fxBolt(a, b, life = .22, col = [.55, .8, 1.6], width = .09) {
