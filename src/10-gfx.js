@@ -242,7 +242,15 @@ ${water ? 'if (uWat.x > 1.5 && uWat.x < 2.5) totalEmissiveRadiance += mix(vec3(0
 ${inst ? `{
   float cwEc = floor(vFlash * 0.25 + 0.002), cwFl = vFlash - cwEc * 4.0;
   totalEmissiveRadiance += vec3(1.0, 0.8, 0.55) * cwFl * 0.55;
-  if (cwEc > 0.5) {
+  if (cwEc > 4.5) {
+    // An Echo ghost (m.echo, code 5): a screen-door see-through in drifting bands, a pale cold body and a flickering rim.
+    float cwSl = fract(gl_FragCoord.y * 0.045 - uTime * 0.7 + vViewPosition.x * 0.3);
+    if (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 0.5 && cwSl < 0.6) discard;
+    float cwFk = 0.78 + 0.22 * sin(uTime * 17.0 + vViewPosition.x * 2.3) * sin(uTime * 3.7 + vViewPosition.y);
+    float cwFr = pow(1.0 - clamp(abs(normal.z), 0.0, 1.0), 2.0);
+    diffuseColor.rgb = vec3(dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15))) * vec3(0.5, 0.68, 0.95);
+    totalEmissiveRadiance += vec3(0.42, 0.7, 1.5) * (cwFr * 1.15 + 0.1 + cwSl * 0.06) * cwFk;
+  } else if (cwEc > 0.5) {
     vec3 cwRc = cwEc < 1.5 ? vec3(1.7, 0.55, 0.1) : cwEc < 2.5 ? vec3(0.55, 0.9, 1.7) : cwEc < 3.5 ? vec3(1.5, 1.2, 0.18) : vec3(0.4, 1.6, 0.35);
     float cwPu = cwEc > 3.5 ? 0.45 + 0.55 * sin(uTime * 4.2 + vViewPosition.x * 0.7) : 0.8 + 0.2 * sin(uTime * 7.0 + vViewPosition.x);
     float cwFr = pow(1.0 - clamp(abs(normal.z), 0.0, 1.0), 2.0);

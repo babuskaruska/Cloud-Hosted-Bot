@@ -233,6 +233,13 @@ function initBestiary4() {
         for (let k = 0; k < 3; k++) S.box(.045, .44, .045, 0, 0, 0, w, { l: L_WOOD, r: [k * PI / 3, 0, 0] });
         S.cyl(.075, .13, 0, 0, 0, iron, { n: 6, r: [0, 0, HPI], l: L_METAL });
       }, 32, { rad: .27, shadow: false }),
+      // Siege mutator only (rigRam): a war banner on a pole at the back and a pair of great horns on the front ridge.
+      siege: new PartBatch(S => {
+        S.cyl(.025, 1.55, -.42, 1.92, -.72, wd, { n: 4, l: L_WOOD }); S.box(.52, .035, .035, -.19, 2.62, -.72, wd, o());
+        clothPanel(S, { x0: -.44, x1: .04, yTop: 2.6, len: .62, z: -.72, col: mulC(COL.clothR, 1.5), col2: mulC(COL.bone, .8), rng: makeRng(11), sway: .08, nx: 3, ny: 5, rag: .45 });
+        PROP.skull(S, -.42, 2.74, -.72, .085, 0);
+        for (const s of [-1, 1]) { S.seg([s * .06, 1.6, .8], [s * .36, 1.86, 1.0], .075, .045, COL.bone, { l: L_BONE, n: 5 }); S.seg([s * .36, 1.86, 1.0], [s * .42, 2.2, .88], .045, .008, COL.boneD, { l: L_BONE, n: 4 }); }
+      }, 8, { rad: .5 }),
       // Pivot at the ridge; the log hangs .6 below on two ropes and swings about x.
       log: new PartBatch(S => {
         for (const z of [-.45, .45]) for (const s of [-1, 1]) S.seg([s * .05, 0, z], [0, -.64, z], .014, .014, COL.rope, { n: 3 });
@@ -354,7 +361,7 @@ function rigRam(e) {
   const jx = fz * Math.sin(t * 61) * .035, roll = fz * Math.sin(t * 47) * .05 + Math.sin(e.ph * .8) * .012 * mv, bump = Math.abs(Math.sin(e.ph * 1.3)) * .012 * mv;
   const M0 = xf(_M[20], null, e.x, e.y + bump * s, e.z, -fz * .03, e.yaw, roll, s, s, s);
   if (jx) M0.multiply(_rm.makeTranslation(jx, 0, 0));
-  K.frame.put(M0, fl, tint); K.vault.put(M0, fl, tint); K.vault.put(xf(_M[26], M0, 0, 0, 0, 0, PI, 0), fl, tint);
+  K.frame.put(M0, fl, tint); if (G.mods && G.mods.indexOf('siege') >= 0) K.siege.put(M0, fl, tint); K.vault.put(M0, fl, tint); K.vault.put(xf(_M[26], M0, 0, 0, 0, 0, PI, 0), fl, tint);
   const wa = e.ph * .661;
   for (let i = 0; i < 4; i++) K.wheel.put(xf(_M[21 + i], M0, i & 1 ? -.5 : .5, .28, i < 2 ? .55 : -.55, wa + i, 0, 0), fl, tint);
   let sw = Math.sin(t * 1.9) * .06 * mv + Math.sin(e.ph * .9) * .035 * mv + fz * .08;

@@ -65,7 +65,7 @@ uniform vec3 uLightPos[${R.NL}]; uniform vec3 uLightCol[${R.NL}];
 uniform vec3 uMistAmb; uniform vec4 uMist;
 uniform vec3 uAO; uniform float uAOFloor;
 uniform vec2 uDither; uniform vec2 uWind;
-uniform vec4 uHalo; uniform vec4 uEdge; uniform vec3 uBackTop; uniform vec4 uBack; uniform vec2 uRes;
+uniform vec4 uHalo; uniform vec4 uEdge; uniform vec3 uBackTop; uniform vec4 uBack; uniform vec2 uRes; uniform vec4 uEcl;
 ${GLSL_BAYER}
 vec3 wpos(vec2 uv, float d){ vec4 p = uInvVP * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return p.xyz / p.w; }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -108,13 +108,23 @@ void main(){
     if (uBack.z > 0.0) {
       vec2 sp = floor(vec2(sx * uRes.y, vUv.y * uRes.y) * 0.5); float h = hash12(sp);
       float st = step(0.9955, h) * (0.55 + 0.45 * sin(uTime * (0.8 + h * 30.0) + h * 91.0)) * smoothstep(0.3, 0.85, vUv.y) * (1.0 - 0.7 * hz);
-      col += vec3(0.75, 0.82, 1.0) * st * uBack.z * (step(0.9992, h) * 1.6 + 0.35);
+      col += vec3(0.75, 0.82, 1.0) * st * uBack.z * (step(0.9992, h) * 1.6 + 0.35) * (1.0 - 0.7 * uEcl.w);
     }
     if (uBack.w > 0.0) {
       float x = sx * 1.6, t = uTime * 0.05, y0 = 0.6 + 0.16 * vn(vec2(x * 1.4, t)), dy = vUv.y - y0;
       float sheet = smoothstep(-0.025, 0.0, dy) * exp(-max(dy, 0.0) * 6.0) * smoothstep(0.0, 0.25, vn(vec2(x * 2.5 - t * 1.4, 7.0)));
       float rays = 0.45 + 0.55 * vn(vec2(x * 22.0 + t * 6.0, t * 4.0));
-      col += mix(vec3(0.05, 0.42, 0.24), vec3(0.24, 0.07, 0.36), smoothstep(0.0, 0.2, dy)) * sheet * rays * uBack.w;
+      col += mix(vec3(0.05, 0.42, 0.24), vec3(0.24, 0.07, 0.36), smoothstep(0.0, 0.2, dy)) * sheet * rays * uBack.w * (1.0 - 0.6 * uEcl.w);
+    }
+    // Eclipse (G.eclA): a black disc (uEcl.xy centre in screen heights, z radius) with a thin bright ring and a
+    // streaked pale corona that slowly turns. Sky pixels only, so the slab hides it where it stands in front.
+    if (uEcl.w > 0.0) {
+      vec2 e = vec2(vUv.x * uRes.x / uRes.y, vUv.y) - uEcl.xy; float er = length(e) / uEcl.z, ea = atan(e.y, e.x);
+      float streak = 0.55 + 0.45 * vn(vec2(ea * 2.6 + uTime * 0.03, er * 1.5 - uTime * 0.08)) * vn(vec2(ea * 7.0 - uTime * 0.05, 3.0));
+      float out1 = step(1.0, er), cor = exp(-(er - 1.0) * 2.2) * out1 * streak * streak, ring = exp(-abs(er - 1.0) * 42.0) * (0.6 + 1.6 * exp(-abs(ea - 2.2) * 5.0));
+      float disc = 1.0 - smoothstep(0.96, 1.0, er);
+      col = mix(col, vec3(0.002, 0.002, 0.004) + vec3(0.01, 0.012, 0.02) * (1.0 - er), disc * uEcl.w);
+      col += (vec3(0.55, 0.64, 0.85) * cor * 0.6 + vec3(1.3, 1.1, 0.9) * ring * 0.7 + vec3(0.06, 0.08, 0.16) * exp(-er * 0.45)) * uEcl.w;
     }
   }
   // Lantern halos: light scattered in the air between the eye and the surface, around each light that stands in front
@@ -133,7 +143,7 @@ void main(){
     uLightPos: { value: R.lightPos }, uLightCol: { value: R.lightCol }, uMistAmb: { value: new THREE.Vector3(0.05, 0.08, 0.14) }, uMist: { value: new THREE.Vector4(-0.3, 0.42, 0.75, 0.1) },
     uAO: { value: new THREE.Vector3(1.0, 18, 0.7) }, uAOFloor: { value: -1e9 }, uDither: { value: R.ditherOfs }, uWind: { value: new THREE.Vector2() },
     uHalo: { value: new THREE.Vector4(0.016, 0.9, 0.0, 0) }, uEdge: { value: new THREE.Vector4(0.03, 0.04, 0.07, 0.6) },
-    uBackTop: { value: new THREE.Vector3() }, uBack: { value: new THREE.Vector4() }, uRes: { value: new THREE.Vector2(1, 1) },
+    uBackTop: { value: new THREE.Vector3() }, uBack: { value: new THREE.Vector4() }, uRes: { value: new THREE.Vector2(1, 1) }, uEcl: { value: new THREE.Vector4() },
   });
 
   M.dof = fsMat(`
@@ -293,6 +303,7 @@ function renderFrame() {
   cam.getWorldDirection(u.uCamDir.value);
   u.uAO.value.y = 0.85 / R.px;
   u.uWind.value.set(SH.uTime.value * 0.05, SH.uTime.value * 0.021); u.uRes.value.set(R.iw, R.ih); u.uBack.value.x = (CAM.yaw - PI / 4) * 1.2;
+  { const ea = G.eclA > .01 ? G.eclA : 0, asp = R.iw / R.ih, ph = asp < 1; u.uEcl.value.set(asp * (ph ? .3 : .15), ph ? .74 : .8, ph ? .036 : .055, ea); }
   u.uHalo.value.x = R.lite || R.quality < .7 ? 0 : .016; // the Fast setting (quality .6) and lite mode skip the halos
   fsPass(M.atmo, T.atmo);
   u = M.dof.uniforms; u.tColor.value = T.atmo.texture; u.tDepth.value = T.scene.depthTexture; u.uPx.value.copy(px);

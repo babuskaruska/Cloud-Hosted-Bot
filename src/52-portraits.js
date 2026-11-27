@@ -258,6 +258,15 @@ const BOSSCARD = {
     // The portrait pushes in a touch while the card is up.
     const zp = 1 + .06 * sat(t / this.DUR), img = bossPortrait(C.kind, 64), sw = 64 / zp, so = (64 - sw) / 2;
     c.drawImage(img, so, so * .6, sw, sw, px, py, pw, pw);
+    // Under an Eclipse the portrait goes cold and dark, with the black sun and its corona in the corner.
+    const ea = G.eclA || 0;
+    if (ea > .05) {
+      c.globalAlpha = a * .45 * ea; c.fillStyle = '#0a1430'; c.fillRect(px, py, pw, pw); c.globalAlpha = a;
+      const er = 4 * ps, ex = px + pw - er - 2 * ps, ey = py + er + 2 * ps;
+      c.fillStyle = 'rgba(190,210,255,' + (.35 * ea).toFixed(3) + ')'; c.beginPath(); c.arc(ex, ey, er + 1.6 * ps, 0, TAU); c.fill();
+      c.fillStyle = '#f4e6c8'; c.beginPath(); c.arc(ex, ey, er + .6 * ps, 0, TAU); c.fill();
+      c.fillStyle = '#050508'; c.beginPath(); c.arc(ex, ey, er, 0, TAU); c.fill();
+    }
     // A flash across the portrait as it lands.
     if (t < .5) { c.globalAlpha = a * (1 - t / .5) * .6 * (FX.flashK || 1); c.fillStyle = '#ffd9a8'; c.fillRect(px, py, pw, pw); c.globalAlpha = a; }
     const tx = px + pw + 6 * ps;

@@ -193,7 +193,7 @@ const EYES = {
 function drawMonster(m, t) {
   if (m._lod === 2) { drawMonsterQuiet(m); return; }
   // Big bodies are hit almost every frame; a full hit flash would wash them out to a flat cream silhouette.
-  const ec = m.elite ? ELITE_CODE[m.elite] || 0 : 0, f0 = m.flash, fk = m.def.boss ? .3 : m.scale > 1.4 ? .6 : 1;
+  const ec = m.echo ? 5 : m.elite ? ELITE_CODE[m.elite] || 0 : 0, f0 = m.flash, fk = m.def.boss ? .3 : m.scale > 1.4 ? .6 : 1;
   if (fk < 1) m.flash = f0 * fk;
   if (ec) m.flash = Math.min(1, m.flash) + ec * 4;
   PartBatch.tier = m._tier || 0; PartBatch.mask = m._smask === undefined ? 255 : m._smask; PartBatch.smallOff = DRAW.crowd;

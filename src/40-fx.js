@@ -498,9 +498,11 @@ function updateFires(dt, t) {
 // ---- Elite auras -------------------------------------------------------------------------------------
 // m.elite = 'burning' | 'shielded' | 'hasted' | 'splitting'. The body gets a coloured rim from the instanced
 // material (ELITE_CODE is packed into the flash attribute in drawMonster); drawElite adds a few sprites.
+// An Echo ghost (m.echo, code 5 in the shader: see-through bands, pale cold rim) gets a cold glow and a wisp trail.
 const ELITE_CODE = { burning: 1, shielded: 2, hasted: 3, splitting: 4 };
 function drawElite(m, t) {
   if (!(m.vis || m.fly) || m.dead) return;
+  if (m.echo) { drawEcho(m, t); return; }
   const e = m.elite, A = FX.add, sc = m.scale / (m.def.scale || 1), top = m.def.top * sc, R0 = Math.max(.32, m.rad * 1.5), cy = m.y + top * .5, sd = (m.lseed || 0) * 7, dt = FX.dt;
   if (e === 'burning') {
     const fl = .85 + .15 * n1(t * 9 + sd, sd), lx = Math.cos(m.yaw) * R0 * .32, lz = -Math.sin(m.yaw) * R0 * .32;
@@ -527,6 +529,15 @@ function drawElite(m, t) {
     A.push(m.x, cy, m.z, R0 * 3.6, R0 * 3.6, 0, 0, .3, 1.0, .25, .1 + .14 * pu, 2, 0, 0, 0);
     if (frnd() < dt * 3) fxPart(m.x + frr(-.5, .5) * R0, m.y + top * frr(.3, .9), m.z + frr(-.5, .5) * R0, 0, frr(-.2, .3), 0, frr(.4, .8), frr(.04, .07), .5, 2.2, .45, { grav: 3, drag: .5 });
   }
+}
+
+function drawEcho(m, t) {
+  const A = FX.add, sc = m.scale / (m.def.scale || 1), top = m.def.top * sc, R0 = Math.max(.3, m.rad * 1.4), sd = (m.lseed || 0) * 7, dt = FX.dt || 0;
+  const fk = .75 + .25 * Math.sin(t * 11 + sd) * Math.sin(t * 2.3 + sd);
+  A.push(m.x, m.y + top * .5, m.z, R0 * 3.4, R0 * 3.8, 0, 0, .3, .55, 1.15, .17 * fk, 2, 0, 0, 0);
+  A.push(m.x, m.y + .06, m.z, R0 * 2.6, R0 * 2.6, 0, 0, .25, .45, 1, .22, 2, 0, 0, 0);
+  // The trail: cold motes left behind where it walked, drifting up and fading.
+  if (frnd() < dt * (DRAW.crowd ? 7 : 14)) fxPart(m.x + frr(-.5, .5) * R0, m.y + top * frr(.1, .8), m.z + frr(-.5, .5) * R0, frr(-.1, .1), frr(.2, .55), frr(-.1, .1), frr(.6, 1.2), frr(.035, .06), .55, .95, 2.1, { drag: 1.2, wob: 1 });
 }
 
 // ---- Spells ------------------------------------------------------------------------------------------
