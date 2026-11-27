@@ -606,7 +606,8 @@ function validSave(S) {
   if (!S || typeof S !== 'object' || S.v !== SAVE_V) return false;
   const now = Date.now(); if (!_num(S.t, now - SAVE_DAYS * 864e5, now + 6e5)) return false;
   if (!_int(S.level, 0, 999) || !_int(S.k, 1, G.wavesPerLand) || !_int(S.seed, 0, 1e9) || !_int(S.index, 0, 1e6) || !_int(S.start, -1e6, 1e6)) return false;
-  const n = BIOMES.length; if (BIOMES[((S.start + S.index) % n + n) % n].key !== S.biome) return false;
+  // A save from before a land was added counts its lands differently: find its land by key and re-anchor the rotation.
+  const n = BIOMES.length; if (BIOMES[((S.start + S.index) % n + n) % n].key !== S.biome) { const bi = BIOMES.findIndex(b => b.key === S.biome); if (bi < 0) return false; S.start = bi - S.index; }
   if (!_num(S.gold, 0, 1e7) || !_int(S.lives, 1, G.maxLives) || !_num(S.mana, 0, G.manaMax) || !_num(S.press, .1, 50) || !Array.isArray(S.towers) || S.towers.length > 40) return false;
   const pads = new Set();
   for (const t of S.towers) {

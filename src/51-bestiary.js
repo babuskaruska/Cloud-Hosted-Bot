@@ -131,7 +131,7 @@ function initBestiary() {
     }, 40, { rad: .3 }),
     legR: toadLeg(1), legL: toadLeg(-1),
   };
-  initBestiary4();
+  initBestiary4(); initLeviathan();
 }
 
 function rigSpider(e) {
@@ -474,3 +474,138 @@ const DEATH_FX = {
     for (let i = 0; i < 12; i++) fxPart(m.x + frr(-.25, .25), m.y + frr(.2, .9), m.z + frr(-.25, .25), frr(-.4, .4), frr(.6, 1.8), frr(-.4, .4), frr(.5, 1.1), frr(.04, .07), g[0] * 1.6, g[1] * 1.6, g[2] * 1.6, { drag: .6, wob: 1, rise: .3 });
   },
 };
+
+// ---- Round 6: The Drowned King (RIGS.leviathan), boss of Stormreach ---------------------------------------------
+// A hulking sea giant on the human rig (heavy gait): grey-green drowned flesh, corroded verdigris armour plates
+// crusted with barnacles, kelp draped over the shoulders and hanging from the belt and beard, chains across the
+// chest and dangling from broken manacles, a crown of branching coral, glowing sea-green eyes (def.eye), and a
+// ship's anchor for a weapon (KIT.item.anchor). Water drips off him as he walks, he leaves wet footprints, and he
+// dies in a burst of sea water (RIG_DEATH 'drown'). Registered in initLeviathan (RIGS, EYES and RIG_DEATH live in
+// 61-monsters.js and here; MON.leviathan below is only a stand-in until the game's own entry exists).
+SPEC.leviathan = { hip: .5, pelvisH: .1, torsoH: .55, shX: .34, shY: .45, uArm: .28, lArm: .32, hipX: .13, uLeg: .25, lLeg: .25, stride: .45, lean: .1, stoop: .2, eyeX: .055, eyeY: .125, eyeZ: .16, top: 1.45 };
+const DROWN = { skin: C(0x74928a), skinD: C(0x46605a), plate: C(0x4f7d6a), plateD: C(0x24382f), iron: C(0x3c4048), barn: C(0x9e9a8c), kelp: C(0x3e3c1c), kelpL: C(0x56582a), coral: C(0xc4553a), coralP: C(0xd8806c), coralY: C(0xd8b070), glow: [.35, 1.5, 1.2] };
+function initLeviathan() {
+  const D = DROWN, sh = { rad: .2 };
+  const skin = (S, r, x, y, z, sc, c) => S.ico(r, x, y, z, c || D.skin, { sc, d: 1, jit: .05 });
+  const plate = (S, w, h, d, x, y, z, r, c) => S.box(w, h, d, x, y, z, c || D.plate, { l: L_METAL, rough: .55, r, jit: .06 });
+  const barn = (S, n, cx, cy, cz, sp, rng) => { for (let k = 0; k < n; k++) S.cone(.016 + .01 * rng(), .022, cx + rng.range(-sp, sp), cy + rng.range(-sp, sp) * .6, cz + rng.range(-sp * .4, sp * .4), mulC(D.barn, .8 + .3 * rng()), { n: 5, rough: .8, jit: 0 }); };
+  const link = (S, a, b, n, r, o = {}) => { for (let k = 0; k < n; k++) { const u = (k + .5) / n; S.add(gTorus(6, .32, 3), { s: [r * 1.4, r, r], p: [lerp(a[0], b[0], u), lerp(a[1], b[1], u) - (o.sag || 0) * Math.sin(u * PI), lerp(a[2], b[2], u)], r: [k & 1 ? HPI : 0, Math.atan2(b[0] - a[0], b[2] - a[2]) + HPI, 0], c: mulC(D.iron, 1.15), l: L_METAL, rough: .6, sway: o.sway ? o.sway * u : 0, jit: 0 }); } };
+  const strand = (S, x, y, z, len, w, c, rng, out = [0, 0]) => { let p = [x, y, z]; for (let k = 0; k < 3; k++) { const u = (k + 1) / 3, q = [x + out[0] * u + rng.range(-.02, .02), y - len * u, z + out[1] * u + rng.range(-.02, .02)]; ribbon(S, [p[0] - w, p[1], p[2]], [p[0] + w, p[1], p[2]], [q[0] + w * .8, q[1], q[2]], [q[0] - w * .8, q[1], q[2]], mulC(c, .8 + .4 * rng()), [k * .25, k * .25, u * .9, u * .9]); p = q; } };
+  const K = KIT.drowned = {};
+  K.pelvis = new PartBatch(S => {
+    const rng = makeRng(61);
+    skin(S, .23, 0, 0, 0, [1.2, .65, 1.0], D.skinD);
+    S.cyl(.26, .08, 0, .06, 0, D.iron, { n: 10, l: L_METAL, rough: .6 }); S.box(.1, .09, .04, 0, .06, .26, mulC(D.plate, 1.2), { l: L_METAL, rough: .4 });
+    for (const sg of [-1, 1]) { plate(S, .15, .22, .03, sg * .1, -.1, .21, [-.15, 0, sg * .12]); plate(S, .13, .2, .03, sg * .2, -.08, .06, [0, sg * HPI * .8, sg * .2], D.plateD); }
+    plate(S, .3, .2, .03, 0, -.08, -.2, [.15, 0, 0], D.plateD); barn(S, 8, .1, -.08, .23, .06, rng);
+    for (let k = 0; k < 9; k++) { const a = (k + .3) / 9 * TAU; strand(S, Math.cos(a) * .25, .03, Math.sin(a) * .25, rng.range(.22, .38), .025, k & 1 ? D.kelp : D.kelpL, rng, [Math.cos(a) * .05, Math.sin(a) * .05]); }
+    link(S, [-.24, .04, .12], [.2, .0, .2], 6, .03, { sag: .07, sway: .3 });
+  }, 2, sh);
+  K.torso = new PartBatch(S => {
+    const rng = makeRng(62);
+    skin(S, .3, 0, .2, .03, [1.15, .85, .95]); skin(S, .3, 0, .41, -.04, [1.32, .72, .9]); skin(S, .14, 0, .5, -.16, [1.4, .9, 1.0], D.skinD);
+    // Breastplate in layers, a hump of plates on the back with a ridge of spines, pauldrons.
+    for (const [y, r, c] of [[.37, .25, D.plate], [.24, .23, D.plateD], [.12, .2, D.plate]]) S.sph(r, 0, y, .12, c, { l: L_METAL, rough: .5, w: 8, h: 4, smooth: false, sc: [1.15, .34, .7] });
+    for (const [x, y] of [[-.16, .42], [.16, .42], [-.14, .23], [.14, .23]]) S.sph(.018, x, y, .28, mulC(D.plate, 1.5), { l: L_METAL, rough: .35, w: 5, h: 3, jit: 0 });
+    plate(S, .46, .26, .08, 0, .38, -.26, [.35, 0, 0], D.plateD);
+    for (let k = 0; k < 5; k++) S.cone(.04 - k * .004, .14, 0, .52 - k * .08, -.3 + k * .025, mulC(D.plateD, .9), { n: 4, r: [-.9, 0, 0], l: L_METAL });
+    for (const sg of [-1, 1]) {
+      S.sph(.17, sg * .37, .47, 0, D.plate, { l: L_METAL, rough: .5, w: 7, h: 4, smooth: false, sc: [1.15, .7, 1.1] });
+      S.sph(.12, sg * .42, .4, 0, D.plateD, { l: L_METAL, rough: .5, w: 7, h: 4, smooth: false, sc: [1.2, .6, 1.1] });
+      barn(S, 5, sg * .37, .56, .02, .08, rng);
+      for (let k = 0; k < 3; k++) S.ico(.03, sg * (.3 + k * .05), .52, .1 - k * .05, D.iron, { sc: [1, .6, 1.5], d: 0, rough: .3 });
+    }
+    barn(S, 6, -.1, .34, .28, .1, rng); barn(S, 4, .12, .15, .29, .06, rng);
+    // A chain across the chest (left shoulder to right hip) and kelp hanging off both shoulders.
+    link(S, [.34, .55, .12], [-.27, .04, .3], 11, .035, { sag: -.05 });
+    for (let k = 0; k < 6; k++) { const sg = k < 3 ? 1 : -1, z = (k % 3 - 1) * .13; strand(S, sg * (.3 + rng() * .1), .55, z, rng.range(.3, .5), .03, k & 1 ? D.kelp : D.kelpL, rng, [sg * .06, z * .3]); }
+    for (let k = 0; k < 4; k++) strand(S, rng.range(-.25, .25), .52, -.28, rng.range(.35, .5), .035, D.kelp, rng, [0, -.06]);
+    S.cyl(.12, .12, 0, .56, .0, D.skinD, { n: 8 });
+  }, 2, { rad: .32 });
+  K.head = new PartBatch(S => {
+    const rng = makeRng(63);
+    skin(S, .165, 0, .1, .04, [1.05, 1.0, 1.0]); S.box(.27, .05, .09, 0, .16, .13, D.skinD, { jit: 0 }); S.box(.22, .09, .16, 0, .02, .11, D.skinD, {});
+    for (let k = 0; k < 4; k++) S.cone(.014, .04, -.06 + k * .04, .085, .19, C(0xc8c0a4), { n: 4, jit: 0 });
+    for (const sg of [-1, 1]) { S.box(.05, .035, .03, sg * .055, .125, .175, COL.black, { jit: 0 }); S.cone(.02, .07, sg * .09, .0, .17, D.barn, { n: 4, r: [.4, 0, 0] }); }
+    for (let k = 0; k < 7; k++) { const x = (k - 3) * .03; strand(S, x, .0, .13 - Math.abs(x) * .4, rng.range(.16, .3), .018, k & 1 ? D.kelpL : D.kelp, rng, [x * .3, .03]); }
+    for (let k = 0; k < 5; k++) { const a = PI + (k - 2) * .45; strand(S, Math.sin(a) * .13, .16, Math.cos(a) * .13 - .02, rng.range(.25, .4), .03, D.kelp, rng, [Math.sin(a) * .04, -.05]); }
+    // The coral crown: a band of encrusted coral with branching red, pink and pale fingers.
+    S.cyl(.135, .025, 0, .225, .03, mulC(D.coral, .45), { n: 9, rough: .9 });
+    for (let k = 0; k < 7; k++) {
+      const a = k / 7 * TAU + .2, c = [D.coral, D.coralP, D.coralY][k % 3], x = Math.cos(a) * .125, z = Math.sin(a) * .125 + .03, h = (k % 2 ? .14 : .22) * (.8 + .4 * rng());
+      const tip = [x * 1.3, .23 + h, z * 1.3]; S.seg([x, .22, z], tip, .018, .011, c, { n: 5, emis: .02 });
+      S.ico(.018, tip[0], tip[1], tip[2], mulC(c, 1.2), { d: 0, emis: .03 });
+      for (let j = 0; j < 2; j++) { const u = .45 + j * .25, b = [lerp(x, tip[0], u), lerp(.2, tip[1], u), lerp(z, tip[2], u)], e = [b[0] + Math.cos(a + (j ? .8 : -.8)) * .06, b[1] + .06 + rng() * .04, b[2] + Math.sin(a + (j ? .8 : -.8)) * .06]; S.seg(b, e, .012, .008, c, { n: 4, emis: .02 }); S.ico(.012, e[0], e[1], e[2], mulC(c, 1.2), { d: 0, emis: .03 }); }
+    }
+  }, 2, { rad: .16 });
+  K.uArm = new PartBatch(S => {
+    const rng = makeRng(64); skin(S, .115, 0, -.13, 0, [1, 1.45, 1]);
+    S.cyl(.12, .07, 0, -.2, 0, D.plateD, { n: 8, l: L_METAL, rough: .5 }); barn(S, 4, 0, -.2, .1, .05, rng);
+  }, 4, sh);
+  K.lArm = new PartBatch(S => {
+    const rng = makeRng(65); skin(S, .1, 0, -.12, 0, [1, 1.5, 1]);
+    S.cyl(.11, .13, 0, -.14, 0, D.plate, { n: 8, l: L_METAL, rough: .5, rt: 1.15 }); barn(S, 5, .02, -.15, .1, .05, rng);
+    S.cyl(.1, .04, 0, -.24, 0, D.iron, { n: 8, l: L_METAL, rough: .6 }); link(S, [.05, -.25, .08], [.08, -.4, .12], 3, .025, { sway: .6 });
+    skin(S, .1, 0, -.31, .015, [1.05, 1.1, 1.1], D.skinD);
+  }, 4, sh);
+  K.uLeg = new PartBatch(S => { skin(S, .135, 0, -.11, 0, [1, 1.3, 1.05]); plate(S, .16, .12, .04, 0, -.1, .13, [-.1, 0, 0], D.plateD); }, 4, sh);
+  K.lLeg = new PartBatch(S => {
+    const rng = makeRng(66); skin(S, .11, 0, -.11, 0, [1, 1.3, 1]);
+    plate(S, .15, .17, .05, 0, -.12, .1, [0, 0, 0]); barn(S, 5, 0, -.12, .13, .05, rng);
+    S.box(.2, .08, .3, 0, -.23, .05, D.skinD, {}); for (const x of [-.06, 0, .06]) S.cone(.02, .05, x, -.24, .21, D.barn, { n: 4, r: [HPI, 0, 0] });
+  }, 4, sh);
+  // The anchor: held at the ring end (y = 0), the crown and flukes at the far end; a length of chain from the ring.
+  KIT.item.anchor = new PartBatch(S => {
+    const rng = makeRng(67), c = mulC(mixC(COL.ironL, C(0x6a4a34), .5), .95), o = { l: L_METAL, rough: .7 };
+    S.box(.06, 1.08, .06, 0, .43, 0, c, o); S.add(gTorus(10, .22, 4), { s: .075, p: [0, -.14, 0], r: [0, HPI, 0], c, l: L_METAL, rough: .7 });
+    S.box(.46, .05, .05, 0, .06, 0, mulC(COAST.wood, .8), { l: L_WOOD, rough: .6 });
+    for (const sg of [-1, 1]) {
+      S.seg([0, .98, 0], [sg * .16, .95, 0], .035, .03, c, { l: L_METAL, n: 5 }); S.seg([sg * .16, .95, 0], [sg * .27, .76, 0], .03, .022, c, { l: L_METAL, n: 5 });
+      S.add(gOct(), { s: [.08, .1, .02], p: [sg * .26, .79, 0], r: [0, 0, sg * .55], c: mulC(c, 1.1), l: L_METAL, rough: .7 });
+    }
+    S.cone(.04, .08, 0, 1.02, 0, c, { n: 4, l: L_METAL });
+    barn(S, 10, 0, .82, .03, .1, rng); for (let k = 0; k < 2; k++) strand(S, rng.range(-.15, .15), .9, .03, .2, .02, D.kelpL, rng, [0, .02]);
+    link(S, [0, -.18, 0], [.05, -.5, .04], 5, .03, { sway: .5 });
+  }, 2, { rad: .12 });
+  for (const k of ['uArm', 'lArm', 'uLeg', 'lLeg']) K[k].mesh.castShadow = true;
+  RIGS.leviathan = rigLeviathan; EYES.leviathan = [.055, .125, .185, .06]; RIG_DEATH.leviathan = 'drown';
+  // Stand-in stats so the model can be tried on its own. The game's own MON.leviathan (Mira's) replaces this.
+  if (!MON.leviathan) MON.leviathan = { name: 'The Drowned King', tip: 'Calls drowned skeletons from the sea.', hp: 1250, spd: .82, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 2.1, top: 4.0, dmg: 50, atkT: 1.8, eye: [.5, 3.2, 2.6], scale: 2.7, boss: true, summon: { type: 'skel', n: 2, every: 9, max: 99, hp: .8 }, death: 'flesh', blade: true, cat: 'armor', rig: 'leviathan' };
+}
+function rigLeviathan(e) {
+  e.weapon = KIT.item.anchor; e.wScale = 1.25; e.heavy = true;
+  const M = rigHuman(KIT.drowned, SPEC.leviathan, e);
+  if (!RIG_CAPTURE) leviathanFx(e, M);
+  return M;
+}
+// Per drawn step: water running off him (drops from the shoulders, beard, hands, belt and the anchor's crown),
+// wet footprints, a faint sea-green glow about the head; heavier while he is dying, then the burst.
+function leviathanFx(m, M) {
+  if (!(m.vis || m.fly) || m.dead || !G.B) return;
+  const dt = FX.dt || 0, sc = m.scale || 1, dying = m.dying > 0, rate = (dying ? 70 : 20) * FX.keep;
+  m._drip = (m._drip || 0) + dt * rate;
+  const src = [[_M[2], .34, .56, .05], [_M[2], -.34, .56, .05], [_M[3], 0, -.05, .14], [_M[5], 0, -.32, 0], [_M[7], 0, -.32, 0], [_M[8], .2, .85, 0], [_M[8], -.2, .85, 0], [_M[1], .2, -.3, .1], [_M[1], -.2, -.3, -.1]];
+  while (m._drip >= 1) {
+    m._drip -= 1; const s = src[Math.floor(frnd() * src.length)];
+    _d4.set(s[1] + frr(-.05, .05), s[2], s[3] + frr(-.05, .05)).applyMatrix4(s[0]);
+    fxPart(_d4.x, _d4.y, _d4.z, frr(-.25, .25), frr(-.6, .2), frr(-.25, .25), frr(.45, .8), frr(.03, .055), .34, .46, .56, { grav: 9.5, drag: .2 });
+  }
+  _d4.set(0, .12, .1).applyMatrix4(M); const g = DROWN.glow, tw = .85 + .15 * Math.sin(G.t * 5 + m.lseed);
+  FX.add.push(_d4.x, _d4.y, _d4.z, .75 * sc, .75 * sc, 0, 0, g[0] * .2, g[1] * .2, g[2] * .2, .35 * tw, 2, 0, 0, 0);
+  m.glowL = true; m.lI = 9; m.lCol = 0x40e0c0; m.lx = _d4.x; m.ly = _d4.y; m.lz = _d4.z;
+  if (m.mv > .3) { m._wet = (m._wet || 0) - dt; if (m._wet <= 0) { m._wet = .55; FX.decals.add(G.B.heightAt, m.x + frr(-.3, .3), m.z + frr(-.3, .3), .55 + frnd() * .3, .006, .01, .014, .5, 9, 9); } }
+  if (dying && m.dying < .1 && !m._burst) { m._burst = 1; leviathanSplash(m); }
+}
+// The Drowned King's end: he bursts into the sea that filled him. A column of spray, a ring of foam, kelp and
+// shell scattered, a sea-green flash, a wide wet stain; on a storm land the sky answers with a strike.
+function leviathanSplash(m) {
+  const sc = m.scale || 1, x = m.x, y = m.y, z = m.z, g = DROWN.glow;
+  fxTimed(5, x, y + 1.6 * sc / 2.7, z, 6, 6, g[0] * 1.6, g[1] * 1.6, g[2] * 1.6, 1, .3); fxTimed(4, x, y + .08, z, 9, 9, .6, .8, .95, .8, .6, { ground: true });
+  lightFlash(x, y + 2, z, 0x50f0d0, 900, .5, 18);
+  for (let i = 0; i < 46; i++) { const a = frnd() * TAU, s = frr(.6, 3); fxPart(x + Math.cos(a) * .4, y + frr(.3, 2.4), z + Math.sin(a) * .4, Math.cos(a) * s, frr(3.5, 9), Math.sin(a) * s, frr(.8, 1.6), frr(.05, .09), .45, .58, .7, { grav: 10, drag: .25 }); }
+  for (let i = 0; i < 14; i++) { const a = frnd() * TAU, s = frr(.6, 2.2); fxSmoke(x + Math.cos(a) * .5, y + frr(.2, 2.5), z + Math.sin(a) * .5, Math.cos(a) * s, frr(1, 3), Math.sin(a) * s, frr(1.4, 2.6), frr(.7, 1.2), 2, .5, .56, .6, .45, { drag: 1.4, rise: -.3 }); }
+  for (let i = 0; i < 12; i++) { _gm.compose(_gp.set(x + frr(-.4, .4), y + frr(.5, 2.5), z + frr(-.4, .4)), _gq.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _gs.setScalar(frr(.8, 1.5))); addDebris(KIT.bit, _gm, i & 1 ? [.3, .3, .14] : [1.1, 1.06, .96], frr(-3, 3), frr(3, 6), frr(-3, 3), frr(4, 10), frr(3, 5), { extra: 1 }); }
+  FX.decals.add(G.B.heightAt, x, z, 3.2, .004, .008, .012, .7, 40, 40);
+  if (G.B.bio.lightning) FX.lightningAt(x + frr(-.5, .5), z + frr(-.5, .5), .8);
+}
+DEATH_FX.drown = (m, kind, ix, iz, up) => { shatter(e => rigMonster(e), m, [ix, 1.6 * up, iz], { spread: 1.5, life: .8, up }); leviathanSplash(m); };

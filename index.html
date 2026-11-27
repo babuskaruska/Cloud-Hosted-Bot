@@ -233,6 +233,8 @@ const SH = {
   uSky: { value: new THREE.Color(0.012, 0.022, 0.045) }, uWind: { value: 1 },
   uCover: { value: new THREE.Vector4(0, 0.55, 0.3, 0.5) }, uCoverCol: { value: new THREE.Vector3(1, 1, 1) }, uCoverP: { value: new THREE.Vector4(0.7, 0.6, 0.0, 0.0) },
   uWat: { value: new THREE.Vector4(0, 1, 1, 0) }, uWatA: { value: new THREE.Vector3(0.012, 0.02, 0.03) }, uWatB: { value: new THREE.Vector3(0.3, 0.4, 0.5) },
+  // Rain-wet surfaces (Stormreach): x = how much shinier (roughness cut, most in the low spots), y = how much darker.
+  uWet: { value: new THREE.Vector2(0, 0) },
 };
 
 function litMaterial(kind, params = {}) {
@@ -241,7 +243,7 @@ function litMaterial(kind, params = {}) {
   mat.customProgramCacheKey = () => 'cw-' + kind;
   mat.onBeforeCompile = sh => {
     sh.uniforms.uTime = SH.uTime; sh.uniforms.uTexA = SH.uTexA; sh.uniforms.uTexH = SH.uTexH; sh.uniforms.uBump = SH.uBump; sh.uniforms.uSky = SH.uSky; sh.uniforms.uWind = SH.uWind;
-    sh.uniforms.uCover = SH.uCover; sh.uniforms.uCoverCol = SH.uCoverCol; sh.uniforms.uCoverP = SH.uCoverP; sh.uniforms.uWat = SH.uWat; sh.uniforms.uWatA = SH.uWatA; sh.uniforms.uWatB = SH.uWatB;
+    sh.uniforms.uCover = SH.uCover; sh.uniforms.uCoverCol = SH.uCoverCol; sh.uniforms.uCoverP = SH.uCoverP; sh.uniforms.uWat = SH.uWat; sh.uniforms.uWatA = SH.uWatA; sh.uniforms.uWatB = SH.uWatB; sh.uniforms.uWet = SH.uWet;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec4 aSurf; varying vec4 vSurf; varying vec2 vTuv; uniform float uTime; uniform float uWind;
@@ -261,7 +263,7 @@ ${world ? `if (aSurf.z > 0.0) {
       .replace('#include <common>', `#include <common>
 precision highp sampler2DArray;
 uniform sampler2DArray uTexA; uniform sampler2DArray uTexH; uniform float uBump; uniform float uTime; uniform vec3 uSky;
-uniform vec4 uCover; uniform vec3 uCoverCol; uniform vec4 uCoverP; uniform vec4 uWat; uniform vec3 uWatA; uniform vec3 uWatB;
+uniform vec4 uCover; uniform vec3 uCoverCol; uniform vec4 uCoverP; uniform vec4 uWat; uniform vec3 uWatA; uniform vec3 uWatB; uniform vec2 uWet;
 varying vec4 vSurf; varying vec2 vTuv;
 ${world ? 'varying vec3 vWpos;' : ''}
 ${inst ? 'varying float vFlash;' : ''}
@@ -299,15 +301,25 @@ if (uWat.x > 0.5 && uWat.x < 1.5) {
   float crack = max(pow(ra, 3.2), pow(rb, 4.4) * 0.8), pool = smoothstep(0.56, 0.74, c1 * 0.55 + c3 * 0.45);
   wHeat = clamp(crack * 0.85 + pool, 0.0, 1.0); wMask = 1.0 - smoothstep(0.38, 0.7, wHeat);
   diffuseColor.rgb = mix(uWatA, uWatB * (0.6 + 0.8 * c3), wMask);
+} else if (uWat.x > 3.5) {
+  // Tidal water (Stormreach): dark sea water with foam streaks running with the flow, white water along the banks
+  // of the channel, and still, dark tide pools and puddles (flow 0).
+  float fl = min(vSurf.z, 1.0), t = wFlow;
+  float f1 = cwN(vec2(vTuv.x * 1.8, vTuv.y * 0.8 - t * 0.6)), f2 = cwN(vec2(vTuv.x * 4.4 + 5.0, vTuv.y * 2.0 - t * 1.2)), f3 = cwN(vec2(vTuv.x * 10.0 - 2.0, vTuv.y * 4.6 - t * 2.0));
+  float streak = smoothstep(0.55, 0.78, f1 * 0.5 + f2 * 0.33 + f3 * 0.17);
+  float bank = smoothstep(0.42, 0.78, abs(vTuv.x) + (f2 - 0.5) * 0.35) * step(0.5, vSurf.z);
+  wMask = clamp((streak * 0.75 + bank * (0.55 + 0.45 * f3)) * fl, 0.0, 1.0);
+  diffuseColor.rgb = mix(uWatA * (0.75 + 0.5 * wn2), uWatB * (0.8 + 0.3 * f3), wMask);
 } else if (uWat.x > 2.5) {
   wMask = smoothstep(0.56, 0.68, wn1 * 0.55 + wn2 * 0.45 + 0.12 * (1.0 - min(vSurf.z, 1.0))) * step(0.01, vSurf.z);
   diffuseColor.rgb = mix(uWatA, uWatB * (0.75 + 0.5 * wn2), wMask);
-}` : 'vec4 cwT = texture(uTexA, vec3(vTuv, cwL)); diffuseColor.rgb *= cwT.rgb * 2.0;'}`)
+}` : 'vec4 cwT = texture(uTexA, vec3(vTuv, cwL)); diffuseColor.rgb *= cwT.rgb * 2.0 * (1.0 - uWet.y);'}`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor = clamp(vSurf.y * (1.15 - 0.3 * cwT.a), 0.045, 1.0);
 ${water ? `if (uWat.x > 0.5 && uWat.x < 1.5) roughnessFactor = mix(0.09, 0.62, wMask);
 else if (uWat.x > 1.5 && uWat.x < 2.5) roughnessFactor = mix(0.55, 0.96, wMask);
-else if (uWat.x > 2.5) roughnessFactor = mix(roughnessFactor, 0.9, wMask);` : ''}`)
+else if (uWat.x > 3.5) roughnessFactor = mix(0.07, 0.75, wMask);
+else if (uWat.x > 2.5) roughnessFactor = mix(roughnessFactor, 0.9, wMask);` : 'roughnessFactor *= 1.0 - uWet.x * mix(0.8, 0.4, cwT.a);'}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 ${water ? `{
   float h0 = cwRipple(vTuv, wFlow, vSurf.z) + wMask * uWat.w;
@@ -558,7 +570,7 @@ uniform sampler2D tColor; uniform sampler2D tDepth;
 uniform mat4 uInvVP; uniform vec3 uCamDir; uniform vec2 uPx; uniform float uTime;
 uniform vec3 uLightPos[${R.NL}]; uniform vec3 uLightCol[${R.NL}];
 uniform vec3 uMistAmb; uniform vec4 uMist;
-uniform vec3 uAO;
+uniform vec3 uAO; uniform float uAOFloor;
 uniform vec2 uDither; uniform vec2 uWind;
 ${GLSL_BAYER}
 vec3 wpos(vec2 uv, float d){ vec4 p = uInvVP * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return p.xyz / p.w; }
@@ -575,7 +587,8 @@ void main(){
     vec3 ddy = abs(du - d) < abs(d - dd) ? wpos(vUv + vec2(0.0, uPx.y), du) - P : P - wpos(vUv - vec2(0.0, uPx.y), dd);
     vec3 N = normalize(cross(ddx, ddy)); if (dot(N, uCamDir) > 0.0) N = -N;
     float occ = 0.0, ang = bayer4(gl_FragCoord.xy + uDither) * 6.2831853;
-    for (int i = 0; i < 10; i++) {
+    // No ambient occlusion below uAOFloor (the open sea around Stormreach: flat, and a lot of pixels).
+    if (P.y > uAOFloor) for (int i = 0; i < 10; i++) {
       float fi = (float(i) + 0.5) / 10.0, a = ang + float(i) * 2.39996;
       vec2 suv = vUv + vec2(cos(a), sin(a)) * uAO.y * sqrt(fi) * uPx;
       vec3 V = wpos(suv, texture2D(tDepth, suv).x) - P;
@@ -595,7 +608,7 @@ void main(){
 }`, {
     tColor: { value: null }, tDepth: { value: null }, uInvVP: { value: new THREE.Matrix4() }, uCamDir: { value: new THREE.Vector3() }, uPx: { value: new THREE.Vector2() }, uTime: SH.uTime,
     uLightPos: { value: R.lightPos }, uLightCol: { value: R.lightCol }, uMistAmb: { value: new THREE.Vector3(0.05, 0.08, 0.14) }, uMist: { value: new THREE.Vector4(-0.3, 0.42, 0.75, 0.1) },
-    uAO: { value: new THREE.Vector3(1.0, 18, 0.7) }, uDither: { value: R.ditherOfs }, uWind: { value: new THREE.Vector2() },
+    uAO: { value: new THREE.Vector3(1.0, 18, 0.7) }, uAOFloor: { value: -1e9 }, uDither: { value: R.ditherOfs }, uWind: { value: new THREE.Vector2() },
   });
 
   M.dof = fsMat(`
@@ -827,6 +840,23 @@ const BIOMES = [
     mobs: { mummy: 3, scarab: 2.4, spider: .6, bomber: 1.3, ghoul: 1.3, toad: 0, slime: .4, ram: 2.2, harpy: 2, shaman: .6 }, early: { mummy: 4, scarab: 2, ram: 5, harpy: 3 }, boss: ['king'], tints: { golem: [1.5, 1.1, .72], wolf: [1.5, 1.2, .8], wisp: [1.4, 1.0, .4], gargoyle: [1.5, 1.2, .9], toad: [1.3, 1.1, .7] }, wispHex: 0xffc060,
     trees: [['palm', 9, 3.0, 4.6], ['tree', 2, 2.4, 3.4]], stumps: 2, rocks: 44, tufts: 150, webs: 0,
   },
+  {
+    // Stormreach: a storm-lashed sea cliff at night. The slab stands in a churning sea (STORM.sea, 42-storm.js:
+    // sea = [level, foam]), rain slants on the wind, lightning lights the whole board every 6-14 s (lightning: the
+    // mean gap), the stream is a tidal channel with foam (water mode 4), everything is wet (wet = [shine, darken]),
+    // and the beacon is a lighthouse whose lamp sweeps two beams over the sea (lighthouse).
+    key: 'storm', name: 'Stormreach',
+    col: { stone: 0x40464f, stoneD: 0x22262d, stoneL: 0x626b76, earth: 0x30342f, earthD: 0x20231f, grass: 0x46553f, grassD: 0x323e2f, moss: 0x3c4e36, road: 0x6a6f76, roadD: 0x43474e, mud: 0x25272a, bark: 0x3a3631, tuftA: 0x58663f, tuftB: 0x9a9262, leaf: 0x283a2a, leafL: 0x3c5434 },
+    strata: [0x343a44, 0x1c2027, 0x4c525c, 0x272b32, 0x3c3a38, 0x20252c, 0x5c626a, 0x2c2f33],
+    hemi: [0x6a8cb6, 0x141c24, 1.25], moon: [0xb4ccf0, 1.5], fill: [0x3a6e86, .36], moonPos: [-10, 40, -36],
+    clear: [.003, .0055, .009], mistAmb: [.045, .07, .09], mist: [-.2, .55, .85, .12], sky: [.014, .026, .04], lift: [.01, .018, .03], sat: .8, expo: .96, sprAmb: [.055, .075, .095],
+    cover: [0, .55, .3, .5], coverCol: [1, 1, 1], coverP: [.7, .6, 0, 0], wet: [.62, .16],
+    wat: [4, .9, 1.15, .45], watA: [.008, .02, .024], watB: [.5, .58, .62], fall: [0, 1.3, 1, 0], fallA: [.02, .04, .05], fallB: [.42, .52, .58], spray: 'water',
+    relief: [1.6, .55, 1.25, 0], puddles: 16, ponds: 3, sway: 1.5, wind: 1.6, beacon: .4, lighthouse: 1, sea: [-4.3, 1], lightning: 10,
+    wx: { n: [.62, .08], velA: [3.4, -15, 1.7], swayA: [.04, .6], sizeA: [.016, .026], colA: [.72, .8, .95, 1], alA: [.42, 0, 1.6], yA: [-2, 14], velB: [5.5, -1.4, 2.6], swayB: [.3, 1.4], sizeB: [.025, .045], colB: [.8, .88, .95, 1], alB: [.35, 0, .7], yB: [-1.5, 5], amb: [.3, .38, .48] },
+    mobs: { harpy: 2, wraith: 1.8, knight: 1.5, ghoul: 1.2, toad: 1, wisp: .9, necro: 1.2, scarab: 0, mummy: 0, spider: .5, hound: .4, ram: .8, shaman: .6 }, early: { harpy: 3, wraith: 3, knight: 3 }, boss: ['leviathan'], tints: { wisp: [.45, 1.25, 1.3], golem: [.7, .9, 1.0], wolf: [.75, .85, .9], toad: [.65, .95, .9], gargoyle: [.8, .95, 1.05], ghoul: [.8, 1.15, 1.2] }, wispHex: 0x60e0d0,
+    trees: [['windbent', 8, 2.2, 3.6]], stumps: 2, rocks: 86, tufts: 380, tuft: 'seagrass', webs: 0, noRuin: 1,
+  },
 ];
 const BIOME = { start: 0 };
 function biomeFor(index) { return BIOMES[((BIOME.start + index) % BIOMES.length + BIOMES.length) % BIOMES.length]; }
@@ -851,16 +881,17 @@ function setBiomeLook(B, instant) {
   if (instant || !LOOK.cur) LOOK.cur = lookOf(b);
   SH.uCover.value.fromArray(b.cover); SH.uCoverCol.value.fromArray(b.coverCol); SH.uCoverP.value.fromArray(b.coverP);
   SH.uWat.value.fromArray(b.wat); SH.uWatA.value.fromArray(b.watA); SH.uWatB.value.fromArray(b.watB); SH.uWind.value = b.sway;
+  SH.uWet.value.fromArray(b.wet || [0, 0]);
   const f = MAT.fall.uniforms; f.uFP.value.fromArray(b.fall); f.uFA.value.fromArray(b.fallA); f.uFB.value.fromArray(b.fallB);
   setWeather(b.wx, instant);
   const m = B.mirrored, p = b.moonPos; LT.moon.position.set(m ? p[2] : p[0], p[1], m ? p[0] : p[2]); LT.moon.target.position.set(0, 0, 0);
-  applyLook(LOOK.cur);
+  applyLook(LOOK.cur); setStormLand(B, instant);
 }
 function updateBiomeLook(dt) {
   if (!LOOK.cur) return;
   const k = 1 - Math.exp(-dt * 1.6), a = LOOK.cur, b = LOOK.to;
   for (const key in a) { const x = a[key], y = b[key]; for (let i = 0; i < x.length; i++) x[i] += (y[i] - x[i]) * k; }
-  applyLook(a); if (typeof eventLook === 'function') eventLook(); WX.fade = Math.min(1, WX.fade + dt * .5); WX.u.uFade.value = WX.fade;
+  applyLook(a); if (typeof eventLook === 'function') eventLook(); updateStorm(dt); WX.fade = Math.min(1, WX.fade + dt * .5); WX.u.uFade.value = WX.fade;
 }
 
 
@@ -1755,21 +1786,39 @@ function buildKeep(B) {
   for (const s of [-1, 1]) { TG.seg([s * 1.32, 1.9, -.08], [s * 1.32, 2.1, .32], .035, .03, COL.iron, { l: L_METAL, n: 4 }); TG.cyl(.09, .14, s * 1.32, 2.14, .34, COL.iron, { n: 6, l: L_METAL, rt: 1.4 }); B.fires.push({ x: kx + s * 1.32, y: ky + 2.3, z: oz + .34, size: .42, type: 'sconce' }); }
   TG.cyl(1.5, 2.4, 2.4, 1.2, -4.2, sdk, { n: 8, l: L_MASON, rt: .92 });
   for (let k = 0; k < 8; k++) { const a = (k + .5) / 8 * TAU, h = rng.range(.2, 1.3); if (rng() < .3) continue; mas(TG, .9, h, .4, 2.4 + Math.cos(a) * 1.2, 2.4 + h / 2, -4.2 + Math.sin(a) * 1.2, null, { r: [0, -a + HPI, 0] }); }
-  const bx = -2.6, bz = -.95, bh = 7.3;
+  const bx = -2.6, bz = -.95, bh = 7.3, LH = !!B.bio.lighthouse;
   TT.cyl(1.9, 1.3, bx, .65, bz, sdk, { n: 8, l: L_MASON, rt: .84 });
-  TT.cyl(1.52, bh, bx, bh / 2, bz, st, { n: 8, l: L_MASON, rt: .9, jit: .03 });
-  for (let c = 0; c < 6; c++) TT.cyl(1.54 - c * .027, .2, bx, 1.7 + c * 1.0, bz, mc(), { n: 8, l: L_MASON });
+  if (LH) {
+    // Stormreach: a lighthouse. Whitewashed and red bands, a railed gallery and a lantern room with a copper roof.
+    const wht = C(0xaaa69a), red = C(0x7e2e26), nb = 6, hb = (bh - 1.3) / nb;
+    for (let c = 0; c < nb; c++) TT.cyl(1.52 - c * .03, hb, bx, 1.3 + (c + .5) * hb, bz, mulC(c & 1 ? red : wht, .9 + .15 * rng()), { n: 10, l: L_MASON, rt: (1.49 - c * .03) / (1.52 - c * .03), jit: .03 });
+    TT.cyl(1.56, .2, bx, 1.3, bz, mulC(wht, .7), { n: 10, l: L_MASON });
+  } else {
+    TT.cyl(1.52, bh, bx, bh / 2, bz, st, { n: 8, l: L_MASON, rt: .9, jit: .03 });
+    for (let c = 0; c < 6; c++) TT.cyl(1.54 - c * .027, .2, bx, 1.7 + c * 1.0, bz, mc(), { n: 8, l: L_MASON });
+  }
   TT.cyl(1.42, .55, bx, bh - .15, bz, sl, { n: 8, l: L_MASON, rt: 1.26 });
   TT.cyl(1.82, .22, bx, bh + .22, bz, st, { n: 8, l: L_MASON });
-  for (let k = 0; k < 8; k++) { const a = (k + .5) / 8 * TAU; if (k === 1) continue; mas(TT, .6, .5, .32, bx + Math.cos(a) * 1.6, bh + .58, bz + Math.sin(a) * 1.6, null, { r: [0, -a + HPI, 0] }); }
-  for (let k = 0; k < 4; k++) { const a = k / 4 * TAU + .4; TT.box(.12, .9, .12, bx + Math.cos(a) * 1.45, bh * (.4 + (k & 1) * .22), bz + Math.sin(a) * 1.45, COL.black, { jit: 0, r: [0, -a, 0] }); }
-  for (let k = 0; k < 5; k++) { const a = k / 5 * TAU + .2; TT.seg([bx + Math.cos(a) * 1.4, bh - .55, bz + Math.sin(a) * 1.4], [bx + Math.cos(a) * 2.2, bh - .4, bz + Math.sin(a) * 2.2], .07, .06, COL.woodD, { l: L_WOOD, n: 4 }); }
+  if (LH) {
+    const rail = C(0x2a2e34), cu = C(0x4a7a6a), top = bh + 4.1;
+    for (let k = 0; k < 16; k++) { const a = k / 16 * TAU; TT.box(.05, .62, .05, bx + Math.cos(a) * 1.72, bh + .63, bz + Math.sin(a) * 1.72, rail, { l: L_METAL, jit: 0 }); }
+    for (const y of [bh + .95, bh + .62]) TT.add(gTorus(16, .03, 3), { s: 1.72, p: [bx, y, bz], r: [HPI, 0, 0], c: rail, l: L_METAL });
+    for (let k = 0; k < 8; k++) { const a = (k + .5) / 8 * TAU; TT.box(.07, top - bh - .85, .07, bx + Math.cos(a) * 1.02, (top + bh + .85) / 2, bz + Math.sin(a) * 1.02, rail, { l: L_METAL, jit: 0 }); }
+    TT.add(gTorus(8, .05, 3), { s: 1.04, p: [bx, top, bz], r: [HPI, 0, 0], c: rail, l: L_METAL });
+    TT.cyl(1.36, 1.0, bx, top + .5, bz, cu, { n: 8, rt: .12, l: L_METAL, rough: .45 });
+    TT.sph(.15, bx, top + 1.1, bz, cu, { l: L_METAL, rough: .45 }); TT.cone(.05, .5, bx, top + 1.45, bz, rail, { n: 4, l: L_METAL });
+    for (let k = 0; k < 4; k++) { const a = k / 4 * TAU + .4; TT.box(.14, .7, .12, bx + Math.cos(a) * 1.5, bh * (.36 + (k & 1) * .26), bz + Math.sin(a) * 1.5, C(0xffc070), { jit: 0, r: [0, -a, 0], emis: .14 }); }
+  } else {
+    for (let k = 0; k < 8; k++) { const a = (k + .5) / 8 * TAU; if (k === 1) continue; mas(TT, .6, .5, .32, bx + Math.cos(a) * 1.6, bh + .58, bz + Math.sin(a) * 1.6, null, { r: [0, -a + HPI, 0] }); }
+    for (let k = 0; k < 4; k++) { const a = k / 4 * TAU + .4; TT.box(.12, .9, .12, bx + Math.cos(a) * 1.45, bh * (.4 + (k & 1) * .22), bz + Math.sin(a) * 1.45, COL.black, { jit: 0, r: [0, -a, 0] }); }
+    for (let k = 0; k < 5; k++) { const a = k / 5 * TAU + .2; TT.seg([bx + Math.cos(a) * 1.4, bh - .55, bz + Math.sin(a) * 1.4], [bx + Math.cos(a) * 2.2, bh - .4, bz + Math.sin(a) * 2.2], .07, .06, COL.woodD, { l: L_WOOD, n: 4 }); }
+  }
   TT.cyl(.6, .55, bx, bh + .6, bz, sdk, { n: 8, l: L_MASON });
   TT.cyl(.72, .4, bx, bh + 1.06, bz, COL.iron, { n: 8, l: L_METAL, rt: 1.4, rough: .7 });
   for (let k = 0; k < 4; k++) { const a = k / 4 * TAU + .5; TT.seg([bx + Math.cos(a) * .72, bh + .35, bz + Math.sin(a) * .72], [bx + Math.cos(a) * .96, bh + 1.22, bz + Math.sin(a) * .96], .04, .04, COL.iron, { l: L_METAL, n: 4 }); }
   TT.cyl(.9, .1, bx, bh + 1.24, bz, COL.ember, { n: 8, emis: .5, jit: 0 });
   for (let k = 0; k < 4; k++) { const a = k * 1.3; TT.seg([bx + Math.cos(a) * .7, bh + 1.28, bz + Math.sin(a) * .7], [bx - Math.cos(a) * .6, bh + 1.48, bz - Math.sin(a) * .6], .1, .09, mulC(COL.bark, .7), { l: L_WOOD, n: 5, emis: .05 }); }
-  clothPanel(TT, { x0: bx - .45, x1: bx + .45, yTop: 5.2, len: 2.3, z: bz + 1.5, col: COL.clothR, col2: mulC(COL.gold, .6), rng, sway: .45 });
+  if (!LH) clothPanel(TT, { x0: bx - .45, x1: bx + .45, yTop: 5.2, len: 2.3, z: bz + 1.5, col: COL.clothR, col2: mulC(COL.gold, .6), rng, sway: .45 });
   B.structs.push({ soup: new Soup().merge(TG, { p: [kx, ky, oz], ao: [0, .9, .7] }), cx: kx, cy: ky, cz: oz - 2.5, kind: 'keep' });
   B.structs.push({ soup: new Soup().merge(TT, { p: [kx, ky, oz], ao: [0, 1.4, .65] }), cx: kx + bx, cy: ky, cz: oz + bz, kind: 'beaconTower' });
   B.beacon = { x: kx + bx, y: ky + bh + 1.45, z: oz + bz };
@@ -1832,12 +1881,15 @@ function scatterProps(B) {
   };
   const bio = B.bio;
   const at = (x, z, build, r, T0) => { if (Math.abs(x) > BH - .8 || Math.abs(z) > BH - .8) return; const T = T0 || new Soup(); if (!T0) build(T); B.put(T, x, z, { ry: rng() * TAU }); if (r) placed.push([x, z, r]); };
-  drop(T => PROP.towerRuin(T, rng), 2.9, { far: 3.6 });
+  const X = { B, rng, drop, find, beside, free, at, H, placed, slope };
+  // A land's big set pieces go down first, where there is still room (BIOME_DRESS.<key>First).
+  if (BIOME_DRESS[bio.key + 'First']) BIOME_DRESS[bio.key + 'First'](X);
+  if (!bio.noRuin) drop(T => PROP.towerRuin(T, rng), 2.9, { far: 3.6 });
   drop(T => PROP.well(T, rng), 1.3, { near: 5.5, far: 2.6 });
   drop(T => PROP.statue(T, rng), 1.2, { near: 6, far: 2.4 });
   drop(T => PROP.ribcage(T, rng), 2.4, { far: 2.8 });
   for (let k = 0; k < 3; k++) { const len = rng.range(4, 7); drop(T => PROP.wallRun(T, rng, len, rng.range(1.8, 3.2)), len * .5, { far: 1.6 }); }
-  { const g = find(3.2, { far: 3.4 }); if (g) {
+  { const g = bio.noRuin ? null : find(3.2, { far: 3.4 }); if (g) {
       const ry = rng() * TAU, cs = Math.cos(ry), sn = Math.sin(ry);
       for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) { if (rng() < .2) continue; const lx = (c - 1.5) * 1.15 + rng.range(-.15, .15), lz = (r - 1) * 1.5 + rng.range(-.15, .15), T = new Soup(); PROP.grave(T, rng); B.put(T, g[0] + lx * cs + lz * sn, g[1] - lx * sn + lz * cs, { ry: ry + rng.range(-.2, .2) }); }
       for (const [lx, lz, a, len] of [[0, -2.5, 0, 4.6], [-2.8, -.2, HPI, 4.2], [2.8, .5, HPI, 3]]) { const T = new Soup(); PROP.fence(T, rng, len); B.put(T, g[0] + lx * cs + lz * sn, g[1] - lx * sn + lz * cs, { ry: ry + a }); }
@@ -1860,9 +1912,9 @@ function scatterProps(B) {
   for (let k = 0; k < 6; k++) { const x = B.lay.cave.x + rng.range(1.8, 7), z = B.zc + rng.sign() * rng.range(1.9, 5); if (free(x, z, .4, .2)) drop(T => PROP.bones(T, rng, rng.int(4, 7)), .5, { at: [x, z], ao: null }); }
   for (let k = 0; k < 5; k++) drop(T => PROP.bones(T, rng, rng.int(3, 5)), .45, { ao: null });
   for (let k = 0; k < 3; k++) drop(T => PROP.cairn(T, rng), .5, {});
-  BIOME_DRESS[bio.key]({ B, rng, drop, find, beside, free, at, H, placed, slope });
+  BIOME_DRESS[bio.key](X);
   const trees = [];
-  for (const [kind, cnt, h0, h1] of bio.trees) for (let k = 0; k < cnt; k++) { const h = rng.range(h0, h1), p = drop(T => PROP[kind](T, rng, h), kind === 'tree' || kind === 'charred' ? .55 : .8, { far: 1.0, water: kind === 'palm' && k < 6 ? 5.5 : 0 }); if (p && kind === 'tree') trees.push([p, h]); }
+  for (const [kind, cnt, h0, h1] of bio.trees) for (let k = 0; k < cnt; k++) { const h = rng.range(h0, h1), p = drop(T => PROP[kind](T, rng, h), kind === 'tree' || kind === 'charred' ? .55 : kind === 'windbent' ? 1.1 : .8, { far: 1.0, water: kind === 'palm' && k < 6 ? 5.5 : 0 }); if (p && kind === 'tree') trees.push([p, h]); }
   for (let k = 0; k < bio.webs && k < trees.length; k++) {
     const [p, h] = trees[k], y = H(p[0], p[1]), a = rng() * TAU, T = new Soup();
     PROP.web(T, [0, h * .42, 0], [Math.cos(a) * .9, h * .55, Math.sin(a) * .9], [Math.cos(a) * .7, h * .18, Math.sin(a) * .7]);
@@ -1874,7 +1926,7 @@ function scatterProps(B) {
     const x = rng.range(-BH + .8, BH - .8), z = rng.range(-BH + .8, BH - .8);
     if (B.dRoadAt(x, z) < ROAD_HALF + .35 || waterD(x, z) < 1.1 || slope(x, z) > .5) continue;
     if (Math.abs(x - B.kx) < 5.4 && z < -11.6) continue;
-    const T = new Soup(); PROP.tuft(T, rng); B.put(T, x, z, { ao: null, s: rng.range(.8, 1.5) });
+    const T = new Soup(); PROP[bio.tuft || 'tuft'](T, rng); B.put(T, x, z, { ao: null, s: rng.range(.8, 1.5) });
   }
   for (let k = 0; k < 60; k++) {
     const i = rng.int(16, B.n - 12), side = rng.sign(), d = ROAD_HALF + rng.range(.1, .45), x = B.px[i] - B.tz[i] * side * d, z = B.pz[i] + B.tx[i] * side * d;
@@ -2060,6 +2112,185 @@ const BIOME_DRESS = {
       X.at(x, z, () => T, .7, T);
     }
   },
+};
+
+// ---- Stormreach props: wreckage, driftwood, kelp, barnacled rocks, tide pools, wind-bent trees and grass -----------
+// The wind blows toward +x (and a little +z), the same way as the rain, so trees and grass all lean that way.
+const COAST = {
+  wood: C(0x6a5c4a), woodL: C(0x8e826c), drift: C(0x9a948a), driftD: C(0x6c665e), kelp: C(0x3c3a1c), kelpL: C(0x5a5226),
+  barn: C(0xb4b0a2), mussel: C(0x1a202c), weed: C(0x2e4a2a), rust: C(0x6a4a34), canvas: C(0xb0a68e), canvasD: C(0x7a7260), star: C(0xc0582c),
+};
+const WIND_DIR = [.89, .45];
+
+Object.assign(PROP, {
+  // Coastal grass: long blades combed over by the wind.
+  seagrass(S, rng) {
+    const c = mulC(mixC(COL.tuftA, COL.tuftB, rng() * .75), .8 + .45 * rng()), n = rng.int(4, 7);
+    for (let k = 0; k < n; k++) {
+      const a = rng() * TAU, l = rng.range(.3, .66), bx = Math.cos(a) * .07, bz = Math.sin(a) * .07, lean = rng.range(.45, .85), w = .03;
+      const tx = bx + (WIND_DIR[0] * lean + rng.range(-.15, .15)) * l, tz = bz + (WIND_DIR[1] * lean + rng.range(-.15, .15)) * l, ty = l * (1 - lean * .55);
+      const px = -Math.sin(a) * w, pz = Math.cos(a) * w, mx = (bx + tx) / 2 + WIND_DIR[0] * .02, mz = (bz + tz) / 2, my = ty * .62;
+      const A = [bx - px, 0, bz - pz], Bp = [bx + px, 0, bz + pz], M1 = [mx - px * .6, my, mz - pz * .6], M2 = [mx + px * .6, my, mz + pz * .6], T = [tx, ty, tz];
+      for (const [p, sw] of [[A, 0], [Bp, 0], [M2, .35], [A, 0], [M2, .35], [M1, .35], [M1, .35], [M2, .35], [T, .9]]) S.v(p[0], p[1], p[2], 0, 1, 0, c[0], c[1], c[2], 0, 0, L_PLAIN, .8, sw, 0);
+    }
+  },
+  // A cypress shaped by the gales: a crooked trunk leaning downwind, every branch streaming the same way, the
+  // foliage in flat, wind-shorn shelves; a few bare snags on the windward side.
+  windbent(S, rng, h) {
+    const bark = mulC(COL.bark, .85 + .3 * rng()), W = WIND_DIR, lean = rng.range(.35, .6);
+    let p = [0, -.1, 0], r = h * .07; const tips = [];
+    for (let k = 0; k < 5; k++) {
+      const u = k / 4, d = [W[0] * lean * (.4 + u) + rng.range(-.15, .15), 1 - u * .35, W[1] * lean * (.4 + u) + rng.range(-.15, .15)], l = Math.hypot(d[0], d[1], d[2]), len = h * .2;
+      const q = [p[0] + d[0] / l * len, p[1] + d[1] / l * len, p[2] + d[2] / l * len]; S.seg(p, q, r, r * .8, bark, { l: L_WOOD, n: 6 }); p = q; r *= .8;
+      if (k >= 2) {
+        const bl = h * rng.range(.25, .42), bq = [p[0] + W[0] * bl, p[1] + bl * rng.range(.05, .3), p[2] + W[1] * bl + rng.range(-.4, .4) * bl];
+        S.seg(p, bq, r * .7, r * .35, bark, { l: L_WOOD, n: 5, sway: .1 }); tips.push(bq);
+      }
+      if (k === 2 || k === 3) { const sl = h * rng.range(.12, .2); S.seg(p, [p[0] - W[0] * sl, p[1] + sl * .5, p[2] - W[1] * sl + rng.range(-.1, .1)], r * .4, r * .12, mulC(bark, 1.2), { l: L_WOOD, n: 4 }); }
+    }
+    tips.push(p);
+    for (const t of tips) for (let j = 0; j < 3; j++) {
+      const rb = h * rng.range(.13, .2), c = mulC(mixC(COL.leaf, COL.leafL, rng() * .8), .75 + .4 * rng());
+      const cx = t[0] - W[0] * rb * (j - .6) * .9, cy = t[1] + rng.range(-.05, .12) + (j === 1 ? .08 : 0), cz = t[2] - W[1] * rb * (j - .6) * .9 + rng.range(-.15, .15);
+      S.ico(rb, cx, cy, cz, c, { sc: [1.7, .42, 1.15], d: 1, l: L_THATCH, sway: .14, r: [0, -Math.atan2(W[1], W[0]) + rng.range(-.3, .3), rng.range(-.08, .08)], cf: v => .62 + .38 * sat(v.y / (rb * .4) + .5) });
+    }
+    for (let k = 0; k < 3; k++) { const a = k * 2.1 + rng(); S.seg([Math.cos(a) * h * .04, h * .08, Math.sin(a) * h * .04], [Math.cos(a) * h * .18, -.1, Math.sin(a) * h * .18], h * .028, h * .015, bark, { l: L_WOOD, n: 5 }); }
+  },
+  // A bleached, sea-smoothed log with snapped branches and a root ball at one end.
+  driftwood(S, rng) {
+    const len = rng.range(1.3, 2.5), r = rng.range(.1, .17), c = mulC(mixC(COAST.drift, COAST.driftD, rng() * .6), .85 + .3 * rng()), bend = rng.range(-.2, .2);
+    S.seg([-len / 2, r * .75, 0], [0, r * .85, bend], r, r * .9, c, { l: L_WOOD, n: 6, rough: .7 }); S.seg([0, r * .85, bend], [len / 2, r * .7, 0], r * .9, r * .6, c, { l: L_WOOD, n: 6, rough: .7 });
+    for (let k = 0; k < 2; k++) { const x = rng.range(-len * .2, len * .35), a = rng.range(-1.2, 1.2); S.seg([x, r, 0], [x + rng.range(-.1, .2), r + .3 * Math.cos(a), .3 * Math.sin(a)], r * .35, r * .15, c, { l: L_WOOD, n: 4 }); }
+    for (let k = 0; k < 6; k++) { const a = k / 6 * TAU + rng() * .5, l = rng.range(.3, .55); S.seg([-len / 2, r * .8, 0], [-len / 2 - .12 - rng() * .15, r * .8 + Math.sin(a) * l, Math.cos(a) * l], r * .4, r * .1, mulC(c, .92), { l: L_WOOD, n: 4 }); }
+  },
+  // A pile of kelp thrown up by the sea: wavy ribbons lying on the ground and a few bladders.
+  kelp(S, rng, n = 5) {
+    for (let k = 0; k < n; k++) {
+      const c = mulC(mixC(COAST.kelp, COAST.kelpL, rng()), .8 + .4 * rng()), a0 = rng() * TAU, w = rng.range(.05, .1), segs = rng.int(4, 7);
+      let x = rng.range(-.3, .3), z = rng.range(-.3, .3), a = a0, y = .025 + rng() * .02;
+      for (let i = 0; i < segs; i++) {
+        const l = rng.range(.14, .24), a2 = a + rng.range(-.7, .7), x2 = x + Math.cos(a2) * l, z2 = z + Math.sin(a2) * l, y2 = .02 + rng() * .07;
+        const px = -Math.sin(a) * w, pz = Math.cos(a) * w, qx = -Math.sin(a2) * w * 1.15, qz = Math.cos(a2) * w * 1.15;
+        ribbon(S, [x - px, y, z - pz], [x + px, y, z + pz], [x2 + qx, y2, z2 + qz], [x2 - qx, y2, z2 - qz], c, [0, 0, 0, 0]);
+        if (rng() < .2) S.ico(.035, x2, y2 + .02, z2, mulC(COAST.kelpL, 1.2), { d: 0, rough: .3 });
+        x = x2; z = z2; a = a2; y = y2;
+      }
+    }
+  },
+  // A wet black rock crusted with barnacles and mussels, with a skirt of green weed at its foot.
+  barnRock(S, rng, r) {
+    S.rock(r, 0, r * .3, 0, mulC(mixC(COL.stoneD, COL.stone, rng() * .6), .85), { sq: .7 });
+    S.ico(r * 1.05, 0, .02, 0, mulC(COAST.weed, .9 + .3 * rng()), { sc: [1, .12, 1], d: 1, rough: .5 });
+    const nb = Math.round(10 + r * 26);
+    for (let k = 0; k < nb; k++) {
+      const a = rng() * TAU, y = rng.range(.05, .55) * r, rr = Math.sqrt(Math.max(0, 1 - Math.pow((y - r * .3) / (r * .7), 2))) * r * .86 + .02, x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+      if (rng() < .7) S.cone(rng.range(.025, .045) * (.7 + r), rng.range(.03, .06), x, y, z, mulC(COAST.barn, .75 + .4 * rng()), { n: 5, r: [Math.sin(a) * 1.1, 0, -Math.cos(a) * 1.1], rough: .8 });
+      else S.ico(rng.range(.035, .06), x, y, z, COAST.mussel, { sc: [1, .55, 1.6], d: 0, rough: .28, r: [0, a, .6] });
+    }
+  },
+  // Starfish and shells for the tide-pool edges.
+  starfish(S, rng) {
+    for (let k = 0, n = rng.int(1, 3); k < n; k++) {
+      const x = rng.range(-.3, .3), z = rng.range(-.3, .3), rot = rng() * TAU, s = rng.range(.07, .12), c = mulC(COAST.star, .8 + .4 * rng());
+      for (let i = 0; i < 5; i++) { const a = rot + i / 5 * TAU; S.box(s * 1.1, .02, s * .32, x + Math.cos(a) * s * .5, .012, z + Math.sin(a) * s * .5, c, { r: [0, -a, 0], jit: .05, rough: .6 }); }
+    }
+    for (let k = 0, n = rng.int(2, 5); k < n; k++) S.ico(rng.range(.025, .045), rng.range(-.4, .4), .015, rng.range(-.4, .4), mulC(COAST.barn, .9 + .3 * rng()), { sc: [1, .45, 1.3], d: 0, r: [0, rng() * TAU, 0] });
+  },
+  // A ship's anchor, rusted, its crown driven into the ground (also the Drowned King's weapon, see KIT.item.anchor).
+  anchor(S, rng, s = 1) {
+    const c = mulC(mixC(COL.ironL, COAST.rust, .55), .9 + .2 * rng()), o = { l: L_METAL, rough: .7 };
+    S.box(.16 * s, 2.2 * s, .16 * s, 0, 1.1 * s, 0, c, o);
+    S.add(gTorus(10, .2, 4), { s: .22 * s, p: [0, 2.35 * s, 0], r: [0, HPI, 0], c, l: L_METAL, rough: .7 });
+    S.box(1.3 * s, .12 * s, .12 * s, 0, 1.95 * s, 0, mulC(c, .85), { l: L_WOOD });
+    for (const sg of [-1, 1]) {
+      S.seg([0, .12 * s, 0], [sg * .45 * s, .2 * s, 0], .08 * s, .07 * s, c, { l: L_METAL, n: 5 }); S.seg([sg * .45 * s, .2 * s, 0], [sg * .72 * s, .55 * s, 0], .07 * s, .05 * s, c, { l: L_METAL, n: 5 });
+      S.add(gOct(), { s: [.2 * s, .26 * s, .05 * s], p: [sg * .7 * s, .52 * s, 0], r: [0, 0, sg * -.6], c: mulC(c, 1.1), l: L_METAL, rough: .7 });
+    }
+  },
+  // The bones of a wrecked ship: a keel half sunk in the ground, curved frames standing up like ribs (some
+  // snapped), a run of planking left on one side, the stern post, and weed and barnacles on the lower timbers.
+  wreck(S, rng) {
+    const L = 6.4, wd = COAST.wood, wl = COAST.woodL, o = () => ({ l: L_WOOD, rough: .6 });
+    S.box(L, .3, .32, 0, .05, 0, mulC(wd, .8), o());
+    const NF = 9, frames = [];
+    for (let i = 0; i < NF; i++) {
+      const x = -L / 2 + .45 + i * (L - .9) / (NF - 1), u = i / (NF - 1), beam = 1.35 * Math.sin(.25 + u * 2.6), ht = 1.35 + .5 * Math.sin(u * PI);
+      frames.push([x, beam, ht]);
+      for (const sd of [-1, 1]) {
+        const broken = rng() < .3, n = broken ? rng.int(2, 3) : 5, pts = [];
+        for (let k = 0; k <= 5; k++) { const t = k / 5, a = t * HPI; pts.push([x + rng.range(-.03, .03), .1 + Math.sin(a) * ht * .25 + (1 - Math.cos(a)) * ht * .75, sd * Math.sin(a) * beam]); }
+        for (let k = 0; k < n; k++) S.seg(pts[k], pts[k + 1], .085, .075, mulC(mixC(wd, wl, rng() * .4), .85 + .3 * rng()), { l: L_WOOD, n: 5, rough: .6 });
+      }
+    }
+    // planking on the +z side, low down and gappy
+    for (let row = 0; row < 3; row++) {
+      const t = (row + .6) / 5, a = t * HPI;
+      for (let i = 0; i < NF - 1; i++) {
+        if (rng() < .3 + row * .15) continue;
+        const f0 = frames[i], f1 = frames[i + 1], y0 = .1 + Math.sin(a) * f0[2] * .25 + (1 - Math.cos(a)) * f0[2] * .75, z0 = Math.sin(a) * f0[1] + .06, y1 = .1 + Math.sin(a) * f1[2] * .25 + (1 - Math.cos(a)) * f1[2] * .75, z1 = Math.sin(a) * f1[1] + .06;
+        S.seg([f0[0], y0, z0], [f1[0], y1, z1], .1, .1, mulC(mixC(wd, wl, .3 + rng() * .4), .8 + .3 * rng()), { l: L_WOOD, n: 4, rough: .6 });
+      }
+    }
+    S.seg([L / 2 - .2, .05, 0], [L / 2 + .45, 2.7, 0], .14, .1, mulC(wd, .9), { l: L_WOOD, n: 6 }); S.box(.12, .12, 1.5, L / 2 + .2, 1.6, 0, mulC(wd, .85), { l: L_WOOD, r: [.15, 0, 0] });
+    S.seg([-L / 2 + .2, .05, 0], [-L / 2 - .5, 1.3, 0], .13, .1, mulC(wd, .9), { l: L_WOOD, n: 6 }); S.seg([-L / 2 - .5, 1.3, 0], [-L / 2 - .75, 2.1, 0], .1, .06, mulC(wd, .9), { l: L_WOOD, n: 6 });
+    for (const x of [-1.2, .9]) S.box(.14, .14, 2.5, x, 1.45, .05, mulC(wd, .8), { l: L_WOOD, r: [rng.range(-.1, .1), rng.range(-.15, .15), rng.range(-.2, .2)] });
+    for (let k = 0; k < 26; k++) { const x = rng.range(-L / 2, L / 2), sd = rng.sign(); S.cone(.04, .05, x, rng.range(.15, .5), sd * rng.range(.35, 1.0), mulC(COAST.barn, .8 + .3 * rng()), { n: 5, rough: .8, r: [sd * -1.2, 0, 0] }); }
+    S.ico(L * .55, 0, -.05, 0, mulC(COL.earthD, .9), { sc: [1, .07, .38], d: 1 });
+  },
+  // A ship's mast. Standing: driven into the ground at a tilt, its yard still up and a torn sail cracking in the wind,
+  // stays running down to the ground. Fallen: lying across the ground, snapped, the sail spread out beside it.
+  mast(S, rng, fallen) {
+    const c = mulC(COAST.wood, 1.1), h = rng.range(4.2, 5.2), sail = mixC(COAST.canvas, COAST.canvasD, rng() * .5);
+    if (!fallen) {
+      const T = new Soup();
+      T.seg([0, -.2, 0], [0, h, 0], .13, .09, c, { l: L_WOOD, n: 6 }); T.cyl(.3, .22, 0, h * .86, 0, mulC(c, .8), { n: 7, l: L_WOOD, open: true });
+      for (let k = -2; k <= 2; k++) T.seg([0, h * .86 + .1, 0], [k * .06, h * .86 - .15, .3], .015, .015, COL.rope, { n: 3 });
+      T.seg([-1.4, h * .72, .05], [1.5, h * .7, .05], .065, .05, c, { l: L_WOOD, n: 5 });
+      clothPanel(T, { x0: -1.3, x1: 1.35, yTop: h * .7 - .05, len: h * .5, z: .12, col: sail, rng, sway: 1.1, nx: 6, ny: 7, rag: .65 });
+      T.seg([0, h * .95, 0], [2.2, 0, -.6], .012, .012, COL.rope, { n: 3 }); T.seg([0, h * .95, 0], [-2.0, 0, .9], .012, .012, COL.rope, { n: 3 });
+      T.seg([-1.4, h * .72, .05], [-1.9, 0, 1.2], .01, .01, COL.rope, { n: 3, sway: .3 });
+      S.merge(T, { r: [rng.range(-.12, .12), 0, rng.range(.08, .16)] });
+      for (const [x, z] of [[2.2, -.6], [-2.0, .9]]) S.box(.08, .3, .08, x, .1, z, c, { l: L_WOOD, r: [.2, 0, .2] });
+    } else {
+      S.seg([-h / 2, .14, 0], [h / 2, .2, 0], .13, .1, c, { l: L_WOOD, n: 6 });
+      for (let k = 0; k < 5; k++) { const a = k / 5 * TAU; S.seg([-h / 2, .14, 0], [-h / 2 - .2, .14 + Math.sin(a) * .14, Math.cos(a) * .14], .05, .01, c, { l: L_WOOD, n: 3 }); }
+      S.seg([.6, .1, -1.4], [.9, .16, 1.5], .06, .05, c, { l: L_WOOD, n: 5 });
+      for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) { if (rng() < .3) continue; const x = .7 + i * .35 + rng.range(-.05, .05), z = -1.2 + j * .6; S.box(.36, .015, .62, x, .03 + rng() * .05, z, mulC(sail, .7 + .35 * rng()), { l: L_CLOTH, r: [rng.range(-.15, .15), rng.range(-.3, .3), rng.range(-.15, .15)] }); }
+      PROP.barrel(S, -1.4, 0, .7, .9, rng);
+    }
+  },
+});
+
+// Lies a barrel on its side (washed up).
+function coastBarrel(rng) { const T = new Soup(), S = new Soup(); PROP.barrel(T, 0, 0, 0, .95, rng); S.merge(T, { p: [0, .25, -.25], r: [HPI, 0, rng.range(-.3, .3)] }); return S; }
+
+// The wreck and the masts go down before the common props (scatterProps), while there is room.
+BIOME_DRESS.stormFirst = function (X) {
+  const { rng, drop } = X;
+  drop(T => PROP.wreck(T, rng), 3.5, { far: 2.6 }) || drop(T => PROP.wreck(T, rng), 3.3, { far: 1.6 });
+  drop(T => PROP.mast(T, rng, true), 2.1, { far: 1.2 }) || drop(T => PROP.mast(T, rng, true), 1.8, { far: .9 });
+  drop(T => PROP.mast(T, rng, false), 1.7, { far: 1.6 });
+};
+BIOME_DRESS.storm = function (X) {
+  const { B, rng, drop } = X;
+  drop(T => PROP.anchor(T, rng, 1), .8, { far: 1.4, r: [rng.range(-.35, .35), rng() * TAU, rng.range(.25, .5)], dy: -.35 });
+  for (let k = 0; k < 9; k++) drop(T => PROP.driftwood(T, rng), 1.0, { far: 1.0 });
+  for (let k = 0; k < 4; k++) { const S = coastBarrel(rng); drop(T => T.merge(S), .5, { far: 1.2 }); }
+  for (let k = 0; k < 16; k++) drop(T => PROP.kelp(T, rng, rng.int(3, 6)), .5, { roadMin: .3, ao: null });
+  for (let k = 0; k < 12; k++) { const r = rng.range(.35, .8); drop(T => PROP.barnRock(T, rng, r), r * .9, { steep: true, roadMin: .3 }); }
+  for (const q of B.ponds) {
+    for (let k = 0; k < 4; k++) { const a = rng() * TAU, d = q.r + rng.range(.3, .9), r = rng.range(.3, .6); X.at(q.x + Math.cos(a) * d, q.z + Math.sin(a) * d, T => PROP.barnRock(T, rng, r), r); }
+    for (let k = 0; k < 4; k++) { const a = rng() * TAU, d = q.r + rng.range(.2, 1.1); X.at(q.x + Math.cos(a) * d, q.z + Math.sin(a) * d, T => PROP.kelp(T, rng, rng.int(2, 4)), 0); }
+    for (let k = 0; k < 3; k++) { const a = rng() * TAU, d = q.r + rng.range(.1, .7); X.at(q.x + Math.cos(a) * d, q.z + Math.sin(a) * d, T => PROP.starfish(T, rng), 0); }
+  }
+  // Kelp and weed washed along the tidal channel's banks.
+  for (let k = 0; k < 26; k++) {
+    const u = rng.int(2, B.SP.length - 2), a = B.SP[u - 1], b = B.SP[u + 1], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1, off = rng.sign() * rng.range(1.1, 1.9), x = B.SP[u][0] - dz / l * off, z = B.SP[u][1] + dx / l * off;
+    if (Math.abs(x) > BH - .8 || Math.abs(z) > BH - .8 || B.dRoadAt(x, z) < ROAD_HALF + .7) continue;
+    X.at(x, z, T => k % 3 ? PROP.kelp(T, rng, rng.int(2, 4)) : PROP.barnRock(T, rng, rng.range(.25, .45)), 0);
+  }
+  // A faint blue-green glow of sea sparks in one tide pool.
+  if (B.ponds[0]) B.env.push({ x: B.ponds[0].x, y: B.ponds[0].y + .8, z: B.ponds[0].z, c: 0x3cd8c8, I: 6, d: 6.5, flick: 1 });
 };
 
 
@@ -2801,6 +3032,254 @@ function setWeather(w, instant) {
   WX.fade = instant ? 1 : 0; u.uFade.value = WX.fade;
 }
 
+// ---- Stormreach: the sea around the slab, the lighthouse beams and the lightning ---------------------------------
+// Everything here is looks only and uses the fx random stream (frnd), so the simulation never depends on it.
+// Lands opt in through their BIOMES entry: bio.sea = [level, foam], bio.lighthouse, bio.lightning (mean seconds
+// between ambient flashes; the gap is drawn from 0.6x to 1.4x of it).
+//
+// Hooks for the other parts of the game:
+// - FX.lightningAt(x, z, power = 1): a bolt strikes that ground point: flash, light, scorch, sparks, smoke, shake.
+//   Visual only; the caller applies any damage. Works on every land (Mira's thunderstorm event calls it).
+// - G.flashT: seconds since the latest flash (counts up each step, resets to 0 when a flash begins, ambient flashes
+//   and FX.lightningAt strikes alike; 1e9 before the first). G.flashX / G.flashZ: where it was. G.flashD: 0 a strike
+//   on the board .. 1 far out at sea. G.flashN: flashes so far. G.flashK: the flash brightness now (0 to about 1.2).
+// - FX.onFlash: functions called as fn(x, z, dist, power) when a flash begins (ambient or FX.lightningAt).
+const STORM = {
+  sea: null, u: null, beams: null, bu: null, vis: 0, want: 0, bio: null, B: null, level: -4.3,
+  next: 3, flashes: [], k: 0, bolts: [], spray: 0, beamA: 0, fall: null,
+};
+FX.onFlash = [];
+const _stc = new THREE.Color();
+
+function initStormMeshes() {
+  if (STORM.sea) return;
+  const v3 = (x, y, z) => ({ value: new THREE.Vector3(x, y, z) }), v4 = () => ({ value: new THREE.Vector4() });
+  const u = STORM.u = {
+    uTime: SH.uTime, uFade: { value: 0 }, uDeep: v3(.008, .02, .026), uFoam: v3(.4, .46, .5), uMoonDir: v3(0, 1, 0), uMoonCol: v3(1, 1, 1), uAmb: v3(.05, .07, .09),
+    uClear: v3(0, 0, 0), uView: v3(0, 1, 0), uBeacon: v4(), uBeaconCol: v3(1, .6, .3), uBeam: v4(), uFall: v4(), uStrike: v4(), uFlash: { value: 0 }, uSkyCol: v3(.02, .04, .06),
+  };
+  const m = new THREE.ShaderMaterial({
+    uniforms: u,
+    vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: `precision highp float; varying vec3 vW;
+uniform float uTime; uniform float uFade; uniform vec3 uDeep; uniform vec3 uFoam; uniform vec3 uMoonDir; uniform vec3 uMoonCol; uniform vec3 uAmb;
+uniform vec3 uClear; uniform vec3 uView; uniform vec4 uBeacon; uniform vec3 uBeaconCol; uniform vec4 uBeam; uniform vec4 uFall; uniform vec4 uStrike; uniform float uFlash; uniform vec3 uSkyCol;
+float hh(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float nn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hh(i), hh(i + vec2(1.0, 0.0)), f.x), mix(hh(i + vec2(0.0, 1.0)), hh(i + vec2(1.0, 1.0)), f.x), f.y); }
+void main(){
+  float t = uTime; vec2 p = vW.xz;
+  float n0 = nn(p * 0.19 + vec2(t * 0.035, -t * 0.03)), n1 = nn(p * 0.52 + vec2(t * 0.12, t * 0.07)), n2 = nn(p * 1.5 - vec2(t * 0.25, t * 0.18)), n3 = nn(p * 4.0 + vec2(t * 0.55, -t * 0.4));
+  // Distance from the foot of the cliffs (the slab is 36 wide; its lower strata step out about a unit).
+  vec2 q = max(abs(p) - 18.0, 0.0); float d = length(q) - 1.0 + (n0 - 0.5) * 1.8;
+  // Swells roll in toward the cliffs and break: crests near the shore, white water churning at the foot, lace
+  // left behind, and whitecaps out at sea.
+  float swell = sin(d * 1.8 - t * 1.6 + n1 * 3.2), near = smoothstep(12.0, 1.0, d);
+  // Long wind swells out at sea (running with the wind, toward +x/+z), which catch the moon in streaks.
+  float roll = sin(dot(p, vec2(0.62, 0.34)) * 1.1 - t * 1.3 + n0 * 5.0);
+  float crest = smoothstep(0.78, 0.97, swell) * near * (0.3 + 0.7 * n2);
+  float churn = smoothstep(1.3, -0.5, d + (n2 - 0.5) * 1.4) * (0.55 + 0.45 * n3);
+  float lace = smoothstep(0.64, 0.8, n2 * 0.65 + n3 * 0.35) * smoothstep(5.0, 0.3, d) * 0.45;
+  float cw = nn(vec2(dot(p, vec2(0.62, 0.34)) * 1.6 - t * 0.9, dot(p, vec2(-0.34, 0.62)) * 0.45 + t * 0.1));
+  float caps = smoothstep(0.84, 0.97, cw * 0.55 + n1 * 0.25 + (roll * 0.5 + 0.5) * 0.2) * 0.22;
+  float foam = clamp(max(max(churn, crest), max(lace, caps)), 0.0, 1.0);
+  if (uFall.w > 0.0) foam = max(foam, smoothstep(2.4, 0.2, length(p - uFall.xy) + (n3 - 0.5) * 1.2) * uFall.w);
+  // A bumped normal from the swells and the noise (screen-space slopes, as in the terrain shader).
+  float h = swell * 0.25 * near + roll * 0.3 + n1 * 0.35 + n2 * 0.1;
+  vec3 dPx = dFdx(vW), dPy = dFdy(vW), N0 = vec3(0.0, 1.0, 0.0), R1 = cross(dPy, N0), R2 = cross(N0, dPx);
+  float det = dot(dPx, R1); vec3 N = normalize(abs(det) * N0 - 1.2 * sign(det) * (dFdx(h) * R1 + dFdy(h) * R2));
+  float ndl = max(dot(N, uMoonDir), 0.0); vec3 Rv = reflect(-uView, N), Hm = normalize(uMoonDir + uView);
+  vec3 col = uDeep * (0.6 + 0.6 * n0) * (uAmb * 3.0 + uMoonCol * ndl * 0.45);
+  col = mix(col, uFoam * (uAmb * 1.3 + uMoonCol * (0.07 + 0.16 * ndl)), foam);
+  col += uMoonCol * pow(max(dot(N, Hm), 0.0), 120.0) * 0.35 * (1.0 - foam);
+  col += uSkyCol * (0.25 + 1.4 * pow(1.0 - max(dot(N, uView), 0.0), 4.0)) * (1.0 - foam);
+  // The lighthouse: its lamp pools warm light on the nearer water, and two beams sweep across the sea.
+  vec3 bd = uBeacon.xyz - vW; float bl = dot(bd, bd), bk = uBeacon.w / (bl + 1.6);
+  col += uBeaconCol * bk * (0.003 + 0.02 * foam + 0.1 * pow(max(dot(Rv, normalize(bd)), 0.0), 40.0) * (1.0 - foam));
+  vec2 bv = p - uBeam.xy; float bdist = length(bv); vec2 bdir = vec2(cos(uBeam.z), sin(uBeam.z));
+  float ba = abs(dot(bv / max(bdist, 0.001), bdir)), beam = smoothstep(0.965, 0.998, ba) * smoothstep(70.0, 8.0, bdist) * smoothstep(3.0, 9.0, bdist) * uBeam.w;
+  col += uBeaconCol * beam * (0.03 + 0.3 * foam);
+  // Lightning: the whole sea flashes, most on the foam; a strike lights the water around it.
+  col += vec3(0.5, 0.6, 0.8) * uFlash * (0.03 + 0.12 * foam * (0.4 + near) + 0.25 * pow(1.0 - max(dot(N, uView), 0.0), 2.0));
+  vec2 sd = p - uStrike.xy; col += vec3(0.55, 0.7, 1.0) * uStrike.w * (0.3 + foam) * 9.0 / (dot(sd, sd) + 6.0);
+  float r = length(p); col = mix(col, uClear, smoothstep(24.0, 64.0, r));
+  gl_FragColor = vec4(mix(uClear, col, uFade), 1.0);
+}`,
+  });
+  const g = new THREE.PlaneGeometry(240, 240, 1, 1); g.rotateX(-HPI);
+  STORM.sea = new THREE.Mesh(g, m); STORM.sea.frustumCulled = false; STORM.sea.visible = false; STORM.sea.renderOrder = -1; R.scene.add(STORM.sea);
+  // Two beams from the lamp: open cones along +x and -x, apex at the lamp, fading along their length; additive,
+  // brightest where you look through the middle of the cone.
+  const bg = new THREE.CylinderGeometry(3.4, .22, 36, 14, 1, true); bg.translate(0, 18, 0); bg.rotateZ(-HPI);
+  const b2 = bg.clone(); b2.rotateY(PI);
+  const pos = [], along = [];
+  for (const gg of [bg, b2]) { const ix = gg.index.array, P = gg.attributes.position.array; for (const i of ix) { pos.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); along.push(Math.abs(P[i * 3]) / 36); } }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('aAlong', new THREE.Float32BufferAttribute(along, 1)); geo.computeVertexNormals();
+  STORM.bu = { uCol: { value: new THREE.Vector3(1, .72, .4) }, uK: { value: 0 } };
+  const bm = new THREE.ShaderMaterial({
+    uniforms: STORM.bu, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+    vertexShader: 'attribute float aAlong; varying float vA; varying vec3 vN; void main(){ vA = aAlong; vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'precision highp float; varying float vA; varying vec3 vN; uniform vec3 uCol; uniform float uK; void main(){ float f = abs(vN.z); float a = f * f * pow(1.0 - vA, 1.6) * smoothstep(0.0, 0.05, vA) * uK; gl_FragColor = vec4(uCol * a, 1.0); }',
+  });
+  STORM.beams = new THREE.Mesh(geo, bm); STORM.beams.frustumCulled = false; STORM.beams.visible = false; STORM.beams.renderOrder = 4; R.scene.add(STORM.beams);
+}
+
+// Called by setBiomeLook when a board becomes the current one.
+function setStormLand(B, instant) {
+  const b = B.bio; STORM.bio = b; STORM.B = B; STORM.want = b.sea ? 1 : 0;
+  if (b.sea && !STORM.sea) initStormMeshes();
+  if (b.sea) {
+    STORM.level = b.sea[0]; STORM.sea.position.y = STORM.level;
+    const f = B.fallAt; STORM.fall = null;
+    if (f) { const tau = Math.sqrt(Math.max(0, f.y - STORM.level) / 4.5), o = f.ext + f.v0 * tau; STORM.fall = [f.x + f.ox * o, f.z + f.oz * o]; }
+    if (instant) STORM.vis = 1;
+    R.mats.atmo.uniforms.uAOFloor.value = STORM.level + .5;
+  } else R.mats.atmo.uniforms.uAOFloor.value = -1e9;
+  if (!b.lightning) { STORM.flashes.length = 0; STORM.bolts.length = 0; }
+  STORM.next = b.lightning ? b.lightning * frr(.25, .6) : 3;
+}
+
+// Flash envelope: quick rise, exponential fall.
+function flashEnv(u, d) { return u < 0 ? 0 : Math.min(1, u / .018) * Math.exp(-u / d); }
+// Starts a flash: a double (sometimes triple) flicker. dist 0 (on the board) .. 1 (far out at sea).
+function stormFlash(x, z, dist, power) {
+  const a = power * lerp(1, .5, dist), p2 = frr(.12, .22), ps = [[0, .055, a], [p2, frr(.07, .12), a * frr(.6, 1.05)]];
+  if (frnd() < .45) ps.push([p2 + frr(.16, .3), frr(.1, .2), a * frr(.25, .5)]);
+  const fl = { t: 0, ps, x, z, dist, power, bolt: null };
+  STORM.flashes.push(fl);
+  G.flashN = (G.flashN || 0) + 1; G.flashT = 0; G.flashD = dist; G.flashX = x; G.flashZ = z;
+  for (const fn of FX.onFlash) { try { fn(x, z, dist, power); } catch (e) { } }
+  return fl;
+}
+function flashLevel(fl) { let k = 0; for (const p of fl.ps) k += p[2] * flashEnv(fl.t - p[0], p[1]); return k; }
+
+// A jagged bolt from a to b: midpoint displacement, plus forks that run down and out.
+function makeBolt(a, b, rough, forks) {
+  const pts = [a, b];
+  for (let pass = 0; pass < 5; pass++) {
+    for (let i = pts.length - 2; i >= 0; i--) {
+      const p = pts[i], q = pts[i + 1], l = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) * rough;
+      pts.splice(i + 1, 0, [(p[0] + q[0]) / 2 + frr(-l, l), (p[1] + q[1]) / 2 + frr(-l, l) * .3, (p[2] + q[2]) / 2 + frr(-l, l)]);
+    }
+  }
+  const segs = [pts];
+  for (let f = 0; f < forks; f++) {
+    const i = Math.floor(frr(.12, .7) * (pts.length - 1)), p = pts[i], len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) * frr(.12, .3), ang = frnd() * TAU;
+    const e = [p[0] + Math.cos(ang) * len * .6, p[1] - len * frr(.5, .9), p[2] + Math.sin(ang) * len * .6], fp = [p, e];
+    for (let pass = 0; pass < 3; pass++) for (let j = fp.length - 2; j >= 0; j--) { const u = fp[j], w = fp[j + 1], l = Math.hypot(w[0] - u[0], w[1] - u[1], w[2] - u[2]) * rough; fp.splice(j + 1, 0, [(u[0] + w[0]) / 2 + frr(-l, l), (u[1] + w[1]) / 2 + frr(-l, l) * .3, (u[2] + w[2]) / 2 + frr(-l, l)]); }
+    segs.push(fp);
+  }
+  return segs;
+}
+function drawBolt(segs, k, w0, w1) {
+  const SG = FX.segs, c = Math.min(1.4, k);
+  for (let s = 0; s < segs.length; s++) {
+    const P = segs[s], ws = s ? .55 : 1;
+    for (let i = 0; i < P.length - 1; i++) {
+      const p = P[i], q = P[i + 1], tw = s ? (1 - i / P.length) : 1;
+      SG.push(p[0], p[1], p[2], w0 * ws * tw, q[0], q[1], q[2], w0 * ws * tw, 2.6, 2.9, 3.6, c * tw);
+      SG.push(p[0], p[1], p[2], w1 * ws * tw, q[0], q[1], q[2], w1 * ws * tw, .3, .42, .8, c * .5 * tw);
+    }
+  }
+}
+
+// FX.lightningAt(x, z, power): a bolt from the sky onto that ground point. Looks only.
+FX.lightningAt = function (x, z, power = 1) {
+  if (!G.B || !isFinite(x) || !isFinite(z) || G.phase === 'crumble' || G.phase === 'rise') return;
+  const y = G.B.heightAt(x, z), fl = stormFlash(x, z, 0, 1.1 * power);
+  fl.bolt = makeBolt([x + frr(-4, 4), y + 26, z + frr(-4, 4)], [x, y + .05, z], .22, 3); fl.w = [.075, .5];
+  fl.strike = [x, z];
+  lightFlash(x, y + 2.2, z, 0xc4dcff, 1500 * power, .32, 26);
+  fxTimed(5, x, y + .5, z, 4.6, 4.6, 2.2, 2.6, 3.6, 1, .16);
+  fxTimed(4, x, y + .08, z, 4.4, 4.4, 1.0, 1.3, 2.0, .7, .4, { ground: true });
+  fxTimed(2, x, y + .3, z, 6, 6, .5, .65, 1.1, .8, .5);
+  fxSparks(x, y + .15, z, 26, 8, 2.2, 2.6, 3.6, { size: .07 });
+  fxSparks(x, y + .15, z, 8, 4, 2.6, 1.6, .6, { size: .06 });
+  for (let i = 0; i < 7; i++) { const a = frnd() * TAU, s = frr(.4, 1.3); fxSmoke(x + Math.cos(a) * .3, y + frr(.1, .5), z + Math.sin(a) * .3, Math.cos(a) * s, frr(.6, 1.4), Math.sin(a) * s, frr(1.4, 2.6), frr(.4, .7), 1.2, .16, .17, .2, .5, { drag: 1.4, rise: .25 }); }
+  fxDust(x, y, z, 4, .7, { speed: 2.2 });
+  FX.decals.add(G.B.heightAt, x, z, 1.15, .015, .016, .02, .85, 40);
+  FX.decals.add(G.B.heightAt, x, z, .5, .002, .002, .003, .9, 40);
+  shake(.55 * power);
+};
+
+const _stv = new THREE.Vector3();
+function updateStorm(dt) {
+  if (G.flashT === undefined) G.flashT = 1e9; else G.flashT += dt;
+  const b = STORM.bio; if (!b) return;
+  const fk = FX.flashK === undefined ? 1 : FX.flashK;
+  STORM.vis = damp(STORM.vis, STORM.want, STORM.want ? 1.1 : 1.6, dt);
+  const live = G.phase === 'play' || G.phase === 'defeat' || G.phase === 'clear';
+  // Ambient lightning: far out at sea, behind the board as the camera sees it.
+  if (b.lightning && STORM.vis > .5) {
+    STORM.next -= dt;
+    if (STORM.next <= 0) {
+      STORM.next = b.lightning * frr(.6, 1.4);
+      const dist = frr(.35, 1), back = Math.atan2(-Math.sin(CAM.yaw), -Math.cos(CAM.yaw)) + frr(-1.15, 1.15), r = lerp(21, 31, dist);
+      const x = CAM.x + Math.cos(back) * r, z = CAM.z + Math.sin(back) * r, fl = stormFlash(x, z, dist, frr(.75, 1.05));
+      if (frnd() < .8) { fl.bolt = makeBolt([x + frr(-6, 6), 46, z + frr(-6, 6)], [x, STORM.level, z], .2, 2 + Math.floor(frr(0, 3))); fl.w = [.11, .75]; fl.strike = [x, z]; }
+    }
+  }
+  let k = 0, sx = 0, sz = 0, sk = 0;
+  for (let i = STORM.flashes.length - 1; i >= 0; i--) {
+    const fl = STORM.flashes[i]; fl.t += dt;
+    if (fl.t > 1.6) { swapRemove(STORM.flashes, i); continue; }
+    const lv = flashLevel(fl); k += lv;
+    if (fl.bolt && lv > .03 && !R.skipDraw) drawBolt(fl.bolt, lv * 1.4, fl.w[0], fl.w[1]);
+    if (fl.strike && lv > sk) { sk = lv; sx = fl.strike[0]; sz = fl.strike[1]; }
+  }
+  k *= fk; STORM.k = k; G.flashK = k;
+  if (k > .002) stormLook(k);
+  const sea = STORM.sea; if (!sea) return;
+  sea.visible = STORM.vis > .004; STORM.beams.visible = sea.visible && !!b.lighthouse;
+  if (!sea.visible) return;
+  const u = STORM.u, mp = LT.moon.position, ml = mp.length() || 1, cl = R.renderer.getClearColor(_stc);
+  u.uFade.value = STORM.vis; u.uMoonDir.value.set(mp.x / ml, mp.y / ml, mp.z / ml);
+  u.uMoonCol.value.set(LT.moon.color.r, LT.moon.color.g, LT.moon.color.b).multiplyScalar(LT.moon.intensity);
+  u.uAmb.value.set(LT.hemi.color.r, LT.hemi.color.g, LT.hemi.color.b).multiplyScalar(LT.hemi.intensity * .09);
+  u.uClear.value.set(cl.r, cl.g, cl.b); { const sk = SH.uSky.value; u.uSkyCol.value.set(sk.r, sk.g, sk.b); }
+  u.uView.value.set(Math.cos(CAM.elev) * Math.sin(CAM.yaw), Math.sin(CAM.elev), Math.cos(CAM.elev) * Math.cos(CAM.yaw));
+  u.uFlash.value = k; u.uStrike.value.set(sx, sz, 0, sk * fk);
+  const bp = LT.beaconPos || { x: 0, y: 0, z: 0 }, bi = LT.beacon.intensity;
+  u.uBeacon.value.set(bp.x, bp.y + .5, bp.z, bi); u.uBeaconCol.value.set(LT.beacon.color.r, LT.beacon.color.g, LT.beacon.color.b);
+  if (STORM.fall) u.uFall.value.set(STORM.fall[0], STORM.fall[1], 0, 1); else u.uFall.value.set(0, 0, 0, 0);
+  // Lighthouse beams: two opposite beams turning once every nine seconds, as bright as the beacon burns.
+  STORM.beamA = (STORM.beamA + dt * TAU / 9) % TAU;
+  const on = b.lighthouse ? LT.beaconOn * (.35 + .65 * LT.beaconLevel) : 0;
+  u.uBeam.value.set(bp.x, bp.z, STORM.beamA, on * STORM.vis);
+  const bm = STORM.beams; bm.position.set(bp.x, bp.y + 1.2, bp.z); bm.rotation.set(0, -STORM.beamA, 0);
+  STORM.bu.uK.value = .085 * on * STORM.vis * (1 - .5 * sat(k));
+  // The lamp flares when a beam swings toward the camera.
+  if (on > .05 && !R.skipDraw) {
+    const face = Math.abs(Math.cos(STORM.beamA) * Math.sin(CAM.yaw) + Math.sin(STORM.beamA) * Math.cos(CAM.yaw)), fl = Math.pow(face, 10) * on;
+    if (fl > .02) { FX.add.push(bp.x, bp.y + 1.2, bp.z, 3.2 + 5 * fl, 3.2 + 5 * fl, 0, 0, 1.6, 1.15, .62, .55 * fl, 2, 0, 0, 0); FX.add.push(bp.x, bp.y + 1.2, bp.z, 9 * fl + 1, .55, 0, 0, 1.8, 1.3, .7, .35 * fl, 6, 0, 0, 0); }
+  }
+  // Waves breaking on the cliffs throw up spray along the slab's edges.
+  if (live && b.sea && STORM.vis > .5) {
+    STORM.spray += dt * 7 * FX.keep;
+    while (STORM.spray >= 1) {
+      STORM.spray -= 1;
+      const side = frnd() < .7 ? (frnd() < .5 ? 0 : 1) : (frnd() < .5 ? 2 : 3), along = frr(-18.5, 18.5), out = frr(1.0, 1.7), ox = side === 0 ? 1 : side === 2 ? -1 : 0, oz = side === 1 ? 1 : side === 3 ? -1 : 0;
+      const x = ox ? ox * (18 + out) : along, z = oz ? oz * (18 + out) : along, y = STORM.level + .1, big = frnd() < .3 ? 1.6 : 1;
+      fxSmoke(x, y + .2, z, ox * frr(.2, .6), frr(1.4, 2.8) * big, oz * frr(.2, .6), frr(1, 1.7), frr(.5, .9) * big, 1.6 * big, .5, .56, .6, .3, { drag: 1.3, rise: -.4 });
+      for (let i = 0, n = Math.round(4 * big); i < n; i++) fxPart(x + frr(-.4, .4), y + .1, z + frr(-.4, .4), ox * frr(.3, 1.2) + frr(-.4, .4), frr(2.5, 5.5) * big, oz * frr(.3, 1.2) + frr(-.4, .4), frr(.6, 1.1), frr(.04, .07), .42, .5, .6, { grav: 8, drag: .3 });
+    }
+  }
+}
+
+// The flash on top of the land's look (called after applyLook and eventLook each step).
+function stormLook(k) {
+  const m = LT.moon, h = LT.hemi, c = Math.min(1, k);
+  m.intensity += 3.8 * k; m.color.setRGB(lerp(m.color.r, .8, c), lerp(m.color.g, .88, c), lerp(m.color.b, 1, c));
+  h.intensity += 1.2 * k; h.color.setRGB(lerp(h.color.r, .7, c * .6), lerp(h.color.g, .8, c * .6), lerp(h.color.b, 1, c * .6));
+  const a = R.mats.atmo.uniforms.uMistAmb.value; a.set(a.x + .16 * k, a.y + .2 * k, a.z + .28 * k);
+  const s = SH.uSky.value; s.setRGB(s.r + .16 * k, s.g + .2 * k, s.b + .28 * k);
+  const cl = R.renderer.getClearColor(_stc); R.renderer.setClearColor(_stc.setRGB(cl.r + .02 * k, cl.g + .028 * k, cl.b + .045 * k), 1);
+  const w = WX.u.uAmb.value; w.set(w.x + .9 * k, w.y + 1.02 * k, w.z + 1.3 * k);
+  const fa = FX.alpha.mesh.material.uniforms.uAmb.value; fa.set(fa.x + .15 * k, fa.y + .18 * k, fa.z + .24 * k);
+  R.exposure *= 1 + .18 * k;
+}
+window.__cwStorm = STORM; // test hook
+
 
 let RIG_CAPTURE = null;
 // Per-step draw plan (planDraw in 90-main.js): crowd = many monsters on screen, so shadow and detail cuts apply.
@@ -3450,7 +3929,7 @@ function initBestiary() {
     }, 40, { rad: .3 }),
     legR: toadLeg(1), legL: toadLeg(-1),
   };
-  initBestiary4();
+  initBestiary4(); initLeviathan();
 }
 
 function rigSpider(e) {
@@ -3793,6 +4272,141 @@ const DEATH_FX = {
     for (let i = 0; i < 12; i++) fxPart(m.x + frr(-.25, .25), m.y + frr(.2, .9), m.z + frr(-.25, .25), frr(-.4, .4), frr(.6, 1.8), frr(-.4, .4), frr(.5, 1.1), frr(.04, .07), g[0] * 1.6, g[1] * 1.6, g[2] * 1.6, { drag: .6, wob: 1, rise: .3 });
   },
 };
+
+// ---- Round 6: The Drowned King (RIGS.leviathan), boss of Stormreach ---------------------------------------------
+// A hulking sea giant on the human rig (heavy gait): grey-green drowned flesh, corroded verdigris armour plates
+// crusted with barnacles, kelp draped over the shoulders and hanging from the belt and beard, chains across the
+// chest and dangling from broken manacles, a crown of branching coral, glowing sea-green eyes (def.eye), and a
+// ship's anchor for a weapon (KIT.item.anchor). Water drips off him as he walks, he leaves wet footprints, and he
+// dies in a burst of sea water (RIG_DEATH 'drown'). Registered in initLeviathan (RIGS, EYES and RIG_DEATH live in
+// 61-monsters.js and here; MON.leviathan below is only a stand-in until the game's own entry exists).
+SPEC.leviathan = { hip: .5, pelvisH: .1, torsoH: .55, shX: .34, shY: .45, uArm: .28, lArm: .32, hipX: .13, uLeg: .25, lLeg: .25, stride: .45, lean: .1, stoop: .2, eyeX: .055, eyeY: .125, eyeZ: .16, top: 1.45 };
+const DROWN = { skin: C(0x74928a), skinD: C(0x46605a), plate: C(0x4f7d6a), plateD: C(0x24382f), iron: C(0x3c4048), barn: C(0x9e9a8c), kelp: C(0x3e3c1c), kelpL: C(0x56582a), coral: C(0xc4553a), coralP: C(0xd8806c), coralY: C(0xd8b070), glow: [.35, 1.5, 1.2] };
+function initLeviathan() {
+  const D = DROWN, sh = { rad: .2 };
+  const skin = (S, r, x, y, z, sc, c) => S.ico(r, x, y, z, c || D.skin, { sc, d: 1, jit: .05 });
+  const plate = (S, w, h, d, x, y, z, r, c) => S.box(w, h, d, x, y, z, c || D.plate, { l: L_METAL, rough: .55, r, jit: .06 });
+  const barn = (S, n, cx, cy, cz, sp, rng) => { for (let k = 0; k < n; k++) S.cone(.016 + .01 * rng(), .022, cx + rng.range(-sp, sp), cy + rng.range(-sp, sp) * .6, cz + rng.range(-sp * .4, sp * .4), mulC(D.barn, .8 + .3 * rng()), { n: 5, rough: .8, jit: 0 }); };
+  const link = (S, a, b, n, r, o = {}) => { for (let k = 0; k < n; k++) { const u = (k + .5) / n; S.add(gTorus(6, .32, 3), { s: [r * 1.4, r, r], p: [lerp(a[0], b[0], u), lerp(a[1], b[1], u) - (o.sag || 0) * Math.sin(u * PI), lerp(a[2], b[2], u)], r: [k & 1 ? HPI : 0, Math.atan2(b[0] - a[0], b[2] - a[2]) + HPI, 0], c: mulC(D.iron, 1.15), l: L_METAL, rough: .6, sway: o.sway ? o.sway * u : 0, jit: 0 }); } };
+  const strand = (S, x, y, z, len, w, c, rng, out = [0, 0]) => { let p = [x, y, z]; for (let k = 0; k < 3; k++) { const u = (k + 1) / 3, q = [x + out[0] * u + rng.range(-.02, .02), y - len * u, z + out[1] * u + rng.range(-.02, .02)]; ribbon(S, [p[0] - w, p[1], p[2]], [p[0] + w, p[1], p[2]], [q[0] + w * .8, q[1], q[2]], [q[0] - w * .8, q[1], q[2]], mulC(c, .8 + .4 * rng()), [k * .25, k * .25, u * .9, u * .9]); p = q; } };
+  const K = KIT.drowned = {};
+  K.pelvis = new PartBatch(S => {
+    const rng = makeRng(61);
+    skin(S, .23, 0, 0, 0, [1.2, .65, 1.0], D.skinD);
+    S.cyl(.26, .08, 0, .06, 0, D.iron, { n: 10, l: L_METAL, rough: .6 }); S.box(.1, .09, .04, 0, .06, .26, mulC(D.plate, 1.2), { l: L_METAL, rough: .4 });
+    for (const sg of [-1, 1]) { plate(S, .15, .22, .03, sg * .1, -.1, .21, [-.15, 0, sg * .12]); plate(S, .13, .2, .03, sg * .2, -.08, .06, [0, sg * HPI * .8, sg * .2], D.plateD); }
+    plate(S, .3, .2, .03, 0, -.08, -.2, [.15, 0, 0], D.plateD); barn(S, 8, .1, -.08, .23, .06, rng);
+    for (let k = 0; k < 9; k++) { const a = (k + .3) / 9 * TAU; strand(S, Math.cos(a) * .25, .03, Math.sin(a) * .25, rng.range(.22, .38), .025, k & 1 ? D.kelp : D.kelpL, rng, [Math.cos(a) * .05, Math.sin(a) * .05]); }
+    link(S, [-.24, .04, .12], [.2, .0, .2], 6, .03, { sag: .07, sway: .3 });
+  }, 2, sh);
+  K.torso = new PartBatch(S => {
+    const rng = makeRng(62);
+    skin(S, .3, 0, .2, .03, [1.15, .85, .95]); skin(S, .3, 0, .41, -.04, [1.32, .72, .9]); skin(S, .14, 0, .5, -.16, [1.4, .9, 1.0], D.skinD);
+    // Breastplate in layers, a hump of plates on the back with a ridge of spines, pauldrons.
+    for (const [y, r, c] of [[.37, .25, D.plate], [.24, .23, D.plateD], [.12, .2, D.plate]]) S.sph(r, 0, y, .12, c, { l: L_METAL, rough: .5, w: 8, h: 4, smooth: false, sc: [1.15, .34, .7] });
+    for (const [x, y] of [[-.16, .42], [.16, .42], [-.14, .23], [.14, .23]]) S.sph(.018, x, y, .28, mulC(D.plate, 1.5), { l: L_METAL, rough: .35, w: 5, h: 3, jit: 0 });
+    plate(S, .46, .26, .08, 0, .38, -.26, [.35, 0, 0], D.plateD);
+    for (let k = 0; k < 5; k++) S.cone(.04 - k * .004, .14, 0, .52 - k * .08, -.3 + k * .025, mulC(D.plateD, .9), { n: 4, r: [-.9, 0, 0], l: L_METAL });
+    for (const sg of [-1, 1]) {
+      S.sph(.17, sg * .37, .47, 0, D.plate, { l: L_METAL, rough: .5, w: 7, h: 4, smooth: false, sc: [1.15, .7, 1.1] });
+      S.sph(.12, sg * .42, .4, 0, D.plateD, { l: L_METAL, rough: .5, w: 7, h: 4, smooth: false, sc: [1.2, .6, 1.1] });
+      barn(S, 5, sg * .37, .56, .02, .08, rng);
+      for (let k = 0; k < 3; k++) S.ico(.03, sg * (.3 + k * .05), .52, .1 - k * .05, D.iron, { sc: [1, .6, 1.5], d: 0, rough: .3 });
+    }
+    barn(S, 6, -.1, .34, .28, .1, rng); barn(S, 4, .12, .15, .29, .06, rng);
+    // A chain across the chest (left shoulder to right hip) and kelp hanging off both shoulders.
+    link(S, [.34, .55, .12], [-.27, .04, .3], 11, .035, { sag: -.05 });
+    for (let k = 0; k < 6; k++) { const sg = k < 3 ? 1 : -1, z = (k % 3 - 1) * .13; strand(S, sg * (.3 + rng() * .1), .55, z, rng.range(.3, .5), .03, k & 1 ? D.kelp : D.kelpL, rng, [sg * .06, z * .3]); }
+    for (let k = 0; k < 4; k++) strand(S, rng.range(-.25, .25), .52, -.28, rng.range(.35, .5), .035, D.kelp, rng, [0, -.06]);
+    S.cyl(.12, .12, 0, .56, .0, D.skinD, { n: 8 });
+  }, 2, { rad: .32 });
+  K.head = new PartBatch(S => {
+    const rng = makeRng(63);
+    skin(S, .165, 0, .1, .04, [1.05, 1.0, 1.0]); S.box(.27, .05, .09, 0, .16, .13, D.skinD, { jit: 0 }); S.box(.22, .09, .16, 0, .02, .11, D.skinD, {});
+    for (let k = 0; k < 4; k++) S.cone(.014, .04, -.06 + k * .04, .085, .19, C(0xc8c0a4), { n: 4, jit: 0 });
+    for (const sg of [-1, 1]) { S.box(.05, .035, .03, sg * .055, .125, .175, COL.black, { jit: 0 }); S.cone(.02, .07, sg * .09, .0, .17, D.barn, { n: 4, r: [.4, 0, 0] }); }
+    for (let k = 0; k < 7; k++) { const x = (k - 3) * .03; strand(S, x, .0, .13 - Math.abs(x) * .4, rng.range(.16, .3), .018, k & 1 ? D.kelpL : D.kelp, rng, [x * .3, .03]); }
+    for (let k = 0; k < 5; k++) { const a = PI + (k - 2) * .45; strand(S, Math.sin(a) * .13, .16, Math.cos(a) * .13 - .02, rng.range(.25, .4), .03, D.kelp, rng, [Math.sin(a) * .04, -.05]); }
+    // The coral crown: a band of encrusted coral with branching red, pink and pale fingers.
+    S.cyl(.135, .025, 0, .225, .03, mulC(D.coral, .45), { n: 9, rough: .9 });
+    for (let k = 0; k < 7; k++) {
+      const a = k / 7 * TAU + .2, c = [D.coral, D.coralP, D.coralY][k % 3], x = Math.cos(a) * .125, z = Math.sin(a) * .125 + .03, h = (k % 2 ? .14 : .22) * (.8 + .4 * rng());
+      const tip = [x * 1.3, .23 + h, z * 1.3]; S.seg([x, .22, z], tip, .018, .011, c, { n: 5, emis: .02 });
+      S.ico(.018, tip[0], tip[1], tip[2], mulC(c, 1.2), { d: 0, emis: .03 });
+      for (let j = 0; j < 2; j++) { const u = .45 + j * .25, b = [lerp(x, tip[0], u), lerp(.2, tip[1], u), lerp(z, tip[2], u)], e = [b[0] + Math.cos(a + (j ? .8 : -.8)) * .06, b[1] + .06 + rng() * .04, b[2] + Math.sin(a + (j ? .8 : -.8)) * .06]; S.seg(b, e, .012, .008, c, { n: 4, emis: .02 }); S.ico(.012, e[0], e[1], e[2], mulC(c, 1.2), { d: 0, emis: .03 }); }
+    }
+  }, 2, { rad: .16 });
+  K.uArm = new PartBatch(S => {
+    const rng = makeRng(64); skin(S, .115, 0, -.13, 0, [1, 1.45, 1]);
+    S.cyl(.12, .07, 0, -.2, 0, D.plateD, { n: 8, l: L_METAL, rough: .5 }); barn(S, 4, 0, -.2, .1, .05, rng);
+  }, 4, sh);
+  K.lArm = new PartBatch(S => {
+    const rng = makeRng(65); skin(S, .1, 0, -.12, 0, [1, 1.5, 1]);
+    S.cyl(.11, .13, 0, -.14, 0, D.plate, { n: 8, l: L_METAL, rough: .5, rt: 1.15 }); barn(S, 5, .02, -.15, .1, .05, rng);
+    S.cyl(.1, .04, 0, -.24, 0, D.iron, { n: 8, l: L_METAL, rough: .6 }); link(S, [.05, -.25, .08], [.08, -.4, .12], 3, .025, { sway: .6 });
+    skin(S, .1, 0, -.31, .015, [1.05, 1.1, 1.1], D.skinD);
+  }, 4, sh);
+  K.uLeg = new PartBatch(S => { skin(S, .135, 0, -.11, 0, [1, 1.3, 1.05]); plate(S, .16, .12, .04, 0, -.1, .13, [-.1, 0, 0], D.plateD); }, 4, sh);
+  K.lLeg = new PartBatch(S => {
+    const rng = makeRng(66); skin(S, .11, 0, -.11, 0, [1, 1.3, 1]);
+    plate(S, .15, .17, .05, 0, -.12, .1, [0, 0, 0]); barn(S, 5, 0, -.12, .13, .05, rng);
+    S.box(.2, .08, .3, 0, -.23, .05, D.skinD, {}); for (const x of [-.06, 0, .06]) S.cone(.02, .05, x, -.24, .21, D.barn, { n: 4, r: [HPI, 0, 0] });
+  }, 4, sh);
+  // The anchor: held at the ring end (y = 0), the crown and flukes at the far end; a length of chain from the ring.
+  KIT.item.anchor = new PartBatch(S => {
+    const rng = makeRng(67), c = mulC(mixC(COL.ironL, C(0x6a4a34), .5), .95), o = { l: L_METAL, rough: .7 };
+    S.box(.06, 1.08, .06, 0, .43, 0, c, o); S.add(gTorus(10, .22, 4), { s: .075, p: [0, -.14, 0], r: [0, HPI, 0], c, l: L_METAL, rough: .7 });
+    S.box(.46, .05, .05, 0, .06, 0, mulC(COAST.wood, .8), { l: L_WOOD, rough: .6 });
+    for (const sg of [-1, 1]) {
+      S.seg([0, .98, 0], [sg * .16, .95, 0], .035, .03, c, { l: L_METAL, n: 5 }); S.seg([sg * .16, .95, 0], [sg * .27, .76, 0], .03, .022, c, { l: L_METAL, n: 5 });
+      S.add(gOct(), { s: [.08, .1, .02], p: [sg * .26, .79, 0], r: [0, 0, sg * .55], c: mulC(c, 1.1), l: L_METAL, rough: .7 });
+    }
+    S.cone(.04, .08, 0, 1.02, 0, c, { n: 4, l: L_METAL });
+    barn(S, 10, 0, .82, .03, .1, rng); for (let k = 0; k < 2; k++) strand(S, rng.range(-.15, .15), .9, .03, .2, .02, D.kelpL, rng, [0, .02]);
+    link(S, [0, -.18, 0], [.05, -.5, .04], 5, .03, { sway: .5 });
+  }, 2, { rad: .12 });
+  for (const k of ['uArm', 'lArm', 'uLeg', 'lLeg']) K[k].mesh.castShadow = true;
+  RIGS.leviathan = rigLeviathan; EYES.leviathan = [.055, .125, .185, .06]; RIG_DEATH.leviathan = 'drown';
+  // Stand-in stats so the model can be tried on its own. The game's own MON.leviathan (Mira's) replaces this.
+  if (!MON.leviathan) MON.leviathan = { name: 'The Drowned King', tip: 'Calls drowned skeletons from the sea.', hp: 1250, spd: .82, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 2.1, top: 4.0, dmg: 50, atkT: 1.8, eye: [.5, 3.2, 2.6], scale: 2.7, boss: true, summon: { type: 'skel', n: 2, every: 9, max: 99, hp: .8 }, death: 'flesh', blade: true, cat: 'armor', rig: 'leviathan' };
+}
+function rigLeviathan(e) {
+  e.weapon = KIT.item.anchor; e.wScale = 1.25; e.heavy = true;
+  const M = rigHuman(KIT.drowned, SPEC.leviathan, e);
+  if (!RIG_CAPTURE) leviathanFx(e, M);
+  return M;
+}
+// Per drawn step: water running off him (drops from the shoulders, beard, hands, belt and the anchor's crown),
+// wet footprints, a faint sea-green glow about the head; heavier while he is dying, then the burst.
+function leviathanFx(m, M) {
+  if (!(m.vis || m.fly) || m.dead || !G.B) return;
+  const dt = FX.dt || 0, sc = m.scale || 1, dying = m.dying > 0, rate = (dying ? 70 : 20) * FX.keep;
+  m._drip = (m._drip || 0) + dt * rate;
+  const src = [[_M[2], .34, .56, .05], [_M[2], -.34, .56, .05], [_M[3], 0, -.05, .14], [_M[5], 0, -.32, 0], [_M[7], 0, -.32, 0], [_M[8], .2, .85, 0], [_M[8], -.2, .85, 0], [_M[1], .2, -.3, .1], [_M[1], -.2, -.3, -.1]];
+  while (m._drip >= 1) {
+    m._drip -= 1; const s = src[Math.floor(frnd() * src.length)];
+    _d4.set(s[1] + frr(-.05, .05), s[2], s[3] + frr(-.05, .05)).applyMatrix4(s[0]);
+    fxPart(_d4.x, _d4.y, _d4.z, frr(-.25, .25), frr(-.6, .2), frr(-.25, .25), frr(.45, .8), frr(.03, .055), .34, .46, .56, { grav: 9.5, drag: .2 });
+  }
+  _d4.set(0, .12, .1).applyMatrix4(M); const g = DROWN.glow, tw = .85 + .15 * Math.sin(G.t * 5 + m.lseed);
+  FX.add.push(_d4.x, _d4.y, _d4.z, .75 * sc, .75 * sc, 0, 0, g[0] * .2, g[1] * .2, g[2] * .2, .35 * tw, 2, 0, 0, 0);
+  m.glowL = true; m.lI = 9; m.lCol = 0x40e0c0; m.lx = _d4.x; m.ly = _d4.y; m.lz = _d4.z;
+  if (m.mv > .3) { m._wet = (m._wet || 0) - dt; if (m._wet <= 0) { m._wet = .55; FX.decals.add(G.B.heightAt, m.x + frr(-.3, .3), m.z + frr(-.3, .3), .55 + frnd() * .3, .006, .01, .014, .5, 9, 9); } }
+  if (dying && m.dying < .1 && !m._burst) { m._burst = 1; leviathanSplash(m); }
+}
+// The Drowned King's end: he bursts into the sea that filled him. A column of spray, a ring of foam, kelp and
+// shell scattered, a sea-green flash, a wide wet stain; on a storm land the sky answers with a strike.
+function leviathanSplash(m) {
+  const sc = m.scale || 1, x = m.x, y = m.y, z = m.z, g = DROWN.glow;
+  fxTimed(5, x, y + 1.6 * sc / 2.7, z, 6, 6, g[0] * 1.6, g[1] * 1.6, g[2] * 1.6, 1, .3); fxTimed(4, x, y + .08, z, 9, 9, .6, .8, .95, .8, .6, { ground: true });
+  lightFlash(x, y + 2, z, 0x50f0d0, 900, .5, 18);
+  for (let i = 0; i < 46; i++) { const a = frnd() * TAU, s = frr(.6, 3); fxPart(x + Math.cos(a) * .4, y + frr(.3, 2.4), z + Math.sin(a) * .4, Math.cos(a) * s, frr(3.5, 9), Math.sin(a) * s, frr(.8, 1.6), frr(.05, .09), .45, .58, .7, { grav: 10, drag: .25 }); }
+  for (let i = 0; i < 14; i++) { const a = frnd() * TAU, s = frr(.6, 2.2); fxSmoke(x + Math.cos(a) * .5, y + frr(.2, 2.5), z + Math.sin(a) * .5, Math.cos(a) * s, frr(1, 3), Math.sin(a) * s, frr(1.4, 2.6), frr(.7, 1.2), 2, .5, .56, .6, .45, { drag: 1.4, rise: -.3 }); }
+  for (let i = 0; i < 12; i++) { _gm.compose(_gp.set(x + frr(-.4, .4), y + frr(.5, 2.5), z + frr(-.4, .4)), _gq.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _gs.setScalar(frr(.8, 1.5))); addDebris(KIT.bit, _gm, i & 1 ? [.3, .3, .14] : [1.1, 1.06, .96], frr(-3, 3), frr(3, 6), frr(-3, 3), frr(4, 10), frr(3, 5), { extra: 1 }); }
+  FX.decals.add(G.B.heightAt, x, z, 3.2, .004, .008, .012, .7, 40, 40);
+  if (G.B.bio.lightning) FX.lightningAt(x + frr(-.5, .5), z + frr(-.5, .5), .8);
+}
+DEATH_FX.drown = (m, kind, ix, iz, up) => { shatter(e => rigMonster(e), m, [ix, 1.6 * up, iz], { spread: 1.5, life: .8, up }); leviathanSplash(m); };
 
 
 const G = {
@@ -5713,7 +6327,8 @@ function validSave(S) {
   if (!S || typeof S !== 'object' || S.v !== SAVE_V) return false;
   const now = Date.now(); if (!_num(S.t, now - SAVE_DAYS * 864e5, now + 6e5)) return false;
   if (!_int(S.level, 0, 999) || !_int(S.k, 1, G.wavesPerLand) || !_int(S.seed, 0, 1e9) || !_int(S.index, 0, 1e6) || !_int(S.start, -1e6, 1e6)) return false;
-  const n = BIOMES.length; if (BIOMES[((S.start + S.index) % n + n) % n].key !== S.biome) return false;
+  // A save from before a land was added counts its lands differently: find its land by key and re-anchor the rotation.
+  const n = BIOMES.length; if (BIOMES[((S.start + S.index) % n + n) % n].key !== S.biome) { const bi = BIOMES.findIndex(b => b.key === S.biome); if (bi < 0) return false; S.start = bi - S.index; }
   if (!_num(S.gold, 0, 1e7) || !_int(S.lives, 1, G.maxLives) || !_num(S.mana, 0, G.manaMax) || !_num(S.press, .1, 50) || !Array.isArray(S.towers) || S.towers.length > 40) return false;
   const pads = new Set();
   for (const t of S.towers) {
