@@ -160,6 +160,7 @@ function startWave() {
   sfx(G.bossWave ? 'hornBoss' : 'horn', cv.x, cv.z, 1.1);
   if (G.horde) { sfx('horde', cv.x, cv.z, 1.1); UI.banner(wl + ' · The horde is coming!', 3.4, true); }
   else UI.banner(G.bossWave ? wl + ' · ' + MON[bossType()].name : wl, G.bossWave ? 3.6 : 2.2, G.bossWave);
+  G.restored = false; autosave(G.k, false);
 }
 function endWave() {
   const l = G.waveLeaks;
@@ -199,7 +200,8 @@ function updateWaves(dt) {
   }
   if (G.lives <= 0 && G.phase === 'play') setPhase('defeat');
 }
-function callWaveEarly() { if (G.phase === 'play' && !G.spawning && !G.bossWave && G.nextIn > .4) { G.gold += Math.round(G.nextIn * 3); G.nextIn = .05; return true; } return false; }
+// After a restore the first wave pays no early-call gold (reloading must not become a gold tap).
+function callWaveEarly() { if (G.phase === 'play' && !G.spawning && !G.bossWave && G.nextIn > .4) { if (!G.restored) G.gold += Math.round(G.nextIn * 3); G.nextIn = .05; return true; } return false; }
 
 // Every purchase goes through pay() and every refund through refund(), so the run summary can count the gold earned.
 function pay(c) { G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); if (G.runStats) G.runStats.last -= c; }
@@ -479,8 +481,8 @@ function restartRun(byPlayer) {
 }
 function setPhase(p) {
   G.phase = p; G.phaseT = 0; if (p !== 'play') G.horde = false;
-  if (p === 'clear') { recordTowers(); if (G.runStats) G.runStats.lands++; G.advance = true; UI.banner('The pass holds', 3.2, false); UI.closeMenu(); }
-  if (p === 'defeat') { recordTowers(); if (G.runStats) G.runStats.sum = runSummary(); UI.banner('The beacon is out', 4.2, true); UI.closeMenu(); sfx('beaconOut', G.B.beacon.x, G.B.beacon.z, 1.2); fxEmbers(G.B.beacon.x, G.B.beacon.y, G.B.beacon.z, 60, .8); for (let i = 0; i < 14; i++) fxSmoke(G.B.beacon.x + rr(-.4, .4), G.B.beacon.y + rr(0, 1), G.B.beacon.z + rr(-.4, .4), rr(-.3, .3), rr(.8, 2), rr(-.3, .3), rr(2, 4), 1, 2, .2, .2, .22, .6, { drag: .5, rise: .2 }); }
+  if (p === 'clear') { recordTowers(); if (G.runStats) G.runStats.lands++; G.advance = true; autosave(1, true); UI.banner('The pass holds', 3.2, false); UI.closeMenu(); }
+  if (p === 'defeat') { recordTowers(); if (G.runStats) G.runStats.sum = runSummary(); clearSave(); UI.banner('The beacon is out', 4.2, true); UI.closeMenu(); sfx('beaconOut', G.B.beacon.x, G.B.beacon.z, 1.2); fxEmbers(G.B.beacon.x, G.B.beacon.y, G.B.beacon.z, 60, .8); for (let i = 0; i < 14; i++) fxSmoke(G.B.beacon.x + rr(-.4, .4), G.B.beacon.y + rr(0, 1), G.B.beacon.z + rr(-.4, .4), rr(-.3, .3), rr(.8, 2), rr(-.3, .3), rr(2, 4), 1, 2, .2, .2, .22, .6, { drag: .5, rise: .2 }); }
   if (p === 'crumble') startCrumble();
   if (p === 'rise') startRise();
 }
@@ -517,11 +519,12 @@ function activateBoard(B, lit) {
   FX.groundAt = B.heightAt;
   G.padCov = null;
 }
-function beginBattle(first) {
+// S: a wave snapshot being restored (restoreRun): no warm-up monsters; restoreRun sets the saved numbers afterwards.
+function beginBattle(first, S) {
   const B = G.B;
   G.mix = {}; G.mana = Math.max(G.mana * .5, 30); for (const k in G.spellCd) G.spellCd[k] = 0; G.pending.length = 0; G.rallies.length = 0;
   G.lives = G.maxLives; G.gold = 300 + 100 * G.level + 12 * G.level * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.snatched = 0; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; G.queue = []; AI.think = .15; AI.wait = 0;
-  const n = 4 + Math.min(3, G.level);
+  const n = S ? 0 : 4 + Math.min(3, G.level);
   for (let i = 0; i < n; i++) spawnMonster(i === n - 1 && G.level > 0 ? 'knight' : 'skel', { s: B.cave.s + 2.2 + i * 1.15, lat: rr(-.7, .7), hpMul: 1 + .22 * G.level });
   if (first || G.newRun || !G.runStats) { G.newRun = false; newRun(); }
   G.runStats.last = G.gold;
@@ -565,4 +568,109 @@ function updatePhase(dt) {
     if (B.igniteAt && t > B.igniteAt && !B.lit) { B.lit = true; sfx('ignite', B.beacon.x, B.beacon.z, 1.3, 1); lightFlash(B.beacon.x, B.beacon.y + 1, B.beacon.z, 0xffa050, 2600, .7, 60); fxEmbers(B.beacon.x, B.beacon.y, B.beacon.z, 50, .6); shake(.5); }
     if (B.lit && t > B.igniteAt + .7) { setBoardCasting(B, false); beginBattle(false); }
   }
+}
+
+// Save and continue. One run is kept in localStorage ('cinderwatch.save'), written at the start of every wave, when a land
+// is cleared (as the start of the next land) and when the page is hidden. A save always resumes at the start of a wave:
+// mid-wave state (monsters, gold from kills during the wave) is never written, so a reload cannot pay out twice.
+// Test sessions (#seed=, #manual, #nosave) never write, so QA and record.js stay deterministic.
+const SAVE_KEY = 'cinderwatch.save', SAVE_V = 1, SAVE_DAYS = 7;
+// on: writing allowed in this session; hold: the Continue offer is up (the demo behind it must not overwrite the save);
+// last: the snapshot written most recently (a page hidden mid-wave rewrites it with the current speed and commander).
+const SAVE = { on: !(HASH.seed || HASH.manual || HASH.nosave), hold: false, last: null };
+function snapshot(k, fresh) {
+  const idx = fresh ? G.boardIndex : G.boardIndex - 1, seed = fresh ? G.boardSeed : G.boardSeed - 1;
+  return {
+    v: SAVE_V, t: Date.now(), fresh: fresh ? 1 : 0, start: BIOME.start, seed, index: idx, biome: biomeFor(idx).key,
+    level: fresh ? G.level + 1 : G.level, k, gold: Math.round(G.gold), lives: G.lives, mana: Math.round(G.mana * 10) / 10, press: G.press, best: G.best, seen: G.seen,
+    towers: fresh ? [] : G.towers.filter(t => t.alive && t.def).map(t => ({ p: t.idx, kind: t.kind, lvl: t.lvl, branch: t.branch || null, oc: t.oc || 0, spent: t.spent, kills: t.kills || 0 })),
+    manual: !!UI.playerActive(), everManual: !!UI.everManual, speed: G.speed, ev: { wave: G.evWave, done: !!G.evDone },
+    run: G.run, slain: G.slain, stats: G.stats, runStats: G.runStats, leaks: G.leaks, leakTypes: G.leakTypes, mix: G.mix, snatched: G.snatched || 0,
+  };
+}
+function writeSave(S) { SAVE.last = S; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); return true; } catch (e) { return false; } }
+function clearSave() { SAVE.last = null; try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+function autosave(k, fresh) { if (SAVE.on && !SAVE.hold && G.lives > 0) writeSave(snapshot(k, fresh)); }
+// Page hidden (tab closed, app switched, iOS dropping the page). Between waves with the road empty, the finished wave
+// is banked; otherwise the wave-start snapshot stands, with the current speed and commander.
+function saveOnHide() {
+  if (!SAVE.on || SAVE.hold || !G.B) return;
+  if (G.phase === 'play' && G.lives > 0 && !G.spawning && !G.bossWave && G.k < G.wavesPerLand && !G.mons.some(m => !m.dead)) { writeSave(snapshot(G.k + 1, false)); return; }
+  const S = SAVE.last; if (!S || G.phase === 'defeat') return;
+  S.t = Date.now(); S.speed = G.speed; S.manual = !!UI.playerActive(); S.everManual = !!UI.everManual; writeSave(S);
+}
+const _num = (v, lo, hi) => typeof v === 'number' && isFinite(v) && v >= lo && v <= hi;
+const _int = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+// A save from this version, younger than SAVE_DAYS, whose numbers all make sense; anything else is ignored.
+function validSave(S) {
+  if (!S || typeof S !== 'object' || S.v !== SAVE_V) return false;
+  const now = Date.now(); if (!_num(S.t, now - SAVE_DAYS * 864e5, now + 6e5)) return false;
+  if (!_int(S.level, 0, 999) || !_int(S.k, 1, G.wavesPerLand) || !_int(S.seed, 0, 1e9) || !_int(S.index, 0, 1e6) || !_int(S.start, -1e6, 1e6)) return false;
+  const n = BIOMES.length; if (BIOMES[((S.start + S.index) % n + n) % n].key !== S.biome) return false;
+  if (!_num(S.gold, 0, 1e7) || !_int(S.lives, 1, G.maxLives) || !_num(S.mana, 0, G.manaMax) || !_num(S.press, .1, 50) || !Array.isArray(S.towers) || S.towers.length > 40) return false;
+  const pads = new Set();
+  for (const t of S.towers) {
+    if (!t || !TOWER_KINDS.includes(t.kind) || !_int(t.p, 0, 99) || pads.has(t.p) || !_int(t.lvl, 0, 3) || !_int(t.oc || 0, 0, OC_MAX)) return false;
+    if (t.lvl === 3 ? !(BRANCH_KEYS[t.kind] || []).includes(t.branch) : (t.branch || t.oc)) return false;
+    pads.add(t.p);
+  }
+  return true;
+}
+// The saved run worth offering on load: valid, and past the first wave of the first land.
+function continueOffer() {
+  let S = null; try { S = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { return null; }
+  return validSave(S) && (S.level > 0 || S.k > 1) ? S : null;
+}
+const _numMap = o => { const r = {}; if (o && typeof o === 'object') for (const k in o) if (_num(o[k], -1e9, 1e9)) r[k] = o[k]; return r; };
+// Swap the demo for the saved run: the saved board (same seed, index and land), towers rebuilt instantly at their
+// level, branch and overcharge, and the saved numbers. The saved wave starts after a short countdown.
+function restoreRun(S) {
+  if (!validSave(S)) return false;
+  const B0 = G.B, ar = AU.ready; AU.ready = false; // silent while the board is swapped (no burst of build sounds)
+  try {
+    if (G.event && typeof endEvent === 'function') endEvent();
+    for (const m of G.mons) if (!m.dead) removeMonster(m);
+    for (const f of G.men) if (!f.dead) { f.dead = f.gone = true; f.alive = false; if (f.flame) removeFlame(f.flame); }
+    for (const t of G.towers) t.dispose();
+    G.mons.length = 0; G.men.length = 0; G.arrows.length = 0; G.shells.length = 0; G.stuck.length = 0; G.fires.length = 0; G.burns.length = 0; G.chain.length = 0; G.towers.length = 0;
+    G.queue = []; G.bossAlive = false; G.slowmo = 0; G.hitstop = 0; CAM.ent = null; G.rangeMul = 1;
+    if (B0) for (const f of B0.flames || []) removeFlame(f);
+    clearDebris(); clearFX(); if (B0) disposeBoard(B0);
+    for (let i = 0; i < LT.emitters.length; i++) LT.emitters[i] = null;
+    BIOME.start = S.start; G.boardSeed = S.seed; G.boardIndex = S.index; G.level = S.level; G.advance = false; G.newRun = false;
+    const B = G.B = buildBoard(G.boardSeed++, G.boardIndex++);
+    R.scene.add(B.group); activateBoard(B, true);
+    G.press = S.press; G.mana = S.mana; G.best = Math.max(G.best, _num(S.best, 0, 1e6) ? S.best : 0);
+    G.seen = {}; if (S.seen && typeof S.seen === 'object') for (const k in S.seen) if (S.seen[k]) G.seen[k] = 1;
+    G.run = _int(S.run, 1, 1e6) ? S.run : 1; G.slain = _int(S.slain, 0, 1e9) ? S.slain : 0; G.stats = Object.assign({ branches: 0, spells: 0 }, _numMap(S.stats));
+    const RS = S.runStats; G.runStats = RS && typeof RS === 'object' && _num(RS.wave0, 0, 1e6) && _num(RS.slain0, 0, 1e9) && _num(RS.earned, 0, 1e9) && _num(RS.best0, 0, 1e6)
+      ? { wave0: RS.wave0, lands: _int(RS.lands, 0, 1e6) ? RS.lands : 0, slain0: RS.slain0, earned: RS.earned, last: 0, best0: RS.best0, tower: RS.tower && typeof RS.tower === 'object' && typeof RS.tower.name === 'string' ? { name: RS.tower.name, kills: +RS.tower.kills || 0, land: String(RS.tower.land || '') } : null, branch: _numMap(RS.branch), sum: null } : null;
+    if (S.fresh) { G.evLevel = -1; beginBattle(false); }
+    else {
+      beginBattle(false, S);
+      G.gold = S.gold; G.lives = S.lives; G.mana = S.mana; G.press = S.press; G.k = S.k - 1; G.nextIn = 4; UI.goldShown = G.gold;
+      G.leaks = _int(S.leaks, 0, 1e6) ? S.leaks : 0; G.leakTypes = _numMap(S.leakTypes); G.mix = _numMap(S.mix); G.snatched = _int(S.snatched, 0, 1e6) ? S.snatched : 0;
+      const ev = S.ev || {}; G.evLevel = G.level; G.evWave = _int(ev.wave, 1, G.wavesPerLand) ? ev.wave : 3; G.evDone = !!ev.done;
+      for (const st of S.towers) { const pad = B.pads[st.p]; if (pad && !pad.tower) restoreTower(pad, st); }
+      G.restored = true;
+    }
+    if (G.runStats) G.runStats.last = G.gold;
+    G.speed = _int(S.speed, 1, 3) ? S.speed : 1; G.paused = false;
+    UI.setManual(!!S.manual); if (S.everManual) UI.everManual = true; UI.closeMenu(); UI.coins.length = 0; UI.idle = 0;
+    camReset(); CAM.fx = CAM.fz = CAM.sx = CAM.sz = 0; R.fade = .2;
+  } finally { AU.ready = ar; }
+  SAVE.last = S.fresh ? null : S;
+  sfx('ignite', G.B.beacon.x, G.B.beacon.z, 1, 1);
+  UI.banner(G.B.bio.name + ' · Land ' + (G.level + 1), 3, false);
+  return true;
+}
+// A saved tower, built at once: no scaffolding, at its level and branch, with its overcharge.
+function restoreTower(pad, st) {
+  const t = new Tower(pad, st.kind, G.B.pads.indexOf(pad)); G.towers.push(t);
+  if (st.lvl === 3) { t.branch = st.branch; t.def = branchDef(t.kind, st.branch); t.lvl = 3; } else t.lvl = st.lvl;
+  t.begin(); t.finish();
+  t.oc = t.lvl >= 3 ? st.oc || 0 : 0; if (t.oc) t.em.I = t.light0 * (1 + .3 * t.oc);
+  let paid = 0; for (let l = 0; l <= Math.min(2, t.lvl); l++) paid += TOWER[t.kind].cost[l];
+  t.spent = _num(st.spent, 0, 1e6) ? st.spent : paid; t.kills = _int(st.kills, 0, 1e9) ? st.kills : 0;
+  return t;
 }

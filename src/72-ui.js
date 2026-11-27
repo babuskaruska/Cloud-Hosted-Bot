@@ -6,7 +6,7 @@ const UI = (() => {
     touch: false, ptrs: new Map(), gest: null, lastTap: { t: -9, x: 0, y: 0 }, waveRect: null, followRect: null, menuRect: null, wake: null, panning: false,
     hud: [], tips: [], tip: null, keys: new Set(), sndArmed: false, vvT: 0, vvN: 0,
     spell: null, gpt: null, spellFlash: {}, spellSeen: {},
-    sets: null, panelRect: null, everManual: false, helpSeen: {}, sumT: 0,
+    sets: null, panelRect: null, everManual: false, helpSeen: {}, sumT: 0, offer: null,
   };
   // Settings, remembered between visits: volumes (0..1) and the graphics mode.
   const SET = { music: 1, sfx: 1, amb: 1, q: 'auto' }, Q0 = { noscale: HASH.noscale, quality: -1 };
@@ -37,6 +37,16 @@ const UI = (() => {
     if (on) { U.sets = { tab: 'set', t: 0, wasPaused: G.paused }; G.paused = true; U.closeMenu(); }
     else { G.paused = U.sets.wasPaused; U.sets = null; }
     sfx('uiClick', CAM.x, CAM.z, .6);
+  }
+  // Continue a saved run (offered on load over the commander's demo, see continueOffer in 62-game.js).
+  // While the offer is up the demo plays on behind it but does not save, so the saved run is safe until the player picks.
+  U.offerContinue = S => { U.offer = { S, t: 0 }; SAVE.hold = true; U.closeMenu(); };
+  function takeOffer(yes) {
+    const o = U.offer; if (!o) return; U.offer = null; SAVE.hold = false; sfx('uiClick', CAM.x, CAM.z, .8); buzz(12);
+    if (!yes) { clearSave(); U.titleT = 0; return; }
+    U.titleT = 7;
+    try { if (!restoreRun(o.S)) { clearSave(); U.titleT = 0; } }
+    catch (e) { clearSave(); setTimeout(() => location.reload(), 30); throw e; }
   }
   const COLR = { bg: 'rgba(9,11,17,0.86)', bg2: 'rgba(24,27,38,0.94)', bd: '#5d4c35', bdHi: '#e8b04a', tx: '#efe4cd', dim: '#a79e8a', amber: '#e8b04a', ember: '#ff8a3c', cold: '#8fc7ff', red: '#e5553c', dark: '#0b0d14', ok: '#9fd08a' };
   const _pv = new THREE.Vector3(), _o = new THREE.Vector3(), _d = new THREE.Vector3();
@@ -123,6 +133,7 @@ const UI = (() => {
       if (PAN[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey) { U.keys.add(e.code); e.preventDefault(); }
       if (e.repeat) return; audioGesture(); U.keepAwake(); U.touch = false;
       const k = e.key;
+      if (U.offer) { if (k === ' ' || k === 'Enter') takeOffer(true); else if (k === 'n' || k === 'N' || k === 'Escape') takeOffer(false); else if (k === 'm' || k === 'M') setMute(!AU.muted); e.preventDefault(); return; }
       if (k === 'o' || k === 'O' || (k === 'Escape' && U.sets)) { openSettings(); e.preventDefault(); return; }
       if (U.sets) { if (k === 'm' || k === 'M') setMute(!AU.muted); return; }
       if (G.phase === 'defeat' && (k === ' ' || k === 'Enter')) { if (restartRun(true)) sfx('uiClick', CAM.x, CAM.z, .8); e.preventDefault(); return; }
@@ -258,6 +269,7 @@ const UI = (() => {
   function onTap(x, y, held) {
     const now = performance.now();
     const b = held && inRect(held, x, y, U.touch ? 44 : 8) ? held : btnAt(x, y);
+    if (U.offer) { if (b && (b.id === 'cont' || b.id === 'newg')) b.fn(x, y); return; }
     // Settings and the run summary are modal: a tap outside the settings closes them; nothing reaches the board or the HUD underneath.
     if (U.sets && !(b && U.btns.some(o => o.id === b.id))) { if (!inRect(U.panelRect, x, y, 0) || (b && b.id === 'gear')) openSettings(false); return; }
     if (b) { if (!b.hud) touchInput(); b.fn(x, y); return; }
@@ -286,6 +298,7 @@ const UI = (() => {
     const st = U.gp, b = i => !!(gp.buttons[i] && gp.buttons[i].pressed), was = i => !!st.prev[i], hit = i => b(i) && !was(i);
     let ax = (Math.abs(gp.axes[0]) > .5 ? Math.sign(gp.axes[0]) : 0) + (b(15) ? 1 : 0) - (b(14) ? 1 : 0), ay = (Math.abs(gp.axes[1]) > .5 ? Math.sign(gp.axes[1]) : 0) + (b(13) ? 1 : 0) - (b(12) ? 1 : 0);
     st.t -= dt;
+    if (U.offer) { if (hit(0)) takeOffer(true); else if (hit(1)) takeOffer(false); for (let i = 0; i < 16; i++) st.prev[i] = b(i); return; }
     if ((ax || ay) && st.t <= 0) {
       st.t = .22; st.active = true; touchInput(); audioGesture();
       if (U.menu) { const n = U.btns.length || 1; U.menu.focus = ((U.menu.focus + (ax || ay)) % n + n) % n; sfx('uiHover', CAM.x, CAM.z, .6); }
@@ -304,7 +317,7 @@ const UI = (() => {
   }
 
   function update(dt) {
-    U.idle += dt; U.moved += dt; U.hurt = Math.max(0, U.hurt - dt * 1.6); U.goldBump = Math.max(0, U.goldBump - dt * 5); U.deny = Math.max(0, U.deny - dt * 3); U.titleT += dt; U.slainBump = Math.max(0, U.slainBump - dt * 4);
+    U.idle += dt; U.moved += dt; U.hurt = Math.max(0, U.hurt - dt * 1.6); U.goldBump = Math.max(0, U.goldBump - dt * 5); U.deny = Math.max(0, U.deny - dt * 3); if (U.offer) U.offer.t += dt; else U.titleT += dt; U.slainBump = Math.max(0, U.slainBump - dt * 4);
     if (G.slain !== U.lastSlain) { U.lastSlain = G.slain; U.slainBump = 1; }
     { const dpr = R.dpr || 1, iw = n => PX.iconSize(n)[0], m3 = PX.measure('000'); let sc = Math.max(2, Math.round(clamp(Math.min(R.cssH / 430, R.cssW / 225), 1.6, 4) * dpr));
       let st = 4; for (const [ic, v] of [['flame', G.lives], ['coin', Math.floor(U.goldShown)], ['skull', G.slain]]) st += iw(ic) + 8 + Math.max(PX.measure('' + v), m3);
@@ -327,7 +340,7 @@ const UI = (() => {
     }
     if (U.menu) { U.menu.t += dt; if ((U.menu.tower && !U.menu.tower.alive) || G.phase !== 'play') U.menu = null; else if (U.menu.pad.tower !== U.menu.tower) U.menu.tower = U.menu.pad.tower; }
     if (G.phase !== 'play') { U.armed = null; U.hover = null; U.spell = null; }
-    else U.hover = (U.inside && !U.touch && !U.hotBtn && !U.panning && !U.spell && !U.sets) ? pickPad(U.mx, U.my) : null;
+    else U.hover = (U.inside && !U.touch && !U.hotBtn && !U.panning && !U.spell && !U.sets && !U.offer) ? pickPad(U.mx, U.my) : null;
     for (const k of SPELL_KINDS) { const n = G.stats[k] || 0; if (n !== (U.spellSeen[k] || 0)) { U.spellSeen[k] = n; U.spellFlash[k] = 1; } U.spellFlash[k] = Math.max(0, (U.spellFlash[k] || 0) - dt * 1.5); }
     U.gpt = U.spell && U.inside && !U.touch && !U.hotBtn && !U.hudHot ? groundPick(U.mx, U.my) : null;
     if (U.goldShown > G.gold) U.goldShown = G.gold;
@@ -401,7 +414,7 @@ const UI = (() => {
       if (!G.spawning && !G.bossWave && G.nextIn > 0) {
         const nk = G.k % NW + 1, nextHorde = isHordeK(nk, G.level), nextBoss = isBossK(nk);
         const warn = nextHorde || nextBoss, showCall = callable && (tch ? !(warn && G.t % 3 < 1.5) : over(U.waveRect ? U.waveRect.x : -1, U.waveRect ? U.waveRect.y : -1, U.waveRect ? U.waveRect.w : 0, U.waveRect ? U.waveRect.h : 0));
-        sub = showCall ? (tch ? 'Tap to call · +' : 'Call now · +') + Math.round(G.nextIn * 3) : (nextHorde ? 'Horde in ' : nextBoss ? 'Boss in ' : 'Next wave in ') + Math.ceil(G.nextIn);
+        sub = showCall ? (G.restored ? (tch ? 'Tap to call now' : 'Call now') : (tch ? 'Tap to call · +' : 'Call now · +') + Math.round(G.nextIn * 3)) : (nextHorde ? 'Horde in ' : nextBoss ? 'Boss in ' : 'Next wave in ') + Math.ceil(G.nextIn);
         if (warn && !showCall) subCol = COLR.ember; frac = 1 - G.nextIn / 6.5;
       } else { const n = G.mons.length + G.queue.length; sub = (G.horde ? 'Horde · ' : '') + n + ' on the road'; if (G.horde) subCol = COLR.ember; }
     }
@@ -609,7 +622,7 @@ const UI = (() => {
     if (hot !== U.hotBtn && hot) sfx('uiHover', CAM.x, CAM.z, .5);
     U.hotBtn = hot;
     if (U.armed && mouse && G.phase === 'play') { const l = TOWER[U.armed].name + ': click a pad', w = tw(l) + pad * 2; const xx = clamp(U.mx + 10 * s, 2 * s, W - w - 2 * s), yy = clamp(U.my + 10 * s, 2 * s, H - LH - pad * 2); plate(xx, yy, w, LH + pad * 2 - s, { bd: COLR.bdHi }); text(l, xx + pad, yy + pad - s, COLR.tx); }
-    if (U.titleT < 7 && !U.menu && !U.sets) {
+    if (U.titleT < 7 && !U.menu && !U.sets && !U.offer) {
       const a = sat(Math.min((U.titleT - .4) * 1.5, (6.6 - U.titleT) * 1.2));
       if (a > 0) {
         const sc = s * 2, t1 = 'Cinderwatch', full = G.B.bio.name + ' · The commander plays until you take over.', t2 = tw(full) + pad * 4 > Wr - iL - 6 * s ? [G.B.bio.name, 'The commander plays', 'until you take over.'] : [full]; if (G.best > G.wavesPerLand) t2.push('Best run: wave ' + G.best);
@@ -678,6 +691,30 @@ const UI = (() => {
       btn('again', Math.round(px + wP / 2 - bw / 2), y, bw, bh, bl, ps, true, () => { if (restartRun(true)) { sfx('uiClick', CAM.x, CAM.z, .8); buzz(12); } }, COLR.amber); y += bh + gap;
       if (left) PX.text(c, left, px + wP / 2, y, ps, COLR.dim, { align: 'c' });
       c.globalAlpha = 1;
+    }
+    if (U.offer) {
+      // Continue or start anew: two big buttons, Space or Enter continues, N starts a new game.
+      const O = U.offer.S, a = sat(U.offer.t * 4 + .2), n = BIOMES.length, bio = BIOMES[((O.start + O.index) % n + n) % n];
+      const mins = Math.max(0, (Date.now() - O.t) / 6e4), ago = mins < 1 ? 'just now' : mins < 60 ? Math.round(mins) + ' min ago' : mins < 48 * 60 ? Math.round(mins / 60) + ' h ago' : Math.round(mins / 1440) + ' days ago';
+      const title = 'Welcome back', l1 = bio.name + ' · ' + (O.manual ? 'you command' : 'the AI commands'), l2 = 'Saved ' + ago;
+      const bc = 'Continue: Land ' + (O.level + 1) + ' · Wave ' + O.k, bn = 'New game', hint = tch ? '' : 'Space or Enter continues · N starts anew';
+      const lay = ps => {
+        const p = 5 * ps, L = PX.LINE * ps, m = t => PX.measure(t) * ps, gap = 3 * ps, bh = Math.max(L + 2 * p - ps, tch ? Math.round(44 * dpr) : 0);
+        const wP = Math.max(PX.measure(title) * (ps + 1), m(l1), m(l2), m(bc) + 4 * p, m(hint) + 2 * p) + 2 * p;
+        const hP = p + PX.LINE * (ps + 1) + gap * 2 + L * 2 + ps + gap * 3 + bh * 2 + gap * 2 + (hint ? gap * 3 + L : 0) + p;
+        return { ps, p, L, gap, bh, wP, hP };
+      };
+      let Ly = lay(s); while (Ly.ps > 2 && (Ly.wP > avW || Ly.hP > avH)) Ly = lay(Ly.ps - 1);
+      const { ps, p, L, gap, bh, wP, hP } = Ly, px = Math.round(W / 2 - wP / 2), py = Math.round(clamp((H - hP) / 2, Math.min(topY + g3, Hb - hP), Hb - hP));
+      c.globalAlpha = a; U.panelRect = { x: px, y: py, w: wP, h: hP };
+      plate(px, py, wP, hP, { bd: COLR.bdHi });
+      let y = py + p; PX.text(c, title, px + wP / 2, y, ps + 1, '#ffd9a8', { align: 'c' }); y += PX.LINE * (ps + 1) + gap * 2;
+      PX.text(c, l1, px + wP / 2, y, ps, COLR.tx, { align: 'c' }); y += L + ps; PX.text(c, l2, px + wP / 2, y, ps, COLR.dim, { align: 'c' }); y += L + gap * 3;
+      btn('cont', px + p, y, wP - 2 * p, bh, bc, ps, true, () => takeOffer(true), COLR.amber); y += bh + gap * 2;
+      btn('newg', px + p, y, wP - 2 * p, bh, bn, ps, false, () => takeOffer(false)); y += bh + gap;
+      if (hint) PX.text(c, hint, px + wP / 2, y + gap, ps, COLR.dim, { align: 'c' });
+      c.globalAlpha = 1;
+      return;
     }
     if (!U.sets) return;
     const S0 = U.sets, help = S0.tab === 'help', paras = tch ? HELP_TOUCH : HELP_KEYS;
