@@ -150,6 +150,16 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
 - **Forge:** the coin sound uses `frnd()` (replay determinism).
 - **Known minor, open:** number keys or R on the defeat screen switch to manual; during the post-defeat crumble the HUD shows stale lives and gold; on a phone the toast and spell bar slightly overlap the lower board; at 3× about half the thunderstorm strikes skip their own thunder (by design spacing); a frosted tidal wave keeps roaring.
 
+## Phase 2 status: round 8 merged (build version 11)
+
+- **Forge:** `src/64-endless.js` (11 mutators, `modMul` hooks, boss affixes).
+- **Mira:**
+  - The rename, the menu (`src/73-menu.js`, `UI.scr`), meta (`src/66-meta.js`, `META`, `startRun(mode, heat)`, `G.mode`, `G.heat`, 14 upgrades, Heat 0–10), story (`src/65-story.js`, `STORY.play`) and the tutorial (`src/67-tutorial.js`).
+  - URL test flags (`TEST_SESSION`) skip the menu.
+- **Ash:** `src/35-longnight.js` (`procBiome(seed, i)`, `key: 'proc'`, a unique `bio.id`, a generated name), per-land grade, glow, glints, edge haze, starry sky and aurora, title camera (`CAM.menuMode`, automatic with `UI.mainMenu`). QA smoke-tests `proc7` and `proc12`.
+- **Echo:** the lantern motif and title theme, `AU.setScene`, story voices, meta sounds, and music generated from `bio.music`.
+- **Known follow-ups:** on phones, the menu buttons cover most of the board. Echo should detect generated-land changes by `bio.id` (every generated land has key `'proc'`). At high Heat the AI needs upgrades.
+
 ## Phase 2: Lanternhold (a full game). Round 8 contracts
 
 The owner's ask: a new name, story, procedural endless rounds that never end, carry-over points between runs, harder levels, more mayhem, a polished real-game feel, and better visuals even on phones.
