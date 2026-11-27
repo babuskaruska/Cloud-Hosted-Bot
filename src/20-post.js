@@ -65,6 +65,7 @@ uniform vec3 uLightPos[${R.NL}]; uniform vec3 uLightCol[${R.NL}];
 uniform vec3 uMistAmb; uniform vec4 uMist;
 uniform vec3 uAO; uniform float uAOFloor;
 uniform vec2 uDither; uniform vec2 uWind;
+uniform vec4 uHalo; uniform vec4 uEdge; uniform vec3 uBackTop; uniform vec4 uBack; uniform vec2 uRes;
 ${GLSL_BAYER}
 vec3 wpos(vec2 uv, float d){ vec4 p = uInvVP * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return p.xyz / p.w; }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -96,12 +97,43 @@ void main(){
     vec3 L = uMistAmb; vec3 Pm = P + vec3(0.0, 0.35, 0.0);
     for (int i = 0; i < ${R.NL}; i++) { vec3 dv = uLightPos[i] - Pm; L += uLightCol[i] / (dot(dv, dv) + 2.0); }
     col = mix(col, L * uMist.w, f);
+    // The slab floats in the dark: its cliffs fade into a low haze below the board's edge (uEdge: haze colour, amount).
+    float ek = smoothstep(16.6, 19.6, max(abs(P.x), abs(P.z))) * smoothstep(-0.6, -8.5, P.y) * uEdge.w;
+    col = mix(col, uEdge.rgb * (0.75 + 0.5 * n), ek);
+  } else {
+    // The void around the slab, read as a night sky: a glow toward the top, faint drifting haze, pixel stars that
+    // twinkle (uBack.z) and, on some lands, an aurora's curtain (uBack.w). uBack.x: the camera's turn (menu arc).
+    float sx = vUv.x * uRes.x / uRes.y + uBack.x, hz = vn(vec2(sx * 2.2 + uWind.x * 0.6, vUv.y * 3.0 - uWind.y));
+    col += uBackTop * smoothstep(0.2, 1.0, vUv.y) * (0.75 + 0.5 * hz);
+    if (uBack.z > 0.0) {
+      vec2 sp = floor(vec2(sx * uRes.y, vUv.y * uRes.y) * 0.5); float h = hash12(sp);
+      float st = step(0.9955, h) * (0.55 + 0.45 * sin(uTime * (0.8 + h * 30.0) + h * 91.0)) * smoothstep(0.3, 0.85, vUv.y) * (1.0 - 0.7 * hz);
+      col += vec3(0.75, 0.82, 1.0) * st * uBack.z * (step(0.9992, h) * 1.6 + 0.35);
+    }
+    if (uBack.w > 0.0) {
+      float x = sx * 1.6, t = uTime * 0.05, y0 = 0.6 + 0.16 * vn(vec2(x * 1.4, t)), dy = vUv.y - y0;
+      float sheet = smoothstep(-0.025, 0.0, dy) * exp(-max(dy, 0.0) * 6.0) * smoothstep(0.0, 0.25, vn(vec2(x * 2.5 - t * 1.4, 7.0)));
+      float rays = 0.45 + 0.55 * vn(vec2(x * 22.0 + t * 6.0, t * 4.0));
+      col += mix(vec3(0.05, 0.42, 0.24), vec3(0.24, 0.07, 0.36), smoothstep(0.0, 0.2, dy)) * sheet * rays * uBack.w;
+    }
+  }
+  // Lantern halos: light scattered in the air between the eye and the surface, around each light that stands in front
+  // of what is seen there (a cheap bloom that respects depth). uHalo: x gain, y core size.
+  if (uHalo.x > 0.0) {
+    vec3 Ph = wpos(vUv, min(d, 0.9999)), H = vec3(0.0);
+    for (int i = 0; i < ${R.NL}; i++) {
+      vec3 v = uLightPos[i] - Ph; float a = -dot(v, uCamDir), pp = max(dot(v, v) - a * a, 0.0);
+      H += uLightCol[i] * (smoothstep(-0.4, 0.8, a) / (pp * pp * 0.15 + pp + uHalo.y));
+    }
+    col += H * uHalo.x;
   }
   gl_FragColor = vec4(col, 1.0);
 }`, {
     tColor: { value: null }, tDepth: { value: null }, uInvVP: { value: new THREE.Matrix4() }, uCamDir: { value: new THREE.Vector3() }, uPx: { value: new THREE.Vector2() }, uTime: SH.uTime,
     uLightPos: { value: R.lightPos }, uLightCol: { value: R.lightCol }, uMistAmb: { value: new THREE.Vector3(0.05, 0.08, 0.14) }, uMist: { value: new THREE.Vector4(-0.3, 0.42, 0.75, 0.1) },
     uAO: { value: new THREE.Vector3(1.0, 18, 0.7) }, uAOFloor: { value: -1e9 }, uDither: { value: R.ditherOfs }, uWind: { value: new THREE.Vector2() },
+    uHalo: { value: new THREE.Vector4(0.016, 0.9, 0.0, 0) }, uEdge: { value: new THREE.Vector4(0.03, 0.04, 0.07, 0.6) },
+    uBackTop: { value: new THREE.Vector3() }, uBack: { value: new THREE.Vector4() }, uRes: { value: new THREE.Vector2(1, 1) },
   });
 
   M.dof = fsMat(`
@@ -159,6 +191,7 @@ uniform sampler2D tColor; uniform sampler2D tBloomA; uniform sampler2D tBloomB;
 uniform vec4 uGrade;
 uniform vec3 uBloom;
 uniform vec3 uLift; uniform vec2 uDither; uniform vec2 uRes;
+uniform vec3 uShT; uniform vec3 uHiT; uniform float uCon;
 ${GLSL_BAYER}
 vec3 filmic(vec3 x){ x = max(x, 0.0); return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 void main(){
@@ -170,9 +203,12 @@ void main(){
   c *= mix(1.0 - uGrade.z, 1.0, vig);
   c = filmic(c);
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  // Split toning per land: the shadows lean one way, the lit parts another (LOOK grade).
+  c *= mix(uShT, uHiT, smoothstep(0.02, 0.45, l));
   c = mix(vec3(l), c, uGrade.y);
   c += uLift * (1.0 - smoothstep(0.0, 0.3, l)) * mix(0.55, 1.0, vig);
-  c = pow(c, vec3(1.0 / 2.2)) * uGrade.w;
+  c = clamp(pow(c, vec3(1.0 / 2.2)), 0.0, 1.0);
+  c = mix(c, c * c * (3.0 - 2.0 * c), uCon) * uGrade.w;
   float b = bayer8(gl_FragCoord.xy + uDither);
   c = floor(c * uBloom.z + b) / uBloom.z;
   gl_FragColor = vec4(c, 1.0);
@@ -180,6 +216,7 @@ void main(){
     tColor: { value: null }, tBloomA: { value: null }, tBloomB: { value: null },
     uGrade: { value: new THREE.Vector4(1.0, 0.92, 0.55, 1.0) }, uBloom: { value: new THREE.Vector3(0.35, 0.5, 28) },
     uLift: { value: new THREE.Vector3(0.010, 0.016, 0.030) }, uDither: { value: R.ditherOfs }, uRes: { value: new THREE.Vector2() },
+    uShT: { value: new THREE.Vector3(1, 1, 1) }, uHiT: { value: new THREE.Vector3(1, 1, 1) }, uCon: { value: 0 },
   });
 
   M.up = fsMat(`
@@ -235,6 +272,7 @@ function renderFrame() {
   const r = R.renderer, M = R.mats, T = R.rt, cam = R.cam;
   r.info.reset();
   scheduleShadows(G.phase === 'crumble' || G.phase === 'rise');
+  { const m = LT.moon, mv = SH.uMoonV.value; mv.copy(m.position).sub(m.target.position).normalize().transformDirection(cam.matrixWorldInverse); SH.uMoonC.value.set(m.color.r, m.color.g, m.color.b).multiplyScalar(m.intensity); SH.uGlint.value = R.quality < .75 || R.lite ? 0 : 1; }
   r.setRenderTarget(T.scene); r.render(R.scene, cam);
   const px = M.atmo.uniforms.uPx.value.set(1 / R.iw, 1 / R.ih);
   let u = M.atmo.uniforms;
@@ -242,11 +280,12 @@ function renderFrame() {
   _ivp.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse).invert(); u.uInvVP.value.copy(_ivp);
   cam.getWorldDirection(u.uCamDir.value);
   u.uAO.value.y = 0.85 / R.px;
-  u.uWind.value.set(SH.uTime.value * 0.05, SH.uTime.value * 0.021);
+  u.uWind.value.set(SH.uTime.value * 0.05, SH.uTime.value * 0.021); u.uRes.value.set(R.iw, R.ih); u.uBack.value.x = (CAM.yaw - PI / 4) * 1.2;
+  u.uHalo.value.x = R.lite ? 0 : .016;
   fsPass(M.atmo, T.atmo);
   u = M.dof.uniforms; u.tColor.value = T.atmo.texture; u.tDepth.value = T.scene.depthTexture; u.uPx.value.copy(px);
   const zr = cam.far - cam.near;
-  const dsc = R.dofScale || 1;
+  const mk = CAM.menuK || 0, dsc = (R.dofScale || 1) * (1 - .22 * mk);
   u.uDof.value.set((R.focusZ - cam.near) / zr, 3.2 * dsc / zr, 11.5 * dsc / zr, HASH.nodof || R.lite ? 0.6 : Math.max(2, Math.min(R.ih, R.iw * 1.6) * 0.0145));
   const nd = R.dofD || 20;
   u.uNear.value.set(Math.max(4 * dsc, 0.55 * nd) / zr, Math.max(6, nd) / zr, 0.6, R.opt ? 0.25 : -1);
@@ -260,7 +299,7 @@ function renderFrame() {
   u.tColor.value = T.bB.texture; u.uDir.value.set(1.6 / T.bB.width, 0); fsPass(M.blur, T.bB2);
   u.tColor.value = T.bB2.texture; u.uDir.value.set(0, 1.6 / T.bB.height); fsPass(M.blur, T.bB);
   u = M.comp.uniforms; u.tColor.value = T.dof.texture; u.tBloomA.value = T.bA.texture; u.tBloomB.value = T.bB.texture;
-  u.uGrade.value.x = R.exposure * (1 + FX.flash * .5); u.uGrade.value.w = R.fade; u.uRes.value.set(R.iw, R.ih);
+  u.uGrade.value.x = R.exposure * (1 + FX.flash * .5); u.uGrade.value.w = R.fade; u.uGrade.value.z = .55 + .2 * mk; u.uRes.value.set(R.iw, R.ih);
   fsPass(M.comp, T.final);
   u = M.up.uniforms; u.tColor.value = T.final.texture; u.uTex.value.set(R.iw, R.ih); u.uOut.value.set(R.dw, R.dh); u.uSeed.value = (SH.uTime.value * 60 % 1000) * 7.13;
   fsPass(M.up, null);

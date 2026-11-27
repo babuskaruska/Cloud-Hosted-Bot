@@ -106,8 +106,9 @@ function collectMistLights() {
   let k = 0; const put = (l, gain) => { if (k >= R.NL) return; R.lightPos[k].copy(l.position); R.lightCol[k].set(l.color.r, l.color.g, l.color.b).multiplyScalar(l.intensity * gain); k++; };
   put(LT.beacon, .05);
   for (const f of LT.flashes) put(f.l, .06);
-  const tw = LT.towers.filter(l => l.intensity > 0).sort((a, b) => b.intensity - a.intensity);
-  for (const l of tw) put(l, .16);
+  // Tower lanterns at their full strength (a tower whose spotlight is on dims its point light, not its glow in the air).
+  const tw = LT.towers.filter((l, i) => l.intensity > 0 || (LT.emitters[i] && LT.emitters[i]._spot > 0)).map(l => { const e = LT.emitters[LT.towers.indexOf(l)]; l.userData.full = e && e.alive ? e.I * e.on * (e.fl || 1) : l.intensity; return l; }).sort((a, b) => b.userData.full - a.userData.full);
+  for (const l of tw) { if (k >= R.NL) break; R.lightPos[k].copy(l.position); R.lightCol[k].set(l.color.r, l.color.g, l.color.b).multiplyScalar(l.userData.full * .16); k++; }
   for (const l of LT.env) if (l.intensity > 0) put(l, .1);
   for (; k < R.NL; k++) R.lightCol[k].set(0, 0, 0);
 }

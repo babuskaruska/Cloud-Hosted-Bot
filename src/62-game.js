@@ -684,7 +684,7 @@ const SAVE = { on: !(HASH.seed || HASH.manual || HASH.nosave), hold: false, last
 function snapshot(k, fresh) {
   const idx = fresh ? G.boardIndex : G.boardIndex - 1, seed = fresh ? G.boardSeed : G.boardSeed - 1;
   return {
-    v: SAVE_V, t: Date.now(), fresh: fresh ? 1 : 0, start: BIOME.start, seed, index: idx, biome: biomeFor(idx).key,
+    v: SAVE_V, t: Date.now(), fresh: fresh ? 1 : 0, start: BIOME.start, seed, index: idx, biome: biomeFor(idx).key, pseed: procSeed(),
     level: fresh ? G.level + 1 : G.level, k, gold: Math.round(G.gold), lives: G.lives, mana: Math.round(G.mana * 10) / 10, press: G.press, best: G.best, seen: G.seen,
     towers: fresh ? [] : G.towers.filter(t => t.alive && t.def).map(t => ({ p: t.idx, kind: t.kind, lvl: t.lvl, branch: t.branch || null, oc: t.oc || 0, spent: t.spent, kills: t.kills || 0 })),
     manual: !!UI.playerActive(), everManual: !!UI.everManual, speed: G.speed, ev: { wave: G.evWave, done: !!G.evDone },
@@ -709,11 +709,13 @@ function validSave(S) {
   if (!S || typeof S !== 'object' || S.v !== SAVE_V) return false;
   const now = Date.now(); if (!_num(S.t, now - SAVE_DAYS * 864e5, now + 6e5)) return false;
   if (!_int(S.level, 0, 999) || !_int(S.k, 1, G.wavesPerLand) || !_int(S.seed, 0, 1e9) || !_int(S.index, 0, 1e6) || !_int(S.start, -1e6, 1e6)) return false;
-  const n = BIOMES.length;
-  if (BIOMES[((S.start + S.index) % n + n) % n].key !== S.biome) {
-    // Saved before the rotation grew (5 lands, now 6): keep the saved land by re-deriving the rotation start from its key.
+  const n = BIOMES.length, j = S.start + S.index;
+  if (S.biome === PROC_KEY) { if (j < n || !_int(S.pseed, -1e9, 1e10)) return false; } // a generated land: its land index and seed
+  else if (j < 0 || j >= n || BIOMES[j].key !== S.biome) {
+    // Saved before the rotation grew (5 lands, now 6) or from a rotation that wrapped past the last hand-made land:
+    // keep the saved land by re-deriving the rotation start from its key.
     const bi = BIOMES.findIndex(b => b.key === S.biome); if (bi < 0) return false;
-    S.start = ((bi - S.index) % n + n) % n;
+    S.start = bi - S.index;
   }
   if (!_num(S.gold, 0, 1e7) || !_int(S.lives, 1, G.maxLives) || !_num(S.mana, 0, G.manaMax) || !_num(S.press, .1, 50) || !Array.isArray(S.towers) || S.towers.length > 40) return false;
   const pads = new Set();
@@ -745,7 +747,7 @@ function restoreRun(S) {
     if (B0) for (const f of B0.flames || []) removeFlame(f);
     clearDebris(); clearFX(); if (B0) disposeBoard(B0);
     for (let i = 0; i < LT.emitters.length; i++) LT.emitters[i] = null;
-    BIOME.start = S.start; G.boardSeed = S.seed; G.boardIndex = S.index; G.level = S.level; G.advance = false; G.newRun = false;
+    BIOME.start = S.start; if (S.biome === PROC_KEY) { BIOME.seed = S.pseed; if (Number.isFinite(G.runSeed)) G.runSeed = S.pseed; } G.boardSeed = S.seed; G.boardIndex = S.index; G.level = S.level; G.advance = false; G.newRun = false;
     const B = G.B = buildBoard(G.boardSeed++, G.boardIndex++);
     R.scene.add(B.group); activateBoard(B, true);
     G.press = S.press; G.mana = S.mana; G.best = Math.max(G.best, _num(S.best, 0, 1e6) ? S.best : 0);

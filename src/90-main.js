@@ -1,5 +1,10 @@
 
-const CAM = { yaw: PI / 4, elev: 38 * PI / 180, dist: 90, x: 0, y: 0, z: 0, zoom: 1, fx: 0, fz: 0, sx: 0, sz: 0, man: false, mx: 0, mz: 0, mzoom: 1, base: 27, aspect: 1.6, za: null, ent: null };
+const CAM = { yaw: PI / 4, elev: 38 * PI / 180, dist: 90, x: 0, y: 0, z: 0, zoom: 1, fx: 0, fz: 0, sx: 0, sz: 0, man: false, mx: 0, mz: 0, mzoom: 1, base: 27, aspect: 1.6, za: null, ent: null,
+  // Title backdrop: while CAM.menuMode is true (the main menu sets it) the camera drifts in a slow arc over the demo
+  // board, lower and wider, with the board framed below the logo. menuK eases 0..1 in and out, so setting it back to
+  // false hands the view to the follow camera smoothly. menuT: the arc's clock.
+  menuMode: false, menuK: 0, menuR: 0, menuT: 0 };
+const CAM_YAW = PI / 4, CAM_ELEV = 38 * PI / 180;
 const _cr = new THREE.Vector3(), _cu = new THREE.Vector3(), _cd = new THREE.Vector3(), _ct = new THREE.Vector3();
 function applyCamera() {
   const cam = R.cam, e = CAM.elev, sy = Math.sin(CAM.yaw), cy = Math.cos(CAM.yaw);
@@ -7,7 +12,7 @@ function applyCamera() {
   const aspect = R.dw / R.dh, base = Math.max(R.viewH, lerp(R.fitTall, R.fitW, smooth(.62, 1.15, aspect)) / aspect), vh = base / CAM.zoom;
   CAM.base = base; CAM.aspect = aspect;
   R.px = vh / R.ih; R.viewW = vh * aspect; R.dofScale = base / R.viewH / CAM.zoom;
-  _ct.set(CAM.x, CAM.y, CAM.z).addScaledVector(_cr, FX.shakeX).addScaledVector(_cu, FX.shakeY - R.shiftY + (R.hudTop || 0) / R.dh * vh * .5);
+  _ct.set(CAM.x, CAM.y, CAM.z).addScaledVector(_cr, FX.shakeX).addScaledVector(_cu, FX.shakeY - R.shiftY + (R.hudTop || 0) / R.dh * vh * .5 * (1 - CAM.menuK) + CAM.menuK * vh * .13);
   const u = _ct.dot(_cr), v = _ct.dot(_cu), us = Math.round(u / R.px) * R.px, vs = Math.round(v / R.px) * R.px;
   R.sub.set((u - us) / R.px, (v - vs) / R.px);
   R.ditherOfs.set(((Math.round(us / R.px) % 8) + 8) % 8, ((Math.round(vs / R.px) % 8) + 8) % 8);
@@ -48,9 +53,23 @@ function updateCamera(dt) {
     CAM.zoom = damp(CAM.zoom, zt, (zt < CAM.zoom ? 1.1 : .7) * fr, dt);
   }
   CAM.y = damp(CAM.y, away ? -2.2 : .4, 1, dt);
+  updateMenuCamera(dt / (G.speed || 1));
   const lk = window.__cw && window.__cw.lock; if (lk) { CAM.x = lk[0]; CAM.z = lk[1]; CAM.zoom = lk[2] || 1; }
 }
 
+// The title backdrop's arc (see CAM.menuMode), blended over the follow camera by menuK.
+function updateMenuCamera(dt) {
+  dt = Math.min(dt, .1);
+  CAM.menuR = sat(CAM.menuR + (CAM.menuMode ? dt / 2.4 : -dt / 1.6));
+  const k = CAM.menuK = CAM.menuR * CAM.menuR * (3 - 2 * CAM.menuR);
+  if (k <= 0) { CAM.yaw = CAM_YAW; CAM.elev = CAM_ELEV; return; }
+  const t = CAM.menuT += dt;
+  if (CAM.menuMode) { CAM.man = false; CAM.za = null; CAM.ent = null; }
+  CAM.yaw = lerp(CAM_YAW, CAM_YAW + .46 * Math.sin(t * .041 + .5) + .08 * Math.sin(t * .013), k);
+  CAM.elev = lerp(CAM_ELEV, (30.5 + 3.5 * Math.sin(t * .067 + 1.3)) * PI / 180, k);
+  CAM.x = lerp(CAM.x, 2.6 * Math.sin(t * .029 + .8), k); CAM.z = lerp(CAM.z, 2.2 * Math.sin(t * .023 + 2.1), k);
+  CAM.zoom = lerp(CAM.zoom, (CAM.aspect < .8 ? .72 : .8) + .04 * Math.sin(t * .053), k);
+}
 function camGrab() { if (!CAM.man) { CAM.man = true; CAM.mx = CAM.x; CAM.mz = CAM.z; CAM.mzoom = CAM.zoom; } }
 function camZoomMin() { return Math.min(1, CAM.base * CAM.aspect / 56, CAM.base / 46); }
 function camPan(dx, dy) {
@@ -223,7 +242,12 @@ function boot() {
   }, 14, { rad: .1 });
   G.boardSeed = HASH.seed ? +HASH.seed : 1 + Math.floor(Math.random() * 9000);
   G.boardIndex = +(HASH.board || 0); G.level = +(HASH.level || 0);
-  { const bi = HASH.biome === undefined ? -1 : BIOMES.findIndex(b => b.key === HASH.biome || b.name.toLowerCase() === String(HASH.biome).toLowerCase()); BIOME.start = (bi >= 0 ? bi : HASH.biome !== undefined && isFinite(+HASH.biome) ? +HASH.biome : HASH.seed ? 0 : Math.floor(Math.random() * BIOMES.length)) - G.boardIndex; }
+  BIOME.seed = G.boardSeed;
+  // The first land: #biome= (a key, a name, a land index, or 'proc' for a generated one), else #level= (land index =
+  // level, so level=7 starts in The Long Night), else the first land with a seed, else a random hand-made one.
+  { const hb = HASH.biome, bi = hb === undefined ? -1 : BIOMES.findIndex(b => b.key === hb || b.name.toLowerCase() === String(hb).toLowerCase());
+    const land = bi >= 0 ? bi : hb === PROC_KEY ? Math.max(BIOMES.length, G.level) : hb !== undefined && isFinite(+hb) ? +hb : HASH.level !== undefined ? G.level : HASH.seed ? 0 : Math.floor(Math.random() * BIOMES.length);
+    BIOME.start = land - G.boardIndex; }
   const B = G.B = buildBoard(G.boardSeed++, G.boardIndex++);
   R.scene.add(B.group); activateBoard(B, true);
   beginBattle(true);

@@ -268,7 +268,7 @@ function buildBoard(seed, index) {
       for (const [dx, dz] of [[0, 0], [0, 1], [1, 1], [0, 0], [1, 1], [1, 0]]) waterV(S, x + dx, q.y, z + dz, (x + dx) * .8, (z + dz) * .8, .02, .14);
     }
   }
-  if (bio.key === 'ember') {
+  if (bio.cracks) {
     for (let q = 0; q < 46; q++) {
       let x = rng.range(-BH + 1.5, BH - 1.5), z = rng.range(-BH + 1.5, BH - 1.5), a = rng.range(0, TAU);
       if (dfAt(dRoad, x, z) < ROAD_HALF + .6 || dfAt(dStr, x, z) < 1.4 || dfAt(dStr, x, z) > 9 || Math.abs(hAt(x + .6, z) - hAt(x - .6, z)) > .3) continue;

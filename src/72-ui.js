@@ -696,7 +696,7 @@ const UI = (() => {
     }
     if (U.offer) {
       // Continue or start anew: two big buttons, Space or Enter continues, N starts a new game.
-      const O = U.offer.S, a = sat(U.offer.t * 4 + .2), n = BIOMES.length, bio = BIOMES[((O.start + O.index) % n + n) % n];
+      const O = U.offer.S, a = sat(U.offer.t * 4 + .2), bio = biomeAt(O.start + O.index, O.pseed);
       const mins = Math.max(0, (Date.now() - O.t) / 6e4), ago = mins < 1 ? 'just now' : mins < 60 ? Math.round(mins) + ' min ago' : mins < 48 * 60 ? Math.round(mins / 60) + ' h ago' : Math.round(mins / 1440) + ' days ago';
       const title = 'Welcome back', l1 = bio.name + ' · ' + (O.manual ? 'you command' : 'the AI commands'), l2 = 'Saved ' + ago;
       const bc = 'Continue: Land ' + (O.level + 1) + ' · Wave ' + O.k, bn = 'New game', hint = tch ? '' : 'Space or Enter continues · N starts anew';

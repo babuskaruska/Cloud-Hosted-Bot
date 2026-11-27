@@ -12,7 +12,7 @@ const EVENTS = {
 G.event = null; G.rangeMul = 1; G.evLevel = -1; G.evWave = 0; G.evDone = false;
 const _evp = { x: 0, y: 0, z: 0, tx: 0, tz: 0 };
 
-function eventKindFor(B) { for (const k in EVENTS) if (EVENTS[k].land === B.bio.key) return k; return null; }
+function eventKindFor(B) { if (B.bio.eventKind && EVENTS[B.bio.eventKind]) return B.bio.eventKind; for (const k in EVENTS) if (EVENTS[k].land === B.bio.key) return k; return null; }
 
 function startEvent(kind) {
   const E = EVENTS[kind], B = G.B; if (!E || !B) return null;

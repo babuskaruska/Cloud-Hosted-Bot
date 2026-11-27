@@ -2,7 +2,7 @@
 const COL0 = Object.assign({}, COL);
 const BIOMES = [
   {
-    key: 'ashen', name: 'Ashen Pass', col: {},
+    key: 'ashen', name: 'Ashen Pass', stars: 0.7, col: {},
     strata: [0x8f8474, 0x3c3f4c, 0x66564a, 0x767a86, 0x70503f, 0x4c4f5c, 0x9a8e7c, 0x55483e],
     hemi: [0x6d83bd, 0x1c1f2a, 1.15], moon: [0xa9c0f6, 1.55], fill: [0x4a5f96, .3], moonPos: [14, 44, -34],
     clear: [.0035, .005, .011], mistAmb: [.05, .08, .14], mist: [-.3, .42, .75, .1], sky: [.012, .022, .045], lift: [.010, .016, .030], sat: .92, expo: 1, sprAmb: [.05, .065, .1],
@@ -14,7 +14,7 @@ const BIOMES = [
     trees: [['tree', 13, 2.6, 4.6]], stumps: 6, rocks: 70, tufts: 320, webs: 4,
   },
   {
-    key: 'frost', name: 'Frostfall',
+    key: 'frost', name: 'Frostfall', stars: 0.85, aurora: 0.3, icicles: 1, brightPads: 1,
     col: { stone: 0x6f7b90, stoneD: 0x454e60, stoneL: 0x9aa7b8, earth: 0x4b4a50, earthD: 0x2f3038, grass: 0x5a6068, grassD: 0x40454e, moss: 0x55606a, road: 0x7a808c, roadD: 0x555a66, mud: 0x3a3e48, bark: 0x2e2a2a, tuftA: 0x6f7a80, tuftB: 0xa9b4bc, leaf: 0x1d382f, leafL: 0x2c4f42 },
     strata: [0x7d8aa0, 0x3a4254, 0x5d6678, 0x9fb4c8, 0x4b5468, 0x6a7890, 0xb8cadb, 0x475062],
     hemi: [0x86a8e0, 0x323c50, 1.1], moon: [0xc6dcff, 1.38], fill: [0x5f7fb4, .28], moonPos: [16, 42, -34],
@@ -27,7 +27,7 @@ const BIOMES = [
     trees: [['pine', 17, 2.8, 5.4], ['tree', 4, 2.6, 4.2]], stumps: 4, rocks: 52, tufts: 110, webs: 0,
   },
   {
-    key: 'fen', name: 'Mirefen',
+    key: 'fen', name: 'Mirefen', stars: 0.35,
     col: { stone: 0x5c6858, stoneD: 0x384234, stoneL: 0x84907a, earth: 0x3b3a28, earthD: 0x24261a, grass: 0x40582c, grassD: 0x2c3e22, moss: 0x4c682e, road: 0x6c6a56, roadD: 0x48483a, mud: 0x2a281c, bark: 0x2c2820, tuftA: 0x486a30, tuftB: 0x7a8a40, leaf: 0x2a4626, leafL: 0x4c6c34 },
     strata: [0x5a5a40, 0x2c3226, 0x4a4030, 0x66705a, 0x3a3020, 0x44503a, 0x777a5c, 0x33382a],
     hemi: [0x4f9482, 0x1a2218, 1.05], moon: [0xa6e6c4, 1.3], fill: [0x2f6f66, .3], moonPos: [10, 46, -32],
@@ -40,7 +40,7 @@ const BIOMES = [
     trees: [['willow', 9, 3.0, 4.6], ['tree', 5, 2.6, 4.4]], stumps: 8, rocks: 42, tufts: 420, webs: 3,
   },
   {
-    key: 'ember', name: 'Emberscar',
+    key: 'ember', name: 'Emberscar', stars: 0.2, cracks: 1,
     col: { stone: 0x403c42, stoneD: 0x242228, stoneL: 0x5e5a62, earth: 0x2e2728, earthD: 0x1c1819, grass: 0x3a2f2c, grassD: 0x261e1c, moss: 0x3a3230, road: 0x5e5652, roadD: 0x3c3634, mud: 0x1e1716, bark: 0x15110f, tuftA: 0x3a2c24, tuftB: 0x6a4a30 },
     strata: [0x3a363c, 0x1c1a20, 0x5a2a22, 0x2a262c, 0x6e3a24, 0x242026, 0x4a4650, 0x301a18],
     hemi: [0x5c5470, 0x2c140e, 1.18], moon: [0xc0b0d0, 1.32], fill: [0xd04a20, .2], moonPos: [18, 40, -32],
@@ -53,7 +53,7 @@ const BIOMES = [
     trees: [['charred', 11, 2.6, 4.4]], stumps: 4, rocks: 80, tufts: 40, webs: 0,
   },
   {
-    key: 'dunes', name: 'Duskmesa',
+    key: 'dunes', name: 'Duskmesa', stars: 1, brightPads: 1,
     col: { stone: 0xb08e6c, stoneD: 0x7a5c48, stoneL: 0xd4b48c, earth: 0xa88c66, earthD: 0x7c6448, grass: 0xbca27a, grassD: 0x927856, moss: 0x7a7444, road: 0xa89478, roadD: 0x786652, mud: 0x64503a, bark: 0x4c3a28, tuftA: 0x8a8048, tuftB: 0xc0a860, leaf: 0x38582e, leafL: 0x66863e },
     strata: [0xb8845c, 0x8e5a40, 0xd6b080, 0x744a38, 0xc89866, 0x9c6a4c, 0xe4cca0, 0x805640],
     hemi: [0x6a6fc0, 0x3c3040, 1.1], moon: [0xd6c8ff, 1.5], fill: [0x2f8f9a, .34], moonPos: [26, 24, -36],
@@ -70,7 +70,7 @@ const BIOMES = [
     // sea = [level, foam]), rain slants on the wind, lightning lights the whole board every 6-14 s (lightning: the
     // mean gap), the stream is a tidal channel with foam (water mode 4), everything is wet (wet = [shine, darken]),
     // and the beacon is a lighthouse whose lamp sweeps two beams over the sea (lighthouse).
-    key: 'storm', name: 'Stormreach',
+    key: 'storm', name: 'Stormreach', stars: 0,
     col: { stone: 0x40464f, stoneD: 0x22262d, stoneL: 0x626b76, earth: 0x30342f, earthD: 0x20231f, grass: 0x46553f, grassD: 0x323e2f, moss: 0x3c4e36, road: 0x6a6f76, roadD: 0x43474e, mud: 0x25272a, bark: 0x3a3631, tuftA: 0x58663f, tuftB: 0x9a9262, leaf: 0x283a2a, leafL: 0x3c5434 },
     strata: [0x343a44, 0x1c2027, 0x4c525c, 0x272b32, 0x3c3a38, 0x20252c, 0x5c626a, 0x2c2f33],
     hemi: [0x6a8cb6, 0x141c24, 1.25], moon: [0xb4ccf0, 1.5], fill: [0x3a6e86, .36], moonPos: [-10, 40, -36],
@@ -84,13 +84,17 @@ const BIOMES = [
     trees: [['windbent', 8, 2.2, 3.6]], stumps: 2, rocks: 86, tufts: 380, tuft: 'seagrass', webs: 0, noRuin: 1,
   },
 ];
-const BIOME = { start: 0 };
-function biomeFor(index) { return BIOMES[((BIOME.start + index) % BIOMES.length + BIOMES.length) % BIOMES.length]; }
+// BIOME.start: the land index of board index 0. BIOME.seed: the procedural lands' seed when the game sets no G.runSeed.
+const BIOME = { start: 0, seed: 1 };
+// Land index BIOME.start + index: a hand-made land below BIOMES.length, a generated one (procBiome, 35-longnight.js) above.
+function biomeFor(index) { return biomeAt(BIOME.start + index); }
 function applyBiomePalette(b) { Object.assign(COL, COL0); for (const k in b.col) COL[k] = C(b.col[k]); }
 
 const LOOK = { cur: null, to: null, bio: null };
+// A land's colour grade: shadow tint (rgb), highlight tint (rgb), contrast (an S-curve, 0..0.3). bio.grade, else neutral.
+const GRADE0 = [1, 1, 1, 1, 1, 1, 0];
 function lookOf(b) {
-  return { hs: C(b.hemi[0]), hg: C(b.hemi[1]), hi: [b.hemi[2]], mc: C(b.moon[0]), mi: [b.moon[1]], fc: C(b.fill[0]), fi: [b.fill[1]], clear: b.clear.slice(), mAmb: b.mistAmb.slice(), mist: b.mist.slice(), sky: b.sky.slice(), lift: b.lift.slice(), grade: [b.sat, b.expo], amb: b.sprAmb.slice(), wamb: b.wx.amb.slice() };
+  return { hs: C(b.hemi[0]), hg: C(b.hemi[1]), hi: [b.hemi[2]], mc: C(b.moon[0]), mi: [b.moon[1]], fc: C(b.fill[0]), fi: [b.fill[1]], clear: b.clear.slice(), mAmb: b.mistAmb.slice(), mist: b.mist.slice(), sky: b.sky.slice(), lift: b.lift.slice(), grade: [b.sat, b.expo], amb: b.sprAmb.slice(), wamb: b.wx.amb.slice(), tone: (b.grade || GRADE0).slice(), back: b.sky.map((v, i) => v * .45 + b.mistAmb[i] * .12).concat([b.stars === undefined ? .6 : b.stars, b.aurora || 0]), edge: b.mistAmb.map((v, i) => v * .55 + b.clear[i] * 1.5).concat([b.sea ? .15 : .62]) };
 }
 const _lc = new THREE.Color();
 function applyLook(L) {
@@ -101,6 +105,8 @@ function applyLook(L) {
   a.uMistAmb.value.set(L.mAmb[0], L.mAmb[1], L.mAmb[2]); a.uMist.value.set(L.mist[0], L.mist[1], L.mist[2], L.mist[3]);
   SH.uSky.value.setRGB(L.sky[0], L.sky[1], L.sky[2]); c.uLift.value.set(L.lift[0], L.lift[1], L.lift[2]); c.uGrade.value.y = L.grade[0]; R.exposure = L.grade[1];
   FX.alpha.mesh.material.uniforms.uAmb.value.set(L.amb[0], L.amb[1], L.amb[2]); WX.u.uAmb.value.set(L.wamb[0], L.wamb[1], L.wamb[2]);
+  const g = L.tone; c.uShT.value.set(g[0], g[1], g[2]); c.uHiT.value.set(g[3], g[4], g[5]); c.uCon.value = g[6];
+  a.uEdge.value.set(L.edge[0], L.edge[1], L.edge[2], L.edge[3]); a.uBackTop.value.set(L.back[0], L.back[1], L.back[2]); a.uBack.value.z = L.back[3]; a.uBack.value.w = L.back[4];
 }
 function setBiomeLook(B, instant) {
   const b = B.bio; LOOK.bio = b; LOOK.to = lookOf(b);

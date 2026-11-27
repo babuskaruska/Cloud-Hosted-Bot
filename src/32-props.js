@@ -219,13 +219,13 @@ function buildBridge(B) {
     for (let k = 0; k <= 8; k++) { const th = PI * k / 8, u = Math.cos(th) * A; T.box(.42, .22, .38, u, spring + (crown - spring) * Math.sin(th) - .05, side * wHalf, COL.stoneL, { l: L_MASON, r: [0, 0, th - HPI] }); }
     for (const u of [-3.25, 3.25]) { const t = yd(u); T.box(.5, 1.25, .5, u, t + .3, side * wHalf, mc(), { l: L_MASON }); T.box(.62, .13, .62, u, t + .98, side * wHalf, COL.stoneL, { l: L_MASON }); T.cone(.2, .25, u, t + 1.15, side * wHalf, COL.stoneD, { n: 4, l: L_ROCK }); }
   }
-  if (B.bio.key === 'frost') for (const side of [-1, 1]) for (let u = -1.15; u <= 1.16; u += .21) { const h = rng.range(.12, .55); T.cone(.04 + .03 * rng(), h, u, yArch(u) - h / 2 - .04, side * (wHalf + .03), COL.ice, { n: 5, r: [PI, 0, 0], rough: .14, emis: .012 }); }
+  if (B.bio.icicles) for (const side of [-1, 1]) for (let u = -1.15; u <= 1.16; u += .21) { const h = rng.range(.12, .55); T.cone(.04 + .03 * rng(), h, u, yArch(u) - h / 2 - .04, side * (wHalf + .03), COL.ice, { n: 5, r: [PI, 0, 0], rough: .14, emis: .012 }); }
   B.put(T, x, z, { y: y0, ry: -ang, ao: null });
   B.bridge = { x, z, y: y0 };
 }
 
 function buildPads(B) {
-  const bright = B.bio.key === 'frost' || B.bio.key === 'dunes', top = bright ? C(0x5a6070) : C(0x8e929e), rim = bright ? C(0x363a46) : C(0x565a66), brass = mulC(COL.brass, bright ? 1.7 : 1.25);
+  const bright = !!B.bio.brightPads, top = bright ? C(0x5a6070) : C(0x8e929e), rim = bright ? C(0x363a46) : C(0x565a66), brass = mulC(COL.brass, bright ? 1.7 : 1.25);
   for (const p of B.pads) {
     const T = new Soup(), rng = B.rng;
     T.cyl(1.36, .34, 0, .12, 0, mulC(rim, .8), { n: 8, l: L_MASON, r: [0, PI / 8, 0] });
@@ -325,7 +325,7 @@ function buildCave(B) {
   rk(1.35, .15, 3.65, 0, { sq: .55 }); rk(1.05, .25, 3.55, -1.05, { sq: .6 }); rk(1.05, .25, 3.55, 1.05, { sq: .6 });
   for (let k = 0; k < 4; k++) rk(2.3, -1.2 - k * .85, 4.3 + k * .3, rng.range(-.6, .6), { sq: .58 });
   for (const zz of [-1.25, -.75, -.2, .35, .9, 1.3]) T.cone(.15 + rng() * .06, .45 + rng() * .5, .3 + rng() * .2, 2.85, zz, mulC(COL.stoneL, .9), { n: 5, l: L_ROCK, r: [PI, 0, 0] });
-  if (B.bio.key === 'frost') for (let zz = -1.4; zz <= 1.41; zz += .2) { const h = rng.range(.2, .75); T.cone(.045 + .03 * rng(), h, .62 + rng() * .1, 2.9 - h / 2, zz, COL.ice, { n: 5, r: [PI, 0, 0], rough: .14, emis: .012 }); }
+  if (B.bio.icicles) for (let zz = -1.4; zz <= 1.41; zz += .2) { const h = rng.range(.2, .75); T.cone(.045 + .03 * rng(), h, .62 + rng() * .1, 2.9 - h / 2, zz, COL.ice, { n: 5, r: [PI, 0, 0], rough: .14, emis: .012 }); }
   T.box(3.8, .2, 3.7, -1.9, 3.05, 0, COL.black, { jit: 0 }); T.box(.2, 3.4, 3.7, -3.45, 1.5, 0, COL.black, { jit: 0 });
   for (const s of [-1, 1]) T.box(3.8, 3.2, .2, -1.9, 1.5, s * 1.82, mulC(COL.stoneD, .25), { l: L_ROCK, jit: 0 });
   for (const s of [-1, 1]) { T.seg([1.7, 0, s * 2.5], [1.78, 1.6, s * 2.55], .055, .035, COL.woodD, { l: L_WOOD }); PROP.skull(T, 1.78, 1.72, s * 2.55, .17, s * .5 + 1.2); }
@@ -374,7 +374,9 @@ function scatterProps(B) {
   const at = (x, z, build, r, T0) => { if (Math.abs(x) > BH - .8 || Math.abs(z) > BH - .8) return; const T = T0 || new Soup(); if (!T0) build(T); B.put(T, x, z, { ry: rng() * TAU }); if (r) placed.push([x, z, r]); };
   const X = { B, rng, drop, find, beside, free, at, H, placed, slope };
   // A land's big set pieces go down first, where there is still room (BIOME_DRESS.<key>First).
-  if (BIOME_DRESS[bio.key + 'First']) BIOME_DRESS[bio.key + 'First'](X);
+  // A generated land (35-longnight.js) dresses as its base land (bio.dress), plus a few of its donor's props (bio.accent).
+  const dress = BIOME_DRESS[bio.dress] ? bio.dress : BIOME_DRESS[bio.key] ? bio.key : 'ashen';
+  if (BIOME_DRESS[dress + 'First']) BIOME_DRESS[dress + 'First'](X);
   if (!bio.noRuin) drop(T => PROP.towerRuin(T, rng), 2.9, { far: 3.6 });
   drop(T => PROP.well(T, rng), 1.3, { near: 5.5, far: 2.6 });
   drop(T => PROP.statue(T, rng), 1.2, { near: 6, far: 2.4 });
@@ -403,7 +405,8 @@ function scatterProps(B) {
   for (let k = 0; k < 6; k++) { const x = B.lay.cave.x + rng.range(1.8, 7), z = B.zc + rng.sign() * rng.range(1.9, 5); if (free(x, z, .4, .2)) drop(T => PROP.bones(T, rng, rng.int(4, 7)), .5, { at: [x, z], ao: null }); }
   for (let k = 0; k < 5; k++) drop(T => PROP.bones(T, rng, rng.int(3, 5)), .45, { ao: null });
   for (let k = 0; k < 3; k++) drop(T => PROP.cairn(T, rng), .5, {});
-  BIOME_DRESS[bio.key](X);
+  BIOME_DRESS[dress](X);
+  if (bio.accent && typeof PROC_ACCENT !== 'undefined' && PROC_ACCENT[bio.accent]) PROC_ACCENT[bio.accent](X);
   const trees = [];
   for (const [kind, cnt, h0, h1] of bio.trees) for (let k = 0; k < cnt; k++) { const h = rng.range(h0, h1), p = drop(T => PROP[kind](T, rng, h), kind === 'tree' || kind === 'charred' ? .55 : kind === 'windbent' ? 1.1 : .8, { far: 1.0, water: kind === 'palm' && k < 6 ? 5.5 : 0 }); if (p && kind === 'tree') trees.push([p, h]); }
   for (let k = 0; k < bio.webs && k < trees.length; k++) {
