@@ -228,7 +228,8 @@ roughnessFactor = clamp(vSurf.y * (1.15 - 0.3 * cwT.a), 0.045, 1.0);
 ${water ? `if (uWat.x > 0.5 && uWat.x < 1.5) roughnessFactor = mix(0.09, 0.62, wMask);
 else if (uWat.x > 1.5 && uWat.x < 2.5) roughnessFactor = mix(0.55, 0.96, wMask);
 else if (uWat.x > 3.5) roughnessFactor = mix(0.07, 0.75, wMask);
-else if (uWat.x > 2.5) roughnessFactor = mix(roughnessFactor, 0.9, wMask);` : 'roughnessFactor *= 1.0 - uWet.x * mix(0.8, 0.4, cwT.a);'}`)
+else if (uWat.x > 2.5) roughnessFactor = mix(roughnessFactor, 0.9, wMask);
+if (uGlint > 1.2 && (uWat.x < 1.5 || uWat.x > 2.5)) roughnessFactor *= mix(0.6, 1.0, wMask); // Ultra: glassier water, crisper lantern reflections` : 'roughnessFactor *= 1.0 - uWet.x * mix(0.8, 0.4, cwT.a);'}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 ${water ? `{
   float h0 = cwRipple(vTuv, wFlow, vSurf.z) + wMask * uWat.w;

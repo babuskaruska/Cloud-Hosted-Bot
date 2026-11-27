@@ -431,4 +431,35 @@ function scatterProps(B) {
     const r = rng.range(.08, .17), T = new Soup(); T.rock(r, 0, r * .3, 0, mixC(COL.roadD, COL.stone, rng())); B.put(T, x, z, { ao: null });
   }
   if (bio.nightProps) nightDress(X); // Act II nights (36-night.js): last, so the rest of the land stays as by day
+  if (GFX.P && GFX.P.extra) ultraDress(X, waterD);
+}
+
+// Ultra (GFX.P.extra, round 14): denser small scenery, from its own random stream so every other tier's land is
+// placed exactly as before: more grass tufts, pebbles, and small flowers (ice shards on frost, cinders on ember,
+// dry thorns on the dunes). Static, merged into the land's chunks like the rest.
+const ULTRA_BLOOM = { ashen: [[.62, .55, .78], [.8, .78, .7]], frost: 'ice', fen: [[.86, .84, .42], [.6, .78, .5]], ember: 'cinder', dunes: 'thorn', storm: [[.92, .74, .8], [.9, .9, .86]] };
+function ultraDress(X, waterD) {
+  const { B, H, slope } = X, bio = B.bio, rng = makeRng(B.seed * 7907 + 313), key = bio.dress || bio.nightOf || bio.key;
+  const ok = (x, z, road) => B.dRoadAt(x, z) > ROAD_HALF + road && waterD(x, z) > 1.1 && slope(x, z) < .5 && !(Math.abs(x - B.kx) < 5.4 && z < -11.6) && B.dStrAt(x, z) > 1.5;
+  for (let k = 0, n = Math.round(bio.tufts * .6); k < n; k++) {
+    const x = rng.range(-BH + .8, BH - .8), z = rng.range(-BH + .8, BH - .8); if (!ok(x, z, .35)) continue;
+    const T = new Soup(); PROP[bio.tuft || 'tuft'](T, rng); B.put(T, x, z, { ao: null, s: rng.range(.6, 1.2) });
+  }
+  for (let k = 0; k < 70; k++) {
+    const x = rng.range(-BH + .8, BH - .8), z = rng.range(-BH + .8, BH - .8); if (!ok(x, z, .15)) continue;
+    const r = rng.range(.05, .13), T = new Soup(); T.rock(r, 0, r * .3, 0, mixC(COL.stoneD, COL.stoneL, rng())); B.put(T, x, z, { ao: null });
+  }
+  const fl = ULTRA_BLOOM[key] || ULTRA_BLOOM.ashen;
+  for (let k = 0; k < 46; k++) {
+    const x = rng.range(-BH + .8, BH - .8), z = rng.range(-BH + .8, BH - .8); if (!ok(x, z, .4)) continue;
+    const T = new Soup();
+    for (let i = 0, m = rng.int(3, 6); i < m; i++) {
+      const a = rng() * TAU, d = rng.range(0, .22), px = Math.cos(a) * d, pz = Math.sin(a) * d, h = rng.range(.08, .2);
+      if (fl === 'ice') T.cone(.035, h * 1.6, px, h * .8, pz, mixC(COL.ice, COL.snow, rng() * .5), { n: 4, l: L_METAL, rough: .2, r: [rng.range(-.3, .3), 0, rng.range(-.3, .3)] });
+      else if (fl === 'cinder') T.box(.05, .04, .05, px, .02, pz, rng() < .5 ? [1, .35, .08] : [.6, .16, .04], { emis: .45, jit: 0 });
+      else if (fl === 'thorn') T.seg([px, 0, pz], [px + rng.range(-.08, .08), h * 1.4, pz + rng.range(-.08, .08)], .012, .006, COL.bark, { l: L_WOOD, n: 3 });
+      else { T.seg([px, 0, pz], [px, h, pz], .008, .008, COL.leaf || COL.moss, { n: 3, sway: .4 }); T.box(.05, .035, .05, px, h, pz, fl[i & 1], { l: L_CLOTH, jit: .1 }); }
+    }
+    B.put(T, x, z, { ao: null, ry: rng() * TAU });
+  }
 }

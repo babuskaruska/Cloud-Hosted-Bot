@@ -1,7 +1,7 @@
 
 const WX = { mesh: null, u: null, fade: 1 };
 function initWeather() {
-  const N = 2600, g = new THREE.InstancedBufferGeometry(), rng = makeRng(4242), seed = new Float32Array(N * 4);
+  const N = 3200, g = new THREE.InstancedBufferGeometry(), rng = makeRng(4242), seed = new Float32Array(N * 4);
   for (let i = 0; i < N; i++) { seed[i * 4] = rng(); seed[i * 4 + 1] = rng(); seed[i * 4 + 2] = rng(); seed[i * 4 + 3] = (i + .5) / N; }
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]), 3)); g.setIndex([0, 1, 2, 0, 2, 3]);
   g.setAttribute('iSeed', new THREE.InstancedBufferAttribute(seed, 4)); g.instanceCount = N;

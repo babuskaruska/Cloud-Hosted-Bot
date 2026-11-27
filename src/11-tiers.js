@@ -20,15 +20,17 @@ const GFX = {
   fpsLabel: { 0: 'Piiramatu', 30: '30', 60: '60' },
   PRESET: {
     low: { css: .9, texel: 2, maxPix: 520000, maxIH: 620, dpr: 2, q0: 1, qMin: .8, moon: 1024, shadowType: 'basic', spotSh: 0, beaconSh: 0, lights: [4, 2, 2, 1],
-      ao: 0, mist: 1, edge: 1, halo: 0, dof: 0, bloom: 1, vig: 1, levels: 28, grain: .035, keep: .55, wx: .45, glint: 0, msaa: 0, fps: 30 },
+      ao: 0, mist: 1, edge: 1, halo: 0, dof: 0, bloom: 1, vig: 1, levels: 28, grain: .035, keep: .55, wx: .366, glint: 0, msaa: 0, fps: 30, aniso: 0, extra: 0 },
     mid: { css: .95, texel: 2, maxPix: 690000, maxIH: 620, dpr: 2.5, q0: 1, qMin: .6, moon: 1536, shadowType: 'pcf', spotSh: 512, beaconSh: 512, lights: [8, 3, 3, 2],
-      ao: 6, mist: 2, edge: 1, halo: 1, dof: 1, bloom: 2, vig: 1, levels: 28, grain: .035, keep: .8, wx: .75, glint: 1, msaa: 0, fps: 60 },
+      ao: 6, mist: 2, edge: 1, halo: 1, dof: 1, bloom: 2, vig: 1, levels: 28, grain: .035, keep: .8, wx: .61, glint: 1, msaa: 0, fps: 60, aniso: 0, extra: 0 },
     high: { css: 0, texel: 2, maxPix: 690000, maxIH: 620, dpr: 3, q0: 1, qMin: .55, moon: 2048, shadowType: 'pcf', spotSh: 1024, beaconSh: 1024, lights: [12, 5, 4, 3],
-      ao: 10, mist: 2, edge: 1, halo: 1, dof: 1, bloom: 2, vig: 1, levels: 28, grain: .035, keep: 1, wx: 1, glint: 1, msaa: 0, fps: 60 },
+      ao: 10, mist: 2, edge: 1, halo: 1, dof: 1, bloom: 2, vig: 1, levels: 28, grain: .035, keep: 1, wx: .8125, glint: 1, msaa: 0, fps: 60, aniso: 4, extra: 0 },
     // Ultra: everything clear. No mist, edge haze, vignette, tilt-shift, lantern haze or grain; full resolution;
-    // finer colour steps; bigger moon shadows; multisampled edges.
-    ultra: { css: 0, texel: 1, maxPix: 2400000, maxIH: 1e9, dpr: 3, q0: 1, qMin: .7, moon: 3072, shadowType: 'pcf', spotSh: 1024, beaconSh: 1024, lights: [12, 5, 4, 3],
-      ao: 10, mist: 0, edge: 0, halo: 0, dof: 0, bloom: 2, vig: 0, levels: 160, grain: 0, keep: 1, wx: 1, glint: 1, msaa: 4, fps: 0 },
+    // finer colour steps; multisampled edges. Round 14 extras: 4096 moon shadows (3072 on a phone) and sharper
+    // spotlight shadows, 8x anisotropic ground textures, glassier water with brighter moon glints, a fifth more
+    // particles and weather, and denser small scenery on the land (extra: grass tufts, pebbles, flowers; 32-props).
+    ultra: { css: 0, texel: 1, maxPix: 2400000, maxIH: 1e9, dpr: 3, q0: 1, qMin: .7, moon: 4096, shadowType: 'pcf', spotSh: 1536, beaconSh: 1024, lights: [12, 5, 4, 3],
+      ao: 10, mist: 0, edge: 0, halo: 0, dof: 0, bloom: 2, vig: 0, levels: 160, grain: 0, keep: 1.2, wx: 1, glint: 1.4, msaa: 4, fps: 0, aniso: 8, extra: 1 },
   },
   mode: 'auto', tier: 'high', P: null, fpsUser: null, gpu: null, auto: null, applied: null,
   // The frame cap in use: the player's (setFps) or the tier's default.
@@ -105,6 +107,8 @@ const GFX = {
     LT.beacon.castShadow = P.beaconSh > 0; if (P.beaconSh) setMap(LT.beacon, Math.round(P.beaconSh * sm));
     for (const s of LT.spots) { s.l.castShadow = P.spotSh > 0; if (P.spotSh) setMap(s.l, Math.round(P.spotSh * sm)); }
     LT.shadowsAt = -1;
+    // Anisotropic filtering of the ground textures (High 4x, Ultra 8x; the GPU's own cap applies).
+    for (const u of [SH.uTexA, SH.uTexH]) { const t = u.value; if (!t) continue; const an = P.aniso ? Math.max(1, Math.min(P.aniso, r.capabilities.getMaxAnisotropy())) : 1; if (t.anisotropy !== an) { t.anisotropy = an; t.needsUpdate = true; } }
     // Point lights: the ones past the tier's count are hidden, so they leave the shaders' light loops.
     const L = P.lights;
     LT.towers.forEach((l, i) => { l.visible = i < L[0]; if (!l.visible) l.intensity = 0; });

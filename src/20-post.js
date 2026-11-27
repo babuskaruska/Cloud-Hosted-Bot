@@ -341,7 +341,7 @@ function renderFrame() {
   const r = R.renderer, M = R.mats, T = R.rt, cam = R.cam, P = GFX.P || GFX.PRESET.high;
   r.info.reset();
   scheduleShadows(G.phase === 'crumble' || G.phase === 'rise');
-  { const m = LT.moon, mv = SH.uMoonV.value; mv.copy(m.position).sub(m.target.position).normalize().transformDirection(cam.matrixWorldInverse); SH.uMoonC.value.set(m.color.r, m.color.g, m.color.b).multiplyScalar(m.intensity); SH.uGlint.value = !P.glint || R.quality < .75 || R.lite ? 0 : 1; }
+  { const m = LT.moon, mv = SH.uMoonV.value; mv.copy(m.position).sub(m.target.position).normalize().transformDirection(cam.matrixWorldInverse); SH.uMoonC.value.set(m.color.r, m.color.g, m.color.b).multiplyScalar(m.intensity); SH.uGlint.value = !P.glint || R.quality < .75 || R.lite ? 0 : P.glint; }
   r.setRenderTarget(T.scene); r.render(R.scene, cam);
   const px = M.atmo.uniforms.uPx.value.set(1 / R.iw, 1 / R.ih);
   let u = M.atmo.uniforms;
