@@ -6,7 +6,7 @@ const R = {
   sub: new THREE.Vector2(), ditherOfs: new THREE.Vector2(),
   focusZ: 60, fade: 0, exposure: 1.0,
   rt: {}, mats: {}, fsScene: null, fsCam: null, fsMesh: null,
-  NL: 12, lightPos: [], lightCol: [],
+  NL: 12, lightPos: [], lightCol: [], tDraw: 0,
 };
 
 const FS_VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
