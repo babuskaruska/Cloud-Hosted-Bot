@@ -24,7 +24,7 @@ const MON = {
   // Round 4. ram: shoves footmen aside instead of stopping (ram), arrows glance off, fire and blasts hurt more (weak).
   // shaman: hangs back behind the column (back) and wards nearby allies (wardCast). harpy: dives to snatch a footman
   // and drop him (swoop), taking extra damage while low. hound: a fast pack hunter that leaves short fire trails (trail).
-  ram: { name: 'Siege ram', tip: 'Shoves footmen aside. Arrows glance off; fire and blasts break it.', hp: 380, spd: .62, rad: .55, mass: 14, bounty: 28, lives: 2, hitH: .7, top: 1.7, dmg: 14, atkT: 1, eye: [3.4, 1.6, .3], scale: 1.4, armor: .25, weak: { blast: 1.5, fire: 1.6 }, slowRes: .4, ram: { every: 1, push: 3.4 }, death: 'rock', cat: 'siege', rig: 'ram' },
+  ram: { name: 'Siege ram', tip: 'Shoves footmen aside. Arrows glance off; fire and blasts break it.', hp: 380, spd: .62, rad: .55, mass: 14, bounty: 28, lives: 2, hitH: .7, top: 1.7, dmg: 14, atkT: 1, eye: [3.4, 1.6, .3], scale: 1.05, armor: .25, weak: { blast: 1.5, fire: 1.6 }, slowRes: .4, ram: { every: 1, push: 3.4 }, death: 'rock', cat: 'siege', rig: 'ram' },
   shaman: { name: 'Goblin shaman', tip: 'Wards the monsters around it. Kill it first.', hp: 50, spd: 1.05, rad: .25, mass: .8, bounty: 12, lives: 1, hitH: .6, top: 1.2, dmg: 5, atkT: 1.1, eye: [2.2, 3.4, .5], scale: .85, back: 3.5, prio: .6, wardCast: { every: 6, r: 3.3, frac: .35, n: 6 }, death: 'flesh', rig: 'shaman' },
   harpy: { name: 'Harpy', tip: 'Swoops down to snatch a footman. Hit it hard while it is low.', hp: 46, spd: 1.9, rad: .26, mass: .5, bounty: 10, lives: 1, hitH: 0, top: .55, dmg: 8, atkT: 1, eye: [3.4, 2.2, .3], scale: 1.1, fly: true, alt: [2.6, 3.3], flap: 11, swoop: { every: [5, 8], carry: 1.3, drop: .75, low: 1.6 }, death: 'bat', cat: 'air', rig: 'harpy' },
   hound: { name: 'Hell hound', tip: 'Runs in packs and leaves fire that burns your footmen.', hp: 42, spd: 2.55, rad: .29, mass: .9, bounty: 7, lives: 1, hitH: .4, top: .85, dmg: 10, atkT: .7, eye: [3.6, 1.2, .2], scale: 1, trail: { every: .45, r: .42, life: 1.5, dps: 6 }, death: 'fur', cat: 'swarm', rig: 'hound' },
@@ -93,7 +93,7 @@ function blastAround(m, ex) {
   for (const f of G.men) { if (f.dead) continue; const d = Math.hypot(f.x - m.x, f.z - m.z); if (d < ex.r) { f.hp -= ex.men * G.dmgMul * .6; f.flash = 1; f.flinch = 1; if (f.hp <= 0) killFootman(f, (f.x - m.x) / (d || 1), (f.z - m.z) / (d || 1)); } }
 }
 function killMonster(m, kind, dx, dz, tower) {
-  const B = G.B, def = m.def, t = m.type, dth = def.death; if (tower) tower.kills++;
+  const B = G.B, def = m.def, t = m.type, dth = (def.rig && RIG_DEATH[def.rig]) || def.death; if (tower) tower.kills++;
   if (def.boss) { m.dying = 1.9; m.hp = 0; m.foe = null; G.slowmo = 1.4; hitStop(.07, .55); shake(.8); sfx('roar', m.x, m.z, 1, 1); return; }
   G.slain++; G.waveKills++; manaFromKill(m);
   const ix = (dx || 0) * 2.2, iz = (dz || 0) * 2.2, up = kind === 'blast' ? 1.7 : 1, sc = m.scale;
@@ -108,6 +108,7 @@ function killMonster(m, kind, dx, dz, tower) {
   }
   else if (dth === 'ghost') { shatter(e => rigMonster(e), m, [ix * .4, 2.2, iz * .4], { spread: .8, life: .45 }); sfx('batScreech', m.x, m.z, .45, .1); fxTimed(5, m.x, m.y + .8, m.z, 2.4, 2.4, .5, 1.1, 2.2, .9, .3); for (let i = 0; i < 6; i++) fxSmoke(m.x + rr(-.2, .2), m.y + rr(.2, 1.2), m.z + rr(-.2, .2), rr(-.5, .5), rr(.6, 1.6), rr(-.5, .5), rr(.6, 1.1), .4, .7, .3, .42, .6, .4, { drag: 1.5, rise: .3 }); }
   else if (dth === 'wisp') { const c = m.tint || [1, 1, 1]; fxTimed(5, m.x, m.y, m.z, 1.5, 1.5, c[0] * 2, c[1] * 2, c[2] * 2, .9, .22); fxSparks(m.x, m.y, m.z, 7, 3.2, c[0] * 2.4, c[1] * 2.4, c[2] * 2.4, { size: .05, grav: 2 }); sfx('ignite', m.x, m.z, .35, rnd()); }
+  else if (DEATH_FX[dth]) DEATH_FX[dth](m, kind, ix, iz, up);
   else {
     const big = t === 'slime', n = big ? 14 : 7;
     for (let i = 0; i < n; i++) { _tm.compose(_tv.set(m.x + rr(-.2, .2) * sc, m.y + rr(.1, .5) * sc, m.z + rr(-.2, .2) * sc), _tq.identity(), _ts.setScalar(rr(.8, 1.8) * sc)); addDebris(KIT.goo, _tm, null, rr(-3, 3) + ix, rr(2, 5.5), rr(-3, 3) + iz, 0, 2, { goo: 1 }); }
@@ -157,6 +158,7 @@ const RIGS = {
   king(m) { m.weapon = KIT.item.khopesh; m.wScale = 1.25; m.heavy = true; m.crown = true; m.wraps = true; return rigHuman(KIT.giant, SPEC.skel, m); },
   spider: rigSpider, scarab: rigSpider, brood: rigSpider, queen: rigSpider, wolf: rigWolf, wraith: rigWraith, toad: rigToad, wisp: rigWisp,
   gargoyle: m => rigBat(m, KIT.garg, .1, .06),
+  ram: rigRam, shaman: rigShaman, harpy: rigHarpy, hound: rigHound,
 };
 // A monster's model: RIGS[def.rig || type]. Until the round 4 models are in RIGS, RIG_STANDIN draws a tinted stand-in
 // from an existing rig (the tint is applied only here, so the real models keep their own colours).
@@ -174,21 +176,22 @@ const EYES = {
   skel: SKEL_EYE, knight: SKEL_EYE, giant: [.058, .185, .152, .075], ogre: OGRE_EYE, rat: [.05, .03, .42, .05], bat: [.04, .03, .16, .05], slime: [.13, .2, .44, .08], slimelet: [.13, .2, .44, .08],
   ghoul: OGRE_EYE, brute: OGRE_EYE, jotun: OGRE_EYE, golem: [.04, .1, .17, .05], colossus: [.04, .1, .17, .05], necro: SKEL_EYE, drummer: SKEL_EYE, bomber: SKEL_EYE, mummy: SKEL_EYE, king: [.058, .185, .152, .075],
   spider: BUG_EYE, scarab: BUG_EYE, brood: [.05, .055, .19, .022], queen: [.05, .055, .19, .016], wolf: [.05, .27, .63, .04], wraith: [.045, 1.04, .17, .055], toad: [.125, .345, .285, .035], gargoyle: [.045, .15, .28, .045], wisp: null,
+  ram: null, shaman: [.045, .11, .14, .042], harpy: [.03, .265, .1, .03], hound: [.05, .275, .63, .045],
 };
 function drawMonster(m, t) {
   const ec = m.elite ? ELITE_CODE[m.elite] || 0 : 0, f0 = m.flash; if (ec) m.flash = Math.min(1, f0) + ec * 4;
   const M = rigMonster(m); m.flash = f0; if (ec) drawElite(m, t);
   if (m.def.boss && m.vis && !m.entered && !m.dying && !m.fly && m.s > G.B.cave.s + 3) { m.entered = true; bossEntrance(m); }
-  const ey = EYES[m.type] !== undefined ? EYES[m.type] : EYES[EYE_STANDIN[m.type]] || null, c = m.def.eye, sc = m.scale, tw = .8 + .2 * Math.sin(t * 9 + m.lseed * 7), ty = m.type;
+  const rk = m.def.rig || m.type, ey = EYES[rk] !== undefined ? EYES[rk] : EYES[EYE_STANDIN[rk]] || null, c = m.def.eye, sc = m.scale, tw = .8 + .2 * Math.sin(t * 9 + m.lseed * 7), ty = rk;
   if (ey) {
     for (const sg of [-1, 1]) { _tv.set(sg * ey[0], ey[1], ey[2]).applyMatrix4(M); FX.add.push(_tv.x, _tv.y, _tv.z, ey[3] * sc * 1.5, ey[3] * sc * 1.5, 0, 0, c[0], c[1], c[2], tw, 0, 0, 0, 0); }
     _tv.set(0, ey[1], ey[2]).applyMatrix4(M); FX.add.push(_tv.x, _tv.y, _tv.z, ey[3] * sc * 9, ey[3] * sc * 9, 0, 0, c[0] * .3, c[1] * .3, c[2] * .3, .5 * tw, 2, 0, 0, 0);
   }
   if (ty === 'wisp') { const k = m.tint || [1, 1, 1]; FX.add.push(m.x, m.y, m.z, .26, .26, 0, 0, k[0] * 2.2, k[1] * 2.2, k[2] * 2.2, tw, 0, 0, 0, 0); FX.add.push(m.x, m.y, m.z, 1.5, 1.5, 0, 0, k[0] * .5, k[1] * .5, k[2] * .5, .5 * tw, 2, 0, 0, 0); m.lx = m.x; m.ly = m.y; m.lz = m.z; if (rnd() < .3) fxPart(m.x + rr(-.05, .05), m.y + rr(-.05, .05), m.z + rr(-.05, .05), -m.vx * .2, rr(-.2, .2), -m.vz * .2, rr(.3, .6), .05, k[0] * 1.6, k[1] * 1.6, k[2] * 1.6, { drag: 1 }); }
   else if (ty === 'wraith') { const a = m.eth ? .5 + .2 * Math.sin(t * 23) : .16; FX.add.push(m.x, m.y + .75 * sc, m.z, 2.3 * sc, 2.6 * sc, 0, 0, .25, .55, 1.2, a, 2, 0, 0, 0); if (m.eth && rnd() < .3) fxPart(m.x + rr(-.25, .25), m.y + rr(.1, 1.3), m.z + rr(-.25, .25), 0, rr(.3, .9), 0, rr(.3, .6), .05, .5, 1.0, 2.0, { drag: .5 }); }
-  else if (ty === 'necro' || ty === 'queen' || ty === 'king' || ty === 'shaman') { if (m.cast > 0) { const g = ty === 'necro' ? [.4, 1.6, .6] : ty === 'queen' ? [1.2, .5, 1.6] : ty === 'shaman' ? [.5, 1.7, 1.0] : [.4, 1.5, 1.3]; FX.add.push(m.x, m.y + m.hitH * 1.6, m.z, 3.2 * m.cast * sc, 3.2 * m.cast * sc, 0, 0, g[0], g[1], g[2], .28 * m.cast, 2, 0, 0, 0); } }
+  else if (ty === 'necro' || ty === 'queen' || ty === 'king') { if (m.cast > 0) { const g = ty === 'necro' ? [.4, 1.6, .6] : ty === 'queen' ? [1.2, .5, 1.6] : [.4, 1.5, 1.3]; FX.add.push(m.x, m.y + m.hitH * 1.6, m.z, 3.2 * m.cast * sc, 3.2 * m.cast * sc, 0, 0, g[0], g[1], g[2], .28 * m.cast, 2, 0, 0, 0); } }
+  else if (ty === 'ram' || ty === 'shaman' || ty === 'harpy' || ty === 'hound') drawMonster4(m, t, ty, M, tw, sc);
   else if (ty === 'colossus' && rnd() < (m.rage ? .5 : .12)) fxPart(m.x + rr(-.7, .7), m.y + rr(.6, 3), m.z + rr(-.7, .7), rr(-.3, .3), rr(.6, 1.8), rr(-.3, .3), rr(.6, 1.2), rr(.05, .08), 2.6, .9, .15, { drag: .3, wob: 1, rise: .3 });
-  else if (ty === 'hound' && m.vis && frnd() < .45) fxPart(m.x + frr(-.2, .2), m.y + frr(.3, .8), m.z + frr(-.2, .2), frr(-.2, .2), frr(.5, 1.2), frr(-.2, .2), frr(.3, .6), frr(.04, .07), 2.6, .8, .15, { drag: .4, rise: .3 });
   // A shaman's ward (not the shielded elite's, which has its own aura): a soft green-blue shell that pulses when cast.
   if (m.ward > 0 && m.elite !== 'shielded' && (m.vis || m.fly)) { const R0 = Math.max(.35, m.rad * 1.6) * sc / (m.def.scale || 1), f = m.wardFx || 0; m.wardFx = Math.max(0, f - (FX.dt || 0) * 2); FX.add.push(m.x, m.y + (m.fly ? 0 : m.def.top * sc / (m.def.scale || 1) * .45), m.z, R0 * 3.2, R0 * 3.2, 0, 0, .45, 1.25, 1.05, (.16 + .14 * sat(m.ward / (m.wardMax || m.ward))) * tw + .3 * f, 2, 0, 0, 0); }
   if (m.torch && m.flame) { const p = RIGOUT.torch; m.flame.x = p.x; m.flame.y = p.y; m.flame.z = p.z; m.lx = p.x; m.ly = p.y + .2; m.lz = p.z; }
@@ -305,7 +308,10 @@ const MILITIA_TINT = [[1, 1, 1], [.92, 1.04, .86], [1.1, .96, .86], [.95, .93, 1
 function drawFootman(f) {
   const kit = footGear(f);
   if (f.pike) f.lv = damp(f.lv || 0, f.target || f.atk >= 0 ? 1 : 0, 5, FX.dt || 0);
-  rigHuman(kit, SPEC.foot, f);
+  // Held by a harpy (f.carry): drawn lower than the simulated point, so the harpy's talons grip his shoulders
+  // instead of its body sitting on his head, arms thrown up. Drawing only; f.y is unchanged.
+  const hc = f.carry, y0 = f.y; if (hc) { f.y -= .45 * (hc.scale || 1); f.cast = .6; }
+  rigHuman(kit, SPEC.foot, f); f.y = y0; if (hc) f.cast = 0;
   if (f.torch && f.flame) { const p = RIGOUT.torch; f.flame.x = p.x; f.flame.y = p.y; f.flame.z = p.z; f.lx = p.x; f.ly = p.y + .2; f.lz = p.z; }
   if (f.hp < f.maxHp) G.hbars.push({ x: f.x, y: f.y + 1.55 * f.scale, z: f.z, f: sat(f.hp / f.maxHp), boss: false, man: true });
 }
