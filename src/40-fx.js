@@ -274,7 +274,7 @@ class DecalBatch {
     const m = new THREE.ShaderMaterial({
       vertexShader: 'attribute vec4 aCol; varying vec4 vCol; varying vec2 vUv; void main(){ vCol = aCol; vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: `precision highp float; varying vec4 vCol; varying vec2 vUv; ${SPR_NOISE}
-void main(){ float r = length(vUv); float sd = floor(vCol.a) ; float al = fract(vCol.a) * 1.02; float n = noise(vUv * 3.0 + sd * 3.7) * 0.6 + noise(vUv * 7.0 + sd) * 0.4;
+void main(){ float r = length(vUv); float sd = floor(vCol.a + 0.015); float al = fract(vCol.a + 0.015) - 0.015; al = max(al, 0.0) * 1.02; float n = noise(vUv * 3.0 + sd * 3.7) * 0.6 + noise(vUv * 7.0 + sd) * 0.4;
   float a = smoothstep(1.0, 0.35, r + (n - 0.5) * 0.8); float th = atan(vUv.y, vUv.x); a *= 0.75 + 0.25 * noise(vec2(th * 3.0, sd));
   gl_FragColor = vec4(vCol.rgb, a * al); }`,
       transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
@@ -295,11 +295,14 @@ void main(){ float r = length(vUv); float sd = floor(vCol.a) ; float al = fract(
     const C = this.col.array, P = this.pos.array;
     for (let s = 0; s < this.cap; s++) {
       const sl = this.slots[s]; if (sl.dead) continue;
-      sl.life -= dt; const k = sl.life <= 0 ? 0 : Math.min(1, sl.life / sl.fade) * sl.a;
+      sl.life -= dt;
+      // An expired decal is collapsed even when its last fade steps were too small to write (else it lingered
+      // forever at a sliver of alpha, which float rounding could show as hard-edged shards).
+      if (sl.life <= 0) { sl.dead = true; P.fill(-999, s * this.vps * 3, (s + 1) * this.vps * 3); this.pos.addUpdateRange(s * this.vps * 3, this.vps * 3); this.pos.needsUpdate = true; continue; }
+      const k = Math.min(1, sl.life / sl.fade) * sl.a;
       if (Math.abs(k - sl.k) < .004) continue;
       sl.k = k; this.dirty = true;
       for (let v = 0; v < this.vps; v++) { const o = (s * this.vps + v) * 4; C[o] = sl.r; C[o + 1] = sl.g; C[o + 2] = sl.b; C[o + 3] = sl.seed + Math.min(.97, k); }
-      if (sl.life <= 0) { sl.dead = true; P.fill(-999, s * this.vps * 3, (s + 1) * this.vps * 3); this.pos.addUpdateRange(s * this.vps * 3, this.vps * 3); this.pos.needsUpdate = true; }
     }
     if (this.dirty) { this.dirty = false; this.col.needsUpdate = true; }
   }

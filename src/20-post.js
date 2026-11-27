@@ -260,7 +260,7 @@ function renderFrame() {
   u.tColor.value = T.bB.texture; u.uDir.value.set(1.6 / T.bB.width, 0); fsPass(M.blur, T.bB2);
   u.tColor.value = T.bB2.texture; u.uDir.value.set(0, 1.6 / T.bB.height); fsPass(M.blur, T.bB);
   u = M.comp.uniforms; u.tColor.value = T.dof.texture; u.tBloomA.value = T.bA.texture; u.tBloomB.value = T.bB.texture;
-  u.uGrade.value.x = R.exposure * (1 + FX.flash * .9); u.uGrade.value.w = R.fade; u.uRes.value.set(R.iw, R.ih);
+  u.uGrade.value.x = R.exposure * (1 + FX.flash * .5); u.uGrade.value.w = R.fade; u.uRes.value.set(R.iw, R.ih);
   fsPass(M.comp, T.final);
   u = M.up.uniforms; u.tColor.value = T.final.texture; u.uTex.value.set(R.iw, R.ih); u.uOut.value.set(R.dw, R.dh); u.uSeed.value = (SH.uTime.value * 60 % 1000) * 7.13;
   fsPass(M.up, null);

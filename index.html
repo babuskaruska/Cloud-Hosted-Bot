@@ -767,7 +767,7 @@ function renderFrame() {
   u.tColor.value = T.bB.texture; u.uDir.value.set(1.6 / T.bB.width, 0); fsPass(M.blur, T.bB2);
   u.tColor.value = T.bB2.texture; u.uDir.value.set(0, 1.6 / T.bB.height); fsPass(M.blur, T.bB);
   u = M.comp.uniforms; u.tColor.value = T.dof.texture; u.tBloomA.value = T.bA.texture; u.tBloomB.value = T.bB.texture;
-  u.uGrade.value.x = R.exposure * (1 + FX.flash * .9); u.uGrade.value.w = R.fade; u.uRes.value.set(R.iw, R.ih);
+  u.uGrade.value.x = R.exposure * (1 + FX.flash * .5); u.uGrade.value.w = R.fade; u.uRes.value.set(R.iw, R.ih);
   fsPass(M.comp, T.final);
   u = M.up.uniforms; u.tColor.value = T.final.texture; u.uTex.value.set(R.iw, R.ih); u.uOut.value.set(R.dw, R.dh); u.uSeed.value = (SH.uTime.value * 60 % 1000) * 7.13;
   fsPass(M.up, null);
@@ -2570,7 +2570,7 @@ class DecalBatch {
     const m = new THREE.ShaderMaterial({
       vertexShader: 'attribute vec4 aCol; varying vec4 vCol; varying vec2 vUv; void main(){ vCol = aCol; vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: `precision highp float; varying vec4 vCol; varying vec2 vUv; ${SPR_NOISE}
-void main(){ float r = length(vUv); float sd = floor(vCol.a) ; float al = fract(vCol.a) * 1.02; float n = noise(vUv * 3.0 + sd * 3.7) * 0.6 + noise(vUv * 7.0 + sd) * 0.4;
+void main(){ float r = length(vUv); float sd = floor(vCol.a + 0.015); float al = fract(vCol.a + 0.015) - 0.015; al = max(al, 0.0) * 1.02; float n = noise(vUv * 3.0 + sd * 3.7) * 0.6 + noise(vUv * 7.0 + sd) * 0.4;
   float a = smoothstep(1.0, 0.35, r + (n - 0.5) * 0.8); float th = atan(vUv.y, vUv.x); a *= 0.75 + 0.25 * noise(vec2(th * 3.0, sd));
   gl_FragColor = vec4(vCol.rgb, a * al); }`,
       transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
@@ -2591,11 +2591,14 @@ void main(){ float r = length(vUv); float sd = floor(vCol.a) ; float al = fract(
     const C = this.col.array, P = this.pos.array;
     for (let s = 0; s < this.cap; s++) {
       const sl = this.slots[s]; if (sl.dead) continue;
-      sl.life -= dt; const k = sl.life <= 0 ? 0 : Math.min(1, sl.life / sl.fade) * sl.a;
+      sl.life -= dt;
+      // An expired decal is collapsed even when its last fade steps were too small to write (else it lingered
+      // forever at a sliver of alpha, which float rounding could show as hard-edged shards).
+      if (sl.life <= 0) { sl.dead = true; P.fill(-999, s * this.vps * 3, (s + 1) * this.vps * 3); this.pos.addUpdateRange(s * this.vps * 3, this.vps * 3); this.pos.needsUpdate = true; continue; }
+      const k = Math.min(1, sl.life / sl.fade) * sl.a;
       if (Math.abs(k - sl.k) < .004) continue;
       sl.k = k; this.dirty = true;
       for (let v = 0; v < this.vps; v++) { const o = (s * this.vps + v) * 4; C[o] = sl.r; C[o + 1] = sl.g; C[o + 2] = sl.b; C[o + 3] = sl.seed + Math.min(.97, k); }
-      if (sl.life <= 0) { sl.dead = true; P.fill(-999, s * this.vps * 3, (s + 1) * this.vps * 3); this.pos.addUpdateRange(s * this.vps * 3, this.vps * 3); this.pos.needsUpdate = true; }
     }
     if (this.dirty) { this.dirty = false; this.col.needsUpdate = true; }
   }
@@ -3057,14 +3060,14 @@ function initStormMeshes() {
   const v3 = (x, y, z) => ({ value: new THREE.Vector3(x, y, z) }), v4 = () => ({ value: new THREE.Vector4() });
   const u = STORM.u = {
     uTime: SH.uTime, uFade: { value: 0 }, uDeep: v3(.008, .02, .026), uFoam: v3(.4, .46, .5), uMoonDir: v3(0, 1, 0), uMoonCol: v3(1, 1, 1), uAmb: v3(.05, .07, .09),
-    uClear: v3(0, 0, 0), uView: v3(0, 1, 0), uBeacon: v4(), uBeaconCol: v3(1, .6, .3), uBeam: v4(), uFall: v4(), uStrike: v4(), uFlash: { value: 0 }, uSkyCol: v3(.02, .04, .06),
+    uClear: v3(0, 0, 0), uView: v3(0, 1, 0), uBeacon: v4(), uBeaconCol: v3(1, .6, .3), uBeam: v4(), uFall: v4(), uStrike: v4(), uFlash: { value: 0 }, uSkyCol: v3(.02, .04, .06), uSlab: { value: 1 },
   };
   const m = new THREE.ShaderMaterial({
     uniforms: u,
     vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
     fragmentShader: `precision highp float; varying vec3 vW;
 uniform float uTime; uniform float uFade; uniform vec3 uDeep; uniform vec3 uFoam; uniform vec3 uMoonDir; uniform vec3 uMoonCol; uniform vec3 uAmb;
-uniform vec3 uClear; uniform vec3 uView; uniform vec4 uBeacon; uniform vec3 uBeaconCol; uniform vec4 uBeam; uniform vec4 uFall; uniform vec4 uStrike; uniform float uFlash; uniform vec3 uSkyCol;
+uniform vec3 uClear; uniform vec3 uView; uniform vec4 uBeacon; uniform vec3 uBeaconCol; uniform vec4 uBeam; uniform vec4 uFall; uniform vec4 uStrike; uniform float uFlash; uniform vec3 uSkyCol; uniform float uSlab;
 float hh(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float nn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(hh(i), hh(i + vec2(1.0, 0.0)), f.x), mix(hh(i + vec2(0.0, 1.0)), hh(i + vec2(1.0, 1.0)), f.x), f.y); }
@@ -3075,16 +3078,17 @@ void main(){
   vec2 q = max(abs(p) - 18.0, 0.0); float d = length(q) - 1.0 + (n0 - 0.5) * 1.8;
   // Swells roll in toward the cliffs and break: crests near the shore, white water churning at the foot, lace
   // left behind, and whitecaps out at sea.
-  float swell = sin(d * 1.8 - t * 1.6 + n1 * 3.2), near = smoothstep(12.0, 1.0, d);
+  // uSlab: how much of the slab stands (0 while it crumbles away or before it rises), so no surf breaks on nothing.
+  float swell = sin(d * 1.8 - t * 1.6 + n1 * 3.2), near = smoothstep(12.0, 1.0, d) * uSlab;
   // Long wind swells out at sea (running with the wind, toward +x/+z), which catch the moon in streaks.
   float roll = sin(dot(p, vec2(0.62, 0.34)) * 1.1 - t * 1.3 + n0 * 5.0);
   float crest = smoothstep(0.78, 0.97, swell) * near * (0.3 + 0.7 * n2);
-  float churn = smoothstep(1.3, -0.5, d + (n2 - 0.5) * 1.4) * (0.55 + 0.45 * n3);
-  float lace = smoothstep(0.64, 0.8, n2 * 0.65 + n3 * 0.35) * smoothstep(5.0, 0.3, d) * 0.45;
+  float churn = smoothstep(1.3, -0.5, d + (n2 - 0.5) * 1.4) * (0.55 + 0.45 * n3) * uSlab;
+  float lace = smoothstep(0.64, 0.8, n2 * 0.65 + n3 * 0.35) * smoothstep(5.0, 0.3, d) * 0.45 * uSlab;
   float cw = nn(vec2(dot(p, vec2(0.62, 0.34)) * 1.6 - t * 0.9, dot(p, vec2(-0.34, 0.62)) * 0.45 + t * 0.1));
   float caps = smoothstep(0.84, 0.97, cw * 0.55 + n1 * 0.25 + (roll * 0.5 + 0.5) * 0.2) * 0.22;
   float foam = clamp(max(max(churn, crest), max(lace, caps)), 0.0, 1.0);
-  if (uFall.w > 0.0) foam = max(foam, smoothstep(2.4, 0.2, length(p - uFall.xy) + (n3 - 0.5) * 1.2) * uFall.w);
+  if (uFall.w > 0.0) foam = max(foam, smoothstep(2.4, 0.2, length(p - uFall.xy) + (n3 - 0.5) * 1.2) * uFall.w * uSlab);
   // A bumped normal from the swells and the noise (screen-space slopes, as in the terrain shader).
   float h = swell * 0.25 * near + roll * 0.3 + n1 * 0.35 + n2 * 0.1;
   vec3 dPx = dFdx(vW), dPy = dFdy(vW), N0 = vec3(0.0, 1.0, 0.0), R1 = cross(dPy, N0), R2 = cross(N0, dPx);
@@ -3128,6 +3132,8 @@ void main(){
 // Called by setBiomeLook when a board becomes the current one.
 function setStormLand(B, instant) {
   const b = B.bio; STORM.bio = b; STORM.B = B; STORM.want = b.sea ? 1 : 0;
+  // The lighthouse lamp burns paler and its light stops short of the back cliffs, which stay cold, wet rock.
+  LT.beacon.color.setHex(b.lighthouse ? 0xffb47e : 0xff8a3a); LT.beacon.distance = b.lighthouse ? 36 : 80;
   if (b.sea && !STORM.sea) initStormMeshes();
   if (b.sea) {
     STORM.level = b.sea[0]; STORM.sea.position.y = STORM.level;
@@ -3141,11 +3147,11 @@ function setStormLand(B, instant) {
 }
 
 // Flash envelope: quick rise, exponential fall.
-function flashEnv(u, d) { return u < 0 ? 0 : Math.min(1, u / .018) * Math.exp(-u / d); }
+function flashEnv(u, d) { return u < 0 ? 0 : Math.min(1, u / .045) * Math.exp(-u / d); }
 // Starts a flash: a double (sometimes triple) flicker. dist 0 (on the board) .. 1 (far out at sea).
 function stormFlash(x, z, dist, power) {
-  const a = power * lerp(1, .5, dist), p2 = frr(.12, .22), ps = [[0, .055, a], [p2, frr(.07, .12), a * frr(.6, 1.05)]];
-  if (frnd() < .45) ps.push([p2 + frr(.16, .3), frr(.1, .2), a * frr(.25, .5)]);
+  const a = power * lerp(1, .5, dist), p2 = frr(.12, .22), ps = [[0, .07, a], [p2, frr(.08, .12), a * frr(.3, .5)]];
+  if (frnd() < .45) ps.push([p2 + frr(.16, .3), frr(.1, .2), a * frr(.12, .25)]);
   const fl = { t: 0, ps, x, z, dist, power, bolt: null };
   STORM.flashes.push(fl);
   G.flashN = (G.flashN || 0) + 1; G.flashT = 0; G.flashD = dist; G.flashX = x; G.flashZ = z;
@@ -3187,10 +3193,10 @@ function drawBolt(segs, k, w0, w1) {
 // FX.lightningAt(x, z, power): a bolt from the sky onto that ground point. Looks only.
 FX.lightningAt = function (x, z, power = 1) {
   if (!G.B || !isFinite(x) || !isFinite(z) || G.phase === 'crumble' || G.phase === 'rise') return;
-  const y = G.B.heightAt(x, z), fl = stormFlash(x, z, 0, 1.1 * power);
+  const y = G.B.heightAt(x, z), fl = stormFlash(x, z, 0, .6 * power);
   fl.bolt = makeBolt([x + frr(-4, 4), y + 26, z + frr(-4, 4)], [x, y + .05, z], .22, 3); fl.w = [.075, .5];
   fl.strike = [x, z];
-  lightFlash(x, y + 2.2, z, 0xc4dcff, 1500 * power, .32, 26);
+  lightFlash(x, y + 2.2, z, 0xc4dcff, 1000 * power * (.4 + .6 * (FX.flashK === undefined ? 1 : FX.flashK)), .32, 26);
   fxTimed(5, x, y + .5, z, 4.6, 4.6, 2.2, 2.6, 3.6, 1, .16);
   fxTimed(4, x, y + .08, z, 4.4, 4.4, 1.0, 1.3, 2.0, .7, .4, { ground: true });
   fxTimed(2, x, y + .3, z, 6, 6, .5, .65, 1.1, .8, .5);
@@ -3231,6 +3237,9 @@ function updateStorm(dt) {
   k *= fk; STORM.k = k; G.flashK = k;
   if (k > .002) stormLook(k);
   const sea = STORM.sea; if (!sea) return;
+  // The slab (and the lighthouse on it) goes as the land crumbles and comes back as the next one rises.
+  const slabW = G.phase === 'crumble' ? (G.phaseT < .6 ? 1 : 0) : G.phase === 'rise' ? (G.phaseT > 1.4 ? 1 : 0) : 1;
+  STORM.slab = damp(STORM.slab === undefined ? 1 : STORM.slab, slabW, slabW ? 1.2 : 2.2, dt);
   sea.visible = STORM.vis > .004; STORM.beams.visible = sea.visible && !!b.lighthouse;
   if (!sea.visible) return;
   const u = STORM.u, mp = LT.moon.position, ml = mp.length() || 1, cl = R.renderer.getClearColor(_stc);
@@ -3239,13 +3248,13 @@ function updateStorm(dt) {
   u.uAmb.value.set(LT.hemi.color.r, LT.hemi.color.g, LT.hemi.color.b).multiplyScalar(LT.hemi.intensity * .09);
   u.uClear.value.set(cl.r, cl.g, cl.b); { const sk = SH.uSky.value; u.uSkyCol.value.set(sk.r, sk.g, sk.b); }
   u.uView.value.set(Math.cos(CAM.elev) * Math.sin(CAM.yaw), Math.sin(CAM.elev), Math.cos(CAM.elev) * Math.cos(CAM.yaw));
-  u.uFlash.value = k; u.uStrike.value.set(sx, sz, 0, sk * fk);
+  u.uFlash.value = k; u.uSlab.value = STORM.slab; u.uStrike.value.set(sx, sz, 0, sk * fk);
   const bp = LT.beaconPos || { x: 0, y: 0, z: 0 }, bi = LT.beacon.intensity;
   u.uBeacon.value.set(bp.x, bp.y + .5, bp.z, bi); u.uBeaconCol.value.set(LT.beacon.color.r, LT.beacon.color.g, LT.beacon.color.b);
   if (STORM.fall) u.uFall.value.set(STORM.fall[0], STORM.fall[1], 0, 1); else u.uFall.value.set(0, 0, 0, 0);
   // Lighthouse beams: two opposite beams turning once every nine seconds, as bright as the beacon burns.
   STORM.beamA = (STORM.beamA + dt * TAU / 9) % TAU;
-  const on = b.lighthouse ? LT.beaconOn * (.35 + .65 * LT.beaconLevel) : 0;
+  const on = b.lighthouse ? LT.beaconOn * (.35 + .65 * LT.beaconLevel) * STORM.slab : 0;
   u.uBeam.value.set(bp.x, bp.z, STORM.beamA, on * STORM.vis);
   const bm = STORM.beams; bm.position.set(bp.x, bp.y + 1.2, bp.z); bm.rotation.set(0, -STORM.beamA, 0);
   STORM.bu.uK.value = .085 * on * STORM.vis * (1 - .5 * sat(k));
@@ -3270,14 +3279,14 @@ function updateStorm(dt) {
 // The flash on top of the land's look (called after applyLook and eventLook each step).
 function stormLook(k) {
   const m = LT.moon, h = LT.hemi, c = Math.min(1, k);
-  m.intensity += 3.8 * k; m.color.setRGB(lerp(m.color.r, .8, c), lerp(m.color.g, .88, c), lerp(m.color.b, 1, c));
-  h.intensity += 1.2 * k; h.color.setRGB(lerp(h.color.r, .7, c * .6), lerp(h.color.g, .8, c * .6), lerp(h.color.b, 1, c * .6));
+  m.intensity += 2.4 * k; m.color.setRGB(lerp(m.color.r, .8, c), lerp(m.color.g, .88, c), lerp(m.color.b, 1, c));
+  h.intensity += .8 * k; h.color.setRGB(lerp(h.color.r, .7, c * .6), lerp(h.color.g, .8, c * .6), lerp(h.color.b, 1, c * .6));
   const a = R.mats.atmo.uniforms.uMistAmb.value; a.set(a.x + .16 * k, a.y + .2 * k, a.z + .28 * k);
   const s = SH.uSky.value; s.setRGB(s.r + .16 * k, s.g + .2 * k, s.b + .28 * k);
   const cl = R.renderer.getClearColor(_stc); R.renderer.setClearColor(_stc.setRGB(cl.r + .02 * k, cl.g + .028 * k, cl.b + .045 * k), 1);
   const w = WX.u.uAmb.value; w.set(w.x + .9 * k, w.y + 1.02 * k, w.z + 1.3 * k);
   const fa = FX.alpha.mesh.material.uniforms.uAmb.value; fa.set(fa.x + .15 * k, fa.y + .18 * k, fa.z + .24 * k);
-  R.exposure *= 1 + .18 * k;
+  R.exposure *= 1 + .08 * k;
 }
 window.__cwStorm = STORM; // test hook
 
@@ -5348,7 +5357,10 @@ const EYES = {
 // earlier step of a 2x/3x frame whose picture is never shown); _tier = the shadow tier of its parts (PartBatch).
 function drawMonster(m, t) {
   if (m._lod === 2) { drawMonsterQuiet(m); return; }
-  const ec = m.elite ? ELITE_CODE[m.elite] || 0 : 0, f0 = m.flash; if (ec) m.flash = Math.min(1, f0) + ec * 4;
+  // Big bodies are hit almost every frame; a full hit flash would wash them out to a flat cream silhouette.
+  const ec = m.elite ? ELITE_CODE[m.elite] || 0 : 0, f0 = m.flash, fk = m.def.boss ? .3 : m.scale > 1.4 ? .6 : 1;
+  if (fk < 1) m.flash = f0 * fk;
+  if (ec) m.flash = Math.min(1, m.flash) + ec * 4;
   PartBatch.tier = m._tier || 0; PartBatch.mask = m._smask === undefined ? 255 : m._smask; PartBatch.smallOff = DRAW.crowd;
   const M = rigMonster(m); PartBatch.tier = 0; PartBatch.mask = 255; PartBatch.smallOff = false; m.flash = f0; if (ec) drawElite(m, t);
   if (m.def.boss && m.vis && !m.entered && !m.dying && !m.fly && m.s > G.B.cave.s + 3) { m.entered = true; bossEntrance(m); }
@@ -5895,17 +5907,36 @@ function updateTides(dt) {
     if (w.t >= w.dur + .3) swapRemove(T, i);
   }
 }
-// The wave's look (effects stream only): a churning wall of spray across the road at the front with a pale foam crest,
-// spray and droplets thrown forward, shrinking as the wave runs out.
+// The wave's look (effects stream only): a dark green-blue wall of water across the road at the front, a pale
+// crest that leans forward over it, a wet sheet of water behind it, and spray thrown ahead; it shrinks as it runs out.
+const _tdq = { x: 0, y: 0, z: 0, tx: 0, tz: 0 };
 function tideFX(w, B, dt) {
-  const p = pathAt(B, w.front, _tdp), k = 1 - .55 * sat(w.t / w.dur), tx = p.tx, tz = p.tz;
-  w.acc += dt * 120;
-  while (w.acc >= 1) {
-    w.acc -= 1; const lat = frr(-1.2, 1.2) * ROAD_HALF, x = p.x - tz * lat + tx * frr(-.3, .3), z = p.z + tx * lat + tz * frr(-.3, .3), v = frr(1.5, 3.5), h = frr(0, 1.4) * k;
-    fxSmoke(x, p.y + .15 + h, z, tx * v, frr(.4, 1.6) * k, tz * v, frr(.35, .7), frr(.3, .55) * k + .18, 1.7, .6, .84, .95, .75, { drag: 3 });
-    if (frnd() < .5) fxPart(x, p.y + .2 + h, z, tx * v * 1.6 + frr(-.7, .7), frr(2, 5) * k, tz * v * 1.6 + frr(-.7, .7), frr(.4, .8), frr(.035, .06), .9, 1.3, 1.45, { grav: 10, drag: .3, streak: 1 });
+  const u = sat(w.t / w.dur), p = pathAt(B, w.front, _tdp), k = 1 - .55 * u, tx = p.tx, tz = p.tz, AL = FX.alpha, SG = FX.segs, T = SH.uTime.value;
+  // Behind the front: the road under a sheet of churned water, fading back towards where the wave rose.
+  for (let s = w.front - .7, n = 0; s > w.s0 - .3 && n < 9; s -= .9, n++) {
+    const q = pathAt(B, s, _tdq), f = 1 - n / 9;
+    AL.push(q.x, q.y + .06, q.z, ROAD_HALF * 2.6, ROAD_HALF * 2.6, n * 1.7 + T * .4, 0, .12, .32, .36, .6 * f * k, 0, n * 3.1, .35, 1);
   }
-  for (let j = -3; j <= 3; j++) { const lat = j / 3 * ROAD_HALF * 1.05; FX.add.push(p.x - tz * lat, p.y + .3 + .5 * k, p.z + tx * lat, 1.3, .9 * k, 0, 0, .45, .85, 1, .8 * k, 2, 0, 0, 0); }
+  // The wall: two rows of green-blue water, then the foam crest higher up and leaning forward, with glints.
+  for (let j = -4; j <= 4; j++) {
+    const lat = j / 4 * ROAD_HALF * 1.1, bob = Math.sin(T * 7 + j * 1.3) * .1, x = p.x - tz * lat, z = p.z + tx * lat, sd = j * 2.3 + w.s0;
+    AL.push(x - tx * .3, p.y + .5 * k, z - tz * .3, 1.4 * k + .3, 1.4 * k + .3, sd, 0, .16, .42, .48, .92, 0, sd, .25, 0);
+    AL.push(x - tx * .1, p.y + (1.2 + bob) * k, z - tz * .1, 1.2 * k + .25, 1.1 * k + .25, sd + 1, 0, .3, .62, .68, .9, 0, sd + 1, .3, 0);
+    AL.push(x + tx * .25, p.y + (1.75 + bob) * k, z + tz * .25, .95 * k + .2, .7 * k + .15, sd + 2, 0, 1.5, 1.7, 1.75, .95, 0, sd + 2, .35, 0);
+    FX.add.push(x + tx * .3, p.y + (1.85 + bob) * k, z + tz * .3, .9 * k + .3, .5 * k + .2, 0, 0, .35, .55, .6, .45 * k, 2, 0, 0, 0);
+  }
+  // A bright lip along the crest.
+  for (let j = -4; j < 4; j++) {
+    const l0 = j / 4 * ROAD_HALF * 1.1, l1 = (j + 1) / 4 * ROAD_HALF * 1.1, b0 = Math.sin(T * 7 + j * 1.3) * .1, b1 = Math.sin(T * 7 + (j + 1) * 1.3) * .1;
+    SG.push(p.x - tz * l0 + tx * .35, p.y + (1.95 + b0) * k, p.z + tx * l0 + tz * .35, .08, p.x - tz * l1 + tx * .35, p.y + (1.95 + b1) * k, p.z + tx * l1 + tz * .35, .08, .6, .85, .95, .8 * k);
+  }
+  w.acc += dt * 60;
+  while (w.acc >= 1) {
+    w.acc -= 1; const lat = frr(-1.2, 1.2) * ROAD_HALF, x = p.x - tz * lat + tx * frr(0, .4), z = p.z + tx * lat + tz * frr(0, .4), v = frr(1.5, 3.5), h = frr(1.3, 2.1) * k;
+    fxSmoke(x, p.y + h, z, tx * v, frr(.4, 1.4) * k, tz * v, frr(.35, .6), frr(.25, .45) * k + .12, 1.4, .62, .78, .84, .6, { drag: 3 });
+    if (frnd() < .7) fxPart(x, p.y + .2 + h, z, tx * v * 1.6 + frr(-.7, .7), frr(2, 5) * k, tz * v * 1.6 + frr(-.7, .7), frr(.4, .8), frr(.035, .06), .8, 1.15, 1.3, { grav: 10, drag: .3, streak: 1 });
+  }
+  for (let j = -3; j <= 3; j++) { const lat = j / 3 * ROAD_HALF * 1.05; FX.add.push(p.x - tz * lat, p.y + .3 + .5 * k, p.z + tx * lat, 1.3, .9 * k, 0, 0, .2, .5, .6, .5 * k, 2, 0, 0, 0); }
 }
 
 function buildWave(k, level) {
@@ -6635,7 +6666,7 @@ function eventLook() {
   if (L.wind) { const rx = Math.cos(CAM.yaw), rz = -Math.sin(CAM.yaw), va = WX.u.uVelA.value, vb = WX.u.uVelB.value, s = L.wind * a; va.set(lerp(va.x, rx * s * .7, a), va.y, lerp(va.z, rz * s * .7, a)); vb.set(lerp(vb.x, rx * s, a), lerp(vb.y, -.15, a), lerp(vb.z, rz * s, a)); }
   // Light: darker and tinted, with a slow red pulse for the lava. The lift tints the shadows (added in the comp pass).
   const pul = L.pulse ? .75 + .25 * Math.sin(G.t * 5.3) * Math.sin(G.t * 2.1 + 1) : 1, c = R.mats.comp.uniforms, lf = c.uLift.value;
-  R.exposure *= lerp(1, L.expo, a) * (L.flash ? 1 + .9 * (ev.flash || 0) : 1); c.uGrade.value.y *= lerp(1, L.sat, a);
+  R.exposure *= lerp(1, L.expo, a) * (L.flash ? 1 + .2 * (ev.flash || 0) * FX.flashK : 1); c.uGrade.value.y *= lerp(1, L.sat, a);
   lf.set(lf.x + L.lift[0] * a * pul, lf.y + L.lift[1] * a * pul, lf.z + L.lift[2] * a * pul);
   LT.moon.intensity *= lerp(1, L.moon, a); LT.hemi.intensity *= lerp(1, L.hemi, a);
   if (L.hemiCol) { const h = LT.hemi.color, hc = L.hemiCol; h.setRGB(h.r * lerp(1, hc[0], a), h.g * lerp(1, hc[1], a), h.b * lerp(1, hc[2], a)); }

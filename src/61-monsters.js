@@ -189,7 +189,10 @@ const EYES = {
 // earlier step of a 2x/3x frame whose picture is never shown); _tier = the shadow tier of its parts (PartBatch).
 function drawMonster(m, t) {
   if (m._lod === 2) { drawMonsterQuiet(m); return; }
-  const ec = m.elite ? ELITE_CODE[m.elite] || 0 : 0, f0 = m.flash; if (ec) m.flash = Math.min(1, f0) + ec * 4;
+  // Big bodies are hit almost every frame; a full hit flash would wash them out to a flat cream silhouette.
+  const ec = m.elite ? ELITE_CODE[m.elite] || 0 : 0, f0 = m.flash, fk = m.def.boss ? .3 : m.scale > 1.4 ? .6 : 1;
+  if (fk < 1) m.flash = f0 * fk;
+  if (ec) m.flash = Math.min(1, m.flash) + ec * 4;
   PartBatch.tier = m._tier || 0; PartBatch.mask = m._smask === undefined ? 255 : m._smask; PartBatch.smallOff = DRAW.crowd;
   const M = rigMonster(m); PartBatch.tier = 0; PartBatch.mask = 255; PartBatch.smallOff = false; m.flash = f0; if (ec) drawElite(m, t);
   if (m.def.boss && m.vis && !m.entered && !m.dying && !m.fly && m.s > G.B.cave.s + 3) { m.entered = true; bossEntrance(m); }
