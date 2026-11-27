@@ -141,7 +141,14 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
   - **Mira:** `MON.leviathan` (The Drowned King: summons `drowned`, tidal wave every 12 s, enrage), `MON.drowned`, the thunderstorm event in `63-events.js`, and `validSave` re-anchoring old 5-land saves by land key.
   - **Echo:** storm music in A Aeolian, rain, surf and thunder synced to `G.flashT`, the leviathan theme and sting, and the sounds `tidalWave`, `thunder` and `thunderstorm`.
 - QA smoke-tests 6 lands. Sims: no defeats.
-- **Round 7 (in progress): bug bash only, no new features.**
+
+## Round 7 results: bug bash (merged; build version 9, the morning build)
+
+- **Echo (7 fixes):** thunder now follows `G.flashD`; no lost or phantom thunder; the tidal-wave crash lands on time; no event chime over the defeat stinger; no double elite cue; the iPhone resume fades in instead of blasting; the unlock path is hardened.
+- **Ash (6 fixes):** decals that never cleared; bosses washed out by the hit flash; the lightning strobe softened (and it follows `prefers-reduced-motion`); a real-looking tidal wave; no warm light on the storm back cliffs; surf and beams fade with the slab.
+- **Mira (6 fixes):** iPad menus no longer let taps through to buttons; late boss escorts capped (no more 6-minute boss waves from land 9 on; starts on land 5); a land event after Play again; Esc no longer deletes a save; no panning behind panels; no tap-through on Continue.
+- **Forge:** the coin sound uses `frnd()` (replay determinism).
+- **Known minor, open:** number keys or R on the defeat screen switch to manual; during the post-defeat crumble the HUD shows stale lives and gold; on a phone the toast and spell bar slightly overlap the lower board; at 3× about half the thunderstorm strikes skip their own thunder (by design spacing); a frosted tidal wave keeps roaring.
 
 ## Next
 
