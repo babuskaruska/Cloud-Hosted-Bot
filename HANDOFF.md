@@ -94,7 +94,22 @@ Mira designs and Ash models four new monsters. Mira adds a `MON` entry with `rig
 - `'harpy'`: a flyer that swoops down and snatches a footman.
 - `'hound'`: a hell hound, fast, that leaves short fire trails (uses `G.fires`).
 
+## Round 4 results (merged; build version 6)
+
+- **Mira:**
+  - New monsters ram, shaman, harpy and hound, with behaviour, AI awareness and land preferences.
+  - UI fixes: coins slide under the stats plate; boss labels sit below the plates; the desktop key hint shows on load.
+- **Ash:** models for all four (`RIGS.ram`, `RIGS.shaman`, `RIGS.harpy`, `RIGS.hound`) with deaths through `RIG_DEATH` / `DEATH_FX`; fixed the unlit left wings on bats and gargoyles; ram `scale` set to 1.05.
+- **Echo:** self-detecting monster sounds (watching `G.mons`), first-sighting cues, ember drums louder on phone speakers.
+- **Forge:**
+  - Removed the stand-in sounds that doubled Echo's.
+  - With the machine quiet, the render-cost bench is the same as before round 3 (the apparent slowdown came from agents sharing the CPU).
+  - Re-saved the baseline.
+- **Perf note:** measure render cost only while no other agents are running (use `../bench2.js`-style A/B in one browser).
+
 ## Next
+
+- Round 5 ideas: save and continue a run (phones lose progress when the tab is closed), phone performance with LOD or fewer shadows in big crowds, a sound check with the real new monsters, harpy close-up polish.
 
 - Round 3: polish and bug bash.
   - **Mira:** settings panel (volume sliders through `AU.setVolume`, quality), a run summary on defeat, the human first-time experience, balance for a human player who starts manually.

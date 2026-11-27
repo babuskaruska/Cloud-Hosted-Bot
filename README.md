@@ -8,6 +8,24 @@ A handful of firelit towers hold the great beacon of a ruined keep against endle
 
 > Imported from [kevintngo/cinderwatch](https://github.com/kevintngo/cinderwatch) (MIT). All credit to the original author.
 
+The play link above is the original game. The build in this repository adds the features below; open `index.html` to play it.
+
+## What's new in this build
+
+- **Bigger battles:** up to 260 monsters alive at once (190 on phones), horde waves, and elite monsters (burning, shielded, hasted, splitting).
+- **Longer lands, a real economy:**
+  - 8 waves per land, with the boss on the last.
+  - Gold to max your towers on the first battlefield.
+  - Repair the beacon (`R`) when it runs low.
+- **Tower branches:** at max level each tower picks one of two paths: Longbow or Volley, Mortar or Firebomb, Tempest or Frost, Knights or Pikes. Each branch has its own model, and overcharge stacks go on top.
+- **Spells, fuelled by mana from kills:** Meteor (`Q`), Frost (`E`) and Rally (`T`).
+- **Land events:** a rockslide, blizzard, bog fog, lava surge or sandstorm strikes once per battlefield.
+- **Four new monsters:** the siege ram, the goblin shaman that wards its allies, the harpy that snatches footmen, and hell hounds that leave fire.
+- **Feel:** camera shake, hit-stop, gore, ground fire, boss entrances, chain explosions, knights, pikemen and militia footmen.
+- **Sound:** music that follows the danger, with its own mode and drum kit for each land; boss themes and stings; land ambience; and fanfares for clearing a land or losing.
+- **Settings** (gear button or `O`): volume, graphics quality and a How to play page. A run summary appears on defeat.
+- **Testing:** `node tools/qa.js` runs smoke tests in every land, sims played by the AI commander, and a render-cost check against a saved baseline.
+
 ![A bone giant falls apart between the towers](media/screenshot.jpg)
 
 ## What is in it
