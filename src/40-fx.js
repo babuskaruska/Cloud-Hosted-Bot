@@ -79,7 +79,7 @@ function updateLights(dt, t, focusX, focusZ) {
     const l = LT.towers[i], e = LT.emitters[i];
     if (e && e.alive) {
       e.fl = .86 + .1 * n1(t * 7 + e.seed, e.seed) + .05 * n1(t * 19 + e.seed, e.seed + 1);
-      l.position.set(e.x, e.y, e.z); l.color.setRGB(e.r, e.g, e.b); l.distance = e.range;
+      l.position.set(e.x, e.y, e.z); l.color.setRGB(e.r, e.g, e.b); l.distance = e.range * (1 - .3 * (G.eclA || 0)); // Eclipse shrinks tower light
       l.intensity = e.I * e.on * e.fl * (1 - .68 * (e._spot || 0));
     } else l.intensity = 0;
   }
@@ -649,7 +649,7 @@ function drawFrozen(m, sc) {
 // cracks with heaved slabs, a dust ring rolls out, a light flare in the boss's colour, a short flash and shake,
 // and the camera is asked to frame the boss for a moment (CAM.ent, read by updateCamera; skipped while the
 // player holds the view). Visual only: effects random stream, no hit-stop, so the simulation is unchanged.
-const BOSS_GLOW = { giant: [1.2, .95, .6], ogre: [1.3, .8, .45], jotun: [.55, .9, 1.5], queen: [1.1, .45, 1.4], colossus: [1.8, .6, .18], king: [.45, 1.4, 1.15] };
+const BOSS_GLOW = { giant: [1.2, .95, .6], ogre: [1.3, .8, .45], jotun: [.55, .9, 1.5], queen: [1.1, .45, 1.4], colossus: [1.8, .6, .18], king: [.45, 1.4, 1.15], leviathan: [.4, 1.3, 1.25] };
 FX.bossIn = [];
 function bossEntrance(m) {
   if (!G.B || G.phase !== 'play') return;
@@ -672,6 +672,7 @@ function bossEntrance(m) {
   for (let i = 0; i < 10; i++) { _spM.compose(_spV.set(x + frr(-.8, .8), gy + .3, z + frr(-.8, .8)), _spQ.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _spS.setScalar(frr(.6, 1.2))); addDebris(KIT.rubble, _spM, [.5, .46, .42], frr(-3, 3), frr(3, 7), frr(-3, 3), frr(4, 10), frr(1.5, 2.6), { extra: 1 }); }
   FX.decals.add(FX.groundAt, x, z, 2.6, .02, .017, .015, .7, 40);
   if (!CAM.man) CAM.ent = { m, t: 0, dur: 1.6 };
+  if (UI.bossCard) UI.bossCard(m.type, m.affixName || m.def.name, BOSS_TITLE[m.type]);
 }
 function updateBossIn(dt) {
   const L = FX.bossIn, A = FX.add, SG = FX.segs;

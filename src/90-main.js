@@ -154,13 +154,15 @@ function step(rdt) {
     for (const f of G.men) if (!f.dead) drawFootman(f);
     R.tDraw += performance.now() - td;
     if (G.phase === 'play') {
-      const k0 = (G.gold >= 70 ? 1 : .5) * (UI.manual ? 1.25 : 1);
+      // With a tower armed (keys 1-4) every free pad lights up: gold-green where it can be built, a dim red when the gold is short.
+      const ak = UI.armed && TOWER[UI.armed], aok = ak && (G.gold >= ak.cost[0] || G.freeTowers > 0), ac = !ak ? [2.4, 1.55, .62] : aok ? [1.6, 2.3, .7] : [2.2, .5, .3];
+      const k0 = ak ? (aok ? 1.9 : 1.1) : (G.gold >= 70 ? 1 : .5) * (UI.manual ? 1.25 : 1);
       for (let i = 0; i < B.pads.length; i++) {
         const p = B.pads[i]; if (p.tower) continue;
         _mm.compose(_mv.set(p.x, p.y, p.z), _mq.setFromAxisAngle(_upv, p.face + Math.sin(G.t * 1.3 + i * 2.1) * .3), _ms); KIT.marker.put(_mm, 0, null);
         // A soft gold ring on each free pad, and a faint ripple that keeps running outward from it ("build here").
         const w = .5 + .5 * Math.sin(G.t * 2.1 + i * 1.7), sz = 3.7 + .25 * w, a = (.27 + .2 * w) * k0, ph = (G.t * .42 + i * .37) % 1;
-        FX.add.push(p.x, p.y + .07, p.z, sz, sz, 0, 0, 2.4, 1.55, .62, a, 4, 0, .52, 1);
+        FX.add.push(p.x, p.y + .07, p.z, sz, sz, 0, 0, ac[0], ac[1], ac[2], a, 4, 0, .52, 1);
         FX.add.push(p.x, p.y + .07, p.z, sz * 1.08, sz * 1.08, 0, 0, 2.1, 1.5, .75, .2 * k0 * smooth(0, .15, ph), 4, 0, .18 + ph * .72, 1);
       }
     }
@@ -223,7 +225,8 @@ function frame(now) {
   const raw = (now - _last) / 1000, rdt = Math.min(.05, Math.max(.001, raw)); _last = now; R.frameDt = rdt;
   if (G.paused) { FX.shake = 0; updateShake(rdt); updateCamera(rdt); UI.update(rdt); AU.update(rdt); } else { for (let i = 0; i < G.speed; i++) { R.skipDraw = i < G.speed - 1; step(rdt); } R.skipDraw = false; }
   R.fade = Math.min(1, R.fade + rdt * 1.6);
-  applyCamera(); renderFrame(); UI.draw();
+  CINE.update(rdt);
+  applyCamera(); renderFrame(); UI.draw(); CINE.drawHud(); CINE.restore();
   if (document.hidden || raw > .25) { _acc = 0; _frames = 0; return; }
   _acc += raw; _frames++;
   if (_acc >= 2) {
@@ -265,6 +268,7 @@ function boot() {
   window.addEventListener('pagehide', saveOnHide);
   for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => setTimeout(resizeRenderer, 60));
   window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, render() { applyCamera(); renderFrame(); }, autoScale, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, save: { SAVE, snapshot, write: writeSave, read: continueOffer, valid: validSave, clear: clearSave, restore: restoreRun, onHide: saveOnHide }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
+  window.__cw.CINE = CINE; window.__cw.cineRun = (sec, dt = 1 / 30) => { for (let i = 0, n = Math.round(sec / dt); i < n; i++) { R.frameDt = dt; step(dt); CINE.update(dt); if (i === n - 1) { R.fade = 1; applyCamera(); renderFrame(); UI.draw(); CINE.drawHud(); } CINE.restore(); } return CINE.cur ? CINE.cur.t : -1; }; window.__cw.bossPortrait = bossPortrait; window.__cw.BOSSCARD = BOSSCARD;
   window.__cw.META = META; window.__cw.STORY = STORY; window.__cw.MENU = MENU; window.__cw.TUT = TUT;
   window.__cw.meta = { startRun, startDemo, abandonRun, bankRun, buyUpgrade, applyMeta, embersFor, heatRules, UPGRADES, HEAT, saveMeta, loadMeta, rerollMods, activeMods };
   // The main menu over the AI demo (Continue there replaces the old "Welcome back" offer), except in test sessions:
@@ -276,6 +280,7 @@ function boot() {
   if (HASH.phase) setPhase(HASH.phase);
   if (HASH.cam) { const c = HASH.cam.split(',').map(Number); window.__cw.lock = c; }
   const ld = document.getElementById('load'); if (ld) ld.remove();
+  if (HASH.cine) setTimeout(() => CINE.play(HASH.cine, () => { window.__cineDone = (window.__cineDone || 0) + 1; }), +(HASH.cinedelay || 300));
   if (HASH.manual) return;
   _last = performance.now();
   requestAnimationFrame(frame);

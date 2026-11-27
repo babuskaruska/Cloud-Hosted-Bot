@@ -129,6 +129,13 @@ const WX_KEYS = ['sizeA', 'sizeB', 'colA', 'colB', 'alA', 'alB'], wxU = k => WX.
 function eventLook() {
   const ev = G.event, B = G.B; if (!B || !WX.u) return;
   drawEventFX(ev, B);
+  // Eclipse mutator (64-endless.js): the land fades darker and colder over a few seconds; tower lights shrink in 60-towers.
+  G.eclA = (G.eclA || 0) + ((G.eclipse && G.phase !== 'menu' ? 1 : 0) - (G.eclA || 0)) * Math.min(1, .016 * 1.5);
+  if (G.eclA > .002) {
+    const ea = G.eclA, lf = R.mats.comp.uniforms.uLift.value;
+    R.exposure *= lerp(1, .8, ea); LT.moon.intensity *= lerp(1, .4, ea); LT.hemi.intensity *= lerp(1, .72, ea);
+    lf.set(lf.x - .004 * ea, lf.y - .002 * ea, lf.z + .01 * ea);
+  }
   if (!ev || ev.amt <= 0) { if (_evLookOn) { _evLookOn = false; const w = B.bio.wx; WX.u.uN.value.fromArray(w.n); WX.u.uVelA.value.fromArray(w.velA); WX.u.uVelB.value.fromArray(w.velB); for (const k of WX_KEYS) wxU(k).fromArray(w[k]); } return; }
   _evLookOn = true;
   const E = ev.def, a = ev.amt, u = R.mats.atmo.uniforms, mi = u.uMist.value, ma = u.uMistAmb.value;
