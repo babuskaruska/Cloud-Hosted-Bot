@@ -6465,10 +6465,10 @@ const MON = {
   queen: { name: 'Brood Queen', tip: 'Keeps hatching spiders.', hp: 1150, spd: .85, rad: 1.1, mass: 40, bounty: 200, lives: 5, hitH: 1.0, top: 2.0, dmg: 40, atkT: 1.5, eye: [3.8, .3, .9], scale: 4.2, boss: true, summon: { type: 'spider', n: 2, every: 8, max: 99, hp: 1 }, death: 'bug', cat: 'armor', tint: [.85, .55, 1.0] },
   colossus: { name: 'Magma Colossus', tip: 'Speeds up when it is nearly dead.', hp: 1250, spd: .7, rad: 1.05, mass: 60, bounty: 200, lives: 5, hitH: 2.2, top: 4.3, dmg: 60, atkT: 2.0, eye: [4, 1.6, .3], scale: 3.0, boss: true, armor: .85, slowRes: .3, enrage: [.3, 1.25], death: 'rock', cat: 'armor', tint: [1.5, .5, .26] },
   king: { name: 'The Buried King', tip: 'Summons mummies to walk with him.', hp: 1250, spd: .86, rad: .92, mass: 40, bounty: 200, lives: 5, hitH: 2.2, top: 4.2, dmg: 46, atkT: 1.7, eye: [.6, 3.0, 2.6], scale: 2.7, boss: true, summon: { type: 'mummy', n: 1, every: 9, max: 99, hp: .7 }, death: 'bones', blade: true, cat: 'armor', tint: [1.2, 1.0, .55] },
-  // Round 11 (Long Night only, see NIGHT_BOSS in 62-game.js): the Hollowing's messenger. snuff: every few seconds its
+  // Round 11 (Long Night only: procBiome's boss lists, 35-longnight.js): the Hollowing's messenger. snuff: every few seconds its
   // cage-lantern drinks the light of the towers within r (they go dark and stop for t seconds; heraldSnuff in 62-game.js);
   // call: it calls n echo ghosts of the road's dead behind it. Model: RIGS.herald (Ash), else the stand-in below.
-  herald: { name: 'The Hollow Herald', tip: 'Snuffs the lights of towers near it and calls echo ghosts. Spread your towers and burn it fast.', hp: 1050, spd: .8, rad: .8, mass: 36, bounty: 200, lives: 5, hitH: 2.0, top: 4.3, dmg: 40, atkT: 1.6, eye: [2.6, 2.3, 1.2], scale: 2.5, boss: true, snuff: { every: 11, r: 4.2, t: 1.8 }, call: { every: 13, n: 2, hp: .3, max: 8 }, enrage: [.3, 1.15], death: 'bones', cat: 'armor', rig: 'herald', tint: [.62, .56, .86] },
+  herald: { name: 'The Hollow Herald', tip: 'Snuffs the lights of towers near it and calls echo ghosts. Spread your towers and burn it fast.', hp: 1050, spd: .8, rad: .8, mass: 36, bounty: 200, lives: 5, hitH: 2.0, top: 4.3, dmg: 40, atkT: 1.6, eye: [1.3, 1.7, 2.6], scale: 2.5, boss: true, snuff: { every: 11, r: 4.2, t: 1.8 }, call: { every: 13, n: 2, hp: .3, max: 8 }, enrage: [.3, 1.15], death: 'flesh', cat: 'armor', rig: 'herald' },
   leviathan: { name: 'The Drowned King', tip: 'Raises the drowned and sweeps a tidal wave down the road. Freeze the wave to break it.', hp: 1250, spd: .8, rad: 1.0, mass: 50, bounty: 200, lives: 5, hitH: 2.1, top: 4.1, dmg: 50, atkT: 1.8, eye: [.4, 3.0, 2.6], scale: 2.75, boss: true, summon: { type: 'drowned', n: 2, every: 8.5, max: 99, hp: .55 }, tide: { every: 12, len: 7.5, dur: 1.5, push: 7, dmg: 16, haste: .4, hasteT: 3.5 }, enrage: [.3, 1.2], death: 'flesh', blade: true, cat: 'armor', rig: 'leviathan' },
 };
 
@@ -7055,15 +7055,13 @@ function waveMenu(k, level) {
   }
   return menu;
 }
-// Long Night bosses of their own, which no hand-made land sends: NIGHT_BOSS[type] = { every, at } makes it the boss of
-// the generated lands at night index d = G.level - 6 where d >= at and (d - at) % every === 0 (the Herald: the third night
-// land, then every fourth). procBiome's own bio.boss list stays as Ash made it; this is the one hook.
-const NIGHT_BOSS = { herald: { every: 4, at: 2 } };
-function nightBoss(level) { if (level < BIOMES.length) return null; const d = level - BIOMES.length; for (const k in NIGHT_BOSS) { const nb = NIGHT_BOSS[k]; if (MON[k] && d >= nb.at && (d - nb.at) % nb.every === 0) return k; } return null; }
-function bossType() { const b = G.B.bio.boss; return (G.B.bio.key === 'proc' && nightBoss(G.level)) || b[Math.floor(G.level / BIOMES.length) % b.length]; }
+// The Hollow Herald is a Long Night boss only: Ash's procBiome puts 'herald' into a generated land's boss list (about one
+// land in three from land 8 on). heraldLand(): this land's boss is the Herald (the story and aiThink read it).
+function heraldLand() { return !!(G.B && G.B.bio.key === 'proc' && bossType() === 'herald'); }
+function bossType() { const b = G.B.bio.boss; return b[Math.floor(G.level / BIOMES.length) % b.length]; }
 // The Hollow Herald (MON.herald). Its cage-lantern drinks the light of the towers near it: they go dark and stop for a
 // moment (tower.snuff, seconds; Ash may read it, m.stolen counts the lights it holds for the lantern's glow). Enraged, it
-// does so more often. Sounds for Echo: 'heraldSnuff' (x, z of the Herald) and 'heraldCall'.
+// does so more often. The look is Ash's FX.snuff (dims the lights in the circle). Sounds for Echo: 'snuff' and 'heraldCall'.
 function heraldSnuff(m, dt) {
   const sp = m.def.snuff; m.snT -= dt * (m.rage ? 1.45 : 1); if (m.snT > 0) return;
   m.snT = sp.every; m.cast = 1; let n = 0; const hy = m.y + m.def.top * m.scale / m.def.scale * .8;
@@ -7074,8 +7072,8 @@ function heraldSnuff(m, dt) {
     fxTimed(5, tw.x, tw.y + 2, tw.z, 2.6, 2.6, .9, .75, .45, .7, .35);
   }
   m.stolen = Math.min(8, (m.stolen || 0) + n);
-  fxTimed(4, m.x, m.y + .08, m.z, sp.r * 2, sp.r * 2, .5, .42, .7, .55, .8, { ground: true });
-  sfx('heraldSnuff', m.x, m.z, 1.1);
+  if (typeof FX.snuff === 'function') FX.snuff(m.x, m.z, sp.r, sp.t + 1); else fxTimed(4, m.x, m.y + .08, m.z, sp.r * 2, sp.r * 2, .5, .42, .7, .55, .8, { ground: true });
+  sfx('snuff', m.x, m.z, 1.1);
 }
 // It calls echo ghosts (pale, half bounty, as the Echoes mutator's) of the road's common dead behind it.
 function heraldCall(m, dt) {
@@ -7557,7 +7555,7 @@ function aiThink(dt) {
   // against the board's air power. Gargoyles shrug off arrows, so a shortfall against them asks for spires first.
   const AA = aiAir(towers);
   // A Herald land: its ghosts want crowd-killers, and its lantern snuffs towers in a circle, so spread the board out.
-  const herald = G.B.bio.key === 'proc' && nightBoss(G.level) === 'herald', snR2 = herald ? MON.herald.snuff.r * MON.herald.snuff.r : 0; if (herald) swarm += 1.5;
+  const herald = heraldLand() && G.bossWave, snR2 = herald ? MON.herald.snuff.r * MON.herald.snuff.r : 0; if (herald) swarm += 1.5;
   const gatePress = sat(G.leaks / 8);
   const opts = [];
   for (const kind of TOWER_KINDS) {
@@ -8303,7 +8301,7 @@ const BEATS = {
     ['herald', 'Hush, little flame. I carry a hundred beacons in this cage. Yours will make a hundred and one.'],
     ['ghost', 'That light in its lantern was ours once. Break the cage, Keeper.'],
   ] },
-  // The Long Night: the first land where the Herald walks (STORY.landStart, nightBoss in 62-game.js).
+  // The Long Night: the first land where the Herald walks (STORY.landStart, heraldLand in 62-game.js).
   herald: { title: 'The Herald', lines: [
     ['ghost', 'Something walks ahead of the dark tonight. A tall thing, carrying a lantern that does not burn.'],
     ['ghost', 'The Hollowing\'s herald. It steals light. Do not crowd your towers where it walks.'],
@@ -8628,7 +8626,7 @@ const STORY = {
     if (restoring || !inRun()) return;
     if (G.level < CAMPAIGN_LANDS) this.play('land:' + G.B.bio.key);
     else {
-      if (nightBoss(G.level) === 'herald') this.play('herald'); // once per keeper, the first land the Herald walks
+      if (heraldLand()) this.play('herald'); // once per keeper, the first land the Herald walks
       const d = nightDepth(), first = META.run && META.run.level0 === G.level;
       if (first && G.mode === 'daily') this.play('daily');
       else if (first && G.mode === 'night') this.play('night:enter');

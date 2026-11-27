@@ -539,7 +539,7 @@ function aiThink(dt) {
   // against the board's air power. Gargoyles shrug off arrows, so a shortfall against them asks for spires first.
   const AA = aiAir(towers);
   // A Herald land: its ghosts want crowd-killers, and its lantern snuffs towers in a circle, so spread the board out.
-  const herald = heraldLand(), snR2 = herald ? MON.herald.snuff.r * MON.herald.snuff.r : 0; if (herald) swarm += 1.5;
+  const herald = heraldLand() && G.bossWave, snR2 = herald ? MON.herald.snuff.r * MON.herald.snuff.r : 0; if (herald) swarm += 1.5;
   const gatePress = sat(G.leaks / 8);
   const opts = [];
   for (const kind of TOWER_KINDS) {
