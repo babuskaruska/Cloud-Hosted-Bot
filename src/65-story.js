@@ -67,9 +67,41 @@ const BEATS = {
   'night:6': { title: 'Wrong Stars', min: 9, lines: [['ghost', 'Deeper than I ever went. The stars are wrong down here.'], ['keeper', 'The fire is not.']] },
   'night:7': { title: 'Quiet', min: 9, lines: [['hollow', 'Why fight the night? It is so quiet here.'], ['keeper', 'Quiet is what the dead want. I am not dead.']] },
   'night:8': { title: 'The Choir', min: 12, lines: [['ghost', 'I hear the old keepers in the wind down here. They are cheering, I think.'], ['keeper', 'Let them cheer. I will keep walking.']] },
+  'night:9': { title: 'Names', min: 12, lines: [['hollow', 'I know your name, keeper. I learned it from the ones who came before you.'], ['keeper', 'Then say it louder. It keeps me warm.']] },
+  'night:10': { title: 'Ash and Oil', min: 15, lines: [['keeper', 'The oil runs low. The lantern burns anyway.'], ['ghost', 'It never burned on oil. It burns on stubbornness. Yours is bottomless.']] },
+  'night:11': { title: 'A Door', min: 15, lines: [['hollow', 'There is a door at the bottom of the night. Would you like to see what is behind it?'], ['ghost', 'Do not answer it, Keeper. Doors down here only open one way.']] },
+  'night:12': { title: 'Morning', min: 18, lines: [['keeper', 'Aldric. Is there a morning, somewhere past all this?'], ['ghost', 'There is one behind you. Every land you lit is a little dawn.']] },
+  'night:13': { title: 'Tired', min: 21, lines: [['hollow', 'I am so tired, little keeper. Why will you not let me rest?'], ['keeper', 'You rest on top of people. Find a softer bed.']] },
+  'night:14': { title: 'The Bottom', min: 24, lines: [['ghost', 'I think we are past the bottom now. The dark is just... thinner here.'], ['keeper', 'Thin dark burns quick. Keep the light high.']] },
+  // More campaign beats.
+  'clear:first': { title: 'First Light', lines: [
+    ['ghost', 'Look at it burn. Forty winters I watched that fire, and I never saw it so bright.'],
+    ['keeper', 'One down. The road goes on.'],
+  ] },
+  halfway: { title: 'Halfway', lines: [
+    ['hollow', 'Three little fires. Do you think I do not see them, keeper?'],
+    ['ghost', 'It speaks. Good. It means you are hurting it.'],
+    ['keeper', 'Then I will hurt it three more times.'],
+  ] },
+  return: { title: 'Again', lines: [
+    ['ghost', 'Back to the Ashen Pass? The fires you lit have gone out again.'],
+    ['keeper', 'The Hollowing always comes back. So do I.'],
+  ] },
+  heat: { title: 'Heat', lines: [
+    ['ghost', 'The dark has grown teeth since your last walk. Can you feel it?'],
+    ['keeper', 'I asked for it. A fire needs something to burn.'],
+  ] },
+  'night:enter': { title: 'Straight to the Dark', lines: [
+    ['ghost', 'Past the sixth beacon already? Most keepers walk the old road first.'],
+    ['keeper', 'The old road is lit. The dark is down here.'],
+  ] },
+  daily: { title: 'Today\'s Road', lines: [
+    ['ghost', 'Every keeper walks the same night today, Keeper. The same lands, the same curses.'],
+    ['keeper', 'Then let us see who carries the light the farthest.'],
+  ] },
 };
-const NIGHT_POOL = Object.keys(BEATS).filter(k => k.startsWith('night:'));
-const BEAT_ORDER = ['intro', 'land:ashen', 'boss:giant', 'land:frost', 'boss:jotun', 'land:fen', 'boss:queen', 'land:ember', 'boss:colossus', 'land:dunes', 'boss:king', 'land:storm', 'boss:leviathan', 'ending', 'boss:ogre'].concat(NIGHT_POOL);
+const NIGHT_POOL = Object.keys(BEATS).filter(k => /^night:\d+$/.test(k));
+const BEAT_ORDER = ['intro', 'land:ashen', 'boss:giant', 'clear:first', 'land:frost', 'boss:jotun', 'land:fen', 'boss:queen', 'halfway', 'land:ember', 'boss:colossus', 'land:dunes', 'boss:king', 'land:storm', 'boss:leviathan', 'ending', 'boss:ogre', 'return', 'heat', 'night:enter', 'daily'].concat(NIGHT_POOL);
 
 // Portraits, 16x16, drawn in code. One letter per pixel; '.' is clear.
 const PORTRAIT_PAL = {
@@ -310,16 +342,22 @@ const STORY = {
     // Boss lines: a moment after a boss steps into view (its entrance plays first).
     if (inRun() && G.phase === 'play') for (const m of G.mons) {
       if (!m.def.boss || m.dead || !m.entered || m._lined) continue;
-      m._lineT = (m._lineT || 0) + dt; if (m._lineT > 1.3) { m._lined = true; this.play('boss:' + m.type); }
+      // Ash's boss intro card (UI.bossCard, about 2.5 s) shows first; the line follows it.
+      m._lineT = (m._lineT || 0) + dt; if (m._lineT > (typeof UI.bossCard === 'function' ? 3.1 : 1.3)) { m._lined = true; this.play('boss:' + m.type); }
     }
     // Nothing on screen: open the next beat, unless a menu screen is up.
-    if (this.queue.length && ((!UI.scr && !UI.sets) || this.queue[0].replay)) this.open(this.queue.shift());
+    // Never over a cinematic (Ash's CINE).
+    const cine = typeof CINE !== 'undefined' && CINE && typeof CINE.on === 'function' && CINE.on();
+    if (this.queue.length && !cine && ((!UI.scr && !UI.sets) || this.queue[0].replay)) this.open(this.queue.shift());
   },
   landStart(restoring) {
     if (restoring || !inRun()) return;
     if (G.level < CAMPAIGN_LANDS) this.play('land:' + G.B.bio.key);
     else {
-      const d = nightDepth();
+      const d = nightDepth(), first = META.run && META.run.level0 === G.level;
+      if (first && G.mode === 'daily') this.play('daily');
+      else if (first && G.mode === 'night') this.play('night:enter');
+      else if (G.mode === 'daily') return; // the daily keeps its interludes short: only the first
       if (d > 0 && d % 3 === 0) {
         // A Long Night interlude every third land: the first unseen one this deep, else nothing new to say.
         const pick = NIGHT_POOL.find(k => !META.story[k] && BEATS[k].min <= d);
@@ -327,5 +365,17 @@ const STORY = {
       }
     }
   },
-  ending() { this.play('ending'); },
+  ending(onDone) { return this.play('ending', { onDone }); },
+  // A land cleared: the first beacon re-lit, and the halfway mark of the campaign.
+  landClear() {
+    if (G.mode !== 'campaign') return;
+    if (G.level === 0) this.play('clear:first'); else if (G.level === 2) this.play('halfway');
+  },
+  // A run's opening beat: the intro the first time, then a word on a return, or on the first run with Heat.
+  runStart() {
+    if (G.mode !== 'campaign') return;
+    if (!META.story.intro) this.play('intro');
+    else if (G.heat > 0 && !META.story.heat) this.play('heat');
+    else if (META.stats.campaigns > 0) this.play('return');
+  },
 };

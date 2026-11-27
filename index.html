@@ -5638,7 +5638,7 @@ function killMonster(m, kind, dx, dz, tower) {
   fxGore(m, dth, kind, ix, iz, up);
   if (def.split && G.mons.length < MAX_ALIVE + 6) { const [ty, n] = def.split; for (let i = 0; i < n; i++) { const u = n > 1 ? i / (n - 1) * 2 - 1 : 0; spawnMonster(ty, { s: Math.max(.5, m.s - .15 - .1 * Math.abs(u)), lat: clamp(m.lat + u * .34, -.95, .95), hpMul: m.maxHp / def.hp, pop: 1 }).kl = u * 2.2; } }
   if (m.torch && m.flame) fxEmbers(m.flame.x, m.flame.y, m.flame.z, 8, .15);
-  if (m.elite) eliteDeath(m);
+  if (m.elite) { eliteDeath(m); if (inRun()) META.stats.elites++; }
   const bounty = Math.max(1, Math.round(def.bounty * G.bountyMul * (m.bmul || 1)));
   dropCoins(m.x, m.y + m.hitH * .6, m.z, bounty, clamp(Math.round(bounty / 3), 1, 6));
   removeMonster(m);
@@ -6331,8 +6331,9 @@ function buildWave(k, level) {
 }
 // Pressure's share of monster health. Above the old 2.2 ceiling it counts double, so strong play meets a real fight.
 function pressHp() { const p = G.press; return .85 + .15 * Math.min(p, 2.2) + .3 * Math.max(0, p - 2.2); }
-// The ceiling for pressure rises with each land; the first land keeps the old, friendly cap.
-function pressCap() { return 2.2 + .3 * G.level; }
+// The ceiling for pressure rises with each land; the first land keeps the old, friendly cap. Heat lifts it further
+// (0.1 per tier), so a strong keeper at high Heat keeps meeting a real fight (G.heat is 0 outside a run).
+function pressCap() { return 2.2 + .3 * G.level + .1 * G.heat; }
 function startWave() {
   const W = G.wavesPerLand;
   G.k = G.k % W + 1; G.queue = buildWave(G.k, G.level); if (waveNumber() > G.best && (inRun() || TEST_SESSION)) { G.best = waveNumber(); if (!TEST_SESSION) try { localStorage.setItem('lanternhold.best', '' + G.best); } catch (e) {} } G.waveT = 0; G.spawning = true; G.bossWave = isBossK(G.k); G.horde = isHordeK(G.k, G.level); G.waveKills = 0; G.waveLeaks = 0; G.bossDown = false; G.trickle = 6; G.trickleN = 0;
@@ -6348,6 +6349,7 @@ function endWave() {
   if (G.lives <= 6) G.press *= .9;
   G.press = clamp(G.press, .6, pressCap());
   G.gold += (22 + 7 * G.k + 8 * G.level) * G.goldMul + G.waveGold;
+  if (G.horde && l === 0) achUnlock('horde');
   G.horde = false;
 }
 function updateWaves(dt) {
@@ -6569,7 +6571,7 @@ const AI = { think: .15, wait: 0, last: '' };
 function aiThink(dt) {
   if (G.phase !== 'play' || UI.playerActive()) return;
   AI.think -= dt; if (AI.think > 0) return; AI.think = .5;
-  aiSpells();
+  aiSpells(); aiReroll();
   const B = G.B, towers = G.towers.filter(t => t.alive), empty = B.pads.filter(p => !p.tower), N = towers.length;
   const cnt = { archer: 0, bombard: 0, spire: 0, guard: 0 }; for (const t of towers) cnt[t.kind]++;
   const ideal = { archer: .36, bombard: .22, spire: .2, guard: .22 };
@@ -6578,6 +6580,8 @@ function aiThink(dt) {
   air += (G.snatched || 0) * .4; siege += (G.mix.ram || 0) * .15;
   // Mutators: armoured monsters want bombards and spires, swarms want splash and guards, fast ones want the slow of spires.
   if (modOn('ironhide')) armor += 3; if (modOn('swarm') || modOn('bloodmoon')) swarm += 3; if (modOn('haste')) { armor += 1; swarm += 1.5; }
+  // Siege sends rams every wave (blasts and fire); Echoes brings killed elites back, so more of everything that kills crowds.
+  if (modOn('siege')) siege += 4; if (modOn('echoes')) { swarm += 1; armor += 1; }
   const gatePress = sat(G.leaks / 8);
   const opts = [];
   for (const kind of TOWER_KINDS) {
@@ -6595,7 +6599,7 @@ function aiThink(dt) {
       for (const t of towers) { const d = Math.hypot(t.x - pad.x, t.z - pad.z); if (kind === 'guard' && t.kind !== 'guard' && d < t.range + 1.5) syn += .16; if (kind !== 'guard' && t.kind === 'guard' && d < def.range[0] + 1) syn += .2; if (t.kind === kind && d < 6) syn -= .12; }
       if (kind === 'guard') { sc *= .8 + .5 * rel; for (const t of towers) if (t.kind === 'guard' && Math.abs(t.pad.s - pad.s) < 9) syn -= .5; }
       sc *= 1 + syn;
-      opts.push({ sc, cost: def.cost[0], act: 'build', kind, pad });
+      opts.push({ sc, cost: G.freeTowers > 0 ? 0 : def.cost[0], act: 'build', kind, pad }); // Founding Stone: the first towers are free
     }
   }
   for (const t of towers) {
@@ -6633,6 +6637,13 @@ function aiThink(dt) {
   AI.think = N < 3 ? .12 : .8;
 }
 
+// In a run with Fate's Lantern rerolls left, the commander rerolls a land that came up with two or more curses
+// (once per land, before the first wave is out).
+function aiReroll() {
+  if (!inRun() || !(G.rerolls > 0) || AI.rerollLv === G.level || G.k > 1 || G.modLevel !== G.level || typeof MUTATORS !== 'object') return;
+  AI.rerollLv = G.level;
+  if (G.mods.filter(k => MUTATORS[k] && MUTATORS[k].curse).length >= 2) rerollMods();
+}
 // Which branch suits this tower: what leaked (counts most) and what this land has sent so far, plus a nudge
 // towards variety so the board does not end up all one kind.
 function aiBranch(t, towers, air, armor, swarm) {
@@ -6739,7 +6750,7 @@ function updatePhase(dt) {
   LT.beaconLevel = damp(LT.beaconLevel, G.lives / G.maxLives, 3, dt);
   if (B.beaconFlame) { const f = B.beaconFlame, lv = LT.beaconLevel; f.on = LT.beaconOn; f.size = 2.35 * (.42 + .58 * lv) * (1 - .32 * LT.beaconGutter); f.embers = 1 + 2 * lv + 6 * LT.beaconGutter; }
   for (let i = 1; i < B.flames.length; i++) B.flames[i].on = LT.beaconOn;
-  if (G.phase === 'clear') { if (t > 2.6) setPhase('crumble'); }
+  if (G.phase === 'clear') { if (t > 2.6 && !G.holdClear) setPhase('crumble'); } // holdClear: the campaign's victory screens
   else if (G.phase === 'defeat') {
     for (const tw of G.towers) { tw.em.on = damp(tw.em.on, 0, 1.5 + tw.idx * .15, dt); if (tw.flame) tw.flame.on = tw.em.on; if (tw.flame2) tw.flame2.on = tw.em.on; }
     // A player who has walked away gets the commander back for the next run.
@@ -7258,9 +7269,41 @@ const BEATS = {
   'night:6': { title: 'Wrong Stars', min: 9, lines: [['ghost', 'Deeper than I ever went. The stars are wrong down here.'], ['keeper', 'The fire is not.']] },
   'night:7': { title: 'Quiet', min: 9, lines: [['hollow', 'Why fight the night? It is so quiet here.'], ['keeper', 'Quiet is what the dead want. I am not dead.']] },
   'night:8': { title: 'The Choir', min: 12, lines: [['ghost', 'I hear the old keepers in the wind down here. They are cheering, I think.'], ['keeper', 'Let them cheer. I will keep walking.']] },
+  'night:9': { title: 'Names', min: 12, lines: [['hollow', 'I know your name, keeper. I learned it from the ones who came before you.'], ['keeper', 'Then say it louder. It keeps me warm.']] },
+  'night:10': { title: 'Ash and Oil', min: 15, lines: [['keeper', 'The oil runs low. The lantern burns anyway.'], ['ghost', 'It never burned on oil. It burns on stubbornness. Yours is bottomless.']] },
+  'night:11': { title: 'A Door', min: 15, lines: [['hollow', 'There is a door at the bottom of the night. Would you like to see what is behind it?'], ['ghost', 'Do not answer it, Keeper. Doors down here only open one way.']] },
+  'night:12': { title: 'Morning', min: 18, lines: [['keeper', 'Aldric. Is there a morning, somewhere past all this?'], ['ghost', 'There is one behind you. Every land you lit is a little dawn.']] },
+  'night:13': { title: 'Tired', min: 21, lines: [['hollow', 'I am so tired, little keeper. Why will you not let me rest?'], ['keeper', 'You rest on top of people. Find a softer bed.']] },
+  'night:14': { title: 'The Bottom', min: 24, lines: [['ghost', 'I think we are past the bottom now. The dark is just... thinner here.'], ['keeper', 'Thin dark burns quick. Keep the light high.']] },
+  // More campaign beats.
+  'clear:first': { title: 'First Light', lines: [
+    ['ghost', 'Look at it burn. Forty winters I watched that fire, and I never saw it so bright.'],
+    ['keeper', 'One down. The road goes on.'],
+  ] },
+  halfway: { title: 'Halfway', lines: [
+    ['hollow', 'Three little fires. Do you think I do not see them, keeper?'],
+    ['ghost', 'It speaks. Good. It means you are hurting it.'],
+    ['keeper', 'Then I will hurt it three more times.'],
+  ] },
+  return: { title: 'Again', lines: [
+    ['ghost', 'Back to the Ashen Pass? The fires you lit have gone out again.'],
+    ['keeper', 'The Hollowing always comes back. So do I.'],
+  ] },
+  heat: { title: 'Heat', lines: [
+    ['ghost', 'The dark has grown teeth since your last walk. Can you feel it?'],
+    ['keeper', 'I asked for it. A fire needs something to burn.'],
+  ] },
+  'night:enter': { title: 'Straight to the Dark', lines: [
+    ['ghost', 'Past the sixth beacon already? Most keepers walk the old road first.'],
+    ['keeper', 'The old road is lit. The dark is down here.'],
+  ] },
+  daily: { title: 'Today\'s Road', lines: [
+    ['ghost', 'Every keeper walks the same night today, Keeper. The same lands, the same curses.'],
+    ['keeper', 'Then let us see who carries the light the farthest.'],
+  ] },
 };
-const NIGHT_POOL = Object.keys(BEATS).filter(k => k.startsWith('night:'));
-const BEAT_ORDER = ['intro', 'land:ashen', 'boss:giant', 'land:frost', 'boss:jotun', 'land:fen', 'boss:queen', 'land:ember', 'boss:colossus', 'land:dunes', 'boss:king', 'land:storm', 'boss:leviathan', 'ending', 'boss:ogre'].concat(NIGHT_POOL);
+const NIGHT_POOL = Object.keys(BEATS).filter(k => /^night:\d+$/.test(k));
+const BEAT_ORDER = ['intro', 'land:ashen', 'boss:giant', 'clear:first', 'land:frost', 'boss:jotun', 'land:fen', 'boss:queen', 'halfway', 'land:ember', 'boss:colossus', 'land:dunes', 'boss:king', 'land:storm', 'boss:leviathan', 'ending', 'boss:ogre', 'return', 'heat', 'night:enter', 'daily'].concat(NIGHT_POOL);
 
 // Portraits, 16x16, drawn in code. One letter per pixel; '.' is clear.
 const PORTRAIT_PAL = {
@@ -7501,16 +7544,22 @@ const STORY = {
     // Boss lines: a moment after a boss steps into view (its entrance plays first).
     if (inRun() && G.phase === 'play') for (const m of G.mons) {
       if (!m.def.boss || m.dead || !m.entered || m._lined) continue;
-      m._lineT = (m._lineT || 0) + dt; if (m._lineT > 1.3) { m._lined = true; this.play('boss:' + m.type); }
+      // Ash's boss intro card (UI.bossCard, about 2.5 s) shows first; the line follows it.
+      m._lineT = (m._lineT || 0) + dt; if (m._lineT > (typeof UI.bossCard === 'function' ? 3.1 : 1.3)) { m._lined = true; this.play('boss:' + m.type); }
     }
     // Nothing on screen: open the next beat, unless a menu screen is up.
-    if (this.queue.length && ((!UI.scr && !UI.sets) || this.queue[0].replay)) this.open(this.queue.shift());
+    // Never over a cinematic (Ash's CINE).
+    const cine = typeof CINE !== 'undefined' && CINE && typeof CINE.on === 'function' && CINE.on();
+    if (this.queue.length && !cine && ((!UI.scr && !UI.sets) || this.queue[0].replay)) this.open(this.queue.shift());
   },
   landStart(restoring) {
     if (restoring || !inRun()) return;
     if (G.level < CAMPAIGN_LANDS) this.play('land:' + G.B.bio.key);
     else {
-      const d = nightDepth();
+      const d = nightDepth(), first = META.run && META.run.level0 === G.level;
+      if (first && G.mode === 'daily') this.play('daily');
+      else if (first && G.mode === 'night') this.play('night:enter');
+      else if (G.mode === 'daily') return; // the daily keeps its interludes short: only the first
       if (d > 0 && d % 3 === 0) {
         // A Long Night interlude every third land: the first unseen one this deep, else nothing new to say.
         const pick = NIGHT_POOL.find(k => !META.story[k] && BEATS[k].min <= d);
@@ -7518,15 +7567,29 @@ const STORY = {
       }
     }
   },
-  ending() { this.play('ending'); },
+  ending(onDone) { return this.play('ending', { onDone }); },
+  // A land cleared: the first beacon re-lit, and the halfway mark of the campaign.
+  landClear() {
+    if (G.mode !== 'campaign') return;
+    if (G.level === 0) this.play('clear:first'); else if (G.level === 2) this.play('halfway');
+  },
+  // A run's opening beat: the intro the first time, then a word on a return, or on the first run with Heat.
+  runStart() {
+    if (G.mode !== 'campaign') return;
+    if (!META.story.intro) this.play('intro');
+    else if (G.heat > 0 && !META.story.heat) this.play('heat');
+    else if (META.stats.campaigns > 0) this.play('return');
+  },
 };
 
 // Meta progression: embers banked at the end of every run, the Keeper's Tree of upgrades bought with them, Heat tiers,
-// lifetime records and story flags. Kept in localStorage 'lanternhold.meta' (every access in try/catch).
+// lifetime records, story flags, achievements (META.ach, 68-achieve.js) and the Daily Long Night's local best (META.daily). Kept in localStorage 'lanternhold.meta' (every access in try/catch).
 //
 // Run modes (G.mode): 'demo' is the AI commander behind the main menu and every test session (URL flags): no upgrades,
 // no Heat, no story, no embers, and the numbers play exactly as before. 'campaign' is the six hand-made lands in order
 // (land 0 = Ashen Pass, BIOME.start = 0); 'night' is The Long Night, the endless lands from land 6 on (G.level >= 6).
+// 'daily' is the Daily Long Night: the Long Night at Heat 0 on the seed of the UTC day (dailySeed()), with the day's
+// mutators fixed by that seed (dailyMods), and the local best per day in META.daily = { date, best, runs }.
 // A campaign run that beats the sixth land carries straight on into the Long Night.
 //
 // Everything a run reads from here is a plain number on G set by applyMeta(), each 1 (or 0) outside a run, so the
@@ -7554,7 +7617,22 @@ Object.assign(G, {
   towerDmg: 1, cdMul: 1, spellPow: 1, spellManaMul: 1, hpMul: 1, spdMul: 1, goldMul: 1, ocMul: 1, mendMul: 1, branchMul: 1,
   budgetMul: 1, bossHpMul: 1, eliteShift: 0, eliteMul: 1, waveGold: 0, heatMods: 0, heatAffix: 0,
 });
-const inRun = () => G.mode === 'campaign' || G.mode === 'night';
+const inRun = () => G.mode === 'campaign' || G.mode === 'night' || G.mode === 'daily';
+// The Long Night's endless lands (the night itself, or the Daily Long Night, which is the night on a seed of the day).
+const nightMode = m => m === 'night' || m === 'daily';
+// ---- The Daily Long Night: the same lands and mutators for every keeper on a UTC day; the local best is kept. ----
+function dailyDate(d) { d = d || new Date(); return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0'); }
+function dailySeed(date) { const s = date || dailyDate(); let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return 1 + h % 999999937; }
+// The day's mutators for a land, from the seed alone (not the gameplay stream), so every keeper meets the same ones.
+function dailyMods(seed, level) {
+  if (typeof MUTATORS !== 'object' || typeof modCount !== 'function') return [];
+  const rng = makeRng((seed ^ Math.imul(level + 1, 0x9E3779B1)) >>> 0), n = modCount(level);
+  const curses = Object.keys(MUTATORS).filter(k => MUTATORS[k].curse), boons = Object.keys(MUTATORS).filter(k => MUTATORS[k].boon), out = [];
+  for (let i = 0; i < n && curses.length; i++) { const j = Math.floor(rng() * curses.length); out.push(curses[j]); curses.splice(j, 1); }
+  if (n > 0 && rng() < .35) out.push(boons[Math.floor(rng() * boons.length)]);
+  return out;
+}
+const dailyBest = () => META.daily && META.daily.date === dailyDate() ? META.daily.best : 0;
 // The land number shown to the player (1-based), and the Long Night depth (1 on its first land).
 const landNo = () => G.level + 1;
 const nightDepth = () => Math.max(0, G.level - CAMPAIGN_LANDS + 1);
@@ -7579,6 +7657,7 @@ const UPGRADES = [
 const UPG = {}; for (const u of UPGRADES) UPG[u.key] = u;
 
 // Heat: each tier adds one rule on top of the ones below it, and pays more embers.
+// Every tier also lifts the pressure ceiling by 0.1 (pressCap in 62-game.js): strong play meets more monsters.
 const HEAT = [
   { name: 'No Heat', tip: 'The road as the old keepers knew it.' },
   { name: 'Thick Bones', tip: 'Monsters have 15% more health.' },
@@ -7588,9 +7667,9 @@ const HEAT = [
   { name: 'Early Elites', tip: 'Elites come a land sooner, and more often.' },
   { name: 'Lean Times', tip: '15% less gold from kills and waves.' },
   { name: 'Crowned Dread', tip: 'Bosses gain an affix and 20% more health.' },
-  { name: 'Swarming Dark', tip: 'Waves carry 15% more monsters.' },
+  { name: 'Swarming Dark', tip: 'Waves carry 25% more monsters.' },
   { name: 'Brittle Beacon', tip: '3 fewer lives again; mending costs 50% more.' },
-  { name: 'Endless Night', tip: 'Monsters have 20% more health; spells cost 20% more mana.' },
+  { name: 'Endless Night', tip: 'Monsters have 30% more health; spells cost 20% more mana.' },
 ];
 const HEAT_MAX = HEAT.length - 1;
 const heatMul = h => Math.round((1 + .35 * h) * 100) / 100;
@@ -7599,8 +7678,8 @@ const HEAT_UNLOCK_LAND = 10; // reaching land 10 at Heat N unlocks Heat N+1
 const META_KEY = 'lanternhold.meta', META_V = 1;
 const META = {
   on: !TEST_SESSION, // writes allowed
-  embers: 0, earned: 0, up: {}, heatMax: 0, tut: 0, story: {}, seen: {}, night: 0,
-  stats: { runs: 0, slain: 0, bosses: 0, bestWave: 0, bestLand: 0, bestNight: 0, campaigns: 0, time: 0, abandons: 0, heatBest: 0 },
+  embers: 0, earned: 0, up: {}, heatMax: 0, tut: 0, story: {}, seen: {}, night: 0, ach: {}, daily: { date: '', best: 0, runs: 0 },
+  stats: { runs: 0, slain: 0, bosses: 0, bestWave: 0, bestLand: 0, bestNight: 0, campaigns: 0, time: 0, abandons: 0, heatBest: 0, elites: 0, dailies: 0 },
   dirty: false, saveT: 0,
   run: null, // the live run: { mode, heat, level0, banked, endingSeen, t }
   last: null, // the last banked result, for the results screen
@@ -7611,12 +7690,13 @@ function loadMeta() {
   const n = (v, lo, hi) => typeof v === 'number' && isFinite(v) ? clamp(Math.floor(v), lo, hi) : 0;
   META.embers = n(o.embers, 0, 1e9); META.earned = n(o.earned, 0, 1e9); META.heatMax = n(o.heatMax, 0, HEAT_MAX); META.tut = o.tut ? 1 : 0; META.night = n(o.night, 0, 1e6);
   if (o.up && typeof o.up === 'object') for (const u of UPGRADES) META.up[u.key] = n(o.up[u.key], 0, u.max);
-  for (const f of ['story', 'seen']) if (o[f] && typeof o[f] === 'object') for (const k in o[f]) if (o[f][k]) META[f][k] = 1;
+  for (const f of ['story', 'seen', 'ach']) if (o[f] && typeof o[f] === 'object') for (const k in o[f]) if (o[f][k]) META[f][k] = 1;
   if (o.stats && typeof o.stats === 'object') for (const k in META.stats) META.stats[k] = n(o.stats[k], 0, 1e12);
+  const D = o.daily; if (D && typeof D === 'object' && typeof D.date === 'string' && /^\d{4}-\d\d-\d\d$/.test(D.date)) META.daily = { date: D.date, best: n(D.best, 0, 1e6), runs: n(D.runs, 0, 1e6) };
 }
 function saveMeta() {
   META.dirty = false; if (!META.on) return false;
-  const o = { v: META_V, embers: META.embers, earned: META.earned, up: META.up, heatMax: META.heatMax, tut: META.tut, story: META.story, seen: META.seen, night: META.night, stats: META.stats };
+  const o = { v: META_V, embers: META.embers, earned: META.earned, up: META.up, heatMax: META.heatMax, tut: META.tut, story: META.story, seen: META.seen, night: META.night, stats: META.stats, ach: META.ach, daily: META.daily };
   try { localStorage.setItem(META_KEY, JSON.stringify(o)); return true; } catch (e) { return false; }
 }
 // Throttled save for small changes (sightings, play time).
@@ -7634,6 +7714,7 @@ function buyUpgrade(key) {
   const c = upCost(key); if (!c || META.embers < c) return false;
   META.embers -= c; META.up[key] = (META.up[key] || 0) + 1; saveMeta();
   sfx('upgradeBuy', CAM.x, CAM.z, 1, META.up[key] / UPG[key].max);
+  achTree();
   return true;
 }
 // A full refund of the tree (the Codex offers it): every ember spent comes back.
@@ -7651,9 +7732,9 @@ function heatRules(h) {
   if (h >= 5) { r.eliteShift = 8; r.eliteMul = 1.3; }
   if (h >= 6) r.gold *= .85;
   if (h >= 7) { r.bossHp *= 1.2; r.affix = 1; }
-  if (h >= 8) r.budget *= 1.15;
+  if (h >= 8) r.budget *= 1.25;
   if (h >= 9) { r.lives -= 3; r.mend *= 1.5; }
-  if (h >= 10) { r.hp *= 1.2; r.mana *= 1.2; }
+  if (h >= 10) { r.hp *= 1.3; r.mana *= 1.2; }
   return r;
 }
 
@@ -7675,6 +7756,9 @@ function metaLandStart(restoring) {
   G.bountyMul *= G.goldMul;
   G.freeTowers = upVal('free');
   if (!inRun()) return;
+  // The Daily Long Night: the day's mutators, rolled from the seed instead of the gameplay stream (Forge's roll skips the land).
+  if (G.mode === 'daily') { setMods(dailyMods(G.runSeed, G.level)); G.modLevel = G.level; G.bountyMul *= modMul('bounty'); }
+  achLandStart();
   if (!restoring) { G.gold += upVal('gold'); UI.goldShown = G.gold; G.mana = Math.min(G.manaMax, G.mana + upVal('mana')); }
   // Heat tier 3 asks for an extra mutator: Forge's modCount adds G.heatMods when the land's mutators roll.
   if (!restoring) {
@@ -7696,8 +7780,11 @@ function metaLandClear() {
     META.stats.campaigns++; META.stats.heatBest = Math.max(META.stats.heatBest, G.heat);
     if (META.heatMax < 1) { META.heatMax = 1; metaUnlock('Heat 1 unlocked'); }
     if (META.run) META.run.ending = true;
-    G.mode = 'night'; STORY.ending();
+    // The victory: the land holds on its clear phase while the cinematic, the ending and the results screen play
+    // (MENU.victory), then the run carries on into the Long Night.
+    G.mode = 'night'; G.holdClear = true; MENU.victory = { stage: 'pending' };
   }
+  achLandClear(); STORY.landClear();
   metaTouch();
 }
 
@@ -7706,7 +7793,7 @@ function metaLandClear() {
 function embersFor(r) {
   const waves = Math.max(0, r.waves | 0), bosses = Math.max(0, r.bosses | 0), l0 = r.level0 | 0;
   let boss = 0; for (let i = 0; i < bosses; i++) boss += 10 + 2 * (l0 + i);
-  const depth = 3 * Math.max(0, (r.level | 0) - (CAMPAIGN_LANDS - 1)), story = r.ending ? 40 : 0, mul = heatMul(r.heat | 0);
+  const depth = 3 * Math.max(0, (r.level | 0) - (CAMPAIGN_LANDS - 1)),  story = r.ending ? 40 : 0, mul = heatMul(r.heat | 0);
   const base = waves + boss + depth + story;
   return { waves, boss, depth, story, mul, heat: r.heat | 0, total: Math.round(base * mul) };
 }
@@ -7720,6 +7807,13 @@ function bankRun(how) {
   Object.assign(res, { how, sum: sm, mode: run.mode, land: landNo(), landName: G.B ? G.B.bio.name : '', notes: (run.notes || []).slice() });
   META.embers += res.total; META.earned += res.total;
   const S = META.stats; S.runs++; S.slain += sm.slain || 0; S.bestWave = Math.max(S.bestWave, waveNumber()); if (how === 'abandon') S.abandons++;
+  if (run.mode === 'daily') {
+    // The day's best counts waves survived; a run continued past midnight still counts for the day it began.
+    const day = run.day || dailyDate(), D = META.daily && META.daily.date === day ? META.daily : (META.daily = { date: day, best: 0, runs: 0 });
+    D.runs++; S.dailies++; res.daily = { day, waves: sm.waves || 0, best: Math.max(D.best, sm.waves || 0), newBest: (sm.waves || 0) > D.best };
+    D.best = res.daily.best;
+  }
+  achBanked(res); res.ach = (run.ach || []).slice();
   res.before = META.embers - res.total; res.after = META.embers;
   META.last = res; saveMeta();
   sfx('emberGain', CAM.x, CAM.z, 1, clamp(res.total / 100, .2, 1));
@@ -7729,7 +7823,7 @@ function bankRun(how) {
 function embersForSave(S) {
   if (!S || !S.mode || S.mode === 'demo') return null;
   const RS = S.runStats || {}, waves = Math.max(0, S.level * G.wavesPerLand + S.k - 1 - (RS.wave0 || 0));
-  return embersFor({ waves, bosses: RS.lands || 0, level: S.level, level0: S.level0 === undefined ? (S.mode === 'night' ? CAMPAIGN_LANDS : 0) : S.level0, heat: S.heat || 0, ending: false });
+  return embersFor({ waves, bosses: RS.lands || 0, level: S.level, level0: S.level0 === undefined ? (nightMode(S.mode) ? CAMPAIGN_LANDS : 0) : S.level0, heat: S.heat || 0, ending: false });
 }
 function bankSave(S) {
   const r = embersForSave(S); if (!r) return null;
@@ -7741,49 +7835,49 @@ function bankSave(S) {
 function startRun(mode, heat) {
   const S = continueOffer(); if (S) bankSave(S);
   clearSave(); STORY.clear(); SAVE.hold = false;
-  G.mode = mode === 'night' ? 'night' : 'campaign'; G.heat = clamp(heat | 0, 0, Math.min(HEAT_MAX, META.heatMax));
-  G.level = G.mode === 'night' ? CAMPAIGN_LANDS : 0; G.boardIndex = G.level; BIOME.start = 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++;
-  G.runSeed = 1 + Math.floor(Math.random() * 1e9); G.boardSeed = 1 + Math.floor(Math.random() * 9000);
+  G.mode = mode === 'night' || mode === 'daily' ? mode : 'campaign'; G.heat = G.mode === 'daily' ? 0 : clamp(heat | 0, 0, Math.min(HEAT_MAX, META.heatMax));
+  G.level = nightMode(G.mode) ? CAMPAIGN_LANDS : 0; G.boardIndex = G.level; BIOME.start = 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++; G.holdClear = false; MENU.victory = null;
+  G.runSeed = G.mode === 'daily' ? dailySeed() : 1 + Math.floor(Math.random() * 1e9); G.boardSeed = G.mode === 'daily' ? 1 + G.runSeed % 9000 : 1 + Math.floor(Math.random() * 9000);
   G.press = 1; G.speed = 1; G.paused = false; G.modLevel = -1; setMods([]); MENU.arrivalLv = -99;
   // A run starts with the lifetime sightings, so "New:" tips only show for monsters this keeper has not met in a run.
   G.seen = {}; for (const k in META.seen) G.seen[k] = 1;
-  META.run = { mode: G.mode, heat: G.heat, level0: G.level, banked: false, ending: false, t: 0, notes: [] };
+  META.run = { mode: G.mode, heat: G.heat, level0: G.level, banked: false, ending: false, t: 0, notes: [], ach: [], day: G.mode === 'daily' ? dailyDate() : '' };
   applyMeta(); G.mana = 30; G.rerolls = upVal('reroll');
   TUT.maybeStart();
   if (TUT.active()) UI.everManual = true; // the tutorial replaces the first "You command" help line
   UI.setManual(true); UI.everManual = true; camReset();
-  if (G.mode === 'campaign') STORY.play('intro');
+  STORY.runStart();
   if (G.phase !== 'crumble') setPhase('crumble');
   sfx('uiClick', CAM.x, CAM.z, 1);
 }
 // Back to the AI demo behind the main menu: a fresh random land, the commander in charge, every number back to 1.
 function startDemo() {
   STORY.clear(); TUT.stop(); SAVE.hold = false;
-  G.mode = 'demo'; G.heat = 0; META.run = null; applyMeta(); G.maxLives = 20;
+  G.mode = 'demo'; G.heat = 0; META.run = null; G.holdClear = false; MENU.victory = null; applyMeta(); G.maxLives = 20;
   BIOME.start = Math.floor(Math.random() * BIOMES.length) - G.boardIndex;
   G.level = 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++; G.press = 1; G.speed = 1; G.paused = false; G.modLevel = -1; setMods([]);
   UI.setManual(false); camReset();
   if (G.phase !== 'crumble') setPhase('crumble');
 }
 // The run leaves for the results screen: embers are banked and the save is gone.
-function abandonRun() {
+function abandonRun(how) {
   if (!inRun()) return null;
-  const res = bankRun('abandon'); clearSave(); SAVE.hold = true; G.paused = true; // nothing saves behind the results screen
+  const res = bankRun(how || 'abandon'); G.holdClear = false; clearSave(); SAVE.hold = true; G.paused = true; // nothing saves behind the results screen
   return res;
 }
 // Continue: the saved run's mode and Heat come back with it (restoreRun calls this before rebuilding the board).
 function metaRestore(S) {
   SAVE.hold = false;
-  G.mode = S.mode === 'night' ? 'night' : S.mode === 'demo' ? 'demo' : 'campaign';
+  G.mode = S.mode === 'night' || S.mode === 'daily' || S.mode === 'demo' ? S.mode : 'campaign'; G.holdClear = false; MENU.victory = null;
   G.heat = _int(S.heat, 0, HEAT_MAX) ? S.heat : 0; G.runSeed = _int(S.runSeed, 0, 2e9) ? S.runSeed : S.seed;
   G.rerolls = _int(S.rerolls, 0, 9) ? S.rerolls : upVal('reroll');
-  META.run = { mode: G.mode, heat: G.heat, level0: _int(S.level0, 0, 999) ? S.level0 : (G.mode === 'night' ? CAMPAIGN_LANDS : 0), banked: false, ending: !!S.ending, endingPaid: !!S.endingPaid, t: 0, notes: [] };
+  META.run = { mode: G.mode, heat: G.heat, level0: _int(S.level0, 0, 999) ? S.level0 : (nightMode(G.mode) ? CAMPAIGN_LANDS : 0), banked: false, ending: !!S.ending, endingPaid: !!S.endingPaid, t: 0, notes: [], ach: [], day: typeof S.day === 'string' ? S.day : '' };
   if (G.mode !== 'demo') { G.seen = {}; for (const k in META.seen) G.seen[k] = 1; }
   applyMeta();
 }
 function metaSnapshot(S) {
   S.mode = G.mode; S.heat = G.heat; S.runSeed = G.runSeed; S.rerolls = G.rerolls;
-  if (META.run) { S.level0 = META.run.level0; S.ending = !!META.run.ending; S.endingPaid = !!META.run.endingPaid; }
+  if (META.run) { S.level0 = META.run.level0; S.ending = !!META.run.ending; S.endingPaid = !!META.run.endingPaid; if (META.run.day) S.day = META.run.day; }
   return S;
 }
 // A sighting in a run counts for the Codex (and silences that monster's "New:" tip in later runs).
@@ -7859,6 +7953,98 @@ const TUT = {
   },
 };
 function anySpellReady() { return SPELL_KINDS.some(k => spellReady(k)); }
+
+// Achievements: feats a keeper earns once, kept in META.ach[id] (saved with the rest of the meta in 66-meta.js).
+// achUnlock(id) is idempotent: the first time it shows a toast and plays sfx('achievement'). Only real runs earn them
+// (never the AI demo behind the menu or a test session's run), except the Keeper's Tree ones, which are bought.
+// The Codex lists them in its Achievements tab; the results screen names the ones earned in the run.
+//
+// Hooks: achLandStart() / achLandClear() from metaLandStart / metaLandClear, achTree() after a purchase,
+// achBanked(res) from bankRun, achTick(dt) from MENU.update (polls the rest twice a second), achToastTick(dt) and achDraw() for the toast.
+const ACH = [
+  { id: 'light', name: 'First Light', tip: 'Clear your first land.', icon: 'flame' },
+  { id: 'six', name: 'Six Fires', tip: 'Beat the campaign.', icon: 'lantern' },
+  { id: 'flawless', name: 'Untouched', tip: 'Clear a land without letting a single monster through.', icon: 'shield' },
+  { id: 'lastember', name: 'Last Ember', tip: 'Clear a land with 3 lives or fewer left.', icon: 'ember' },
+  { id: 'horde', name: 'Wall of Fire', tip: 'Beat a horde wave with no leaks.', icon: 'swarm' },
+  { id: 'giants', name: 'Giantsbane', tip: 'Slay 10 bosses.', icon: 'crown' },
+  { id: 'slay1k', name: 'Gravedigger', tip: 'Slay 1,000 monsters.', icon: 'skull' },
+  { id: 'slay10k', name: 'The Boneyard', tip: 'Slay 10,000 monsters.', icon: 'skull' },
+  { id: 'elites', name: 'Elite Hunter', tip: 'Slay 100 elites.', icon: 'star' },
+  { id: 'night3', name: 'Into the Dark', tip: 'Reach the third land of the Long Night.', icon: 'moon' },
+  { id: 'night10', name: 'Lantern in the Deep', tip: 'Reach the tenth land of the Long Night.', icon: 'moon' },
+  { id: 'heat3', name: 'Kindling', tip: 'Clear a land at Heat 3 or higher.', icon: 'heat' },
+  { id: 'heat5', name: 'Wildfire', tip: 'Clear a land at Heat 5 or higher.', icon: 'heat' },
+  { id: 'heat10', name: 'Endless Night', tip: 'Clear a land at Heat 10.', icon: 'heat' },
+  { id: 'cursed', name: 'Unbothered', tip: 'Clear a land under 3 or more curses.', icon: 'fog' },
+  { id: 'oc', name: 'White Hot', tip: 'Overcharge a tower to its limit.', icon: 'upgrade' },
+  { id: 'branches', name: 'Master Builder', tip: 'Have 4 branched towers standing on one land.', icon: 'guard' },
+  { id: 'spells', name: 'Stormcaller', tip: 'Cast 12 spells on one land.', icon: 'meteor' },
+  { id: 'hoard', name: "Dragon's Hoard", tip: 'Hold 3,000 gold at once.', icon: 'coin' },
+  { id: 'codex', name: 'Naturalist', tip: 'Meet 20 kinds of monster.', icon: 'banner' },
+  { id: 'daily', name: 'Daybreak', tip: 'Finish a Daily Long Night.', icon: 'hourglass' },
+  { id: 'tree10', name: 'Rooted', tip: "Learn 10 levels in the Keeper's Tree.", icon: 'ember' },
+  { id: 'treemax', name: 'Fully Grown', tip: "Learn every upgrade in the Keeper's Tree to the top.", icon: 'star' },
+];
+const ACH_BY = {}; for (const a of ACH) ACH_BY[a.id] = a;
+const ACHQ = []; // toasts waiting: { a, t }
+const achCount = () => ACH.filter(a => META.ach[a.id]).length;
+
+function achUnlock(id, any) {
+  const a = ACH_BY[id]; if (!a || META.ach[id] || !(any || inRun())) return false;
+  META.ach[id] = 1; if (META.run && META.run.ach) META.run.ach.push(id); saveMeta();
+  ACHQ.push({ a, t: 0 }); sfx('achievement', CAM.x, CAM.z, 1);
+  return true;
+}
+
+const ACHL = { spells0: 0, t: 0 }; // the current land's starting counts
+function achLandStart() { ACHL.spells0 = (G.stats && G.stats.spells) || 0; }
+function achLandClear() {
+  if (!inRun()) return;
+  achUnlock('light');
+  if (META.run && META.run.mode === 'campaign' && G.level === CAMPAIGN_LANDS - 1) achUnlock('six');
+  if (!G.leaks) achUnlock('flawless');
+  if (G.lives <= 3) achUnlock('lastember');
+  if (G.heat >= 3) achUnlock('heat3'); if (G.heat >= 5) achUnlock('heat5'); if (G.heat >= 10) achUnlock('heat10');
+  if (Array.isArray(G.mods) && typeof MUTATORS === 'object' && G.mods.filter(k => MUTATORS[k] && MUTATORS[k].curse).length >= 3) achUnlock('cursed');
+  if (META.stats.bosses >= 10) achUnlock('giants');
+}
+function achTree() {
+  let n = 0, all = true; for (const u of UPGRADES) { const l = META.up[u.key] || 0; n += l; if (l < u.max) all = false; }
+  if (n >= 10) achUnlock('tree10', true); if (all) achUnlock('treemax', true);
+}
+function achBanked(res) { if (res && res.mode === 'daily') achUnlock('daily'); }
+function achTick(dt) {
+  if (!inRun() || G.phase !== 'play') return;
+  ACHL.t -= dt; if (ACHL.t > 0) return; ACHL.t = .5;
+  const S = META.stats, runSlain = G.runStats ? G.slain - G.runStats.slain0 : 0;
+  if (S.slain + runSlain >= 1000) achUnlock('slay1k'); if (S.slain + runSlain >= 10000) achUnlock('slay10k');
+  if (S.elites >= 100) achUnlock('elites');
+  if (nightMode(G.mode)) { const d = nightDepth(); if (d >= 3) achUnlock('night3'); if (d >= 10) achUnlock('night10'); }
+  let br = 0; for (const t of G.towers) { if (!t.alive) continue; if (t.branch) br++; if ((t.oc || 0) >= OC_MAX) achUnlock('oc'); }
+  if (br >= 4) achUnlock('branches');
+  if (((G.stats && G.stats.spells) || 0) - ACHL.spells0 >= 12) achUnlock('spells');
+  if (G.gold >= 3000) achUnlock('hoard');
+  let seen = 0; for (const k in META.seen) if (META.seen[k]) seen++; if (seen >= 20) achUnlock('codex');
+}
+
+// The toast: a small plate sliding down under the top of the screen, one feat at a time.
+const ACH_TOAST = 3.6;
+function achToastTick(dt) { const q = ACHQ[0]; if (q) { q.t += dt; if (q.t > ACH_TOAST) ACHQ.shift(); } }
+function achDraw(ctx, E) {
+  const q = ACHQ[0]; if (!q) return; const D = ACH_TOAST;
+  const c = UI.COLR, s = E.s, ps = Math.max(2, s - (E.tch ? 1 : 0)), p = 4 * ps, L = PX.LINE * ps, a = q.a;
+  const head = 'Achievement', ic = PX.iconSize(a.icon)[0] ? a.icon : 'star', [iw, ih] = PX.iconSize(ic), ik = ps * 2;
+  const tw = Math.max(PX.measure(head) * ps, PX.measure(a.name) * ps), w = Math.min(E.Wr - E.iL - 8 * s, iw * ik + 3 * p + tw), h = Math.max(ih * ik, 2 * L) + 2 * p;
+  const k = Math.min(sat(q.t * 4), sat((D - q.t) * 3)), e = 1 - (1 - k) * (1 - k);
+  const x = Math.round((E.iL + E.Wr) / 2 - w / 2), y = Math.round(E.iT + 4 * s + (UI.scr ? 0 : 26 * s) - (1 - e) * (h + 10 * s));
+  ctx.globalAlpha = e;
+  ctx.save(); ctx.shadowColor = 'rgba(255,170,80,0.55)'; ctx.shadowBlur = 10 * s * (.6 + .4 * Math.sin(q.t * 5)); UI.plate(x, y, w, h, { bd: c.bdHi, bg: 'rgba(30,22,12,0.96)' }); ctx.restore();
+  PX.icon(ctx, ic, x + p, y + Math.round((h - ih * ik) / 2), ik, 1);
+  const tx0 = x + 2 * p + iw * ik, ty = y + Math.round((h - 2 * L) / 2) + ps;
+  PX.text(ctx, head, tx0, ty, ps, c.dim); PX.text(ctx, a.name, tx0, ty + L, ps, c.amber);
+  ctx.globalAlpha = 1;
+}
 
 const PX = (() => {
   const LINE = 9, CAP = 7, GAP = 1, CACHE_MAX = 500;
@@ -9173,6 +9359,11 @@ const UI = (() => {
 // dialogue panel, the tutorial guide and the HUD row of mutator icons.
 //
 // UI.scr is the open screen: null | 'title' | 'heat' | 'tree' | 'codex' | 'pause' | 'confirm' | 'results' | 'arrival'.
+// The results screen follows a defeat (after Ash's CINE.play('defeat') when the build has it), an abandoned run, and the
+// campaign's victory (CINE.play('victory'), then the ending beat, then results with "Into the Long Night"). While it is
+// open the audio scene is 'results'. Its embers count up (sfx 'emberTick', throttled) and each new unlock rings
+// (sfx 'unlock'): upgrades that became affordable, a new Heat tier, the run's achievements and a daily best.
+// On phones (touch, short side under 700 CSS px) the main menu is a compact bottom sheet so the demo shows above it.
 // Every control goes into UI.btns (so taps find it) and into MENU.items (so keys and the gamepad can walk it).
 // Input: touch and mouse (tap a button), keys (arrows or WASD move, Enter or Space picks, Esc goes back) and a gamepad
 // (stick or D-pad, A picks, B goes back, Start opens the in-game menu).
@@ -9211,7 +9402,7 @@ const MENU = (() => {
     if (S) { const r = embersForSave(S); return confirm('Start a new run?', ['Your saved run ends here' + (r && r.total ? ' and banks ' + r.total + ' embers.' : '.')], 'Start anew', () => toHeat(mode), 'title'); }
     toHeat(mode);
   }
-  function toHeat(mode) { if (META.heatMax > 0) { M.heatPick = clamp(M.heatPick || META.heatMax, 0, META.heatMax); M.open('heat'); } else begin(mode, 0); }
+  function toHeat(mode) { if (mode === 'daily') return begin('daily', 0); if (META.heatMax > 0) { M.heatPick = clamp(M.heatPick || META.heatMax, 0, META.heatMax); M.open('heat'); } else begin(mode, 0); }
   function begin(mode, heat) { UI.scr = null; M.wasPaused = false; startRun(mode, heat); }
   function confirm(title, lines, yes, fn, back, no) { M.conf = { title, lines, yes, fn, back, no }; M.open('confirm'); }
   function doContinue() {
@@ -9219,18 +9410,85 @@ const MENU = (() => {
     UI.scr = null; M.wasPaused = false; buzz(12);
     try { if (!restoreRun(S)) { clearSave(); M.open('title'); } } catch (e) { clearSave(); setTimeout(() => location.reload(), 30); throw e; }
   }
-  function toMenu() { M.res = null; startDemo(); M.open('title'); }
+  function toMenu() { M.res = null; M.victory = null; startDemo(); M.open('title'); }
+  // ---- results: the cinematic first (Ash's CINE, if the build has it), then the screen ----
+  const cineOk = () => typeof CINE !== 'undefined' && CINE && typeof CINE.play === 'function';
+  function playCine(kind, done) { let called = false; const fin = () => { if (!called) { called = true; done(); } }; try { CINE.play(kind, fin); } catch (e) { fin(); } }
+  function openResults() {
+    const r = M.res || META.last; M.rc = { t: 0, tickT: -1, shown: -1, fanAt: 0, fan: r ? fanfare(r) : [] };
+    M.open('results');
+  }
+  // What the run opened up, rung one by one after the count: newly affordable upgrades, Heat tiers and other notes,
+  // the run's achievements, a daily best.
+  function fanfare(r) {
+    const c = C(), out = [], before = r.before || 0, after = r.after || 0;
+    for (const n of r.notes || []) out.push({ text: n, col: c.ember });
+    if (r.daily && r.daily.newBest) out.push({ text: "New best for today: " + r.daily.waves + ' waves', col: c.amber });
+    for (const id of r.ach || []) if (ACH_BY[id]) out.push({ text: 'Achievement: ' + ACH_BY[id].name, col: c.amber, icon: ACH_BY[id].icon });
+    const ups = UPGRADES.filter(u => { const k = upCost(u.key); return k && k <= after && k > before; });
+    if (ups.length) out.push({ text: (ups.length > 2 ? ups.length + ' upgrades' : ups.map(u => u.name).join(' and ')) + ' now in reach', col: c.ok, icon: 'ember' });
+    if (out.length > 5) { const n = out.length - 4; out.length = 4; out.push({ text: 'and ' + n + ' more', col: c.dim }); }
+    return out;
+  }
+  // The ember rows of a result, in the order they count up.
+  function emberRows(r) {
+    const rows = [['Embers for waves', r.waves], ['Embers for bosses', r.boss]];
+    if (r.depth) rows.push(['The Long Night', r.depth]); if (r.story) rows.push(['The story', r.story]);
+    return rows;
+  }
+  const RC = { row: .28, lead: .35, total: 1.1, fan: .55 };
+  const rcTimes = r => { const n = emberRows(r).length, t0 = RC.lead + n * RC.row; return { t0, end: t0 + RC.total }; };
+  function resultsTick(dt) {
+    const rc = M.rc, r = M.res || META.last; if (!rc || !r) return;
+    rc.t += dt; const T = rcTimes(r), rows = emberRows(r);
+    // The sum on screen (rows, then the total): a tick whenever it moves, at most every 60 ms.
+    let shown = 0; rows.forEach(([, v], i) => { shown += Math.round(v * sat((rc.t - RC.lead - i * RC.row) / RC.row)); });
+    shown += Math.round(r.total * sat((rc.t - T.t0) / RC.total));
+    if (shown !== rc.shown && rc.t - rc.tickT > .06 && rc.t < T.end + .1) { rc.tickT = rc.t; sfx('emberTick', CAM.x, CAM.z, .7, clamp((rc.t - RC.lead) / (T.end - RC.lead), 0, 1)); }
+    rc.shown = shown;
+    while (rc.fanAt < rc.fan.length && rc.t > T.end + .3 + rc.fanAt * RC.fan) { sfx('unlock', CAM.x, CAM.z, 1, rc.fanAt / Math.max(1, rc.fan.length - 1)); rc.fanAt++; }
+  }
+  // A tap, Enter or Space while the count runs: jump to the end of it.
+  function skipCount() {
+    const rc = M.rc, r = M.res || META.last; if (!rc || !r) return false;
+    const T = rcTimes(r), end = T.end + .3 + rc.fan.length * RC.fan; if (rc.t >= end) return false;
+    if (rc.t < T.end) { rc.t = T.end + .29; rc.tickT = rc.t; sfx('emberTick', CAM.x, CAM.z, .7, 1); } else rc.t = end;
+    return true;
+  }
+  M.skipCount = skipCount;
+  // The campaign's victory: the run so far, not banked (the run goes on into the Long Night unless the keeper rests).
+  function victoryResult() {
+    const run = META.run || { level0: 0, notes: [], ach: [] }, sm = runSummary() || {};
+    const r = embersFor({ waves: sm.waves, bosses: sm.lands, level: G.level, level0: run.level0, heat: G.heat, ending: run.ending && !run.endingPaid });
+    return Object.assign(r, { how: 'victory', sum: sm, mode: 'campaign', land: landNo(), landName: G.B ? G.B.bio.name : '', notes: (run.notes || []).slice(), ach: (run.ach || []).slice(), before: META.embers, after: META.embers + r.total });
+  }
+  function intoNight() { M.victory = null; G.holdClear = false; M.res = null; M.rc = null; M.close(); sfx('uiClick', CAM.x, CAM.z, 1); }
+  function restRun() { M.victory = null; M.res = abandonRun('rest'); openResults(); }
   function buzz(p) { if (UI.touch && navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
 
   // ---- update: results after a defeat, the arrival card, the tutorial, story ----
   M.update = dt => {
-    M.t += dt; metaTick(dt); STORY.update(dt); TUT.update(dt);
-    // Echo's audio scene: the main menu (the demo behind it), a story beat, or the game.
-    const scene = STORY.on() ? 'story' : UI.scr && G.mode === 'demo' ? 'menu' : 'game';
+    M.t += dt; metaTick(dt); STORY.update(dt); TUT.update(dt); achTick(dt); achToastTick(dt);
+    if (UI.scr === 'results') resultsTick(dt);
+    // Echo's audio scene: the main menu (the demo behind it), a story beat, the results screen, or the game.
+    const scene = STORY.on() ? 'story' : UI.scr === 'results' ? 'results' : UI.scr && G.mode === 'demo' ? 'menu' : 'game';
     UI.mainMenu = scene === 'menu'; G.scene = scene;
     if (scene !== M.scene) { M.scene = scene; if (typeof AU.setScene === 'function') try { AU.setScene(scene); } catch (e) {} }
     if (UI.mx !== M.lmx || UI.my !== M.lmy) { if (M.lmx !== undefined) M.kb = false; M.lmx = UI.mx; M.lmy = UI.my; } // the mouse took over from the keys
-    if (inRun() && G.phase === 'defeat' && G.phaseT > SUMMARY_AT && !UI.scr && !STORY.on()) { M.res = META.last; M.open('results'); }
+    // A defeat: the dark swallows the keep (Ash's cinematic), then the results.
+    if (inRun() && G.phase === 'defeat' && !UI.scr && !STORY.on()) {
+      const cine = cineOk();
+      if (cine && M.cineRun !== G.run && G.phaseT > .4) { M.cineRun = G.run; M.cineDone = false; const run = G.run; playCine('defeat', () => { if (M.cineRun === run) M.cineDone = true; }); }
+      if (cine ? M.cineRun === G.run && (M.cineDone || G.phaseT > 12) : G.phaseT > SUMMARY_AT) { M.res = META.last; openResults(); }
+    }
+    // The campaign won: the beacon re-lights (cinematic), the ending beat, then the results. The land holds meanwhile.
+    const V = M.victory;
+    if (V && inRun() && G.phase === 'clear' && !UI.scr && !STORY.on()) {
+      if (V.stage === 'pending' && G.phaseT > .5) { V.stage = 'cine'; V.t0 = M.t; if (cineOk()) playCine('victory', () => { if (V.stage === 'cine') V.stage = 'story'; }); else V.stage = 'story'; }
+      if (V.stage === 'cine' && M.t - V.t0 > 12) V.stage = 'story';
+      if (V.stage === 'story') { V.stage = 'wait'; if (!STORY.ending(() => { V.stage = 'results'; })) V.stage = 'results'; }
+      if (V.stage === 'results') { V.stage = 'shown'; M.res = victoryResult(); openResults(); }
+    } else if (V && (!inRun() || G.phase !== 'clear')) { M.victory = null; G.holdClear = false; }
     if (inRun() && G.phase === 'play' && M.arrivalLv !== G.level && G.modLevel === G.level && !STORY.on() && !STORY.queue.length && !UI.scr) {
       M.arrivalLv = G.level; if (activeMods().length) M.open('arrival');
     }
@@ -9257,6 +9515,7 @@ const MENU = (() => {
     }
     if (d && UI.scr === 'codex' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) { pageStep(d); return true; }
     if (d) { const n = M.items.length || 1; M.sel = ((M.sel + d) % n + n) % n; sfx('menuMove', CAM.x, CAM.z, .6); return true; }
+    if ((k === 'Enter' || k === ' ') && UI.scr === 'results' && skipCount()) return true;
     if (k === 'Enter' || k === ' ') { const it = M.items[M.sel]; if (it) { sfx('menuSelect', CAM.x, CAM.z, .8); it.fn(); } return true; }
     if (k === 'Escape' || k === 'Backspace') { M.back(); return true; }
     return true;
@@ -9275,12 +9534,13 @@ const MENU = (() => {
       sfx('menuMove', CAM.x, CAM.z, .6);
     }
     if (!d) M.padT = 0; else M.padT -= 1 / 60;
+    if (hit(0) && UI.scr === 'results' && skipCount()) return;
     if (hit(0)) { const it = M.items[M.sel]; if (it) { sfx('menuSelect', CAM.x, CAM.z, .8); it.fn(); } }
     if (hit(1)) M.back();
   };
   M.padT = 0;
   // A tap that hit no control: the story advances; the arrival card begins; other screens ignore it.
-  M.tapOutside = () => { if (STORY.on()) STORY.advance(); else if (UI.scr === 'arrival') M.close(); };
+  M.tapOutside = () => { if (STORY.on()) STORY.advance(); else if (UI.scr === 'arrival') M.close(); else if (UI.scr === 'results') skipCount(); };
   function heatStep(d) { M.heatPick = clamp(M.heatPick + d, 0, META.heatMax); sfx('heatSelect', CAM.x, CAM.z, .8, M.heatPick / HEAT_MAX); }
   function pageStep(d) { M.page = Math.max(0, Math.min((M.pages || 1) - 1, M.page + d)); sfx('uiHover', CAM.x, CAM.z, .6); }
 
@@ -9374,20 +9634,27 @@ const MENU = (() => {
   }
 
   // ---- the screens ----
-  function drawTitle() {
-    const c = C(), s = E.s, W = E.W, H = E.H, avW = E.Wr - E.iL - 8 * s;
-    // A dark wash over the demo, darker at the edges.
-    dim(.32); const g = ctx.createRadialGradient(W / 2, H * .45, Math.min(W, H) * .2, W / 2, H * .45, Math.max(W, H) * .75); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.6)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    const wide = W > H * 1.25 && H < 560 * E.dpr;
-    // The menu items.
-    const S = M.save, list = [];
+  function titleList() {
+    const c = C(), S = M.save, list = [];
     if (S) { const mins = Math.max(0, (Date.now() - S.t) / 6e4), ago = mins < 1 ? 'just now' : mins < 60 ? Math.round(mins) + ' min ago' : mins < 2880 ? Math.round(mins / 60) + ' h ago' : Math.round(mins / 1440) + ' days ago';
       list.push({ id: 'mcont', label: 'Continue', sub: 'Land ' + (S.level + 1) + ' · Wave ' + S.k + (S.heat ? ' · Heat ' + S.heat : '') + ' · ' + ago, fn: doContinue, col: c.amber }); }
     list.push({ id: 'mcamp', label: 'Campaign', sub: META.stats.campaigns ? 'Six lands · beaten ' + META.stats.campaigns + 'x' : 'Six lands. Light the beacons.', fn: () => pickMode('campaign'), col: S ? null : c.amber });
-    list.push({ id: 'mnight', label: 'The Long Night', sub: META.stats.campaigns ? (META.stats.bestNight ? 'Deepest: night land ' + META.stats.bestNight : 'Endless lands') : 'Endless lands · after the campaign', fn: () => pickMode('night') });
-    list.push({ id: 'mtree', label: "Keeper's Tree", sub: META.embers + ' embers', fn: () => M.open('tree', { from: 'title' }), icon: 'ember' });
-    list.push({ id: 'mcodex', label: 'Codex', sub: 'Bestiary, story, records', fn: () => { M.page = 0; M.open('codex'); } });
+    list.push({ id: 'mnight', label: 'The Long Night', short: 'Long Night', sub: META.stats.campaigns ? (META.stats.bestNight ? 'Deepest: night land ' + META.stats.bestNight : 'Endless lands') : 'Endless lands · after the campaign', fn: () => pickMode('night') });
+    const db = dailyBest();
+    list.push({ id: 'mdaily', label: 'Daily Long Night', short: 'Daily', sub: db ? "Today's best: " + db + ' waves' : 'One road for everyone today', fn: () => pickMode('daily') });
+    list.push({ id: 'mtree', label: "Keeper's Tree", short: 'Tree ' + META.embers, sub: META.embers + ' embers', fn: () => M.open('tree', { from: 'title' }), icon: 'ember' });
+    list.push({ id: 'mcodex', label: 'Codex', sub: 'Bestiary, story, feats, records', fn: () => { M.page = 0; M.open('codex'); } });
     list.push({ id: 'mset', label: 'Settings', fn: () => UI.openSettings(true), nosub: true });
+    return list;
+  }
+  // Phones: a compact bottom sheet (and a small logo up top), so the commander's demo shows in between.
+  const compactMenu = () => E.tch && Math.min(E.W, E.H) < 700 * E.dpr;
+  function drawTitle() {
+    const c = C(), s = E.s, W = E.W, H = E.H, avW = E.Wr - E.iL - 8 * s, list = titleList();
+    if (compactMenu()) return drawTitleCompact(list);
+    // A dark wash over the demo, darker at the edges.
+    dim(.32); const g = ctx.createRadialGradient(W / 2, H * .45, Math.min(W, H) * .2, W / 2, H * .45, Math.max(W, H) * .75); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.6)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const wide = W > H * 1.25 && H < 560 * E.dpr;
     // Fit: logo scale k and button font ps.
     const lw0 = PX.measure('LANTERNHOLD');
     const fit = ps => {
@@ -9410,6 +9677,44 @@ const MENU = (() => {
     // Footer: credit to the original.
     const fs = Math.max(1, ps - 1), ft = 'After Cinderwatch by kevintngo · MIT';
     if (mw(ft, fs) < avW) tx(ft, W / 2, E.Hb - PX.LINE * fs - 3 * s, fs, 'rgba(167,158,138,0.7)', { align: 'c' });
+  }
+  function drawTitleCompact(list) {
+    const c = C(), s = E.s, W = E.W, H = E.H, port = H > W, cols = port ? 3 : 4, span = port ? 3 : 2;
+    const sheetW = Math.min(E.Wr - E.iL - 8 * s, port ? 1e9 : 560 * E.dpr), avH = E.Hb - E.iT;
+    // The primary entry (Continue, else Campaign) spans the first row with its sub line; the rest are short buttons.
+    const prim = list[0], rest = list.slice(1);
+    const fit = ps => {
+      const p = 4 * ps, gap = 3 * ps, cw = Math.floor((sheetW - 2 * p - (cols - 1) * gap) / cols), bh1 = touchH(ps, 1), bh2 = touchH(ps, 2);
+      const pw = cw * span + gap * (span - 1);
+      let ok = mw(prim.label, ps) + 2 * p <= pw && mw(prim.sub || '', ps) + 2 * p <= pw;
+      for (const it of rest) { const l = it.short || it.label; if (mw(l, ps) + (it.icon ? 12 * ps : 0) + 2 * p > cw) ok = false; }
+      const slots = span + rest.length, rows = Math.ceil(slots / cols), h = 2 * p + bh2 + (rows - 1) * (bh1 + gap);
+      return { ps, p, gap, cw, pw, bh1, bh2, rows, h, ok: ok && h < avH * (port ? .3 : .45) };
+    };
+    let F = fit(s); while (F.ps > 2 && !F.ok) F = fit(F.ps - 1);
+    const { ps, p, gap, cw, pw, bh1, bh2, h } = F, sx = Math.round((E.iL + E.Wr) / 2 - sheetW / 2), sy = E.Hb - h - 4 * s;
+    // Light washes: the top behind the logo and the bottom behind the sheet; the middle stays clear for the demo.
+    const gt = ctx.createLinearGradient(0, 0, 0, H * .3); gt.addColorStop(0, 'rgba(4,5,10,0.7)'); gt.addColorStop(1, 'rgba(4,5,10,0)'); ctx.fillStyle = gt; ctx.fillRect(0, 0, W, H * .3);
+    const gb = ctx.createLinearGradient(0, sy - 40 * s, 0, H); gb.addColorStop(0, 'rgba(4,5,10,0)'); gb.addColorStop(1, 'rgba(4,5,10,0.75)'); ctx.fillStyle = gb; ctx.fillRect(0, sy - 40 * s, W, H - sy + 40 * s);
+    // The logo, small, up top.
+    const lw0 = PX.measure('LANTERNHOLD'), k = Math.max(2, Math.floor(Math.min((port ? .8 : .5) * (E.Wr - E.iL) / lw0, (port ? .045 : .09) * H / PX.LINE)));
+    drawLogo(W / 2, E.iT + (port ? 14 : 6) * s, k, ps);
+    // The sheet.
+    ctx.globalAlpha = sat(M.t * 5 + .3);
+    UI.plate(sx, sy, sheetW, h, { bd: c.bdHi, bg: 'rgba(10,11,18,0.9)' });
+    button(prim.id, sx + p, sy + p, pw, bh2, prim.label, ps, prim.fn, { sub: prim.sub, col: prim.col || c.amber });
+    let slot = span;
+    for (const it of rest) {
+      const col = slot % cols, row = Math.floor(slot / cols);
+      const bx = sx + p + col * (cw + gap), by = row === 0 ? sy + p : sy + p + bh2 + gap + (row - 1) * (bh1 + gap), bhh = row === 0 ? bh2 : bh1;
+      const last = it === rest[rest.length - 1], bw = last ? (cols - col) * (cw + gap) - gap : cw; // the last one fills its row
+      button(it.id, bx, by, bw, bhh, it.short || it.label, ps, it.fn, { col: it.col, icon: it.icon });
+      slot++;
+    }
+    ctx.globalAlpha = 1;
+    // The credit, small, just above the sheet.
+    const fs = Math.max(1, ps - 1), ft = 'After Cinderwatch by kevintngo · MIT';
+    if (mw(ft, fs) < E.Wr - E.iL - 8 * s) tx(ft, W / 2, sy - PX.LINE * fs - 3 * s, fs, 'rgba(167,158,138,0.6)', { align: 'c' });
   }
   // The logo: LANTERNHOLD in the pixel font, big, with an ember glow and sparks rising from it.
   function drawLogo(cx, y, k, ps) {
@@ -9455,7 +9760,7 @@ const MENU = (() => {
     items.push({ t: 'gap' }, { t: 'btns', stack: true, list: [
       { id: 'presume', label: 'Resume', fn: () => M.close(), col: c.amber },
       { id: 'pset', label: 'Settings', fn: () => UI.openSettings(true) },
-      { id: 'pquit', label: 'Abandon run', fn: () => { const n = runEmbersNow(); confirm('Abandon the run?', ['You keep the embers it has earned: ' + n + '.'], 'Abandon', () => { M.res = abandonRun(); M.open('results'); }, 'pause', () => { M.open('pause'); }); }, col: c.ember },
+      { id: 'pquit', label: 'Abandon run', fn: () => { const n = runEmbersNow(); confirm('Abandon the run?', ['You keep the embers it has earned: ' + n + '.'], 'Abandon', () => { M.res = abandonRun(); openResults(); }, 'pause', () => { M.open('pause'); }); }, col: c.ember },
     ] });
     panel(items, { cap: 200, minW: 150 });
   }
@@ -9463,27 +9768,38 @@ const MENU = (() => {
   function drawResults() {
     dim(.35); const c = C(), r = M.res || META.last;
     if (!r) { panel([{ t: 'title', text: 'The beacon is out' }, { t: 'btns', list: [{ id: 'rmenu', label: 'Main menu', fn: toMenu }] }]); return; }
-    const sm = r.sum || {}, items = [{ t: 'title', text: r.how === 'abandon' ? 'Run abandoned' : 'The beacon is out', col: '#ffd9a8' }, { t: 'text', text: (r.landName ? r.landName + ' · ' : '') + 'Land ' + r.land + (r.heat ? ' · Heat ' + r.heat : ''), col: c.dim }];
+    const rc = M.rc || { t: 99, fan: [], fanAt: 0 }, T = rcTimes(r), win = r.how === 'victory';
+    const sm = r.sum || {}, title = win ? 'Six fires burn' : r.how === 'abandon' ? 'Run abandoned' : r.how === 'rest' ? 'The keeper rests' : 'The beacon is out';
+    const where = r.mode === 'daily' ? 'Daily Long Night' + (r.daily ? ' · ' + r.daily.day : '') : (r.landName ? r.landName + ' · ' : '') + 'Land ' + r.land + (r.heat ? ' · Heat ' + r.heat : '');
+    const items = [{ t: 'title', text: title, col: win ? c.amber : '#ffd9a8' }, { t: 'text', text: where, col: c.dim }];
     items.push({ t: 'row', l: 'Waves survived', r: '' + (sm.waves || 0) }, { t: 'row', l: 'Lands cleared', r: '' + (sm.lands || 0) }, { t: 'row', l: 'Monsters slain', r: '' + (sm.slain || 0) });
     if (sm.tower) items.push({ t: 'row', l: 'Best tower', r: sm.tower.name + ' · ' + sm.tower.kills });
-    items.push({ t: 'sep' }, { t: 'row', l: 'Embers for waves', r: '' + r.waves }, { t: 'row', l: 'Embers for bosses', r: '' + r.boss });
-    if (r.depth) items.push({ t: 'row', l: 'The Long Night', r: '' + r.depth });
-    if (r.story) items.push({ t: 'row', l: 'The story', r: '' + r.story });
+    if (r.daily) items.push({ t: 'row', l: "Today's best", r: r.daily.best + ' waves', rc: r.daily.newBest ? c.amber : c.tx });
+    items.push({ t: 'sep' });
+    // The ember sources count up one after another, then the total.
+    emberRows(r).forEach(([l, v], i) => { const k = sat((rc.t - RC.lead - i * RC.row) / RC.row); items.push({ t: 'row', l, r: '' + Math.round(v * k), rc: k >= 1 ? c.tx : c.amber }); });
     if (r.heat) items.push({ t: 'row', l: 'Heat ' + r.heat, r: '×' + r.mul.toFixed(2), rc: c.ember });
-    items.push({ t: 'big', text: '+' + r.total + ' embers', col: c.amber }, { t: 'text', text: 'You have ' + META.embers + ' embers.', col: c.tx });
-    for (const n of r.notes || []) items.push({ t: 'text', text: n, col: c.ember });
-    const cheap = UPGRADES.filter(u => upCost(u.key) && upCost(u.key) <= META.embers).length;
-    if (cheap) items.push({ t: 'text', text: cheap + ' upgrade' + (cheap > 1 ? 's' : '') + ' ready in the Keeper\'s Tree.', col: c.ok });
-    items.push({ t: 'btns', stack: true, list: [
+    const kt = sat((rc.t - T.t0) / RC.total), tot = Math.round(r.total * (1 - Math.pow(1 - kt, 2)));
+    items.push({ t: 'big', text: '+' + tot + ' embers' + (win ? ' so far' : ''), col: kt >= 1 && (rc.t - T.end) < .25 ? '#fff0c8' : c.amber });
+    items.push({ t: 'text', text: win ? 'Banked when the run ends. You have ' + META.embers + '.' : 'You have ' + Math.round((r.before || 0) + (r.after - (r.before || 0)) * (1 - Math.pow(1 - kt, 2))) + ' embers.', col: c.tx });
+    // The unlocks ring one by one; their lines are laid out from the start so nothing jumps.
+    rc.fan.forEach((f, i) => items.push({ t: 'text', text: f.text, col: i < rc.fanAt ? f.col : 'rgba(0,0,0,0)' }));
+    const port = E.H > E.W * 1.1;
+    const list = win ? [
+      { id: 'rnight', label: 'Into the Long Night', fn: intoNight, col: c.amber },
+      { id: 'rtree', label: "Keeper's Tree", fn: () => M.open('tree', { from: 'results' }), icon: 'ember' },
+      { id: 'rrest', label: 'Bank and rest', fn: restRun },
+    ] : [
       { id: 'ragain', label: 'Play again', fn: () => { const h = r.heat || 0, md = r.mode; UI.scr = null; M.wasPaused = false; startRun(md, h); }, col: c.amber },
       { id: 'rtree', label: "Keeper's Tree", fn: () => M.open('tree', { from: 'results' }), icon: 'ember' },
       { id: 'rmenu', label: 'Main menu', fn: toMenu },
-    ] });
-    panel(items, { cap: 200, minW: 150, bd: c.ember });
+    ];
+    items.push({ t: 'btns', stack: port, list });
+    panel(items, { cap: 200, minW: 150, bd: win ? c.amber : c.ember });
   }
   function drawArrival() {
     dim(.25); const c = C(), mods = activeMods();
-    const items = [{ t: 'title', text: G.B.bio.name }, { t: 'text', text: G.level >= CAMPAIGN_LANDS ? 'The Long Night · Land ' + landNo() : 'Land ' + landNo() + ' of ' + CAMPAIGN_LANDS, col: c.dim }];
+    const items = [{ t: 'title', text: G.B.bio.name }, { t: 'text', text: G.mode === 'daily' ? 'Daily Long Night · Land ' + nightDepth() + ' · ' + ((META.run && META.run.day) || dailyDate()) : G.level >= CAMPAIGN_LANDS ? 'The Long Night · Land ' + landNo() : 'Land ' + landNo() + ' of ' + CAMPAIGN_LANDS, col: c.dim }];
     if (G.heat) items.push({ t: 'text', text: 'Heat ' + G.heat + ' · ' + HEAT[G.heat].name, col: c.ember });
     items.push({ t: 'sep' });
     for (const m of mods) items.push({ t: 'mod', icon: m.icon, name: m.name, tip: m.tip, col: MUTATORS[m.key] && MUTATORS[m.key].boon ? c.ok : c.amber });
@@ -9548,14 +9864,14 @@ const MENU = (() => {
     const c = C(), s = E.s, avW = E.Wr - E.iL - 8 * s, avH = E.Hb - E.iT - 8 * s, tab = M.tab;
     let ps = s; const p0 = ps => 5 * ps;
     // Width first: about 230 font pixels where the screen allows.
-    while (ps > 2 && (mw('Bestiary', ps) + mw('Story', ps) + mw('Records', ps) + 12 * p0(ps) + 6 * ps > avW || PX.LINE * ps * 14 > avH)) ps--;
+    while (ps > 2 && (mw('Bestiary', ps) + mw('Story', ps) + mw('Feats', ps) + mw('Records', ps) + 16 * p0(ps) + 9 * ps > avW || PX.LINE * ps * 14 > avH)) ps--;
     const p = p0(ps), L = PX.LINE * ps, gap = 3 * ps, w = Math.min(avW, Math.max(230 * ps, mw('Bestiary', ps) * 4)), inner = w - 2 * p, bh = touchH(ps);
     const h = Math.min(avH, Math.max(L * 16, Math.round(avH * .9))), x = Math.round((E.iL + E.Wr) / 2 - w / 2), y = Math.round(clamp((E.H - h) / 2, E.iT + 4 * s, E.Hb - h));
     UI.panelRect = { x, y, w, h };
     ctx.globalAlpha = sat(M.t * 6 + .25);
     UI.plate(x, y, w, h, { bd: c.bdHi });
     // Tabs.
-    const tabs = [['beasts', 'Bestiary'], ['story', 'Story'], ['records', 'Records']], tw = Math.floor((inner - 2 * gap) / 3);
+    const tw = Math.floor((inner - 3 * gap) / 4), tabs = [['beasts', 'Bestiary'], ['story', 'Story'], ['feats', mw('Achievements', ps) + 2 * p <= tw ? 'Achievements' : 'Feats'], ['records', 'Records']];
     tabs.forEach(([k, l], i) => button('ct' + k, x + p + i * (tw + gap), y + p, tw, bh, l, ps, () => { M.tab = k; M.page = 0; }, { on: tab === k }));
     const y0 = y + p + bh + gap * 2, foot = bh + gap, avail = y + h - p - foot - y0;
     let rows = [];
@@ -9574,9 +9890,20 @@ const MENU = (() => {
         const yy = y0 + i * rh, known = META.story[k];
         button('cs' + k, x + p, yy, inner, rh - gap, known ? BEATS[k].title : '???', ps, () => { if (known) STORY.play(k, { replay: true }); }, { off: !known, offOk: false });
       });
+    } else if (tab === 'feats') {
+      // Achievements: earned ones lit, the rest dim with the way to earn them.
+      tx('Earned: ' + achCount() + ' of ' + ACH.length, x + p, y0, ps, c.dim);
+      const rh = L * 2 + gap * 2, per = Math.max(1, Math.floor((avail - L - gap) / rh)); M.pages = Math.ceil(ACH.length / per); M.page = Math.min(M.page, M.pages - 1);
+      ACH.slice(M.page * per, M.page * per + per).forEach((a, i) => {
+        const yy = y0 + L + gap + i * rh, got = !!META.ach[a.id], ic = PX.iconSize(a.icon)[0] ? a.icon : 'star', [iw, ih] = PX.iconSize(ic);
+        PX.icon(ctx, ic, x + p + Math.round((10 - iw) * ps / 2), yy + Math.round((L * 2 - ih * ps) / 2), ps, got ? 1 : .3);
+        tx(a.name, x + p + 13 * ps, yy, ps, got ? c.amber : '#7a7262');
+        const tl = wrap(a.tip, inner - 13 * ps, ps)[0]; tx(tl, x + p + 13 * ps, yy + L, ps, got ? c.tx : c.dim);
+      });
+      tx((M.page + 1) + '/' + M.pages, x + w - p, y0, ps, c.dim, { align: 'r' });
     } else {
       const S = META.stats, tm = Math.round(S.time / 60);
-      rows = [['Runs', S.runs], ['Embers earned', META.earned], ['Embers now', META.embers], ['Best wave', S.bestWave], ['Deepest land', S.bestLand], ['Deepest night land', S.bestNight], ['Campaigns beaten', S.campaigns], ['Heat unlocked', META.heatMax], ['Monsters slain', S.slain], ['Bosses slain', S.bosses], ['Time keeping', (tm >= 60 ? Math.floor(tm / 60) + ' h ' : '') + (tm % 60) + ' min'], ['Runs abandoned', S.abandons]];
+      rows = [['Runs', S.runs], ['Embers earned', META.earned], ['Embers now', META.embers], ['Best wave', S.bestWave], ['Deepest land', S.bestLand], ['Deepest night land', S.bestNight], ['Campaigns beaten', S.campaigns], ['Heat unlocked', META.heatMax], ['Monsters slain', S.slain], ['Bosses slain', S.bosses], ['Time keeping', (tm >= 60 ? Math.floor(tm / 60) + ' h ' : '') + (tm % 60) + ' min'], ['Runs abandoned', S.abandons], ['Elites slain', S.elites], ['Achievements', achCount() + '/' + ACH.length], ['Daily runs', S.dailies], ["Today's daily best", dailyBest() + ' waves']];
       const rh = L + ps, per = Math.max(1, Math.floor(avail / rh)); M.pages = Math.ceil(rows.length / per); M.page = Math.min(M.page, M.pages - 1);
       rows.slice(M.page * per, M.page * per + per).forEach((r, i) => { const yy = y0 + i * rh; tx(r[0], x + p, yy, ps, c.dim); tx('' + r[1], x + w - p, yy, ps, c.tx, { align: 'r' }); });
     }
@@ -9688,6 +10015,7 @@ const MENU = (() => {
     else if (s === 'pause') drawPause(); else if (s === 'confirm') drawConfirm(); else if (s === 'results') drawResults(); else if (s === 'arrival') drawArrival();
     // A story beat (a Codex replay too) sits over everything: the controls under it stop taking taps.
     if (STORY.on()) { M.items.length = 0; UI.btns.length = 0; drawStory(); }
+    achDraw(ctx, E); // an achievement toast sits over everything
     if (M.sel >= M.items.length) M.sel = Math.max(0, M.items.length - 1);
   };
   return M;

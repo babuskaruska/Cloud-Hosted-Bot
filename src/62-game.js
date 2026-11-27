@@ -240,8 +240,9 @@ function buildWave(k, level) {
 }
 // Pressure's share of monster health. Above the old 2.2 ceiling it counts double, so strong play meets a real fight.
 function pressHp() { const p = G.press; return .85 + .15 * Math.min(p, 2.2) + .3 * Math.max(0, p - 2.2); }
-// The ceiling for pressure rises with each land; the first land keeps the old, friendly cap.
-function pressCap() { return 2.2 + .3 * G.level; }
+// The ceiling for pressure rises with each land; the first land keeps the old, friendly cap. Heat lifts it further
+// (0.1 per tier), so a strong keeper at high Heat keeps meeting a real fight (G.heat is 0 outside a run).
+function pressCap() { return 2.2 + .3 * G.level + .1 * G.heat; }
 function startWave() {
   const W = G.wavesPerLand;
   G.k = G.k % W + 1; G.queue = buildWave(G.k, G.level); if (waveNumber() > G.best && (inRun() || TEST_SESSION)) { G.best = waveNumber(); if (!TEST_SESSION) try { localStorage.setItem('lanternhold.best', '' + G.best); } catch (e) {} } G.waveT = 0; G.spawning = true; G.bossWave = isBossK(G.k); G.horde = isHordeK(G.k, G.level); G.waveKills = 0; G.waveLeaks = 0; G.bossDown = false; G.trickle = 6; G.trickleN = 0;
@@ -257,6 +258,7 @@ function endWave() {
   if (G.lives <= 6) G.press *= .9;
   G.press = clamp(G.press, .6, pressCap());
   G.gold += (22 + 7 * G.k + 8 * G.level) * G.goldMul + G.waveGold;
+  if (G.horde && l === 0) achUnlock('horde');
   G.horde = false;
 }
 function updateWaves(dt) {
@@ -478,7 +480,7 @@ const AI = { think: .15, wait: 0, last: '' };
 function aiThink(dt) {
   if (G.phase !== 'play' || UI.playerActive()) return;
   AI.think -= dt; if (AI.think > 0) return; AI.think = .5;
-  aiSpells();
+  aiSpells(); aiReroll();
   const B = G.B, towers = G.towers.filter(t => t.alive), empty = B.pads.filter(p => !p.tower), N = towers.length;
   const cnt = { archer: 0, bombard: 0, spire: 0, guard: 0 }; for (const t of towers) cnt[t.kind]++;
   const ideal = { archer: .36, bombard: .22, spire: .2, guard: .22 };
@@ -487,6 +489,8 @@ function aiThink(dt) {
   air += (G.snatched || 0) * .4; siege += (G.mix.ram || 0) * .15;
   // Mutators: armoured monsters want bombards and spires, swarms want splash and guards, fast ones want the slow of spires.
   if (modOn('ironhide')) armor += 3; if (modOn('swarm') || modOn('bloodmoon')) swarm += 3; if (modOn('haste')) { armor += 1; swarm += 1.5; }
+  // Siege sends rams every wave (blasts and fire); Echoes brings killed elites back, so more of everything that kills crowds.
+  if (modOn('siege')) siege += 4; if (modOn('echoes')) { swarm += 1; armor += 1; }
   const gatePress = sat(G.leaks / 8);
   const opts = [];
   for (const kind of TOWER_KINDS) {
@@ -504,7 +508,7 @@ function aiThink(dt) {
       for (const t of towers) { const d = Math.hypot(t.x - pad.x, t.z - pad.z); if (kind === 'guard' && t.kind !== 'guard' && d < t.range + 1.5) syn += .16; if (kind !== 'guard' && t.kind === 'guard' && d < def.range[0] + 1) syn += .2; if (t.kind === kind && d < 6) syn -= .12; }
       if (kind === 'guard') { sc *= .8 + .5 * rel; for (const t of towers) if (t.kind === 'guard' && Math.abs(t.pad.s - pad.s) < 9) syn -= .5; }
       sc *= 1 + syn;
-      opts.push({ sc, cost: def.cost[0], act: 'build', kind, pad });
+      opts.push({ sc, cost: G.freeTowers > 0 ? 0 : def.cost[0], act: 'build', kind, pad }); // Founding Stone: the first towers are free
     }
   }
   for (const t of towers) {
@@ -542,6 +546,13 @@ function aiThink(dt) {
   AI.think = N < 3 ? .12 : .8;
 }
 
+// In a run with Fate's Lantern rerolls left, the commander rerolls a land that came up with two or more curses
+// (once per land, before the first wave is out).
+function aiReroll() {
+  if (!inRun() || !(G.rerolls > 0) || AI.rerollLv === G.level || G.k > 1 || G.modLevel !== G.level || typeof MUTATORS !== 'object') return;
+  AI.rerollLv = G.level;
+  if (G.mods.filter(k => MUTATORS[k] && MUTATORS[k].curse).length >= 2) rerollMods();
+}
 // Which branch suits this tower: what leaked (counts most) and what this land has sent so far, plus a nudge
 // towards variety so the board does not end up all one kind.
 function aiBranch(t, towers, air, armor, swarm) {
@@ -648,7 +659,7 @@ function updatePhase(dt) {
   LT.beaconLevel = damp(LT.beaconLevel, G.lives / G.maxLives, 3, dt);
   if (B.beaconFlame) { const f = B.beaconFlame, lv = LT.beaconLevel; f.on = LT.beaconOn; f.size = 2.35 * (.42 + .58 * lv) * (1 - .32 * LT.beaconGutter); f.embers = 1 + 2 * lv + 6 * LT.beaconGutter; }
   for (let i = 1; i < B.flames.length; i++) B.flames[i].on = LT.beaconOn;
-  if (G.phase === 'clear') { if (t > 2.6) setPhase('crumble'); }
+  if (G.phase === 'clear') { if (t > 2.6 && !G.holdClear) setPhase('crumble'); } // holdClear: the campaign's victory screens
   else if (G.phase === 'defeat') {
     for (const tw of G.towers) { tw.em.on = damp(tw.em.on, 0, 1.5 + tw.idx * .15, dt); if (tw.flame) tw.flame.on = tw.em.on; if (tw.flame2) tw.flame2.on = tw.em.on; }
     // A player who has walked away gets the commander back for the next run.

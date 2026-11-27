@@ -3,6 +3,11 @@
 // dialogue panel, the tutorial guide and the HUD row of mutator icons.
 //
 // UI.scr is the open screen: null | 'title' | 'heat' | 'tree' | 'codex' | 'pause' | 'confirm' | 'results' | 'arrival'.
+// The results screen follows a defeat (after Ash's CINE.play('defeat') when the build has it), an abandoned run, and the
+// campaign's victory (CINE.play('victory'), then the ending beat, then results with "Into the Long Night"). While it is
+// open the audio scene is 'results'. Its embers count up (sfx 'emberTick', throttled) and each new unlock rings
+// (sfx 'unlock'): upgrades that became affordable, a new Heat tier, the run's achievements and a daily best.
+// On phones (touch, short side under 700 CSS px) the main menu is a compact bottom sheet so the demo shows above it.
 // Every control goes into UI.btns (so taps find it) and into MENU.items (so keys and the gamepad can walk it).
 // Input: touch and mouse (tap a button), keys (arrows or WASD move, Enter or Space picks, Esc goes back) and a gamepad
 // (stick or D-pad, A picks, B goes back, Start opens the in-game menu).
@@ -41,7 +46,7 @@ const MENU = (() => {
     if (S) { const r = embersForSave(S); return confirm('Start a new run?', ['Your saved run ends here' + (r && r.total ? ' and banks ' + r.total + ' embers.' : '.')], 'Start anew', () => toHeat(mode), 'title'); }
     toHeat(mode);
   }
-  function toHeat(mode) { if (META.heatMax > 0) { M.heatPick = clamp(M.heatPick || META.heatMax, 0, META.heatMax); M.open('heat'); } else begin(mode, 0); }
+  function toHeat(mode) { if (mode === 'daily') return begin('daily', 0); if (META.heatMax > 0) { M.heatPick = clamp(M.heatPick || META.heatMax, 0, META.heatMax); M.open('heat'); } else begin(mode, 0); }
   function begin(mode, heat) { UI.scr = null; M.wasPaused = false; startRun(mode, heat); }
   function confirm(title, lines, yes, fn, back, no) { M.conf = { title, lines, yes, fn, back, no }; M.open('confirm'); }
   function doContinue() {
@@ -49,18 +54,85 @@ const MENU = (() => {
     UI.scr = null; M.wasPaused = false; buzz(12);
     try { if (!restoreRun(S)) { clearSave(); M.open('title'); } } catch (e) { clearSave(); setTimeout(() => location.reload(), 30); throw e; }
   }
-  function toMenu() { M.res = null; startDemo(); M.open('title'); }
+  function toMenu() { M.res = null; M.victory = null; startDemo(); M.open('title'); }
+  // ---- results: the cinematic first (Ash's CINE, if the build has it), then the screen ----
+  const cineOk = () => typeof CINE !== 'undefined' && CINE && typeof CINE.play === 'function';
+  function playCine(kind, done) { let called = false; const fin = () => { if (!called) { called = true; done(); } }; try { CINE.play(kind, fin); } catch (e) { fin(); } }
+  function openResults() {
+    const r = M.res || META.last; M.rc = { t: 0, tickT: -1, shown: -1, fanAt: 0, fan: r ? fanfare(r) : [] };
+    M.open('results');
+  }
+  // What the run opened up, rung one by one after the count: newly affordable upgrades, Heat tiers and other notes,
+  // the run's achievements, a daily best.
+  function fanfare(r) {
+    const c = C(), out = [], before = r.before || 0, after = r.after || 0;
+    for (const n of r.notes || []) out.push({ text: n, col: c.ember });
+    if (r.daily && r.daily.newBest) out.push({ text: "New best for today: " + r.daily.waves + ' waves', col: c.amber });
+    for (const id of r.ach || []) if (ACH_BY[id]) out.push({ text: 'Achievement: ' + ACH_BY[id].name, col: c.amber, icon: ACH_BY[id].icon });
+    const ups = UPGRADES.filter(u => { const k = upCost(u.key); return k && k <= after && k > before; });
+    if (ups.length) out.push({ text: (ups.length > 2 ? ups.length + ' upgrades' : ups.map(u => u.name).join(' and ')) + ' now in reach', col: c.ok, icon: 'ember' });
+    if (out.length > 5) { const n = out.length - 4; out.length = 4; out.push({ text: 'and ' + n + ' more', col: c.dim }); }
+    return out;
+  }
+  // The ember rows of a result, in the order they count up.
+  function emberRows(r) {
+    const rows = [['Embers for waves', r.waves], ['Embers for bosses', r.boss]];
+    if (r.depth) rows.push(['The Long Night', r.depth]); if (r.story) rows.push(['The story', r.story]);
+    return rows;
+  }
+  const RC = { row: .28, lead: .35, total: 1.1, fan: .55 };
+  const rcTimes = r => { const n = emberRows(r).length, t0 = RC.lead + n * RC.row; return { t0, end: t0 + RC.total }; };
+  function resultsTick(dt) {
+    const rc = M.rc, r = M.res || META.last; if (!rc || !r) return;
+    rc.t += dt; const T = rcTimes(r), rows = emberRows(r);
+    // The sum on screen (rows, then the total): a tick whenever it moves, at most every 60 ms.
+    let shown = 0; rows.forEach(([, v], i) => { shown += Math.round(v * sat((rc.t - RC.lead - i * RC.row) / RC.row)); });
+    shown += Math.round(r.total * sat((rc.t - T.t0) / RC.total));
+    if (shown !== rc.shown && rc.t - rc.tickT > .06 && rc.t < T.end + .1) { rc.tickT = rc.t; sfx('emberTick', CAM.x, CAM.z, .7, clamp((rc.t - RC.lead) / (T.end - RC.lead), 0, 1)); }
+    rc.shown = shown;
+    while (rc.fanAt < rc.fan.length && rc.t > T.end + .3 + rc.fanAt * RC.fan) { sfx('unlock', CAM.x, CAM.z, 1, rc.fanAt / Math.max(1, rc.fan.length - 1)); rc.fanAt++; }
+  }
+  // A tap, Enter or Space while the count runs: jump to the end of it.
+  function skipCount() {
+    const rc = M.rc, r = M.res || META.last; if (!rc || !r) return false;
+    const T = rcTimes(r), end = T.end + .3 + rc.fan.length * RC.fan; if (rc.t >= end) return false;
+    if (rc.t < T.end) { rc.t = T.end + .29; rc.tickT = rc.t; sfx('emberTick', CAM.x, CAM.z, .7, 1); } else rc.t = end;
+    return true;
+  }
+  M.skipCount = skipCount;
+  // The campaign's victory: the run so far, not banked (the run goes on into the Long Night unless the keeper rests).
+  function victoryResult() {
+    const run = META.run || { level0: 0, notes: [], ach: [] }, sm = runSummary() || {};
+    const r = embersFor({ waves: sm.waves, bosses: sm.lands, level: G.level, level0: run.level0, heat: G.heat, ending: run.ending && !run.endingPaid });
+    return Object.assign(r, { how: 'victory', sum: sm, mode: 'campaign', land: landNo(), landName: G.B ? G.B.bio.name : '', notes: (run.notes || []).slice(), ach: (run.ach || []).slice(), before: META.embers, after: META.embers + r.total });
+  }
+  function intoNight() { M.victory = null; G.holdClear = false; M.res = null; M.rc = null; M.close(); sfx('uiClick', CAM.x, CAM.z, 1); }
+  function restRun() { M.victory = null; M.res = abandonRun('rest'); openResults(); }
   function buzz(p) { if (UI.touch && navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
 
   // ---- update: results after a defeat, the arrival card, the tutorial, story ----
   M.update = dt => {
-    M.t += dt; metaTick(dt); STORY.update(dt); TUT.update(dt);
-    // Echo's audio scene: the main menu (the demo behind it), a story beat, or the game.
-    const scene = STORY.on() ? 'story' : UI.scr && G.mode === 'demo' ? 'menu' : 'game';
+    M.t += dt; metaTick(dt); STORY.update(dt); TUT.update(dt); achTick(dt); achToastTick(dt);
+    if (UI.scr === 'results') resultsTick(dt);
+    // Echo's audio scene: the main menu (the demo behind it), a story beat, the results screen, or the game.
+    const scene = STORY.on() ? 'story' : UI.scr === 'results' ? 'results' : UI.scr && G.mode === 'demo' ? 'menu' : 'game';
     UI.mainMenu = scene === 'menu'; G.scene = scene;
     if (scene !== M.scene) { M.scene = scene; if (typeof AU.setScene === 'function') try { AU.setScene(scene); } catch (e) {} }
     if (UI.mx !== M.lmx || UI.my !== M.lmy) { if (M.lmx !== undefined) M.kb = false; M.lmx = UI.mx; M.lmy = UI.my; } // the mouse took over from the keys
-    if (inRun() && G.phase === 'defeat' && G.phaseT > SUMMARY_AT && !UI.scr && !STORY.on()) { M.res = META.last; M.open('results'); }
+    // A defeat: the dark swallows the keep (Ash's cinematic), then the results.
+    if (inRun() && G.phase === 'defeat' && !UI.scr && !STORY.on()) {
+      const cine = cineOk();
+      if (cine && M.cineRun !== G.run && G.phaseT > .4) { M.cineRun = G.run; M.cineDone = false; const run = G.run; playCine('defeat', () => { if (M.cineRun === run) M.cineDone = true; }); }
+      if (cine ? M.cineRun === G.run && (M.cineDone || G.phaseT > 12) : G.phaseT > SUMMARY_AT) { M.res = META.last; openResults(); }
+    }
+    // The campaign won: the beacon re-lights (cinematic), the ending beat, then the results. The land holds meanwhile.
+    const V = M.victory;
+    if (V && inRun() && G.phase === 'clear' && !UI.scr && !STORY.on()) {
+      if (V.stage === 'pending' && G.phaseT > .5) { V.stage = 'cine'; V.t0 = M.t; if (cineOk()) playCine('victory', () => { if (V.stage === 'cine') V.stage = 'story'; }); else V.stage = 'story'; }
+      if (V.stage === 'cine' && M.t - V.t0 > 12) V.stage = 'story';
+      if (V.stage === 'story') { V.stage = 'wait'; if (!STORY.ending(() => { V.stage = 'results'; })) V.stage = 'results'; }
+      if (V.stage === 'results') { V.stage = 'shown'; M.res = victoryResult(); openResults(); }
+    } else if (V && (!inRun() || G.phase !== 'clear')) { M.victory = null; G.holdClear = false; }
     if (inRun() && G.phase === 'play' && M.arrivalLv !== G.level && G.modLevel === G.level && !STORY.on() && !STORY.queue.length && !UI.scr) {
       M.arrivalLv = G.level; if (activeMods().length) M.open('arrival');
     }
@@ -87,6 +159,7 @@ const MENU = (() => {
     }
     if (d && UI.scr === 'codex' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) { pageStep(d); return true; }
     if (d) { const n = M.items.length || 1; M.sel = ((M.sel + d) % n + n) % n; sfx('menuMove', CAM.x, CAM.z, .6); return true; }
+    if ((k === 'Enter' || k === ' ') && UI.scr === 'results' && skipCount()) return true;
     if (k === 'Enter' || k === ' ') { const it = M.items[M.sel]; if (it) { sfx('menuSelect', CAM.x, CAM.z, .8); it.fn(); } return true; }
     if (k === 'Escape' || k === 'Backspace') { M.back(); return true; }
     return true;
@@ -105,12 +178,13 @@ const MENU = (() => {
       sfx('menuMove', CAM.x, CAM.z, .6);
     }
     if (!d) M.padT = 0; else M.padT -= 1 / 60;
+    if (hit(0) && UI.scr === 'results' && skipCount()) return;
     if (hit(0)) { const it = M.items[M.sel]; if (it) { sfx('menuSelect', CAM.x, CAM.z, .8); it.fn(); } }
     if (hit(1)) M.back();
   };
   M.padT = 0;
   // A tap that hit no control: the story advances; the arrival card begins; other screens ignore it.
-  M.tapOutside = () => { if (STORY.on()) STORY.advance(); else if (UI.scr === 'arrival') M.close(); };
+  M.tapOutside = () => { if (STORY.on()) STORY.advance(); else if (UI.scr === 'arrival') M.close(); else if (UI.scr === 'results') skipCount(); };
   function heatStep(d) { M.heatPick = clamp(M.heatPick + d, 0, META.heatMax); sfx('heatSelect', CAM.x, CAM.z, .8, M.heatPick / HEAT_MAX); }
   function pageStep(d) { M.page = Math.max(0, Math.min((M.pages || 1) - 1, M.page + d)); sfx('uiHover', CAM.x, CAM.z, .6); }
 
@@ -204,20 +278,27 @@ const MENU = (() => {
   }
 
   // ---- the screens ----
-  function drawTitle() {
-    const c = C(), s = E.s, W = E.W, H = E.H, avW = E.Wr - E.iL - 8 * s;
-    // A dark wash over the demo, darker at the edges.
-    dim(.32); const g = ctx.createRadialGradient(W / 2, H * .45, Math.min(W, H) * .2, W / 2, H * .45, Math.max(W, H) * .75); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.6)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    const wide = W > H * 1.25 && H < 560 * E.dpr;
-    // The menu items.
-    const S = M.save, list = [];
+  function titleList() {
+    const c = C(), S = M.save, list = [];
     if (S) { const mins = Math.max(0, (Date.now() - S.t) / 6e4), ago = mins < 1 ? 'just now' : mins < 60 ? Math.round(mins) + ' min ago' : mins < 2880 ? Math.round(mins / 60) + ' h ago' : Math.round(mins / 1440) + ' days ago';
       list.push({ id: 'mcont', label: 'Continue', sub: 'Land ' + (S.level + 1) + ' · Wave ' + S.k + (S.heat ? ' · Heat ' + S.heat : '') + ' · ' + ago, fn: doContinue, col: c.amber }); }
     list.push({ id: 'mcamp', label: 'Campaign', sub: META.stats.campaigns ? 'Six lands · beaten ' + META.stats.campaigns + 'x' : 'Six lands. Light the beacons.', fn: () => pickMode('campaign'), col: S ? null : c.amber });
-    list.push({ id: 'mnight', label: 'The Long Night', sub: META.stats.campaigns ? (META.stats.bestNight ? 'Deepest: night land ' + META.stats.bestNight : 'Endless lands') : 'Endless lands · after the campaign', fn: () => pickMode('night') });
-    list.push({ id: 'mtree', label: "Keeper's Tree", sub: META.embers + ' embers', fn: () => M.open('tree', { from: 'title' }), icon: 'ember' });
-    list.push({ id: 'mcodex', label: 'Codex', sub: 'Bestiary, story, records', fn: () => { M.page = 0; M.open('codex'); } });
+    list.push({ id: 'mnight', label: 'The Long Night', short: 'Long Night', sub: META.stats.campaigns ? (META.stats.bestNight ? 'Deepest: night land ' + META.stats.bestNight : 'Endless lands') : 'Endless lands · after the campaign', fn: () => pickMode('night') });
+    const db = dailyBest();
+    list.push({ id: 'mdaily', label: 'Daily Long Night', short: 'Daily', sub: db ? "Today's best: " + db + ' waves' : 'One road for everyone today', fn: () => pickMode('daily') });
+    list.push({ id: 'mtree', label: "Keeper's Tree", short: 'Tree ' + META.embers, sub: META.embers + ' embers', fn: () => M.open('tree', { from: 'title' }), icon: 'ember' });
+    list.push({ id: 'mcodex', label: 'Codex', sub: 'Bestiary, story, feats, records', fn: () => { M.page = 0; M.open('codex'); } });
     list.push({ id: 'mset', label: 'Settings', fn: () => UI.openSettings(true), nosub: true });
+    return list;
+  }
+  // Phones: a compact bottom sheet (and a small logo up top), so the commander's demo shows in between.
+  const compactMenu = () => E.tch && Math.min(E.W, E.H) < 700 * E.dpr;
+  function drawTitle() {
+    const c = C(), s = E.s, W = E.W, H = E.H, avW = E.Wr - E.iL - 8 * s, list = titleList();
+    if (compactMenu()) return drawTitleCompact(list);
+    // A dark wash over the demo, darker at the edges.
+    dim(.32); const g = ctx.createRadialGradient(W / 2, H * .45, Math.min(W, H) * .2, W / 2, H * .45, Math.max(W, H) * .75); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.6)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const wide = W > H * 1.25 && H < 560 * E.dpr;
     // Fit: logo scale k and button font ps.
     const lw0 = PX.measure('LANTERNHOLD');
     const fit = ps => {
@@ -240,6 +321,44 @@ const MENU = (() => {
     // Footer: credit to the original.
     const fs = Math.max(1, ps - 1), ft = 'After Cinderwatch by kevintngo · MIT';
     if (mw(ft, fs) < avW) tx(ft, W / 2, E.Hb - PX.LINE * fs - 3 * s, fs, 'rgba(167,158,138,0.7)', { align: 'c' });
+  }
+  function drawTitleCompact(list) {
+    const c = C(), s = E.s, W = E.W, H = E.H, port = H > W, cols = port ? 3 : 4, span = port ? 3 : 2;
+    const sheetW = Math.min(E.Wr - E.iL - 8 * s, port ? 1e9 : 560 * E.dpr), avH = E.Hb - E.iT;
+    // The primary entry (Continue, else Campaign) spans the first row with its sub line; the rest are short buttons.
+    const prim = list[0], rest = list.slice(1);
+    const fit = ps => {
+      const p = 4 * ps, gap = 3 * ps, cw = Math.floor((sheetW - 2 * p - (cols - 1) * gap) / cols), bh1 = touchH(ps, 1), bh2 = touchH(ps, 2);
+      const pw = cw * span + gap * (span - 1);
+      let ok = mw(prim.label, ps) + 2 * p <= pw && mw(prim.sub || '', ps) + 2 * p <= pw;
+      for (const it of rest) { const l = it.short || it.label; if (mw(l, ps) + (it.icon ? 12 * ps : 0) + 2 * p > cw) ok = false; }
+      const slots = span + rest.length, rows = Math.ceil(slots / cols), h = 2 * p + bh2 + (rows - 1) * (bh1 + gap);
+      return { ps, p, gap, cw, pw, bh1, bh2, rows, h, ok: ok && h < avH * (port ? .3 : .45) };
+    };
+    let F = fit(s); while (F.ps > 2 && !F.ok) F = fit(F.ps - 1);
+    const { ps, p, gap, cw, pw, bh1, bh2, h } = F, sx = Math.round((E.iL + E.Wr) / 2 - sheetW / 2), sy = E.Hb - h - 4 * s;
+    // Light washes: the top behind the logo and the bottom behind the sheet; the middle stays clear for the demo.
+    const gt = ctx.createLinearGradient(0, 0, 0, H * .3); gt.addColorStop(0, 'rgba(4,5,10,0.7)'); gt.addColorStop(1, 'rgba(4,5,10,0)'); ctx.fillStyle = gt; ctx.fillRect(0, 0, W, H * .3);
+    const gb = ctx.createLinearGradient(0, sy - 40 * s, 0, H); gb.addColorStop(0, 'rgba(4,5,10,0)'); gb.addColorStop(1, 'rgba(4,5,10,0.75)'); ctx.fillStyle = gb; ctx.fillRect(0, sy - 40 * s, W, H - sy + 40 * s);
+    // The logo, small, up top.
+    const lw0 = PX.measure('LANTERNHOLD'), k = Math.max(2, Math.floor(Math.min((port ? .8 : .5) * (E.Wr - E.iL) / lw0, (port ? .045 : .09) * H / PX.LINE)));
+    drawLogo(W / 2, E.iT + (port ? 14 : 6) * s, k, ps);
+    // The sheet.
+    ctx.globalAlpha = sat(M.t * 5 + .3);
+    UI.plate(sx, sy, sheetW, h, { bd: c.bdHi, bg: 'rgba(10,11,18,0.9)' });
+    button(prim.id, sx + p, sy + p, pw, bh2, prim.label, ps, prim.fn, { sub: prim.sub, col: prim.col || c.amber });
+    let slot = span;
+    for (const it of rest) {
+      const col = slot % cols, row = Math.floor(slot / cols);
+      const bx = sx + p + col * (cw + gap), by = row === 0 ? sy + p : sy + p + bh2 + gap + (row - 1) * (bh1 + gap), bhh = row === 0 ? bh2 : bh1;
+      const last = it === rest[rest.length - 1], bw = last ? (cols - col) * (cw + gap) - gap : cw; // the last one fills its row
+      button(it.id, bx, by, bw, bhh, it.short || it.label, ps, it.fn, { col: it.col, icon: it.icon });
+      slot++;
+    }
+    ctx.globalAlpha = 1;
+    // The credit, small, just above the sheet.
+    const fs = Math.max(1, ps - 1), ft = 'After Cinderwatch by kevintngo · MIT';
+    if (mw(ft, fs) < E.Wr - E.iL - 8 * s) tx(ft, W / 2, sy - PX.LINE * fs - 3 * s, fs, 'rgba(167,158,138,0.6)', { align: 'c' });
   }
   // The logo: LANTERNHOLD in the pixel font, big, with an ember glow and sparks rising from it.
   function drawLogo(cx, y, k, ps) {
@@ -285,7 +404,7 @@ const MENU = (() => {
     items.push({ t: 'gap' }, { t: 'btns', stack: true, list: [
       { id: 'presume', label: 'Resume', fn: () => M.close(), col: c.amber },
       { id: 'pset', label: 'Settings', fn: () => UI.openSettings(true) },
-      { id: 'pquit', label: 'Abandon run', fn: () => { const n = runEmbersNow(); confirm('Abandon the run?', ['You keep the embers it has earned: ' + n + '.'], 'Abandon', () => { M.res = abandonRun(); M.open('results'); }, 'pause', () => { M.open('pause'); }); }, col: c.ember },
+      { id: 'pquit', label: 'Abandon run', fn: () => { const n = runEmbersNow(); confirm('Abandon the run?', ['You keep the embers it has earned: ' + n + '.'], 'Abandon', () => { M.res = abandonRun(); openResults(); }, 'pause', () => { M.open('pause'); }); }, col: c.ember },
     ] });
     panel(items, { cap: 200, minW: 150 });
   }
@@ -293,27 +412,38 @@ const MENU = (() => {
   function drawResults() {
     dim(.35); const c = C(), r = M.res || META.last;
     if (!r) { panel([{ t: 'title', text: 'The beacon is out' }, { t: 'btns', list: [{ id: 'rmenu', label: 'Main menu', fn: toMenu }] }]); return; }
-    const sm = r.sum || {}, items = [{ t: 'title', text: r.how === 'abandon' ? 'Run abandoned' : 'The beacon is out', col: '#ffd9a8' }, { t: 'text', text: (r.landName ? r.landName + ' · ' : '') + 'Land ' + r.land + (r.heat ? ' · Heat ' + r.heat : ''), col: c.dim }];
+    const rc = M.rc || { t: 99, fan: [], fanAt: 0 }, T = rcTimes(r), win = r.how === 'victory';
+    const sm = r.sum || {}, title = win ? 'Six fires burn' : r.how === 'abandon' ? 'Run abandoned' : r.how === 'rest' ? 'The keeper rests' : 'The beacon is out';
+    const where = r.mode === 'daily' ? 'Daily Long Night' + (r.daily ? ' · ' + r.daily.day : '') : (r.landName ? r.landName + ' · ' : '') + 'Land ' + r.land + (r.heat ? ' · Heat ' + r.heat : '');
+    const items = [{ t: 'title', text: title, col: win ? c.amber : '#ffd9a8' }, { t: 'text', text: where, col: c.dim }];
     items.push({ t: 'row', l: 'Waves survived', r: '' + (sm.waves || 0) }, { t: 'row', l: 'Lands cleared', r: '' + (sm.lands || 0) }, { t: 'row', l: 'Monsters slain', r: '' + (sm.slain || 0) });
     if (sm.tower) items.push({ t: 'row', l: 'Best tower', r: sm.tower.name + ' · ' + sm.tower.kills });
-    items.push({ t: 'sep' }, { t: 'row', l: 'Embers for waves', r: '' + r.waves }, { t: 'row', l: 'Embers for bosses', r: '' + r.boss });
-    if (r.depth) items.push({ t: 'row', l: 'The Long Night', r: '' + r.depth });
-    if (r.story) items.push({ t: 'row', l: 'The story', r: '' + r.story });
+    if (r.daily) items.push({ t: 'row', l: "Today's best", r: r.daily.best + ' waves', rc: r.daily.newBest ? c.amber : c.tx });
+    items.push({ t: 'sep' });
+    // The ember sources count up one after another, then the total.
+    emberRows(r).forEach(([l, v], i) => { const k = sat((rc.t - RC.lead - i * RC.row) / RC.row); items.push({ t: 'row', l, r: '' + Math.round(v * k), rc: k >= 1 ? c.tx : c.amber }); });
     if (r.heat) items.push({ t: 'row', l: 'Heat ' + r.heat, r: '×' + r.mul.toFixed(2), rc: c.ember });
-    items.push({ t: 'big', text: '+' + r.total + ' embers', col: c.amber }, { t: 'text', text: 'You have ' + META.embers + ' embers.', col: c.tx });
-    for (const n of r.notes || []) items.push({ t: 'text', text: n, col: c.ember });
-    const cheap = UPGRADES.filter(u => upCost(u.key) && upCost(u.key) <= META.embers).length;
-    if (cheap) items.push({ t: 'text', text: cheap + ' upgrade' + (cheap > 1 ? 's' : '') + ' ready in the Keeper\'s Tree.', col: c.ok });
-    items.push({ t: 'btns', stack: true, list: [
+    const kt = sat((rc.t - T.t0) / RC.total), tot = Math.round(r.total * (1 - Math.pow(1 - kt, 2)));
+    items.push({ t: 'big', text: '+' + tot + ' embers' + (win ? ' so far' : ''), col: kt >= 1 && (rc.t - T.end) < .25 ? '#fff0c8' : c.amber });
+    items.push({ t: 'text', text: win ? 'Banked when the run ends. You have ' + META.embers + '.' : 'You have ' + Math.round((r.before || 0) + (r.after - (r.before || 0)) * (1 - Math.pow(1 - kt, 2))) + ' embers.', col: c.tx });
+    // The unlocks ring one by one; their lines are laid out from the start so nothing jumps.
+    rc.fan.forEach((f, i) => items.push({ t: 'text', text: f.text, col: i < rc.fanAt ? f.col : 'rgba(0,0,0,0)' }));
+    const port = E.H > E.W * 1.1;
+    const list = win ? [
+      { id: 'rnight', label: 'Into the Long Night', fn: intoNight, col: c.amber },
+      { id: 'rtree', label: "Keeper's Tree", fn: () => M.open('tree', { from: 'results' }), icon: 'ember' },
+      { id: 'rrest', label: 'Bank and rest', fn: restRun },
+    ] : [
       { id: 'ragain', label: 'Play again', fn: () => { const h = r.heat || 0, md = r.mode; UI.scr = null; M.wasPaused = false; startRun(md, h); }, col: c.amber },
       { id: 'rtree', label: "Keeper's Tree", fn: () => M.open('tree', { from: 'results' }), icon: 'ember' },
       { id: 'rmenu', label: 'Main menu', fn: toMenu },
-    ] });
-    panel(items, { cap: 200, minW: 150, bd: c.ember });
+    ];
+    items.push({ t: 'btns', stack: port, list });
+    panel(items, { cap: 200, minW: 150, bd: win ? c.amber : c.ember });
   }
   function drawArrival() {
     dim(.25); const c = C(), mods = activeMods();
-    const items = [{ t: 'title', text: G.B.bio.name }, { t: 'text', text: G.level >= CAMPAIGN_LANDS ? 'The Long Night · Land ' + landNo() : 'Land ' + landNo() + ' of ' + CAMPAIGN_LANDS, col: c.dim }];
+    const items = [{ t: 'title', text: G.B.bio.name }, { t: 'text', text: G.mode === 'daily' ? 'Daily Long Night · Land ' + nightDepth() + ' · ' + ((META.run && META.run.day) || dailyDate()) : G.level >= CAMPAIGN_LANDS ? 'The Long Night · Land ' + landNo() : 'Land ' + landNo() + ' of ' + CAMPAIGN_LANDS, col: c.dim }];
     if (G.heat) items.push({ t: 'text', text: 'Heat ' + G.heat + ' · ' + HEAT[G.heat].name, col: c.ember });
     items.push({ t: 'sep' });
     for (const m of mods) items.push({ t: 'mod', icon: m.icon, name: m.name, tip: m.tip, col: MUTATORS[m.key] && MUTATORS[m.key].boon ? c.ok : c.amber });
@@ -378,14 +508,14 @@ const MENU = (() => {
     const c = C(), s = E.s, avW = E.Wr - E.iL - 8 * s, avH = E.Hb - E.iT - 8 * s, tab = M.tab;
     let ps = s; const p0 = ps => 5 * ps;
     // Width first: about 230 font pixels where the screen allows.
-    while (ps > 2 && (mw('Bestiary', ps) + mw('Story', ps) + mw('Records', ps) + 12 * p0(ps) + 6 * ps > avW || PX.LINE * ps * 14 > avH)) ps--;
+    while (ps > 2 && (mw('Bestiary', ps) + mw('Story', ps) + mw('Feats', ps) + mw('Records', ps) + 16 * p0(ps) + 9 * ps > avW || PX.LINE * ps * 14 > avH)) ps--;
     const p = p0(ps), L = PX.LINE * ps, gap = 3 * ps, w = Math.min(avW, Math.max(230 * ps, mw('Bestiary', ps) * 4)), inner = w - 2 * p, bh = touchH(ps);
     const h = Math.min(avH, Math.max(L * 16, Math.round(avH * .9))), x = Math.round((E.iL + E.Wr) / 2 - w / 2), y = Math.round(clamp((E.H - h) / 2, E.iT + 4 * s, E.Hb - h));
     UI.panelRect = { x, y, w, h };
     ctx.globalAlpha = sat(M.t * 6 + .25);
     UI.plate(x, y, w, h, { bd: c.bdHi });
     // Tabs.
-    const tabs = [['beasts', 'Bestiary'], ['story', 'Story'], ['records', 'Records']], tw = Math.floor((inner - 2 * gap) / 3);
+    const tw = Math.floor((inner - 3 * gap) / 4), tabs = [['beasts', 'Bestiary'], ['story', 'Story'], ['feats', mw('Achievements', ps) + 2 * p <= tw ? 'Achievements' : 'Feats'], ['records', 'Records']];
     tabs.forEach(([k, l], i) => button('ct' + k, x + p + i * (tw + gap), y + p, tw, bh, l, ps, () => { M.tab = k; M.page = 0; }, { on: tab === k }));
     const y0 = y + p + bh + gap * 2, foot = bh + gap, avail = y + h - p - foot - y0;
     let rows = [];
@@ -404,9 +534,20 @@ const MENU = (() => {
         const yy = y0 + i * rh, known = META.story[k];
         button('cs' + k, x + p, yy, inner, rh - gap, known ? BEATS[k].title : '???', ps, () => { if (known) STORY.play(k, { replay: true }); }, { off: !known, offOk: false });
       });
+    } else if (tab === 'feats') {
+      // Achievements: earned ones lit, the rest dim with the way to earn them.
+      tx('Earned: ' + achCount() + ' of ' + ACH.length, x + p, y0, ps, c.dim);
+      const rh = L * 2 + gap * 2, per = Math.max(1, Math.floor((avail - L - gap) / rh)); M.pages = Math.ceil(ACH.length / per); M.page = Math.min(M.page, M.pages - 1);
+      ACH.slice(M.page * per, M.page * per + per).forEach((a, i) => {
+        const yy = y0 + L + gap + i * rh, got = !!META.ach[a.id], ic = PX.iconSize(a.icon)[0] ? a.icon : 'star', [iw, ih] = PX.iconSize(ic);
+        PX.icon(ctx, ic, x + p + Math.round((10 - iw) * ps / 2), yy + Math.round((L * 2 - ih * ps) / 2), ps, got ? 1 : .3);
+        tx(a.name, x + p + 13 * ps, yy, ps, got ? c.amber : '#7a7262');
+        const tl = wrap(a.tip, inner - 13 * ps, ps)[0]; tx(tl, x + p + 13 * ps, yy + L, ps, got ? c.tx : c.dim);
+      });
+      tx((M.page + 1) + '/' + M.pages, x + w - p, y0, ps, c.dim, { align: 'r' });
     } else {
       const S = META.stats, tm = Math.round(S.time / 60);
-      rows = [['Runs', S.runs], ['Embers earned', META.earned], ['Embers now', META.embers], ['Best wave', S.bestWave], ['Deepest land', S.bestLand], ['Deepest night land', S.bestNight], ['Campaigns beaten', S.campaigns], ['Heat unlocked', META.heatMax], ['Monsters slain', S.slain], ['Bosses slain', S.bosses], ['Time keeping', (tm >= 60 ? Math.floor(tm / 60) + ' h ' : '') + (tm % 60) + ' min'], ['Runs abandoned', S.abandons]];
+      rows = [['Runs', S.runs], ['Embers earned', META.earned], ['Embers now', META.embers], ['Best wave', S.bestWave], ['Deepest land', S.bestLand], ['Deepest night land', S.bestNight], ['Campaigns beaten', S.campaigns], ['Heat unlocked', META.heatMax], ['Monsters slain', S.slain], ['Bosses slain', S.bosses], ['Time keeping', (tm >= 60 ? Math.floor(tm / 60) + ' h ' : '') + (tm % 60) + ' min'], ['Runs abandoned', S.abandons], ['Elites slain', S.elites], ['Achievements', achCount() + '/' + ACH.length], ['Daily runs', S.dailies], ["Today's daily best", dailyBest() + ' waves']];
       const rh = L + ps, per = Math.max(1, Math.floor(avail / rh)); M.pages = Math.ceil(rows.length / per); M.page = Math.min(M.page, M.pages - 1);
       rows.slice(M.page * per, M.page * per + per).forEach((r, i) => { const yy = y0 + i * rh; tx(r[0], x + p, yy, ps, c.dim); tx('' + r[1], x + w - p, yy, ps, c.tx, { align: 'r' }); });
     }
@@ -518,6 +659,7 @@ const MENU = (() => {
     else if (s === 'pause') drawPause(); else if (s === 'confirm') drawConfirm(); else if (s === 'results') drawResults(); else if (s === 'arrival') drawArrival();
     // A story beat (a Codex replay too) sits over everything: the controls under it stop taking taps.
     if (STORY.on()) { M.items.length = 0; UI.btns.length = 0; drawStory(); }
+    achDraw(ctx, E); // an achievement toast sits over everything
     if (M.sel >= M.items.length) M.sel = Math.max(0, M.items.length - 1);
   };
   return M;

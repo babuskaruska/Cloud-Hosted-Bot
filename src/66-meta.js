@@ -1,9 +1,11 @@
 // Meta progression: embers banked at the end of every run, the Keeper's Tree of upgrades bought with them, Heat tiers,
-// lifetime records and story flags. Kept in localStorage 'lanternhold.meta' (every access in try/catch).
+// lifetime records, story flags, achievements (META.ach, 68-achieve.js) and the Daily Long Night's local best (META.daily). Kept in localStorage 'lanternhold.meta' (every access in try/catch).
 //
 // Run modes (G.mode): 'demo' is the AI commander behind the main menu and every test session (URL flags): no upgrades,
 // no Heat, no story, no embers, and the numbers play exactly as before. 'campaign' is the six hand-made lands in order
 // (land 0 = Ashen Pass, BIOME.start = 0); 'night' is The Long Night, the endless lands from land 6 on (G.level >= 6).
+// 'daily' is the Daily Long Night: the Long Night at Heat 0 on the seed of the UTC day (dailySeed()), with the day's
+// mutators fixed by that seed (dailyMods), and the local best per day in META.daily = { date, best, runs }.
 // A campaign run that beats the sixth land carries straight on into the Long Night.
 //
 // Everything a run reads from here is a plain number on G set by applyMeta(), each 1 (or 0) outside a run, so the
@@ -31,7 +33,22 @@ Object.assign(G, {
   towerDmg: 1, cdMul: 1, spellPow: 1, spellManaMul: 1, hpMul: 1, spdMul: 1, goldMul: 1, ocMul: 1, mendMul: 1, branchMul: 1,
   budgetMul: 1, bossHpMul: 1, eliteShift: 0, eliteMul: 1, waveGold: 0, heatMods: 0, heatAffix: 0,
 });
-const inRun = () => G.mode === 'campaign' || G.mode === 'night';
+const inRun = () => G.mode === 'campaign' || G.mode === 'night' || G.mode === 'daily';
+// The Long Night's endless lands (the night itself, or the Daily Long Night, which is the night on a seed of the day).
+const nightMode = m => m === 'night' || m === 'daily';
+// ---- The Daily Long Night: the same lands and mutators for every keeper on a UTC day; the local best is kept. ----
+function dailyDate(d) { d = d || new Date(); return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0'); }
+function dailySeed(date) { const s = date || dailyDate(); let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return 1 + h % 999999937; }
+// The day's mutators for a land, from the seed alone (not the gameplay stream), so every keeper meets the same ones.
+function dailyMods(seed, level) {
+  if (typeof MUTATORS !== 'object' || typeof modCount !== 'function') return [];
+  const rng = makeRng((seed ^ Math.imul(level + 1, 0x9E3779B1)) >>> 0), n = modCount(level);
+  const curses = Object.keys(MUTATORS).filter(k => MUTATORS[k].curse), boons = Object.keys(MUTATORS).filter(k => MUTATORS[k].boon), out = [];
+  for (let i = 0; i < n && curses.length; i++) { const j = Math.floor(rng() * curses.length); out.push(curses[j]); curses.splice(j, 1); }
+  if (n > 0 && rng() < .35) out.push(boons[Math.floor(rng() * boons.length)]);
+  return out;
+}
+const dailyBest = () => META.daily && META.daily.date === dailyDate() ? META.daily.best : 0;
 // The land number shown to the player (1-based), and the Long Night depth (1 on its first land).
 const landNo = () => G.level + 1;
 const nightDepth = () => Math.max(0, G.level - CAMPAIGN_LANDS + 1);
@@ -56,6 +73,7 @@ const UPGRADES = [
 const UPG = {}; for (const u of UPGRADES) UPG[u.key] = u;
 
 // Heat: each tier adds one rule on top of the ones below it, and pays more embers.
+// Every tier also lifts the pressure ceiling by 0.1 (pressCap in 62-game.js): strong play meets more monsters.
 const HEAT = [
   { name: 'No Heat', tip: 'The road as the old keepers knew it.' },
   { name: 'Thick Bones', tip: 'Monsters have 15% more health.' },
@@ -65,9 +83,9 @@ const HEAT = [
   { name: 'Early Elites', tip: 'Elites come a land sooner, and more often.' },
   { name: 'Lean Times', tip: '15% less gold from kills and waves.' },
   { name: 'Crowned Dread', tip: 'Bosses gain an affix and 20% more health.' },
-  { name: 'Swarming Dark', tip: 'Waves carry 15% more monsters.' },
+  { name: 'Swarming Dark', tip: 'Waves carry 25% more monsters.' },
   { name: 'Brittle Beacon', tip: '3 fewer lives again; mending costs 50% more.' },
-  { name: 'Endless Night', tip: 'Monsters have 20% more health; spells cost 20% more mana.' },
+  { name: 'Endless Night', tip: 'Monsters have 30% more health; spells cost 20% more mana.' },
 ];
 const HEAT_MAX = HEAT.length - 1;
 const heatMul = h => Math.round((1 + .35 * h) * 100) / 100;
@@ -76,8 +94,8 @@ const HEAT_UNLOCK_LAND = 10; // reaching land 10 at Heat N unlocks Heat N+1
 const META_KEY = 'lanternhold.meta', META_V = 1;
 const META = {
   on: !TEST_SESSION, // writes allowed
-  embers: 0, earned: 0, up: {}, heatMax: 0, tut: 0, story: {}, seen: {}, night: 0,
-  stats: { runs: 0, slain: 0, bosses: 0, bestWave: 0, bestLand: 0, bestNight: 0, campaigns: 0, time: 0, abandons: 0, heatBest: 0 },
+  embers: 0, earned: 0, up: {}, heatMax: 0, tut: 0, story: {}, seen: {}, night: 0, ach: {}, daily: { date: '', best: 0, runs: 0 },
+  stats: { runs: 0, slain: 0, bosses: 0, bestWave: 0, bestLand: 0, bestNight: 0, campaigns: 0, time: 0, abandons: 0, heatBest: 0, elites: 0, dailies: 0 },
   dirty: false, saveT: 0,
   run: null, // the live run: { mode, heat, level0, banked, endingSeen, t }
   last: null, // the last banked result, for the results screen
@@ -88,12 +106,13 @@ function loadMeta() {
   const n = (v, lo, hi) => typeof v === 'number' && isFinite(v) ? clamp(Math.floor(v), lo, hi) : 0;
   META.embers = n(o.embers, 0, 1e9); META.earned = n(o.earned, 0, 1e9); META.heatMax = n(o.heatMax, 0, HEAT_MAX); META.tut = o.tut ? 1 : 0; META.night = n(o.night, 0, 1e6);
   if (o.up && typeof o.up === 'object') for (const u of UPGRADES) META.up[u.key] = n(o.up[u.key], 0, u.max);
-  for (const f of ['story', 'seen']) if (o[f] && typeof o[f] === 'object') for (const k in o[f]) if (o[f][k]) META[f][k] = 1;
+  for (const f of ['story', 'seen', 'ach']) if (o[f] && typeof o[f] === 'object') for (const k in o[f]) if (o[f][k]) META[f][k] = 1;
   if (o.stats && typeof o.stats === 'object') for (const k in META.stats) META.stats[k] = n(o.stats[k], 0, 1e12);
+  const D = o.daily; if (D && typeof D === 'object' && typeof D.date === 'string' && /^\d{4}-\d\d-\d\d$/.test(D.date)) META.daily = { date: D.date, best: n(D.best, 0, 1e6), runs: n(D.runs, 0, 1e6) };
 }
 function saveMeta() {
   META.dirty = false; if (!META.on) return false;
-  const o = { v: META_V, embers: META.embers, earned: META.earned, up: META.up, heatMax: META.heatMax, tut: META.tut, story: META.story, seen: META.seen, night: META.night, stats: META.stats };
+  const o = { v: META_V, embers: META.embers, earned: META.earned, up: META.up, heatMax: META.heatMax, tut: META.tut, story: META.story, seen: META.seen, night: META.night, stats: META.stats, ach: META.ach, daily: META.daily };
   try { localStorage.setItem(META_KEY, JSON.stringify(o)); return true; } catch (e) { return false; }
 }
 // Throttled save for small changes (sightings, play time).
@@ -111,6 +130,7 @@ function buyUpgrade(key) {
   const c = upCost(key); if (!c || META.embers < c) return false;
   META.embers -= c; META.up[key] = (META.up[key] || 0) + 1; saveMeta();
   sfx('upgradeBuy', CAM.x, CAM.z, 1, META.up[key] / UPG[key].max);
+  achTree();
   return true;
 }
 // A full refund of the tree (the Codex offers it): every ember spent comes back.
@@ -128,9 +148,9 @@ function heatRules(h) {
   if (h >= 5) { r.eliteShift = 8; r.eliteMul = 1.3; }
   if (h >= 6) r.gold *= .85;
   if (h >= 7) { r.bossHp *= 1.2; r.affix = 1; }
-  if (h >= 8) r.budget *= 1.15;
+  if (h >= 8) r.budget *= 1.25;
   if (h >= 9) { r.lives -= 3; r.mend *= 1.5; }
-  if (h >= 10) { r.hp *= 1.2; r.mana *= 1.2; }
+  if (h >= 10) { r.hp *= 1.3; r.mana *= 1.2; }
   return r;
 }
 
@@ -152,6 +172,9 @@ function metaLandStart(restoring) {
   G.bountyMul *= G.goldMul;
   G.freeTowers = upVal('free');
   if (!inRun()) return;
+  // The Daily Long Night: the day's mutators, rolled from the seed instead of the gameplay stream (Forge's roll skips the land).
+  if (G.mode === 'daily') { setMods(dailyMods(G.runSeed, G.level)); G.modLevel = G.level; G.bountyMul *= modMul('bounty'); }
+  achLandStart();
   if (!restoring) { G.gold += upVal('gold'); UI.goldShown = G.gold; G.mana = Math.min(G.manaMax, G.mana + upVal('mana')); }
   // Heat tier 3 asks for an extra mutator: Forge's modCount adds G.heatMods when the land's mutators roll.
   if (!restoring) {
@@ -173,8 +196,11 @@ function metaLandClear() {
     META.stats.campaigns++; META.stats.heatBest = Math.max(META.stats.heatBest, G.heat);
     if (META.heatMax < 1) { META.heatMax = 1; metaUnlock('Heat 1 unlocked'); }
     if (META.run) META.run.ending = true;
-    G.mode = 'night'; STORY.ending();
+    // The victory: the land holds on its clear phase while the cinematic, the ending and the results screen play
+    // (MENU.victory), then the run carries on into the Long Night.
+    G.mode = 'night'; G.holdClear = true; MENU.victory = { stage: 'pending' };
   }
+  achLandClear(); STORY.landClear();
   metaTouch();
 }
 
@@ -183,7 +209,7 @@ function metaLandClear() {
 function embersFor(r) {
   const waves = Math.max(0, r.waves | 0), bosses = Math.max(0, r.bosses | 0), l0 = r.level0 | 0;
   let boss = 0; for (let i = 0; i < bosses; i++) boss += 10 + 2 * (l0 + i);
-  const depth = 3 * Math.max(0, (r.level | 0) - (CAMPAIGN_LANDS - 1)), story = r.ending ? 40 : 0, mul = heatMul(r.heat | 0);
+  const depth = 3 * Math.max(0, (r.level | 0) - (CAMPAIGN_LANDS - 1)),  story = r.ending ? 40 : 0, mul = heatMul(r.heat | 0);
   const base = waves + boss + depth + story;
   return { waves, boss, depth, story, mul, heat: r.heat | 0, total: Math.round(base * mul) };
 }
@@ -197,6 +223,13 @@ function bankRun(how) {
   Object.assign(res, { how, sum: sm, mode: run.mode, land: landNo(), landName: G.B ? G.B.bio.name : '', notes: (run.notes || []).slice() });
   META.embers += res.total; META.earned += res.total;
   const S = META.stats; S.runs++; S.slain += sm.slain || 0; S.bestWave = Math.max(S.bestWave, waveNumber()); if (how === 'abandon') S.abandons++;
+  if (run.mode === 'daily') {
+    // The day's best counts waves survived; a run continued past midnight still counts for the day it began.
+    const day = run.day || dailyDate(), D = META.daily && META.daily.date === day ? META.daily : (META.daily = { date: day, best: 0, runs: 0 });
+    D.runs++; S.dailies++; res.daily = { day, waves: sm.waves || 0, best: Math.max(D.best, sm.waves || 0), newBest: (sm.waves || 0) > D.best };
+    D.best = res.daily.best;
+  }
+  achBanked(res); res.ach = (run.ach || []).slice();
   res.before = META.embers - res.total; res.after = META.embers;
   META.last = res; saveMeta();
   sfx('emberGain', CAM.x, CAM.z, 1, clamp(res.total / 100, .2, 1));
@@ -206,7 +239,7 @@ function bankRun(how) {
 function embersForSave(S) {
   if (!S || !S.mode || S.mode === 'demo') return null;
   const RS = S.runStats || {}, waves = Math.max(0, S.level * G.wavesPerLand + S.k - 1 - (RS.wave0 || 0));
-  return embersFor({ waves, bosses: RS.lands || 0, level: S.level, level0: S.level0 === undefined ? (S.mode === 'night' ? CAMPAIGN_LANDS : 0) : S.level0, heat: S.heat || 0, ending: false });
+  return embersFor({ waves, bosses: RS.lands || 0, level: S.level, level0: S.level0 === undefined ? (nightMode(S.mode) ? CAMPAIGN_LANDS : 0) : S.level0, heat: S.heat || 0, ending: false });
 }
 function bankSave(S) {
   const r = embersForSave(S); if (!r) return null;
@@ -218,49 +251,49 @@ function bankSave(S) {
 function startRun(mode, heat) {
   const S = continueOffer(); if (S) bankSave(S);
   clearSave(); STORY.clear(); SAVE.hold = false;
-  G.mode = mode === 'night' ? 'night' : 'campaign'; G.heat = clamp(heat | 0, 0, Math.min(HEAT_MAX, META.heatMax));
-  G.level = G.mode === 'night' ? CAMPAIGN_LANDS : 0; G.boardIndex = G.level; BIOME.start = 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++;
-  G.runSeed = 1 + Math.floor(Math.random() * 1e9); G.boardSeed = 1 + Math.floor(Math.random() * 9000);
+  G.mode = mode === 'night' || mode === 'daily' ? mode : 'campaign'; G.heat = G.mode === 'daily' ? 0 : clamp(heat | 0, 0, Math.min(HEAT_MAX, META.heatMax));
+  G.level = nightMode(G.mode) ? CAMPAIGN_LANDS : 0; G.boardIndex = G.level; BIOME.start = 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++; G.holdClear = false; MENU.victory = null;
+  G.runSeed = G.mode === 'daily' ? dailySeed() : 1 + Math.floor(Math.random() * 1e9); G.boardSeed = G.mode === 'daily' ? 1 + G.runSeed % 9000 : 1 + Math.floor(Math.random() * 9000);
   G.press = 1; G.speed = 1; G.paused = false; G.modLevel = -1; setMods([]); MENU.arrivalLv = -99;
   // A run starts with the lifetime sightings, so "New:" tips only show for monsters this keeper has not met in a run.
   G.seen = {}; for (const k in META.seen) G.seen[k] = 1;
-  META.run = { mode: G.mode, heat: G.heat, level0: G.level, banked: false, ending: false, t: 0, notes: [] };
+  META.run = { mode: G.mode, heat: G.heat, level0: G.level, banked: false, ending: false, t: 0, notes: [], ach: [], day: G.mode === 'daily' ? dailyDate() : '' };
   applyMeta(); G.mana = 30; G.rerolls = upVal('reroll');
   TUT.maybeStart();
   if (TUT.active()) UI.everManual = true; // the tutorial replaces the first "You command" help line
   UI.setManual(true); UI.everManual = true; camReset();
-  if (G.mode === 'campaign') STORY.play('intro');
+  STORY.runStart();
   if (G.phase !== 'crumble') setPhase('crumble');
   sfx('uiClick', CAM.x, CAM.z, 1);
 }
 // Back to the AI demo behind the main menu: a fresh random land, the commander in charge, every number back to 1.
 function startDemo() {
   STORY.clear(); TUT.stop(); SAVE.hold = false;
-  G.mode = 'demo'; G.heat = 0; META.run = null; applyMeta(); G.maxLives = 20;
+  G.mode = 'demo'; G.heat = 0; META.run = null; G.holdClear = false; MENU.victory = null; applyMeta(); G.maxLives = 20;
   BIOME.start = Math.floor(Math.random() * BIOMES.length) - G.boardIndex;
   G.level = 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++; G.press = 1; G.speed = 1; G.paused = false; G.modLevel = -1; setMods([]);
   UI.setManual(false); camReset();
   if (G.phase !== 'crumble') setPhase('crumble');
 }
 // The run leaves for the results screen: embers are banked and the save is gone.
-function abandonRun() {
+function abandonRun(how) {
   if (!inRun()) return null;
-  const res = bankRun('abandon'); clearSave(); SAVE.hold = true; G.paused = true; // nothing saves behind the results screen
+  const res = bankRun(how || 'abandon'); G.holdClear = false; clearSave(); SAVE.hold = true; G.paused = true; // nothing saves behind the results screen
   return res;
 }
 // Continue: the saved run's mode and Heat come back with it (restoreRun calls this before rebuilding the board).
 function metaRestore(S) {
   SAVE.hold = false;
-  G.mode = S.mode === 'night' ? 'night' : S.mode === 'demo' ? 'demo' : 'campaign';
+  G.mode = S.mode === 'night' || S.mode === 'daily' || S.mode === 'demo' ? S.mode : 'campaign'; G.holdClear = false; MENU.victory = null;
   G.heat = _int(S.heat, 0, HEAT_MAX) ? S.heat : 0; G.runSeed = _int(S.runSeed, 0, 2e9) ? S.runSeed : S.seed;
   G.rerolls = _int(S.rerolls, 0, 9) ? S.rerolls : upVal('reroll');
-  META.run = { mode: G.mode, heat: G.heat, level0: _int(S.level0, 0, 999) ? S.level0 : (G.mode === 'night' ? CAMPAIGN_LANDS : 0), banked: false, ending: !!S.ending, endingPaid: !!S.endingPaid, t: 0, notes: [] };
+  META.run = { mode: G.mode, heat: G.heat, level0: _int(S.level0, 0, 999) ? S.level0 : (nightMode(G.mode) ? CAMPAIGN_LANDS : 0), banked: false, ending: !!S.ending, endingPaid: !!S.endingPaid, t: 0, notes: [], ach: [], day: typeof S.day === 'string' ? S.day : '' };
   if (G.mode !== 'demo') { G.seen = {}; for (const k in META.seen) G.seen[k] = 1; }
   applyMeta();
 }
 function metaSnapshot(S) {
   S.mode = G.mode; S.heat = G.heat; S.runSeed = G.runSeed; S.rerolls = G.rerolls;
-  if (META.run) { S.level0 = META.run.level0; S.ending = !!META.run.ending; S.endingPaid = !!META.run.endingPaid; }
+  if (META.run) { S.level0 = META.run.level0; S.ending = !!META.run.ending; S.endingPaid = !!META.run.endingPaid; if (META.run.day) S.day = META.run.day; }
   return S;
 }
 // A sighting in a run counts for the Codex (and silences that monster's "New:" tip in later runs).

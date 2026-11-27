@@ -127,7 +127,7 @@ function killMonster(m, kind, dx, dz, tower) {
   fxGore(m, dth, kind, ix, iz, up);
   if (def.split && G.mons.length < MAX_ALIVE + 6) { const [ty, n] = def.split; for (let i = 0; i < n; i++) { const u = n > 1 ? i / (n - 1) * 2 - 1 : 0; spawnMonster(ty, { s: Math.max(.5, m.s - .15 - .1 * Math.abs(u)), lat: clamp(m.lat + u * .34, -.95, .95), hpMul: m.maxHp / def.hp, pop: 1 }).kl = u * 2.2; } }
   if (m.torch && m.flame) fxEmbers(m.flame.x, m.flame.y, m.flame.z, 8, .15);
-  if (m.elite) eliteDeath(m);
+  if (m.elite) { eliteDeath(m); if (inRun()) META.stats.elites++; }
   const bounty = Math.max(1, Math.round(def.bounty * G.bountyMul * (m.bmul || 1)));
   dropCoins(m.x, m.y + m.hitH * .6, m.z, bounty, clamp(Math.round(bounty / 3), 1, 6));
   removeMonster(m);
