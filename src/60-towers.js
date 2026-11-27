@@ -357,7 +357,7 @@ function findTarget(x, z, range, air, ground, minRange = 0) {
   for (const m of G.mons) {
     if (m.dead || m.hp <= 0 || !m.vis) continue; if (m.fly ? !air : !ground) continue;
     const d = dist2(x, z, m.x, m.z); if (d > r2 || d < m2) continue;
-    const sc = m.prog + (m.fly ? 2 : 0) + (m.def.boss ? -.0 : 0); if (sc > bp) { bp = sc; best = m; }
+    const sc = m.prog + (m.fly ? 2 : 0) + (m.def.prio || 0) + (m.low ? 1 : 0); if (sc > bp) { bp = sc; best = m; }
   }
   return best;
 }
