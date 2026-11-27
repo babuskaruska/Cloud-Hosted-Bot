@@ -38,7 +38,7 @@ const UI = (() => {
   function setChoices() {
     const out = [];
     if (hasGfx()) {
-      const cur = SET.gfx || 'auto';
+      const cur = SET.gfx || GFX.mode || 'auto';
       out.push({ id: 'gfx', label: 'Graafika', cur, note: TIER_NOTE[cur] || '', opts: ['auto'].concat(GFX.tiers.filter(k => k !== 'auto')).map(k => [k, k === 'auto' ? TIER_ET.auto : (GFX.label && GFX.label[k]) || TIER_ET[k] || k]), pick: k => { SET.gfx = k; applyGfx(); saveSettings(); } });
       if (typeof GFX.setFps === 'function') { const f = SET.fps !== undefined ? SET.fps : GFX.fpsCap; out.push({ id: 'fps', label: 'Kaadrisagedus', cur: f === 30 || f === 60 ? f : 0, opts: [[30, '30'], [60, '60'], [0, 'Piiramatu']], pick: k => { SET.fps = k; applyGfx(); saveSettings(); } }); }
     } else out.push({ id: 'q', label: 'Graafika', cur: SET.q, note: SET.q === 'auto' ? 'Automaatne valib seadme järgi.' : SET.q === 'sharp' ? 'Terav: kõik detailid.' : 'Kiire: sujuvam, pehmem.', opts: [['auto', 'Automaatne'], ['sharp', 'Terav'], ['fast', 'Kiire']], pick: k => { SET.q = k; applyQuality(); saveSettings(); } });
