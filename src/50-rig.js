@@ -1,53 +1,98 @@
 
 let RIG_CAPTURE = null;
+// Per-step draw plan (planDraw in 90-main.js): crowd = many monsters on screen, so shadow and detail cuts apply.
+const DRAW = { crowd: false, onScreen: 0, thin: 0 };
 class PartBatch {
   constructor(build, cap, o = {}) {
     const S = new Soup(); build(S); const geo = S.build();
-    this.cap = cap; this.n = 0;
+    this.cap = cap; this.n = 0; this.nb = 0; this.nc = 0; this.mid = null; this.cast = o.shadow !== false; this.mask = 0;
+    this.small = geo.boundingSphere.radius < .17; // small parts (heads, hands, swords...) drop their shadow first in a crowd
     const m = this.mesh = new THREE.InstancedMesh(geo, MAT.inst, cap);
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
     this.flash = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1); this.flash.setUsage(THREE.DynamicDrawUsage); geo.setAttribute('aFlash', this.flash);
-    m.frustumCulled = false; m.castShadow = o.shadow !== false; m.receiveShadow = true; m.count = 0;
+    m.frustumCulled = false; m.castShadow = this.cast; m.receiveShadow = true; m.count = 0;
     this.rad = o.rad || .1; this.maxCap = Math.max(64, cap * 4);
-    R.scene.add(m); PartBatch.all.push(this);
+    this.hook(m); R.scene.add(m); PartBatch.all.push(this);
+  }
+  // Shadow tiers (PartBatch.tier while a part is put; ignored by batches that cast no shadow). end() packs the
+  // instances as [tier 0 | tier 1 | tier 2]: tier 0 casts into every shadow map, tier 1 only into the moon's and
+  // the beacon's (it is too far from any tower spotlight for its shadow to land in the light), tier 2 into none.
+  // The shadow pass draws just the leading run of instances, so the culled ones cost nothing there. this.mask
+  // collects PartBatch.mask (the spotlights its tier 0 parts stand near): a spotlight's shadow map skips a batch
+  // with none of its parts in that light (see the shadow-map wrapper in 20-post.js).
+  hook(m) {
+    const b = this;
+    m.onBeforeShadow = function (r, o, cam, sc) { this.count = sc.isOrthographicCamera || sc === PartBatch.wideCam ? b.n + b.nb : b.n; };
+    m.onAfterShadow = function () { this.count = b.n + b.nb + b.nc; };
   }
   // Doubles the instance capacity (up to 4x the starting cap) so big crowds are not silently clipped.
   grow() {
     if (this.cap >= this.maxCap) return false;
-    const old = this.mesh, cap = Math.min(this.maxCap, this.cap * 2), geo = old.geometry;
+    const old = this.mesh, cap0 = this.cap, cap = Math.min(this.maxCap, this.cap * 2), geo = old.geometry, nc = this.nc;
     const m = new THREE.InstancedMesh(geo, old.material, cap);
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.instanceMatrix.array.set(old.instanceMatrix.array);
     m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3); m.instanceColor.setUsage(THREE.DynamicDrawUsage); m.instanceColor.array.set(old.instanceColor.array);
     const fl = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1); fl.setUsage(THREE.DynamicDrawUsage); fl.array.set(this.flash.array); this.flash = fl; geo.setAttribute('aFlash', fl);
+    if (nc) for (const [a, k] of [[m.instanceMatrix.array, 16], [m.instanceColor.array, 3], [fl.array, 1]]) a.copyWithin((cap - nc) * k, (cap0 - nc) * k, cap0 * k);
     m.frustumCulled = false; m.castShadow = old.castShadow; m.receiveShadow = old.receiveShadow; m.count = 0; m.renderOrder = old.renderOrder;
     if (old.parent) { old.parent.add(m); old.parent.remove(old); }
-    old.dispose(); this.mesh = m; this.cap = cap; return true;
+    old.dispose(); this.mesh = m; this.cap = cap; this.hook(m);
+    if (this.mid) { const o = this.mid; this.mid = { m: new Float32Array(cap * 16), c: new Float32Array(cap * 3), f: new Float32Array(cap) }; this.mid.m.set(o.m); this.mid.c.set(o.c); this.mid.f.set(o.f); }
+    return true;
   }
   put(mat, flash = 0, tint = null) {
     if (RIG_CAPTURE) { RIG_CAPTURE(this, mat, tint); return; }
-    if (this.n >= this.cap && !this.grow()) return; const i = this.n++;
-    mat.toArray(this.mesh.instanceMatrix.array, i * 16);
-    const c = this.mesh.instanceColor.array;
+    if (this.n + this.nb + this.nc >= this.cap && !this.grow()) return;
+    const tier = !this.cast ? 0 : this.small && PartBatch.smallOff ? 2 : PartBatch.tier;
+    let i, M, c, f;
+    if (tier === 1) {
+      if (!this.mid) this.mid = { m: new Float32Array(this.cap * 16), c: new Float32Array(this.cap * 3), f: new Float32Array(this.cap) };
+      i = this.nb++; M = this.mid.m; c = this.mid.c; f = this.mid.f;
+    } else {
+      if (tier === 0) { i = this.n++; this.mask |= PartBatch.mask; } else i = this.cap - 1 - this.nc++;
+      M = this.mesh.instanceMatrix.array; c = this.mesh.instanceColor.array; f = this.flash.array;
+    }
+    mat.toArray(M, i * 16);
     if (tint) { c[i * 3] = tint[0]; c[i * 3 + 1] = tint[1]; c[i * 3 + 2] = tint[2]; } else { c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = 1; }
-    this.flash.array[i] = flash;
+    f[i] = flash;
   }
   end() {
-    const m = this.mesh; m.count = this.n; m.visible = this.n > 0;
-    if (this.n) {
-      for (const a of [m.instanceMatrix, m.instanceColor, this.flash]) { a.clearUpdateRanges(); a.addUpdateRange(0, this.n * a.itemSize); a.needsUpdate = true; }
+    const m = this.mesh, n = this.n, nb = this.nb, nc = this.nc, tot = n + nb + nc;
+    if (nb) { const o = this.mid; m.instanceMatrix.array.set(o.m.subarray(0, nb * 16), n * 16); m.instanceColor.array.set(o.c.subarray(0, nb * 3), n * 3); this.flash.array.set(o.f.subarray(0, nb), n); }
+    if (nc) { const cap = this.cap; for (const [a, k] of [[m.instanceMatrix.array, 16], [m.instanceColor.array, 3], [this.flash.array, 1]]) a.copyWithin((n + nb) * k, (cap - nc) * k, cap * k); }
+    m.count = tot; m.visible = tot > 0; m.castShadow = this.cast && n + nb > 0;
+    if (tot) {
+      for (const a of [m.instanceMatrix, m.instanceColor, this.flash]) { a.clearUpdateRanges(); a.addUpdateRange(0, tot * a.itemSize); a.needsUpdate = true; }
     }
   }
 }
-PartBatch.all = [];
-function beginParts() { for (const b of PartBatch.all) b.n = 0; }
+PartBatch.all = []; PartBatch.tier = 0; PartBatch.mask = 255; PartBatch.smallOff = false; PartBatch.wideCam = null;
+function beginParts() { for (const b of PartBatch.all) b.n = b.nb = b.nc = b.mask = 0; PartBatch.tier = 0; PartBatch.mask = 255; }
 function endParts() { for (const b of PartBatch.all) b.end(); }
 
 const _rq = new THREE.Quaternion(), _re = new THREE.Euler(), _rv = new THREE.Vector3(), _rs = new THREE.Vector3(), _rm = new THREE.Matrix4();
 const _M = []; for (let i = 0; i < 28; i++) _M.push(new THREE.Matrix4());
+// out = parent * T(p) * R(XYZ euler) * S. Written out by hand (the rotation straight from the angles, and an affine
+// product): the same matrix as compose() + multiplyMatrices(), at about a third of the cost. Every rig part goes
+// through here, so it is most of the per-monster draw cost in a big crowd.
 function xf(out, parent, px, py, pz, rx, ry, rz, sx = 1, sy = 1, sz = 1) {
-  _rq.setFromEuler(_re.set(rx, ry, rz, 'XYZ')); _rm.compose(_rv.set(px, py, pz), _rq, _rs.set(sx, sy, sz));
-  if (parent) out.multiplyMatrices(parent, _rm); else out.copy(_rm); return out;
+  const a = Math.cos(rx), b = Math.sin(rx), c = Math.cos(ry), d = Math.sin(ry), e = Math.cos(rz), f = Math.sin(rz);
+  const ae = a * e, af = a * f, be = b * e, bf = b * f;
+  const b0 = c * e * sx, b1 = (af + be * d) * sx, b2 = (bf - ae * d) * sx;
+  const b4 = -c * f * sy, b5 = (ae - bf * d) * sy, b6 = (be + af * d) * sy;
+  const b8 = d * sz, b9 = -b * c * sz, b10 = a * c * sz;
+  const o = out.elements;
+  if (!parent) {
+    o[0] = b0; o[1] = b1; o[2] = b2; o[3] = 0; o[4] = b4; o[5] = b5; o[6] = b6; o[7] = 0;
+    o[8] = b8; o[9] = b9; o[10] = b10; o[11] = 0; o[12] = px; o[13] = py; o[14] = pz; o[15] = 1; return out;
+  }
+  const A = parent.elements, a0 = A[0], a1 = A[1], a2 = A[2], a4 = A[4], a5 = A[5], a6 = A[6], a8 = A[8], a9 = A[9], a10 = A[10], a12 = A[12], a13 = A[13], a14 = A[14];
+  o[0] = a0 * b0 + a4 * b1 + a8 * b2; o[1] = a1 * b0 + a5 * b1 + a9 * b2; o[2] = a2 * b0 + a6 * b1 + a10 * b2; o[3] = 0;
+  o[4] = a0 * b4 + a4 * b5 + a8 * b6; o[5] = a1 * b4 + a5 * b5 + a9 * b6; o[6] = a2 * b4 + a6 * b5 + a10 * b6; o[7] = 0;
+  o[8] = a0 * b8 + a4 * b9 + a8 * b10; o[9] = a1 * b8 + a5 * b9 + a9 * b10; o[10] = a2 * b8 + a6 * b9 + a10 * b10; o[11] = 0;
+  o[12] = a0 * px + a4 * py + a8 * pz + a12; o[13] = a1 * px + a5 * py + a9 * pz + a13; o[14] = a2 * px + a6 * py + a10 * pz + a14; o[15] = 1;
+  return out;
 }
 
 const KIT = {};
@@ -398,10 +443,14 @@ function updateDebris(dt, groundAt, onCoin) {
     } else if (d.rest && groundAt(d.p.x, d.p.z) < d.p.y - 3) { d.rest = false; d.vy = 0; }
     else if (d.life < .9 && !d.coin) { d.p.y -= dt * .22; }
     if (d.coin && d.max - d.life > d.coin) { onCoin(d); swapRemove(DEB, i); continue; }
+    if (R.skipDraw) continue;
     let sc = 1; if (!d.coin && d.life < .5) sc = Math.max(.01, d.life / .5);
     _dm.compose(d.p, d.q, _ds.copy(d.s).multiplyScalar(sc));
+    // In a crowd, pieces at rest cast no shadow and flying ones skip the tower spotlights.
+    PartBatch.tier = DRAW.crowd ? (d.rest ? 2 : 1) : 0;
     d.batch.put(_dm, d.flash, d.tint);
   }
+  PartBatch.tier = 0;
 }
 function clearDebris() { DEB.length = 0; }
 

@@ -280,7 +280,8 @@ function initBestiary4() {
   // Harpy: a pale woman's torso and face, a wild black mane, broad brown wings, a feathered tail and bird legs
   // whose talons close in flight and open wide on the dive.
   {
-    const skin = [.7, .56, .5], skinD = [.46, .35, .33], fe = [.5, .36, .24], feD = [.26, .17, .12], feL = [.85, .68, .46], hair = [.07, .045, .07], leg = [.58, .47, .2], claw = [.05, .04, .04];
+    const skin = [.78, .6, .52], skinD = [.46, .35, .33], fe = [.5, .36, .24], feD = [.26, .17, .12], feL = [.85, .68, .46], hair = [.07, .045, .07], leg = [.58, .47, .2], claw = [.05, .04, .04];
+    const tawny = [.66, .44, .24], crest = [.62, .17, .1];
     KIT.harpy = {
       body: new PartBatch(S => {
         S.ico(.12, 0, .02, 0, skin, { sc: [1, 1.25, .8], d: 1 }); S.ico(.13, 0, -.14, -.01, feD, { sc: [1.05, 1.05, .95], d: 1 }); S.ico(.08, 0, .06, .07, skinD, { sc: [1.4, .6, .7], d: 1 });
@@ -291,10 +292,18 @@ function initBestiary4() {
         S.ico(.09, 0, .29, .0, hair, { sc: [1.05, .8, 1], d: 1 });
         for (let i = 0; i < 5; i++) { const s = i - 2, k = Math.abs(s); S.box(.05, .035, .2, s * .03, .28 - k * .03, -.1 - k * .015, hair, { jit: .1, r: [-.5 - k * .15, s * .2, 0] }); }
         for (const s of [-1, 1]) S.cone(.02, .07, s * .085, .27, .0, skin, { n: 4, r: [-.2, 0, -s * 1.1] });
+        // Seen from above (the usual view, pitched into flight) she is mostly back and hair: a long mane streaming
+        // down the back, a crest of rust-red plumes and a pale feathered mantle give her a silhouette and a colour.
+        for (let i = 0; i < 4; i++) { const s = i - 1.5; S.box(.045, .03, .3, s * .035, .2 - Math.abs(s) * .02, -.2, i & 1 ? hair : [.16, .07, .09], { jit: .08, r: [-.95 - Math.abs(s) * .08, s * .16, 0] }); }
+        for (let i = 0; i < 3; i++) { const s = i - 1; S.box(.03, .012, .2, s * .035, .36, -.04, crest, { jit: .06, r: [-.55, s * .3, 0] }); S.box(.034, .014, .06, s * .055, .375, -.135, feL, { jit: .04, r: [-.55, s * .3, 0] }); }
+        S.ico(.11, 0, .1, -.08, feL, { sc: [1.25, .5, .9], d: 1 });
       }, 24, { rad: .2 }),
       wing: new PartBatch(S => {
-        const pts = [[0, 0, .06, feL], [.18, .04, .12, feL], [.36, .05, .1, feL], [.58, .03, .04, feL], [.86, 0, -.04, fe], [.82, 0, -.14, feD], [.7, 0, -.12, feD], [.66, 0, -.24, feD], [.54, 0, -.2, fe], [.48, 0, -.3, feD], [.36, 0, -.24, fe], [.28, 0, -.32, feD], [.16, 0, -.25, fe], [.06, 0, -.28, feD], [0, 0, -.14, fe]];
-        const c0 = [.06, .01, -.04, fe];
+        // Dark at the root, tawny across the span, the trailing feathers alternating light and dark so the edge reads
+        // as separate feathers, and the outer feathers drooping a little so the wing is not one flat sheet.
+        const pts = [[0, 0, .06, feD], [.18, .04, .12, fe], [.36, .05, .1, tawny], [.58, .03, .04, tawny], [.86, -.02, -.04, feL], [.82, -.035, -.14, feD], [.7, -.03, -.12, feL], [.66, -.045, -.24, feD], [.54, -.035, -.2, feL], [.48, -.045, -.3, feD], [.36, -.035, -.24, feL], [.28, -.04, -.32, feD], [.16, -.025, -.25, tawny], [.06, -.02, -.28, feD], [0, 0, -.14, feD]];
+        const c0 = [.06, .01, -.04, feD];
+        for (let i = 0; i < 5; i++) S.box(.1, .012, .055, .08 + i * .1, .05 - i * .006, .07 - i * .016, i & 1 ? feL : [.88, .74, .52], { jit: .05, r: [0, .12, 0] });
         for (let i = 0; i < pts.length - 1; i++) { S.tri(c0, pts[i + 1], pts[i], fe, L_PLAIN, .95); S.tri(c0, pts[i], pts[i + 1], fe, L_PLAIN, .95); }
         S.seg([0, 0, .06], [.36, .05, .1], .03, .02, skinD, { n: 4 }); S.seg([.36, .05, .1], [.58, .03, .04], .02, .012, skinD, { n: 4 });
         for (let i = 0; i < 4; i++) S.box(.22, .01, .045, .7 + i * .035, .005, .0 - i * .045, i & 1 ? feD : fe, { jit: .06, r: [0, .35 + i * .22, 0] });
@@ -375,8 +384,11 @@ function rigShaman(e) { e.weapon = KIT.item.boneStaff; e.staffOut = true; e.wSca
 // Harpy: flaps on e.ph like the bat. e.swoop (0 cruise, 1 dive, 2 carrying; eased here into e.swD / e.swC)
 // pitches it into a dive with the wings swept back and the talons thrown forward and open, or, while carrying a
 // footman (e.carry), hauls upright with the legs straight down, talons shut and the wings beating hard.
+// The model is drawn 12 % over its size (looks only; hits use def.rad) so she reads against the ground.
 function rigHarpy(e) {
-  const K = KIT.harpy, s = e.scale || 1, fl = e.flash || 0, tint = e.tint || null, fz = e.flinch || 0, dt = FX.dt || 0, w = e.swoop || 0;
+  const K = KIT.harpy, s = (e.scale || 1) * 1.12, fl = e.flash || 0, tint = e.tint || null, fz = e.flinch || 0, w = e.swoop || 0;
+  // Eased on game time since its last drawing, so the ease keeps its pace when steps go undrawn (off screen, 2x/3x).
+  const dt = clamp(G.t - (e._rigT === undefined ? G.t - (FX.dt || 0) : e._rigT), 0, .25); e._rigT = G.t;
   e.swD = damp(e.swD || 0, w === 1 ? 1 : 0, 7, dt); e.swC = damp(e.swC || 0, w >= 2 || e.carry ? 1 : 0, 6, dt);
   const sw = e.swD, cr = e.swC, f = Math.sin(e.ph), calm = 1 - Math.max(sw, cr);
   const pitch = lerp(lerp(.5, 1.25, sw), .12, cr) - fz * .5, bob = Math.sin(e.ph - .6) * (.07 + .05 * cr) * (1 - sw);

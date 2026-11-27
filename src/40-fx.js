@@ -9,28 +9,32 @@ function initLights() {
   const S = R.scene;
   LT.hemi = new THREE.HemisphereLight(0x6d83bd, 0x1c1f2a, 1.15); S.add(LT.hemi);
   const sm = window.matchMedia && matchMedia('(pointer: coarse)').matches ? .75 : 1;
-  const moon = LT.moon = new THREE.DirectionalLight(0xa9c0f6, 1.55); moon.castShadow = true; moon.shadow.mapSize.set(2048 * sm, 2048 * sm);
+  const moon = LT.moon = new THREE.DirectionalLight(0xa9c0f6, 1.55); moon.castShadow = true; moon.shadow.mapSize.set(2048 * sm, 2048 * sm); LT.moonMap = 2048 * sm;
   const sc = moon.shadow.camera; sc.left = -31; sc.right = 31; sc.top = 31; sc.bottom = -31; sc.near = 5; sc.far = 130; moon.shadow.bias = -0.0005; moon.shadow.normalBias = 0.06;
   S.add(moon); S.add(moon.target);
   LT.fill = new THREE.DirectionalLight(0x4a5f96, 0.3); LT.fill.position.set(30, 14, 34); S.add(LT.fill);
   const b = LT.beacon = new THREE.PointLight(0xff8a3a, 0, 80, 2); b.castShadow = true; b.shadow.mapSize.set(1024 * sm, 1024 * sm);
-  b.shadow.camera.near = .5; b.shadow.camera.far = 80; b.shadow.bias = -0.004; b.shadow.normalBias = 0.05; S.add(b);
+  b.shadow.camera.near = .5; b.shadow.camera.far = 80; b.shadow.bias = -0.004; b.shadow.normalBias = 0.05; S.add(b); PartBatch.wideCam = b.shadow.camera;
   for (let i = 0; i < 3; i++) {
     const s = new THREE.SpotLight(0xff9646, 0, 17, 1.12, .85, 2); s.castShadow = true; s.shadow.mapSize.set(1024 * sm, 1024 * sm);
     s.shadow.camera.near = .4; s.shadow.camera.far = 18; s.shadow.bias = -0.0025; s.shadow.normalBias = 0.04;
-    s.position.set(0, 4, 0); S.add(s); S.add(s.target); LT.spots.push({ l: s, owner: null, fade: 0, want: null });
+    s.position.set(0, 4, 0); s.userData.spot = i; S.add(s); S.add(s.target); LT.spots.push({ l: s, owner: null, fade: 0, want: null });
   }
   for (let i = 0; i < 12; i++) { const l = new THREE.PointLight(0xff9646, 0, 11, 2); S.add(l); LT.towers.push(l); }
   for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0xffc070, 0, 22, 2); S.add(l); LT.flashes.push({ l, t: 1, dur: 1, i0: 0 }); }
   for (let i = 0; i < 5; i++) { const l = new THREE.PointLight(0xff9a50, 0, 7, 2); S.add(l); LT.torches.push({ l, owner: null, cur: 0 }); }
   for (let i = 0; i < 3; i++) { const l = new THREE.PointLight(0xff5a1e, 0, 9, 2); S.add(l); LT.env.push(l); }
 }
+// Each shadow map is redrawn every third frame, staggered. In a crowd the beacon's cube map (six passes, the
+// costliest by far) is redrawn every sixth frame; its light moves with its shadow so the two always agree.
 function scheduleShadows(busy) {
   const f = LT.tick = (LT.tick + 1) % 3, all = LT.shadowsAt < 0 || !R.opt; LT.shadowsAt = 0;
+  if (f === 0) LT.cyc = (LT.cyc || 0) + 1;
   const set = (l, on) => { l.shadow.autoUpdate = false; l.shadow.needsUpdate = (on || all) && l.intensity > 0; };
   set(LT.moon, busy || f === 0);
-  if (f === 1 || all) LT.beacon.position.copy(LT.bp);
-  set(LT.beacon, f === 1);
+  const bf = f === 1 && (!DRAW.crowd || (LT.cyc & 1) === 0);
+  if (bf || all) LT.beacon.position.copy(LT.bp);
+  set(LT.beacon, bf);
   set(LT.spots[0].l, f === 0); set(LT.spots[1].l, f === 2); set(LT.spots[2].l, f === 2);
 }
 function lightFlash(x, y, z, color, intensity, dur, range = 24) {
@@ -306,18 +310,20 @@ const DECAL_MIN_LIFE = 150;
 
 const FX = {
   add: null, alpha: null, segs: null, decals: null,
-  parts: [], smokes: [], flames: [], timed: [], bolts: [], fires: [], scorch: [], meteors: [], novas: [], lit: [], shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, shakeT: 0, flash: 0, flashK: 1, dt: 0, calm: false, groundAt: () => 0,
+  parts: [], smokes: [], flames: [], timed: [], bolts: [], fires: [], scorch: [], meteors: [], novas: [], lit: [], keep: 1, shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, shakeT: 0, flash: 0, flashK: 1, dt: 0, calm: false, groundAt: () => 0,
 };
 function initFX() {
   FX.add = new SpriteBatch(4000, false); FX.alpha = new SpriteBatch(800, true); FX.segs = new SegBatch(900); FX.decals = new DecalBatch(200);
   R.scene.add(FX.add.mesh, FX.alpha.mesh, FX.segs.mesh, FX.decals.mesh);
 }
+// FX.keep (0.55-1, set by planDraw): in a big crowd on screen, or at a lowered resolution, only that share of new
+// particles and smoke puffs is made, and the caps shrink with it. Effects keep their shape, just thinner.
 function fxPart(x, y, z, vx, vy, vz, life, size, r, g, b, o) {
-  if (FX.parts.length > 1700) return;
+  if (FX.parts.length > 1700 * FX.keep || (FX.keep < 1 && frnd() > FX.keep)) return;
   FX.parts.push({ x, y, z, vx, vy, vz, life, max: life, size, r, g, b, grav: o && o.grav || 0, drag: o && o.drag || 0, streak: o && o.streak || 0, rise: o && o.rise || 0, bounce: o && o.bounce || 0, seed: frnd() * 100, wob: o && o.wob || 0 });
 }
 function fxSmoke(x, y, z, vx, vy, vz, life, size, grow, r, g, b, a, o) {
-  if (FX.smokes.length > 640) return;
+  if (FX.smokes.length > 640 * FX.keep || (FX.keep < 1 && frnd() > FX.keep)) return;
   FX.smokes.push({ x, y, z, vx, vy, vz, life, max: life, size, grow, r, g, b, a, drag: o && o.drag !== undefined ? o.drag : 1.2, seed: frnd() * 100, rise: o && o.rise || 0 });
 }
 function fxSparks(x, y, z, n, speed, r, g, b, o = {}) {
