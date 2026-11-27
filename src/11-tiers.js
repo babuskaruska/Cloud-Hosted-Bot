@@ -19,7 +19,7 @@ const GFX = {
   label: { auto: 'Automaatne', low: 'Madal', mid: 'Keskmine', high: 'Kõrge', ultra: 'Ultra' },
   fpsLabel: { 0: 'Piiramatu', 30: '30', 60: '60' },
   PRESET: {
-    low: { css: .66, texel: 2, maxPix: 690000, maxIH: 620, dpr: 2, q0: 1, qMin: .75, moon: 1024, shadowType: 'basic', spotSh: 0, beaconSh: 0, lights: [4, 2, 2, 1],
+    low: { css: .9, texel: 2, maxPix: 520000, maxIH: 620, dpr: 2, q0: 1, qMin: .8, moon: 1024, shadowType: 'basic', spotSh: 0, beaconSh: 0, lights: [4, 2, 2, 1],
       ao: 0, mist: 1, edge: 1, halo: 0, dof: 0, bloom: 1, vig: 1, levels: 28, grain: .035, keep: .55, wx: .45, glint: 0, msaa: 0, fps: 30 },
     mid: { css: .95, texel: 2, maxPix: 690000, maxIH: 620, dpr: 2.5, q0: 1, qMin: .6, moon: 1536, shadowType: 'pcf', spotSh: 512, beaconSh: 512, lights: [8, 3, 3, 2],
       ao: 6, mist: 2, edge: 1, halo: 1, dof: 1, bloom: 2, vig: 1, levels: 28, grain: .035, keep: .8, wx: .75, glint: 1, msaa: 0, fps: 60 },
