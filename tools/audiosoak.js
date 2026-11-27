@@ -6,6 +6,7 @@
 // (the crowd, choir and eclipse beds are flags: 0 or 1).
 //   node tools/audiosoak.js               4 cycles, desktop
 //   node tools/audiosoak.js 8 phone       8 cycles on an iPhone 13 profile with taps
+//   STYLE=classic node tools/audiosoak.js  the classic soundtrack (default: chip)
 const { chromium, devices } = require('playwright');
 const path = require('path');
 const chrome = require('./chrome.js');
@@ -59,6 +60,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await waitFor(s => s.scr === 'title', 'title'); await sleep(1000);
     if (touch) await page.touchscreen.tap(20, 20); else await page.mouse.click(5, 5); // a gesture unlocks the audio
     await sleep(800);
+    if (process.env.STYLE) await page.evaluate(s => window.__cwAudio.setStyle(s), process.env.STYLE);
     for (let c = 0; c < N; c++) {
       await startCampaign(); await sleep(3000);
       await press('gear'); await waitFor(s => s.scr === 'pause', 'pause');
@@ -84,8 +86,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   if (last && last.nan) errors.push('NaN written to AudioParams: ' + last.nan + ' ' + last.where.join(' | '));
   if (titles.length > 1) { // what is left running at the title must not grow (act: voices still ringing, allowed to vary a little)
     const a = titles[0].live, b = last.live;
-    const FLAG = { choir: 1, crowd: 1, ecl: 1 }; // beds that exist or not (0/1): built when needed, so only more than one is a leak
-    for (const k of Object.keys(b)) if (FLAG[k] ? b[k] > 1 : b[k] > (a[k] || 0) + (k === 'act' || k === 'actList' ? 4 : 0)) errors.push(`live.${k} grew ${a[k]} -> ${b[k]}`);
+    const FLAG = { choir: 1, crowd: 1, ecl: 1, chipP: 3 }; // beds that exist or not: built when needed, so only more than the limit is a leak (chipP: the chip players, the live one and up to two fading)
+    for (const k of Object.keys(b)) if (FLAG[k] ? b[k] > FLAG[k] : b[k] > (a[k] || 0) + (k === 'act' || k === 'actList' ? 4 : 0)) errors.push(`live.${k} grew ${a[k]} -> ${b[k]}`);
   }
   console.log(errors.length ? 'FAIL\n' + errors.join('\n') : `PASS (${titles.length} cycles, ${prof})`);
   await browser.close();
