@@ -466,7 +466,7 @@ function harpyThink(m, dt, e) {
     if (m.swT <= 0) {
       m.swT = .5; let best = null, bd = 1e9;
       if (e <= 0 && m.s > G.B.cave.s + 3) for (const f of G.men) { if (f.dead || f.gone || f.carry || f.fallV !== undefined || !f.onRoad || (f.snatched && !f.snatched.dead)) continue; const ds = f.s - m.s; if (ds < -1.5 || ds > 6) continue; const d = dist2(f.x, f.z, m.x, m.z); if (d < bd) { bd = d; best = f; } }
-      if (best) { m.swoop = 1; m.prey = best; best.snatched = m; m.diveT = 0; sfx('batScreech', m.x, m.z, .7, .2); }
+      if (best) { m.swoop = 1; m.prey = best; best.snatched = m; m.diveT = 0; }
     }
   }
   if (m.swoop === 1) {
@@ -478,7 +478,7 @@ function harpyThink(m, dt, e) {
       m.swoop = 2; m.carry = f; f.carry = m; f.snatched = null; m.prey = null; m.carryT = 0; G.snatched = (G.snatched || 0) + 1;
       for (const o of G.mons) if (o.foe === f) o.foe = null;
       f.hp -= m.def.dmg * G.dmgMul * (f.armor || 1); f.flash = 1; f.flinch = 1; if (f.hp <= 0) { m.carry = null; m.swoop = 0; m.swT = rr(sw.every[0], sw.every[1]); f.carry = null; killFootman(f, 0, 0); return null; }
-      fxDust(f.x, f.y + .05, f.z, 5, .7, { speed: 2.4 }); sfx('batScreech', m.x, m.z, .9, .6); sfx('slash', m.x, m.z, .6, rnd());
+      fxDust(f.x, f.y + .05, f.z, 5, .7, { speed: 2.4 }); sfx('slash', m.x, m.z, .6, rnd());
       return null;
     }
     return { x: f.x, y: d < 2.5 ? gy : gy + Math.min(2, (d - 2.5) * .6), z: f.z };
@@ -509,7 +509,7 @@ function ramShove(m, men) {
     f.shoveAt = G.t; m.shove = 1;
     const sd = side >= 0 ? 1 : -1; f.kbx = (-tz * sd * rm.push + tx * 1.2); f.kbz = (tx * sd * rm.push + tz * 1.2);
     f.hp -= m.def.dmg * G.dmgMul * (f.armor || 1); f.flash = 1; f.flinch = 1;
-    fxDust(f.x, f.y + .05, f.z, 4, .6, { speed: 2.2 }); fxSparks(f.x, f.y + .8, f.z, 5, 3, 3, 2.2, 1.2, { size: .05, grav: 7 }); sfx('clash', f.x, f.z, .7, .2); shake(.08);
+    fxDust(f.x, f.y + .05, f.z, 4, .6, { speed: 2.2 }); fxSparks(f.x, f.y + .8, f.z, 5, 3, 3, 2.2, 1.2, { size: .05, grav: 7 }); shake(.08);
     if (f.hp <= 0) killFootman(f, f.kbx / rm.push, f.kbz / rm.push);
   }
   return slow;
@@ -526,7 +526,7 @@ function shamanWard(m, dt) {
     if (++n >= wc.n) break;
   }
   if (!n) { m.wardT = 1; return; }
-  m.cast = 1; fxTimed(4, m.x, m.y + .08, m.z, wc.r * 2, wc.r * 2, .4, 1.4, .8, .45, .5, { ground: true }); sfx('ignite', m.x, m.z, .6, .7);
+  m.cast = 1; fxTimed(4, m.x, m.y + .08, m.z, wc.r * 2, wc.r * 2, .4, 1.4, .8, .45, .5, { ground: true });
 }
 function leak(m) {
   const B = G.B, n = m.def.lives + (m.elite ? 1 : 0);
