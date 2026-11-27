@@ -271,7 +271,9 @@ function rigHuman(kit, sp, e) {
   if (e.point > 0) { const u = e.point, b = Math.sin((e.ph || 0) * 1.3) * .08; shR = lerp(shR, -1.95 + b, u); elR = lerp(elR, -.1, u); rzR = lerp(rzR, -.18, u); shL = lerp(shL, -.25, u); elL = lerp(elL, -1.6, u); rzL = lerp(rzL, .55, u); }
   if (e.heavy) { shR = -.3 + .3 * sw; elR = -.5; bladeA = 1.9; shL = -.2 - .5 * sw; elL = -.6; }
   if (e.claw) { shR = -1.25 + .45 * sw; elR = -.55; shL = -1.25 - .45 * sw; elL = -.55; }
+  if (e.push) { const p = e.push; shR = -1.62 + .1 * sw; elR = -.5; shL = -1.62 - .1 * sw; elL = -.5; rzR = -.12; rzL = .12; lean += .22 * p; twist *= .4; }
   if (e.staff) { shR = -.75; elR = -.95; bladeA = .12; }
+  if (e.staffOut) { shR = -.42 + .12 * sw; elR = -.5; rzR = -.32; bladeA = .08; }
   if (e.cast > 0) { const u = easeInOut(Math.min(1, e.cast * 1.6)); shR = lerp(shR, -2.7, u); elR = lerp(elR, -.25, u); shL = lerp(shL, -2.3, u); elL = lerp(elL, -.4, u); }
   if (e.drum) { const b = Math.sin(e.beat || 0); shR = -.95 - .5 * Math.max(0, b); elR = -1.15; shL = -.95 - .5 * Math.max(0, -b); elL = -1.15; bladeA = .9; }
   let atk = e.atk;
@@ -353,7 +355,9 @@ function rigBat(e, K = KIT.bat, wx = .06, wy = .02) {
   const M0 = xf(_M[0], null, e.x, e.y + Math.sin(e.ph * .5) * .08, e.z, -.25 + (e.flinch || 0) * .8, e.yaw, Math.sin(e.ph * .25) * .15, s, s, s);
   K.body.put(M0, fl, tint);
   K.wing.put(xf(_M[1], M0, wx, wy, 0, 0, 0, f * .85 + .15), fl, tint);
-  K.wing.put(xf(_M[2], M0, -wx, wy, 0, 0, 0, -(f * .85 + .15), -1, 1, 1), fl, tint);
+  // The left wing is the right one turned half a turn about z, not mirrored: a mirror flips the winding, so the
+  // face seen from above was the one lit from below and the left wing always looked dark.
+  K.wing.put(xf(_M[2], M0, -wx, wy, 0, 0, 0, PI - (f * .85 + .15)), fl, tint);
   return M0;
 }
 
@@ -404,7 +408,7 @@ function clearDebris() { DEB.length = 0; }
 // Extra death mayhem on top of the shatter in killMonster: loose bits (bone, gore, fur, chitin, rock), goo
 // splats and ground stains. Scales back as the debris pool fills so bodies and coins always have room.
 const _gm = new THREE.Matrix4(), _gp = new THREE.Vector3(), _gq = new THREE.Quaternion(), _gs = new THREE.Vector3();
-const GORE_C = { bone: [1.08, 1.02, .88], blood: [.5, .07, .06], dark: [.3, .04, .04], fur: [.62, .5, .45], bat: [.36, .3, .36], chitin: [.32, .28, .22], rock: [.62, .6, .58] };
+const GORE_C = { bone: [1.08, 1.02, .88], blood: [.5, .07, .06], dark: [.3, .04, .04], fur: [.62, .5, .45], bat: [.36, .3, .36], chitin: [.32, .28, .22], rock: [.62, .6, .58], wood: [.95, .82, .7], iron: [.36, .38, .44], feather: [.62, .48, .36], ash: [.24, .22, .21], coal: [.12, .1, .1], dye: [.95, .5, .45] };
 function fxGore(m, dth, kind, ix, iz, up) {
   if (!G.B || !KIT.bit) return;
   const hA = G.B.heightAt, sc = m.scale || 1, x = m.x, y = m.y, z = m.z, blast = kind === 'blast';
@@ -416,7 +420,7 @@ function fxGore(m, dth, kind, ix, iz, up) {
       _gm.compose(_gp.set(x + frr(-.2, .2) * sc, y + frr(.2, .7) * sc, z + frr(-.2, .2) * sc), _gq.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _gs.setScalar(size * frr(.7, 1.3) * sc));
       if (o.flat) _gs.y *= .35;
       const tn = o.var ? [tint[0] * frr(.8, 1.15), tint[1] * frr(.8, 1.15), tint[2] * frr(.8, 1.15)] : tint;
-      addDebris(KIT.bit, _gm, tn, ix * .6 + frr(-spd, spd), frr(upv * .45, upv) * up, iz * .6 + frr(-spd, spd), frr(4, 12), frr(l0, l1), { extra: 1, float: o.float || 0, bounce: o.bounce });
+      addDebris(o.batch || KIT.bit, _gm, tn, ix * .6 + frr(-spd, spd), frr(upv * .45, upv) * up, iz * .6 + frr(-spd, spd), frr(4, 12), frr(l0, l1), { extra: 1, float: o.float || 0, bounce: o.bounce });
     }
   };
   const stain = (dx, dz, size, c, a) => FX.decals.add(hA, x + dx, z + dz, size, c[0], c[1], c[2], a, 60);
@@ -440,6 +444,22 @@ function fxGore(m, dth, kind, ix, iz, up) {
     const n = Math.round(3 * more);
     for (let i = 0; i < n; i++) { _gm.compose(_gp.set(x + frr(-.3, .3) * sc, y + frr(.2, 1) * sc, z + frr(-.3, .3) * sc), _gq.identity(), _gs.setScalar(frr(.4, .8))); addDebris(KIT.rubble, _gm, m.tint, frr(-2.5, 2.5) + ix, frr(2, 4.5), frr(-2.5, 2.5) + iz, frr(3, 9), frr(4, 6.5), { extra: 1 }); }
     stain(0, 0, .6 * sc + .2, [.1, .095, .09], .45);
+  } else if (dth === 'wood') {
+    // Siege ram: wood splinters and planks, iron bits, a dark stain (the crew's bones come from the shatter).
+    keep(ext); bits(9, GORE_C.wood, 2.6, 4.4, 1.1, 4, 7, { batch: KIT.splinter, var: 1 }); bits(5, GORE_C.iron, 2, 3.6, .9, 4, 6.5, { var: 1 });
+    bits(3, GORE_C.bone, 1.7, 3.2, .9, 4, 6.5, { var: 1 });
+    stain(0, 0, .8 * sc + .3, [.12, .1, .08], .4);
+  } else if (dth === 'feather') {
+    // Harpy: a cloud of feathers that drift down slowly, a little blood.
+    bits(12, tintOf(GORE_C.feather), 1.6, 2.6, 1.1, 3.5, 5.5, { batch: KIT.feather, float: 1, var: 1 }); bits(3, GORE_C.blood, 1.4, 2.5, .45, 2.5, 4);
+  } else if (dth === 'ember') {
+    // Hell hound: ash flakes that float down and a scorched patch.
+    keep(ext * .9); bits(8, GORE_C.ash, 1.6, 3.2, .7, 3, 5, { flat: 1, float: 1, var: 1 }); bits(3, GORE_C.coal, 1.8, 3.4, .6, 3, 5);
+    stain(0, 0, .45 * sc + .25, [.025, .018, .015], .7);
+  } else if (dth === 'hex') {
+    // Goblin shaman: blood, dyed feathers from the headdress, bone beads.
+    keep(ext * .9); bits(4, GORE_C.blood, 1.8, 3.4, .8, 3, 5, { var: 1 }); bits(5, GORE_C.dye, 1.2, 2.6, .8, 3, 5, { batch: KIT.feather, float: 1, var: 1 });
+    stain(ix * .2, iz * .2, .35 * sc + .15, [.04, .012, .01], .55);
   } else if (dth === 'goo') {
     for (let i = 0; i < 3; i++) { const a = frnd() * TAU, d = frr(.5, 1.1) * sc; stain(Math.cos(a) * d + ix * .2, Math.sin(a) * d + iz * .2, frr(.15, .3) * sc + .1, [.012, .034, .014], .6); }
   }
