@@ -56,6 +56,16 @@ function spawnMonster(type, o = {}) {
     // Round 4 state (Ash's rigs may read these): shove 0-1 after a ram hit; swoop 0 cruise / 1 dive / 2 carrying, carry = the footman held,
     // low = near the ground; wardT = time to the next ward cast; trailT = time to the next fire patch.
     shove: 0, swoop: 0, swT: def.swoop ? rr(2, 4) : 0, carry: null, prey: null, low: false, wardT: def.wardCast ? def.wardCast.every * rr(.3, .55) : 0, trailT: def.trail ? rr(.1, .4) : 0,
+    // Speed only (Ash, round 12): every field that the sim, the rigs or the effects add later exists from the start
+    // (as undefined, which reads the same as a missing field), so all monsters share one hidden class. Without this
+    // there were over 100 shapes, and the crowd code (updateUnits) kept falling out of optimized code ("wrong map").
+    home: 0, lane: 0, laneT: undefined, elite: undefined, bmul: undefined, echo: undefined, ward: undefined, wardMax: undefined, wardFx: undefined, evMul: undefined,
+    alt: undefined, side: undefined, glowL: undefined, lCol: undefined, fireT: undefined, fx: undefined, fz: undefined, crew: undefined, crewN: undefined, frozen: undefined,
+    diveT: undefined, carryT: undefined, entered: undefined, hsT: undefined, affix: undefined, affixName: undefined, affixed: undefined, small: undefined, _xd: undefined,
+    _lineT: undefined, _lined: undefined, weapon: undefined, shield: undefined, helm: undefined, plate: undefined, shamble: undefined, wScale: undefined, drum: undefined,
+    standard: undefined, claw: undefined, heavy: undefined, staff: undefined, staffOut: undefined, hood: undefined, robe: undefined, keg: undefined, crown: undefined, wraps: undefined,
+    _rigT: undefined, swD: undefined, swC: undefined, _ls: undefined, _drip: undefined, _wet: undefined, _cfx: undefined, _wisp: undefined,
+    _lod: 0, _tier: 0, _smask: 255, _gi: 0, _tx: 0, _tz: 0, _x0: 0, _z0: 0,
   };
   m.home = m.lane = m.lat;
   if (type === 'skel' && rnd() < .26) { m.torch = true; m.flame = addFlame({ x: 0, y: -50, z: 0, size: .36, embers: .45, glow: .8 }); m.lI = 30; }

@@ -9,15 +9,12 @@ const UI = (() => {
     sets: null, panelRect: null, everManual: false, helpSeen: {}, sumT: 0, offer: null, scr: null, mutCard: false,
   };
   // Settings, remembered between visits: volumes (0..1) and the graphics mode.
-  const SET = { music: 1, sfx: 1, amb: 1, q: 'auto' }, Q0 = { noscale: HASH.noscale, quality: -1 };
+  const SET = { music: 1, sfx: 1, amb: 1, q: 'auto' };
   function saveSettings() { try { localStorage.setItem('lanternhold.settings', JSON.stringify(SET)); } catch (e) {} }
   function applyVolumes() { AU.setVolume('music', SET.music); AU.setVolume('sfx', SET.sfx); AU.setVolume('crowd', SET.sfx); AU.setVolume('ambience', SET.amb); }
-  // Graphics: Auto lets the frame-rate watcher pick the resolution; Sharp holds full resolution; Fast holds a low one.
-  function applyQuality() {
-    if (Q0.quality < 0) Q0.quality = R.quality;
-    if (SET.q === 'auto') { HASH.noscale = Q0.noscale; R.quality = Q0.quality; } else { HASH.noscale = '1'; R.quality = SET.q === 'sharp' ? 1 : .6; }
-    if (R.renderer) resizeRenderer();
-  }
+  // Graphics: the tiers live in GFX (11-tiers.js), which also saves the choice. SET.q may be 'auto', a tier key, or
+  // the old 'sharp' / 'fast' (High / Low).
+  function applyQuality() { GFX.set(SET.q); }
   function loadSettings() {
     try {
       const o = JSON.parse(localStorage.getItem('lanternhold.settings') || '{}') || {};
@@ -25,7 +22,7 @@ const UI = (() => {
       if (o.q === 'auto' || o.q === 'sharp' || o.q === 'fast') SET.q = o.q;
       const h = JSON.parse(localStorage.getItem('lanternhold.help') || '[]'); if (Array.isArray(h)) for (const k of h) U.helpSeen[k] = 1;
     } catch (e) {}
-    applyVolumes(); if (SET.q !== 'auto') applyQuality();
+    applyVolumes(); SET.q = GFX.mode === 'high' ? 'sharp' : GFX.mode === 'low' ? 'fast' : GFX.mode; // GFX.init already applied it
   }
   // One-time help lines for the player's first steps (remembered, so they show once per browser).
   function helpTip(key) {

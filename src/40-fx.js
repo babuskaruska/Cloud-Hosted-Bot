@@ -4,6 +4,9 @@ const frnd = makeRng(0xF1A3E5), frr = (a, b) => a + (b - a) * frnd();
 const LT = {
   hemi: null, moon: null, fill: null, beacon: null, spots: [], towers: [], flashes: [], torches: [], env: [], envSrc: [], envK: 0,
   beaconBase: 1500, beaconMul: 1, beaconLevel: 1, bp: new THREE.Vector3(), tick: 0, shadowsAt: -1, beaconGutter: 0, beaconOn: 1, cold: 0, emitters: [], spotTimer: 0,
+  // Point lights in use per graphics tier (GFX.apply): towers, torches, flashes. With fewer tower lights than
+  // towers, tPick holds the emitters that get one (the brightest near the camera, re-picked with the spotlights).
+  nTower: 12, nTorch: 5, nFlash: 4, tPick: [],
 };
 function initLights() {
   const S = R.scene;
@@ -39,7 +42,7 @@ function scheduleShadows(busy) {
 }
 function lightFlash(x, y, z, color, intensity, dur, range = 24) {
   let best = LT.flashes[0];
-  for (const f of LT.flashes) { if (f.t >= 1) { best = f; break; } if (f.l.intensity < best.l.intensity) best = f; }
+  for (let i = 0; i < LT.nFlash; i++) { const f = LT.flashes[i]; if (f.t >= 1) { best = f; break; } if (f.l.intensity < best.l.intensity) best = f; }
   best.l.position.set(x, y, z); best.l.color.set(color); best.l.distance = range; best.i0 = intensity; best.t = 0; best.dur = dur; best.l.intensity = intensity;
 }
 function updateLights(dt, t, focusX, focusZ) {
@@ -52,6 +55,7 @@ function updateLights(dt, t, focusX, focusZ) {
   LT.spotTimer -= dt;
   if (LT.spotTimer <= 0) {
     LT.spotTimer = .4;
+    if (LT.nTower < LT.towers.length) pickTowerLights(focusX, focusZ);
     const lit = LT.emitters.filter(e => e && e.alive && e.on > .5 && e.spot);
     const key = e => dist2(e.x, e.z, focusX, focusZ) - (e._spot > .2 ? 12 : 0);
     lit.sort((a, b) => key(a) - key(b));
@@ -75,8 +79,9 @@ function updateLights(dt, t, focusX, focusZ) {
     const l = LT.env[i], e = LT.envSrc[i];
     if (e && LT.envK > .01) { l.position.set(e.x, e.y, e.z); l.color.setHex(e.c); l.distance = e.d; l.intensity = e.I * LT.envK * (e.flick ? .82 + .18 * n1(t * 1.7 + i * 5, i + 11) : 1); } else l.intensity = 0;
   }
+  const few = LT.nTower < LT.towers.length;
   for (let i = 0; i < LT.towers.length; i++) {
-    const l = LT.towers[i], e = LT.emitters[i];
+    const l = LT.towers[i], e = few ? (i < LT.nTower ? LT.tPick[i] : null) : LT.emitters[i];
     if (e && e.alive) {
       e.fl = .86 + .1 * n1(t * 7 + e.seed, e.seed) + .05 * n1(t * 19 + e.seed, e.seed + 1);
       l.position.set(e.x, e.y, e.z); l.color.setRGB(e.r, e.g, e.b); l.distance = e.range * (1 - .3 * (G.eclA || 0)); // Eclipse shrinks tower light
@@ -85,16 +90,30 @@ function updateLights(dt, t, focusX, focusZ) {
     } else l.intensity = 0;
   }
 }
+// Low and Mid tiers: which lit towers get one of the few tower point lights. A tower that keeps its light keeps its
+// slot (no hand-over flicker); free slots go to the brightest of the rest, nearest the camera first.
+const _tpScore = e => e.I * e.on / (1 + dist2(e.x, e.z, _tpF.x, _tpF.z) * .02), _tpF = { x: 0, z: 0 }, _tpCand = [];
+function pickTowerLights(fx, fz) {
+  _tpF.x = fx; _tpF.z = fz; _tpCand.length = 0;
+  for (const e of LT.emitters) if (e && e.alive && e.on > .05) { e._tps = _tpScore(e); _tpCand.push(e); }
+  _tpCand.sort((a, b) => b._tps - a._tps);
+  const n = LT.nTower, P = LT.tPick; P.length = n;
+  for (let i = 0; i < n; i++) if (P[i] && _tpCand.indexOf(P[i]) >= n) P[i] = null; else if (P[i] === undefined) P[i] = null;
+  for (let j = 0; j < Math.min(n, _tpCand.length); j++) { const e = _tpCand[j]; if (P.indexOf(e) >= 0) continue; const k = P.indexOf(null); if (k < 0) break; P[k] = e; }
+}
 function updateTorchLights(dt, cands, focusX, focusZ) {
   for (const c of cands) c._ls = c.lI / (1 + dist2(c.lx, c.lz, focusX, focusZ) * .03);
   cands.sort((a, b) => b._ls - a._ls);
   const top = cands.slice(0, 9);
-  for (const s of LT.torches) if (s.owner && (!s.owner.alive || !top.includes(s.owner))) s.releasing = true;
-  for (let i = 0; i < Math.min(5, top.length); i++) {
-    const c = top[i]; if (LT.torches.some(s => s.owner === c)) continue;
-    const s = LT.torches.find(s => !s.owner); if (s) { s.owner = c; s.releasing = false; s.cur = 0; }
+  const nT = LT.nTorch;
+  for (let i = 0; i < nT; i++) { const s = LT.torches[i]; if (s.owner && (!s.owner.alive || !top.includes(s.owner))) s.releasing = true; }
+  for (let i = 0; i < Math.min(nT, top.length); i++) {
+    const c = top[i]; let has = false, free = null;
+    for (let j = 0; j < nT; j++) { const s = LT.torches[j]; if (s.owner === c) has = true; else if (!s.owner && !free) free = s; }
+    if (!has && free) { free.owner = c; free.releasing = false; free.cur = 0; }
   }
-  for (const s of LT.torches) {
+  for (let i = 0; i < nT; i++) {
+    const s = LT.torches[i];
     const o = s.owner;
     if (!o) { s.l.intensity = 0; continue; }
     s.cur = damp(s.cur, s.releasing ? 0 : o.lI, s.releasing ? 20 : 12, dt);
@@ -103,13 +122,17 @@ function updateTorchLights(dt, cands, focusX, focusZ) {
     s.l.intensity = s.cur * (.85 + .15 * n1(SH.uTime.value * 9, o.lseed || 0));
   }
 }
+const _mistTw = [], byFull = (a, b) => b._full - a._full;
 function collectMistLights() {
   let k = 0; const put = (l, gain) => { if (k >= R.NL) return; R.lightPos[k].copy(l.position); R.lightCol[k].set(l.color.r, l.color.g, l.color.b).multiplyScalar(l.intensity * gain); k++; };
   put(LT.beacon, .05);
   for (const f of LT.flashes) put(f.l, .06);
-  // Tower lanterns at their full strength (a tower whose spotlight is on dims its point light, not its glow in the air).
-  const tw = LT.towers.filter((l, i) => l.intensity > 0 || (LT.emitters[i] && LT.emitters[i]._spot > 0)).map(l => { const e = LT.emitters[LT.towers.indexOf(l)]; l.userData.full = e && e.alive ? e.I * e.on * (e.fl || 1) * (e.snf === undefined ? 1 : e.snf) : l.intensity; return l; }).sort((a, b) => b.userData.full - a.userData.full);
-  for (const l of tw) { if (k >= R.NL) break; R.lightPos[k].copy(l.position); R.lightCol[k].set(l.color.r, l.color.g, l.color.b).multiplyScalar(l.userData.full * .16); k++; }
+  // Tower lanterns at their full strength (a tower whose spotlight is on dims its point light, not its glow in the
+  // air), straight from the emitters, so towers without a point light on Low and Mid still glow in the mist.
+  _mistTw.length = 0;
+  for (const e of LT.emitters) if (e && e.alive) { e._full = e.I * e.on * (e.fl || 1) * (e.snf === undefined ? 1 : e.snf); if (e._full > 0 || e._spot > 0) _mistTw.push(e); }
+  _mistTw.sort(byFull);
+  for (const e of _mistTw) { if (k >= R.NL) break; R.lightPos[k].set(e.x, e.y, e.z); R.lightCol[k].set(e.r, e.g, e.b).multiplyScalar(e._full * .16); k++; }
   for (const l of LT.env) if (l.intensity > 0) put(l, .1);
   for (; k < R.NL; k++) R.lightCol[k].set(0, 0, 0);
 }

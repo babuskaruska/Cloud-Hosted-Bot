@@ -130,11 +130,11 @@ const SH = {
 };
 
 // The Echo ghost's screen-door (a discard in the monster shader) only where it is cheap: not on touch devices
-// (phones and tablets, tile-based GPUs) and not on the Fast setting. HASH.dither=0/1 forces it for tests.
+// (phones and tablets, tile-based GPUs) and not on the Low graphics tier. HASH.dither=0/1 forces it for tests.
 function echoDitherWanted() {
   if (HASH.dither !== undefined) return HASH.dither !== '0';
   if (R.coarse === undefined) R.coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
-  return !R.coarse && !(HASH.noscale && R.quality < .75);
+  return !R.coarse && GFX.tier !== 'low';
 }
 // Switches MAT.inst to the program with or without the screen-door (a one-time recompile, on a settings change).
 function syncEchoDither() {

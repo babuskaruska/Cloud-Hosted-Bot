@@ -115,7 +115,7 @@ function planDraw() {
   }
   if (skip) return; // a hidden step keeps the last plan's crowd state
   DRAW.onScreen = on; DRAW.crowd = R.opt && on > DRAW_CROWD;
-  FX.keep = R.opt ? (R.lite ? .65 : R.quality < .75 ? .85 : 1) * (1 - .35 * sat((on - 70) / 110)) : 1;
+  FX.keep = R.opt ? (GFX.P ? GFX.P.keep : 1) * (R.lite ? .65 : R.quality < .75 ? .85 : 1) * (1 - .35 * sat((on - 70) / 110)) : 1;
   if (!R.opt) return;
   // A spotlight lights a disc of ground under its tower: radius = height above the ground x tan(cone angle).
   _spotP.length = 0; LT.spots.forEach((s, j) => { const l = s.l, p = l.position; if (l.intensity > 0) { const r = clamp((p.y - G.B.heightAt(p.x, p.z)) * Math.tan(l.angle) + 1.2, 2, 16); _spotP.push(p, j, r * r); } });
@@ -195,7 +195,8 @@ function step(rdt) {
   if (AU.ready) { let lit = 0; for (const t of G.towers) if (t.alive && t.em.on > .5 && t.kind !== 'spire') lit++; AU.setAmbience(sat((.3 + lit * .06) * LT.beaconOn + .05), sat((G.phase === 'play' ? .5 : .85) * B.bio.wind), G.bossAlive && G.phase === 'play' ? 1 : 0); AU.update(rdt); }
 }
 
-let _last = 0, _acc = 0, _frames = 0, _slow = 0, _fast = 0, _hold = 0, _back = 12, _check = null, _noGain = 0, _noBack = 30;
+let _last = 0, _acc = 0, _frames = 0, _slow = 0, _fast = 0, _hold = 0, _back = 12, _check = null, _noGain = 0, _noBack = 30, _tierHold = 0;
+function autoScaleReset() { _acc = 0; _frames = 0; _slow = 0; _fast = 0; _hold = 0; _back = 12; _check = null; _noGain = 0; _noBack = 30; _tierHold = 20; }
 // Automatic resolution scaling (graphics Auto; HASH.noscale turns it off). Every 2 s: two slow windows (> 22.5 ms a
 // frame) drop the internal resolution a step (down to .55, then "lite": a smaller moon shadow map and no depth of
 // field); three fast ones (< 18.6 ms) raise it again after a hold that doubles each time it drops. Each drop is
@@ -205,42 +206,61 @@ function setLite(on) {
   if (!!R.lite === on) return; R.lite = on ? 1 : 0;
   const s = on ? 1024 : LT.moonMap; LT.moon.shadow.mapSize.set(s, s); if (LT.moon.shadow.map) { LT.moon.shadow.map.dispose(); LT.moon.shadow.map = null; }
 }
+// Graphics 'auto' (GFX.mode): when the frames stay slow with the resolution already at the tier's floor and lite on,
+// the next tier down takes over (at most every 20 s; GFX.stepDown remembers it for this GPU).
 function autoScale(ms) {
   if (ms > 22.5) { _slow++; _fast = 0; } else { _slow = 0; _fast = ms < 18.6 ? _fast + 1 : 0; }
-  _hold -= 2; _noGain -= 2;
+  _hold -= 2; _noGain -= 2; _tierHold -= 2;
+  const qMin = GFX.P ? GFX.P.qMin : .55;
+  if (_slow >= 3 && R.lite && R.quality <= qMin + .001 && _tierHold <= 0 && !_check && GFX.stepDown()) return;
   if (_check) {
     const c = _check; _check = null;
     if (ms > c.ms * .92) { if (c.lite) setLite(false); else { R.quality = c.q; resizeRenderer(); } _noGain = _noBack; _noBack = Math.min(600, _noBack * 2); _slow = 0; return; }
   }
-  if (_slow >= 3 && R.quality <= .55 && !R.lite && _noGain <= 0) { setLite(true); _slow = 0; _check = { ms, lite: true }; }
-  else if (_slow >= 2 && R.quality > .55 && _noGain <= 0) { _check = { ms, q: R.quality }; R.quality = Math.max(.55, R.quality - .15); resizeRenderer(); _slow = 0; _hold = _back; _back = Math.min(480, _back * 2); }
+  if (_slow >= 3 && R.quality <= qMin + .001 && !R.lite && _noGain <= 0) { setLite(true); _slow = 0; _check = { ms, lite: true }; }
+  else if (_slow >= 2 && R.quality > qMin + .001 && _noGain <= 0) { _check = { ms, q: R.quality }; R.quality = Math.max(qMin, R.quality - .15); resizeRenderer(); _slow = 0; _hold = _back; _back = Math.min(480, _back * 2); }
   else if (_fast >= 3 && _hold <= 0) {
     if (R.lite) { setLite(false); _fast = 0; }
     else if (R.quality < 1) { R.quality = Math.min(1, R.quality + .15); resizeRenderer(); _fast = 0; }
   }
 }
+// Frame pacing. The browser calls frame() at the display's rate (60, 90, 120 Hz); a frame is drawn only once the
+// cap's interval has passed (GFX.fpsCap: 30, 60, or 0 = every refresh up to about 240 Hz), with a 2.5 ms slack so
+// a 60 Hz display at a 30 cap draws every second refresh. Paused, or on a menu with no input for 2 s, the game
+// draws at 20 fps (battery); a hidden tab gets no calls at all. The simulation takes the real time between drawn
+// frames (up to 50 ms a step), so a lower frame rate does not slow the game down.
+function frameCap() {
+  let cap = GFX.fpsCap;
+  const quiet = (G.paused || UI.mainMenu || CAM.menuMode || (typeof MENU !== 'undefined' && MENU.modal && MENU.modal())) && performance.now() - (R.inputAt || 0) > 2000 && !(typeof CINE !== 'undefined' && CINE.cur);
+  if (quiet) cap = cap > 0 ? Math.min(cap, 20) : 20;
+  R.capNow = cap; R.quiet = !!quiet;
+  return cap;
+}
 function frame(now) {
   requestAnimationFrame(frame);
-  if (now - _last < 10.5) return;
+  const cap = frameCap();
+  if (now - _last < (cap > 0 ? 1000 / cap - 2.5 : 4)) return;
   const raw = (now - _last) / 1000, rdt = Math.min(.05, Math.max(.001, raw)); _last = now; R.frameDt = rdt;
   if (G.paused) { FX.shake = 0; updateShake(rdt); updateCamera(rdt); UI.update(rdt); AU.update(rdt); } else { for (let i = 0; i < G.speed; i++) { R.skipDraw = i < G.speed - 1; step(rdt); } R.skipDraw = false; }
   R.fade = Math.min(1, R.fade + rdt * 1.6);
   CINE.update(rdt);
   applyCamera(); renderFrame(); UI.draw(); CINE.drawHud(); CINE.restore();
-  if (document.hidden || raw > .25) { _acc = 0; _frames = 0; return; }
+  // The frame-time watcher skips the quiet 20 fps frames; under a 30 cap a frame counts as its time halved, so
+  // holding 30 reads as "fast" and the resolution may rise until the cap can no longer be held.
+  if (document.hidden || raw > .25 || R.quiet) { _acc = 0; _frames = 0; return; }
   _acc += raw; _frames++;
   if (_acc >= 2) {
-    const ms = _acc / _frames * 1000;
-    R.fpsText = (1000 / ms).toFixed(0) + ' fps  ' + R.iw + 'x' + R.ih + '  calls ' + R.renderer.info.render.calls + '  mons ' + G.mons.length;
-    if (!HASH.noscale) autoScale(ms); else if (R.lite) setLite(false);
+    const ms = _acc / _frames * 1000, norm = cap > 0 && cap < 60 ? ms * cap / 60 : ms;
+    R.fpsText = (1000 / ms).toFixed(0) + ' fps  ' + GFX.tier + (GFX.mode === 'auto' ? ' (auto)' : '') + '  ' + R.iw + 'x' + R.ih + '  calls ' + R.renderer.info.render.calls + '  mons ' + G.mons.length;
+    if (!HASH.noscale && GFX.mode === 'auto') autoScale(norm); else if (R.lite) setLite(false);
     _acc = 0; _frames = 0;
   }
 }
 
 function boot() {
-  if (window.matchMedia && matchMedia('(pointer: coarse)').matches && !HASH.noscale) R.quality = .85;
   if (window.matchMedia) { const rm = matchMedia('(prefers-reduced-motion: reduce)'), upd = () => { FX.shakeK = rm.matches ? 0 : 1; FX.flashK = rm.matches ? .3 : 1; }; upd(); if (rm.addEventListener) rm.addEventListener('change', upd); }
-  initRenderer(); initMaterials(); resizeRenderer(); initLights(); initFX(); initWeather(); initKits(); UI.init();
+  initRenderer(); initMaterials(); resizeRenderer(); initLights(); initFX(); initWeather(); GFX.init(); initKits(); UI.init();
+  for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']) window.addEventListener(ev, () => { R.inputAt = performance.now(); }, { passive: true, capture: true });
   KIT.marker = new PartBatch(S => {
     const gold = mulC(COL.gold, .85), amber = C(0xc9682a);
     S.box(.08, 1.15, .08, 0, .57, 0, COL.woodD, { l: L_WOOD, r: [0, 0, .05] }); S.cone(.07, .14, .03, 1.2, 0, COL.brass, { n: 4, l: L_METAL, emis: .05 });
@@ -267,7 +287,7 @@ function boot() {
   window.addEventListener('blur', () => UI.dropTouches());
   window.addEventListener('pagehide', saveOnHide);
   for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => setTimeout(resizeRenderer, 60));
-  window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, render() { applyCamera(); renderFrame(); }, autoScale, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, save: { SAVE, snapshot, write: writeSave, read: continueOffer, valid: validSave, clear: clearSave, restore: restoreRun, onHide: saveOnHide }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
+  window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, GFX, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, render() { applyCamera(); renderFrame(); }, autoScale, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, save: { SAVE, snapshot, write: writeSave, read: continueOffer, valid: validSave, clear: clearSave, restore: restoreRun, onHide: saveOnHide }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
   window.__cw.CINE = CINE; window.__cw.cineRun = (sec, dt = 1 / 30) => { for (let i = 0, n = Math.round(sec / dt); i < n; i++) { R.frameDt = dt; step(dt); CINE.update(dt); if (i === n - 1) { R.fade = 1; applyCamera(); renderFrame(); UI.draw(); CINE.drawHud(); } CINE.restore(); } return CINE.cur ? CINE.cur.t : -1; }; window.__cw.bossPortrait = bossPortrait; window.__cw.BOSSCARD = BOSSCARD;
   window.__cw.META = META; window.__cw.STORY = STORY; window.__cw.MENU = MENU; window.__cw.TUT = TUT;
   window.__cw.meta = { startRun, startDemo, abandonRun, bankRun, buyUpgrade, applyMeta, embersFor, heatRules, UPGRADES, HEAT, saveMeta, loadMeta, rerollMods, activeMods };

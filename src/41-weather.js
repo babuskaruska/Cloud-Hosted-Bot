@@ -7,16 +7,16 @@ function initWeather() {
   g.setAttribute('iSeed', new THREE.InstancedBufferAttribute(seed, 4)); g.instanceCount = N;
   const v2 = () => ({ value: new THREE.Vector2() }), v3 = () => ({ value: new THREE.Vector3() }), v4 = () => ({ value: new THREE.Vector4() });
   const u = WX.u = {
-    uTime: SH.uTime, uLightPos: { value: R.lightPos }, uLightCol: { value: R.lightCol }, uAmb: v3(), uFade: { value: 1 }, uN: v2(),
+    uTime: SH.uTime, uLightPos: { value: R.lightPos }, uLightCol: { value: R.lightCol }, uAmb: v3(), uFade: { value: 1 }, uN: v2(), uWx: { value: 1 },
     uVelA: v3(), uVelB: v3(), uSwayA: v2(), uSwayB: v2(), uSizeA: v2(), uSizeB: v2(), uColA: v4(), uColB: v4(), uAlA: v3(), uAlB: v3(), uYA: v2(), uYB: v2(),
   };
   const m = new THREE.ShaderMaterial({
     uniforms: u, transparent: true, depthWrite: false, depthTest: true, side: THREE.DoubleSide, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendEquation: THREE.AddEquation,
     vertexShader: `attribute vec4 iSeed; varying vec4 vCol; varying vec2 vUv; varying float vAdd;
-uniform float uTime; uniform float uFade; uniform vec3 uLightPos[12]; uniform vec3 uLightCol[12]; uniform vec3 uAmb; uniform vec2 uN;
+uniform float uTime; uniform float uFade; uniform vec3 uLightPos[12]; uniform vec3 uLightCol[12]; uniform vec3 uAmb; uniform vec2 uN; uniform float uWx;
 uniform vec3 uVelA; uniform vec3 uVelB; uniform vec2 uSwayA; uniform vec2 uSwayB; uniform vec2 uSizeA; uniform vec2 uSizeB; uniform vec4 uColA; uniform vec4 uColB; uniform vec3 uAlA; uniform vec3 uAlB; uniform vec2 uYA; uniform vec2 uYB;
 void main(){
-  float isB = step(iSeed.w, uN.y), show = step(iSeed.w, uN.x + uN.y);
+  float ws = iSeed.w / uWx, isB = step(ws, uN.y), show = step(ws, uN.x + uN.y);
   vec3 vel = mix(uVelA, uVelB, isB), al = mix(uAlA, uAlB, isB); vec2 sway = mix(uSwayA, uSwayB, isB), sz = mix(uSizeA, uSizeB, isB), yr = mix(uYA, uYB, isB); vec4 cp = mix(uColA, uColB, isB);
   float r1 = fract(iSeed.w * 91.7 + iSeed.x * 3.1), r2 = fract(iSeed.w * 357.3 + iSeed.z * 5.7), span = max(yr.y - yr.x, 0.01);
   vec3 p = vec3(iSeed.x * 48.0, iSeed.y * span, iSeed.z * 48.0) + vel * uTime * (0.65 + 0.7 * r1);
@@ -36,7 +36,15 @@ void main(){
 void main(){ float a = smoothstep(1.0, 0.25, length(vUv)) * vCol.a; gl_FragColor = vec4(vCol.rgb * a, a * (1.0 - vAdd)); }`,
   });
   WX.mesh = new THREE.Mesh(g, m); WX.mesh.frustumCulled = false; WX.mesh.renderOrder = 4; R.scene.add(WX.mesh);
+  WX.N = N;
 }
+// The graphics tier's share of weather particles (GFX.P.wx): only that many instances are drawn, and the shader
+// spreads the weather's mix (uN) over them (uWx), so every kind of particle thins out evenly.
+WX.apply = () => {
+  if (!WX.u) return;
+  const k = GFX.P ? GFX.P.wx : 1, n = Math.max(1, Math.min(WX.N, Math.round(WX.N * k)));
+  WX.u.uWx.value = n / WX.N; WX.mesh.geometry.instanceCount = n;
+};
 function setWeather(w, instant) {
   const u = WX.u;
   u.uN.value.fromArray(w.n); u.uVelA.value.fromArray(w.velA); u.uVelB.value.fromArray(w.velB); u.uSwayA.value.fromArray(w.swayA); u.uSwayB.value.fromArray(w.swayB);

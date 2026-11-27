@@ -17,8 +17,8 @@ float bayer8(vec2 a){ return bayer4(0.5 * a) * 0.25 + bayer2(a); }
 float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 `;
 
-function fsMat(frag, uniforms) {
-  return new THREE.ShaderMaterial({ vertexShader: FS_VERT, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false, toneMapped: false });
+function fsMat(frag, uniforms, defines) {
+  return new THREE.ShaderMaterial({ vertexShader: FS_VERT, fragmentShader: frag, uniforms, defines: Object.assign({}, defines), depthTest: false, depthWrite: false, toneMapped: false });
 }
 
 function initRenderer() {
@@ -80,26 +80,43 @@ void main(){
     vec3 ddx = abs(dr - d) < abs(d - dl) ? wpos(vUv + vec2(uPx.x, 0.0), dr) - P : P - wpos(vUv - vec2(uPx.x, 0.0), dl);
     vec3 ddy = abs(du - d) < abs(d - dd) ? wpos(vUv + vec2(0.0, uPx.y), du) - P : P - wpos(vUv - vec2(0.0, uPx.y), dd);
     vec3 N = normalize(cross(ddx, ddy)); if (dot(N, uCamDir) > 0.0) N = -N;
+    // Ambient occlusion, AO_N taps (graphics tier; 0 on Low). None below uAOFloor (the open sea around Stormreach:
+    // flat, and a lot of pixels).
+#if AO_N > 0
     float occ = 0.0, ang = bayer4(gl_FragCoord.xy + uDither) * 6.2831853;
-    // No ambient occlusion below uAOFloor (the open sea around Stormreach: flat, and a lot of pixels).
-    if (P.y > uAOFloor) for (int i = 0; i < 10; i++) {
-      float fi = (float(i) + 0.5) / 10.0, a = ang + float(i) * 2.39996;
+    if (P.y > uAOFloor) for (int i = 0; i < AO_N; i++) {
+      float fi = (float(i) + 0.5) / float(AO_N), a = ang + float(i) * 2.39996;
       vec2 suv = vUv + vec2(cos(a), sin(a)) * uAO.y * sqrt(fi) * uPx;
       vec3 V = wpos(suv, texture2D(tDepth, suv).x) - P;
       float vv = dot(V, V);
       occ += max(0.0, dot(V, N) - 0.035) / (vv + 0.03) * step(vv, uAO.z);
     }
-    float ao = clamp(1.0 - occ * uAO.x * 0.1, 0.0, 1.0);
+    float ao = clamp(1.0 - occ * uAO.x * (1.0 / float(AO_N)), 0.0, 1.0);
     col *= ao;
+#endif
+#if MIST > 0 || EDGE > 0
     float n = vn(P.xz * 0.16 + uWind) * 0.65 + vn(P.xz * 0.47 - uWind * 1.7) * 0.35;
+#endif
+    // Ground mist (none on Ultra; on Low it takes the plain mist colour, not the lanterns' light).
+#if MIST > 0
     float tau = min(uMist.z * exp(-(max(P.y, -1.0) - uMist.x) / uMist.y), 1.25) * smoothstep(0.34, 0.86, n) * smoothstep(-2.4, -1.1, P.y);
     float f = 1.0 - exp(-tau);
-    vec3 L = uMistAmb; vec3 Pm = P + vec3(0.0, 0.35, 0.0);
-    for (int i = 0; i < ${R.NL}; i++) { vec3 dv = uLightPos[i] - Pm; L += uLightCol[i] / (dot(dv, dv) + 2.0); }
-    col = mix(col, L * uMist.w, f);
+    if (f > 0.002) {
+      vec3 L = uMistAmb;
+#if MIST > 1
+      vec3 Pm = P + vec3(0.0, 0.35, 0.0);
+      for (int i = 0; i < ${R.NL}; i++) { vec3 dv = uLightPos[i] - Pm; L += uLightCol[i] / (dot(dv, dv) + 2.0); }
+#else
+      L *= 1.6;
+#endif
+      col = mix(col, L * uMist.w, f);
+    }
+#endif
     // The slab floats in the dark: its cliffs fade into a low haze below the board's edge (uEdge: haze colour, amount).
+#if EDGE > 0
     float ek = smoothstep(16.6, 19.6, max(abs(P.x), abs(P.z))) * smoothstep(-0.6, -8.5, P.y) * uEdge.w;
     col = mix(col, uEdge.rgb * (0.75 + 0.5 * n), ek);
+#endif
   } else {
     // The void around the slab, read as a night sky: a glow toward the top, faint drifting haze, pixel stars that
     // twinkle (uBack.z) and, on some lands, an aurora's curtain (uBack.w). uBack.x: the camera's turn (menu arc).
@@ -129,6 +146,7 @@ void main(){
   }
   // Lantern halos: light scattered in the air between the eye and the surface, around each light that stands in front
   // of what is seen there (a cheap bloom that respects depth). uHalo: x gain, y core size.
+#if HALO > 0
   if (uHalo.x > 0.0) {
     vec3 Ph = wpos(vUv, min(d, 0.9999)), H = vec3(0.0);
     for (int i = 0; i < ${R.NL}; i++) {
@@ -137,6 +155,7 @@ void main(){
     }
     col += H * uHalo.x;
   }
+#endif
   gl_FragColor = vec4(col, 1.0);
 }`, {
     tColor: { value: null }, tDepth: { value: null }, uInvVP: { value: new THREE.Matrix4() }, uCamDir: { value: new THREE.Vector3() }, uPx: { value: new THREE.Vector2() }, uTime: SH.uTime,
@@ -144,7 +163,7 @@ void main(){
     uAO: { value: new THREE.Vector3(1.0, 18, 0.7) }, uAOFloor: { value: -1e9 }, uDither: { value: R.ditherOfs }, uWind: { value: new THREE.Vector2() },
     uHalo: { value: new THREE.Vector4(0.016, 0.9, 0.0, 0) }, uEdge: { value: new THREE.Vector4(0.03, 0.04, 0.07, 0.6) },
     uBackTop: { value: new THREE.Vector3() }, uBack: { value: new THREE.Vector4() }, uRes: { value: new THREE.Vector2(1, 1) }, uEcl: { value: new THREE.Vector4() },
-  });
+  }, { AO_N: 10, MIST: 2, EDGE: 1, HALO: 1 });
 
   M.dof = fsMat(`
 precision highp float;
@@ -207,11 +226,19 @@ ${GLSL_BAYER}
 vec3 filmic(vec3 x){ x = max(x, 0.0); return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 void main(){
   vec3 c = texture2D(tColor, vUv).rgb;
+#if BLOOM > 1
   c += texture2D(tBloomA, vUv).rgb * uBloom.x + texture2D(tBloomB, vUv).rgb * uBloom.y;
+#elif BLOOM > 0
+  c += texture2D(tBloomB, vUv).rgb * (uBloom.x * 0.25 + uBloom.y * 0.85);
+#endif
   c *= uGrade.x;
+#if VIG > 0
   vec2 q = (vUv - 0.5) * vec2(1.0, 0.92);
   float vig = smoothstep(0.9, 0.3, length(q) * 1.25);
   c *= mix(1.0 - uGrade.z, 1.0, vig);
+#else
+  const float vig = 1.0;
+#endif
   // Cinematics (43-cine.js): a ring around the beacon (uCine.xy, radius uCine.z in screen heights). Outside it the
   // land dims to black (uCineK.x); its edge glows (y); inside, warm light floods (z).
   if (uCineK.w > 0.5) {
@@ -239,7 +266,7 @@ void main(){
     uLift: { value: new THREE.Vector3(0.010, 0.016, 0.030) }, uDither: { value: R.ditherOfs }, uRes: { value: new THREE.Vector2() },
     uShT: { value: new THREE.Vector3(1, 1, 1) }, uHiT: { value: new THREE.Vector3(1, 1, 1) }, uCon: { value: 0 },
     uCine: { value: new THREE.Vector4() }, uCineK: { value: new THREE.Vector4() }, uCineC: { value: new THREE.Vector3(1, 1, 1) },
-  });
+  }, { BLOOM: 2, VIG: 1 });
 
   M.up = fsMat(`
 precision highp float; varying vec2 vUv;
@@ -257,30 +284,36 @@ void main(){
 }
 
 function resizeRenderer() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const P = GFX.P || GFX.PRESET.high;
+  // The canvases' device pixel ratio is capped per graphics tier (Low draws the final upscale and the HUD at 2x).
+  const dpr = Math.min(window.devicePixelRatio || 1, 3, P.dpr);
   const dw = Math.max(8, Math.floor(window.innerWidth * dpr)), dh = Math.max(8, Math.floor(window.innerHeight * dpr));
   R.dw = dw; R.dh = dh; R.dpr = dpr; R.cssW = dw / dpr; R.cssH = dh / dpr;
   { const el = document.getElementById('safe'), cs = el ? getComputedStyle(el) : null, v = k => cs ? Math.round((parseFloat(cs[k]) || 0) * dpr) : 0; R.safe = [v('paddingLeft'), v('paddingTop'), v('paddingRight'), v('paddingBottom')]; }
   R.renderer.setSize(dw, dh, false);
-  const texel = Math.max(2, Math.sqrt(dw * dh / R.maxPix), Math.min(dw, dh) / R.maxIH);
+  // Internal size: at least P.texel device pixels per scene pixel, at most P.maxPix pixels, and on Low/Mid at most
+  // P.css scene pixels per CSS pixel (whatever the screen's density).
+  const texel = Math.max(P.texel, Math.sqrt(dw * dh / P.maxPix), Math.min(dw, dh) / P.maxIH, P.css ? dpr / P.css : 0);
   let ih = Math.round(dh / texel * R.quality);
-  ih = Math.max(ih, Math.min(dh, 240));
+  ih = Math.max(ih, Math.min(dh, P.css ? 180 : 240));
   let iw = Math.max(8, Math.round(dw * ih / dh));
   if (iw > 1500) { ih = Math.round(ih * 1500 / iw); iw = 1500; }
   R.iw = iw; R.ih = ih;
   for (const k in R.rt) { R.rt[k].dispose(); if (R.rt[k].depthTexture) R.rt[k].depthTexture.dispose(); }
-  const mk = (w, h, type, filter, depth) => {
-    const t = new THREE.WebGLRenderTarget(w, h, { type, format: THREE.RGBAFormat, minFilter: filter, magFilter: filter, depthBuffer: !!depth, stencilBuffer: false, generateMipmaps: false });
+  const mk = (w, h, type, filter, depth, samples) => {
+    const t = new THREE.WebGLRenderTarget(w, h, { type, format: THREE.RGBAFormat, minFilter: filter, magFilter: filter, depthBuffer: !!depth, stencilBuffer: false, generateMipmaps: false, samples: samples || 0 });
     if (depth) { t.depthTexture = new THREE.DepthTexture(w, h); t.depthTexture.type = THREE.UnsignedIntType; }
     return t;
   };
   const HF = THREE.HalfFloatType, NE = THREE.NearestFilter, LI = THREE.LinearFilter;
-  R.rt.scene = mk(iw, ih, HF, NE, true);
-  R.rt.atmo = mk(iw, ih, HF, NE, false);
-  R.rt.dof = mk(iw, ih, HF, LI, false);
+  R.rt = {};
+  R.rt.scene = mk(iw, ih, HF, NE, true, R.renderer.capabilities.isWebGL2 ? P.msaa : 0);
+  // Without tilt-shift the atmosphere pass writes a linear-filtered target, which the bloom reads directly.
+  R.rt.atmo = mk(iw, ih, HF, P.dof ? NE : LI, false);
+  if (P.dof) R.rt.dof = mk(iw, ih, HF, LI, false);
   const bw = Math.max(4, iw >> 1), bh = Math.max(4, ih >> 1), cw = Math.max(2, iw >> 2), ch = Math.max(2, ih >> 2);
-  R.rt.bA = mk(bw, bh, HF, LI, false); R.rt.bA2 = mk(bw, bh, HF, LI, false);
-  R.rt.bB = mk(cw, ch, HF, LI, false); R.rt.bB2 = mk(cw, ch, HF, LI, false);
+  if (P.bloom > 1) { R.rt.bA = mk(bw, bh, HF, LI, false); R.rt.bA2 = mk(bw, bh, HF, LI, false); }
+  if (P.bloom > 0) { R.rt.bB = mk(cw, ch, HF, LI, false); R.rt.bB2 = mk(cw, ch, HF, LI, false); }
   R.rt.final = mk(iw, ih, THREE.UnsignedByteType, LI, false);
   const hud = document.getElementById('hud'); hud.width = dw; hud.height = dh;
 }
@@ -292,10 +325,10 @@ function fsPass(mat, target) {
 const _ivp = new THREE.Matrix4();
 function renderFrame() {
   syncEchoDither();
-  const r = R.renderer, M = R.mats, T = R.rt, cam = R.cam;
+  const r = R.renderer, M = R.mats, T = R.rt, cam = R.cam, P = GFX.P || GFX.PRESET.high;
   r.info.reset();
   scheduleShadows(G.phase === 'crumble' || G.phase === 'rise');
-  { const m = LT.moon, mv = SH.uMoonV.value; mv.copy(m.position).sub(m.target.position).normalize().transformDirection(cam.matrixWorldInverse); SH.uMoonC.value.set(m.color.r, m.color.g, m.color.b).multiplyScalar(m.intensity); SH.uGlint.value = R.quality < .75 || R.lite ? 0 : 1; }
+  { const m = LT.moon, mv = SH.uMoonV.value; mv.copy(m.position).sub(m.target.position).normalize().transformDirection(cam.matrixWorldInverse); SH.uMoonC.value.set(m.color.r, m.color.g, m.color.b).multiplyScalar(m.intensity); SH.uGlint.value = !P.glint || R.quality < .75 || R.lite ? 0 : 1; }
   r.setRenderTarget(T.scene); r.render(R.scene, cam);
   const px = M.atmo.uniforms.uPx.value.set(1 / R.iw, 1 / R.ih);
   let u = M.atmo.uniforms;
@@ -305,24 +338,35 @@ function renderFrame() {
   u.uAO.value.y = 0.85 / R.px;
   u.uWind.value.set(SH.uTime.value * 0.05, SH.uTime.value * 0.021); u.uRes.value.set(R.iw, R.ih); u.uBack.value.x = (CAM.yaw - PI / 4) * 1.2;
   { const ea = G.eclA > .01 ? G.eclA : 0, asp = R.iw / R.ih, ph = asp < 1; u.uEcl.value.set(asp * (ph ? .3 : .15), ph ? .74 : .8, ph ? .036 : .055, ea); }
-  u.uHalo.value.x = R.lite || R.quality < .7 ? 0 : .016; // the Fast setting (quality .6) and lite mode skip the halos
+  u.uHalo.value.x = !P.halo || R.lite || R.quality < .7 ? 0 : .016; // lite mode and a lowered resolution skip the halos
   fsPass(M.atmo, T.atmo);
-  u = M.dof.uniforms; u.tColor.value = T.atmo.texture; u.tDepth.value = T.scene.depthTexture; u.uPx.value.copy(px);
-  const zr = cam.far - cam.near;
-  const mk = CAM.menuK || 0, dsc = (R.dofScale || 1) * (1 - .22 * mk);
-  u.uDof.value.set((R.focusZ - cam.near) / zr, 3.2 * dsc / zr, 11.5 * dsc / zr, HASH.nodof || R.lite ? 0.6 : Math.max(2, Math.min(R.ih, R.iw * 1.6) * 0.0145));
-  const nd = R.dofD || 20;
-  u.uNear.value.set(Math.max(4 * dsc, 0.55 * nd) / zr, Math.max(6, nd) / zr, 0.6, R.opt ? 0.25 : -1);
-  fsPass(M.dof, T.dof);
-  u = M.bright.uniforms; u.tColor.value = T.dof.texture; u.uPx.value.copy(px); fsPass(M.bright, T.bA);
-  u = M.blur.uniforms;
-  u.tColor.value = T.bA.texture; u.uDir.value.set(1 / T.bA.width, 0); fsPass(M.blur, T.bA2);
-  u.tColor.value = T.bA2.texture; u.uDir.value.set(0, 1 / T.bA.height); fsPass(M.blur, T.bA);
-  u.tColor.value = T.bA.texture; u.uDir.value.set(1 / T.bB.width, 0); fsPass(M.blur, T.bB2);
-  u.tColor.value = T.bB2.texture; u.uDir.value.set(0, 1 / T.bB.height); fsPass(M.blur, T.bB);
-  u.tColor.value = T.bB.texture; u.uDir.value.set(1.6 / T.bB.width, 0); fsPass(M.blur, T.bB2);
-  u.tColor.value = T.bB2.texture; u.uDir.value.set(0, 1.6 / T.bB.height); fsPass(M.blur, T.bB);
-  u = M.comp.uniforms; u.tColor.value = T.dof.texture; u.tBloomA.value = T.bA.texture; u.tBloomB.value = T.bB.texture;
+  const mk = CAM.menuK || 0;
+  let img = T.atmo;
+  if (P.dof) { // tilt-shift (not on Low or Ultra)
+    u = M.dof.uniforms; u.tColor.value = T.atmo.texture; u.tDepth.value = T.scene.depthTexture; u.uPx.value.copy(px);
+    const zr = cam.far - cam.near, dsc = (R.dofScale || 1) * (1 - .22 * mk);
+    u.uDof.value.set((R.focusZ - cam.near) / zr, 3.2 * dsc / zr, 11.5 * dsc / zr, HASH.nodof || R.lite ? 0.6 : Math.max(2, Math.min(R.ih, R.iw * 1.6) * 0.0145));
+    const nd = R.dofD || 20;
+    u.uNear.value.set(Math.max(4 * dsc, 0.55 * nd) / zr, Math.max(6, nd) / zr, 0.6, R.opt ? 0.25 : -1);
+    fsPass(M.dof, T.dof); img = T.dof;
+  }
+  // Bloom: two levels (half and quarter size), or on Low one quarter-size level straight from the picture.
+  if (P.bloom > 1) {
+    u = M.bright.uniforms; u.tColor.value = img.texture; u.uPx.value.copy(px); fsPass(M.bright, T.bA);
+    u = M.blur.uniforms;
+    u.tColor.value = T.bA.texture; u.uDir.value.set(1 / T.bA.width, 0); fsPass(M.blur, T.bA2);
+    u.tColor.value = T.bA2.texture; u.uDir.value.set(0, 1 / T.bA.height); fsPass(M.blur, T.bA);
+    u.tColor.value = T.bA.texture; u.uDir.value.set(1 / T.bB.width, 0); fsPass(M.blur, T.bB2);
+    u.tColor.value = T.bB2.texture; u.uDir.value.set(0, 1 / T.bB.height); fsPass(M.blur, T.bB);
+  } else if (P.bloom > 0) {
+    u = M.bright.uniforms; u.tColor.value = img.texture; u.uPx.value.set(2 / R.iw, 2 / R.ih); fsPass(M.bright, T.bB);
+    u = M.blur.uniforms;
+  }
+  if (P.bloom > 0) {
+    u.tColor.value = T.bB.texture; u.uDir.value.set(1.6 / T.bB.width, 0); fsPass(M.blur, T.bB2);
+    u.tColor.value = T.bB2.texture; u.uDir.value.set(0, 1.6 / T.bB.height); fsPass(M.blur, T.bB);
+  }
+  u = M.comp.uniforms; u.tColor.value = img.texture; u.tBloomA.value = P.bloom > 1 ? T.bA.texture : null; u.tBloomB.value = P.bloom > 0 ? T.bB.texture : null;
   u.uGrade.value.x = R.exposure * (1 + FX.flash * .5); u.uGrade.value.w = R.fade; u.uGrade.value.z = .55 + .2 * mk; u.uRes.value.set(R.iw, R.ih); CINE.post(u);
   fsPass(M.comp, T.final);
   u = M.up.uniforms; u.tColor.value = T.final.texture; u.uTex.value.set(R.iw, R.ih); u.uOut.value.set(R.dw, R.dh); u.uSeed.value = (SH.uTime.value * 60 % 1000) * 7.13;
