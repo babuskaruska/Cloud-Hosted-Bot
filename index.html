@@ -7872,6 +7872,66 @@ const AU = (function () {
     const lp = flt(d, 'lowpass', 6000); belld(lp, t + 0.3, mtof(78), 0.04, 1.6); belld(lp, t + 0.55, mtof(81), 0.035, 1.8);
   };
 
+  // ---- Round 6: Stormreach (thunder, the drowned king's wave, the thunderstorm event). ----
+  // Thunder at a distance: near 1 is a strike right here (a tearing crack, a hard boom, then the roll); near 0 is far
+  // off (no crack, dark, slow to swell and long). The roll is a few overlapping swells of low noise that flutter.
+  function thunderV(d, t, near, vel) {
+    const k = rr(0.85, 1.15), L = 3 + 2.4 * (1 - near) + rr(-0.3, 0.6), crack = near > 0.55;
+    if (crack) {
+      const c = gn(d), cf = flt(c, 'highpass', 1300); noi(t, 0.3, cf);
+      c.gain.setValueAtTime(0, t); let ti = t;
+      for (let i = 0; i < 14; i++) { c.gain.setValueAtTime(rnd() < 0.7 ? rr(0.25, 0.7) * vel * near : 0.02, ti); ti += rr(0.006, 0.02); }
+      c.gain.linearRampToValueAtTime(0, ti + 0.04);
+      grains(d, t, 16, 0.35, 0.4 * vel * near, 0.002, 0.01, 1800, 7000, 2, 1);
+      const sh = shape(d, 2);
+      const g = gn(sh), o = osc('sine', 72 * k, t + 0.02, 1.0, g); sw(o.frequency, t + 0.02, 95 * k, 30 * k, 0.6); ad(g.gain, t + 0.02, 0.85 * vel * near, 0.004, 0.85);
+      const b = gn(sh), bf = flt(b, 'lowpass', 2500, 0.7); noi(t + 0.01, 1.1, bf); sw(bf.frequency, t + 0.01, 3600, 180, 0.75); ad(b.gain, t + 0.01, 0.65 * vel * near, 0.003, 0.85);
+    }
+    const t0 = t + (crack ? 0.12 : 0), roll = gn(d, 0.7), n = 3 + ((rnd() * 3) | 0);
+    osc('sine', rr(2.5, 5), t0, L + 0.5, gn(roll.gain, 0.3)); // the roll flutters
+    for (let i = 0; i < n; i++) {
+      const ti = t0 + Math.pow(i / n, 1.3) * L * 0.65 + rr(0, 0.25), dur = rr(1.2, 2.3) * (1.35 - 0.35 * near), a = vel * (i ? rr(0.45, 0.85) : 1) * (0.5 + 0.5 * near) * (1 - i / (n + 2));
+      const r = gn(roll), rf = flt(r, 'lowpass', (110 + 250 * near) * rr(0.8, 1.2), 0.8); noi(ti, dur + 0.3, rf, bufBrown);
+      r.gain.setValueAtTime(0.0001, ti); r.gain.linearRampToValueAtTime(Math.max(0.0002, a), ti + rr(0.08, 0.3) * (1.6 - near)); r.gain.exponentialRampToValueAtTime(0.0001, ti + dur);
+    }
+    const m = gn(d), mf = flt(m, 'bandpass', 230 + 170 * near, 0.9); noi(t0, L + 0.2, mf, bufPink); // a body a phone speaker can play
+    m.gain.setValueAtTime(0.0001, t0); m.gain.linearRampToValueAtTime(vel * (0.22 + 0.4 * near), t0 + 0.08 + 0.5 * (1 - near)); m.gain.exponentialRampToValueAtTime(0.0001, t0 + L);
+  }
+  // A low drowned choir singing "oh": detuned saws through two vowel bands and a chest band, a slow swell, late vibrato.
+  function choirTone(d, t, m, dur, vel) {
+    const f = mtof(m), env = gn(d), src = gn(null, 1), f1 = flt(env, 'bandpass', 420, 4), f2 = flt(gn(env, 0.5), 'bandpass', 780, 6);
+    src.connect(f1); src.connect(f2); src.connect(flt(gn(env, 0.6), 'lowpass', 320));
+    const vib = gn(null, 0); osc('sine', rr(4.6, 5.4), t, dur + 0.8, vib);
+    for (let i = 0; i < 3; i++) { const o = osc('sawtooth', f, t, dur + 0.8, gn(src, 0.33)); o.detune.value = (i - 1) * rr(8, 14); vib.connect(o.detune); }
+    vib.gain.setValueAtTime(0, t + 0.2); vib.gain.linearRampToValueAtTime(12, t + dur * 0.7);
+    const a = Math.min(0.5, dur * 0.35);
+    env.gain.setValueAtTime(0.0001, t); env.gain.linearRampToValueAtTime(vel, t + a); env.gain.setValueAtTime(vel, t + dur * 0.75); env.gain.setTargetAtTime(0.0001, t + dur * 0.75, dur * 0.15 + 0.1);
+  }
+  S.thunder = (d, t, p) => thunderV(d, t, 1 - 0.5 * p, 1); // a strike on the road: crack and roll, no delay
+  S.tidalWave = (d, t) => { // the drowned king sweeps the road: a roaring surge, the crash, the wash draining back
+    const D = 0.9, tc = t + D, sh = shape(d, 2);
+    const s = gn(d), sb = flt(s, 'bandpass', 400, 0.7); noi(t, D + 1.6, sb, bufPink); sw(sb.frequency, t, 220, 1500, D);
+    s.gain.setValueAtTime(0.0001, t); s.gain.exponentialRampToValueAtTime(0.6, tc - 0.04); s.gain.linearRampToValueAtTime(0.3, tc + 0.3); s.gain.exponentialRampToValueAtTime(0.0001, tc + 1.3);
+    const r = gn(d), rf = flt(r, 'lowpass', 120, 0.8); noi(t, D + 2.8, rf, bufBrown); sw(rf.frequency, t, 80, 320, D);
+    r.gain.setValueAtTime(0.0001, t); r.gain.exponentialRampToValueAtTime(0.9, tc); r.gain.exponentialRampToValueAtTime(0.0001, tc + 2.6);
+    const hi = gn(d), hf = flt(hi, 'highpass', 2500); noi(t + 0.2, D, hf); hi.gain.setValueAtTime(0.0001, t + 0.2); hi.gain.exponentialRampToValueAtTime(0.12, tc); hi.gain.linearRampToValueAtTime(0.0001, tc + 0.12);
+    const g = gn(sh), o = osc('sine', 80, tc, 0.9, g); sw(o.frequency, tc, 105, 34, 0.5); ad(g.gain, tc, 0.9, 0.005, 0.7);
+    const b = gn(sh), bf = flt(b, 'lowpass', 3000, 0.6); noi(tc, 1.7, bf); sw(bf.frequency, tc, 5500, 400, 1.4); ad(b.gain, tc, 0.85, 0.01, 1.4);
+    const m = gn(d), mf = flt(m, 'bandpass', 330, 0.9); noi(tc, 1.1, mf, bufPink); ad(m.gain, tc, 0.9, 0.005, 0.9); // the crash, for small speakers
+    const w = gn(d), wf = flt(w, 'bandpass', 3500, 0.6); noi(tc + 0.3, 2.0, wf); sw(wf.frequency, tc + 0.3, 4500, 1400, 1.8);
+    w.gain.setValueAtTime(0.0001, tc + 0.3); w.gain.linearRampToValueAtTime(0.18, tc + 0.7); w.gain.exponentialRampToValueAtTime(0.0001, tc + 2.2);
+    grains(d, tc + 0.5, 30, 1.5, 0.12, 0.003, 0.012, 1500, 5000, 3, 1); // foam and pebbles
+  };
+  S.thunderstorm = (d, t) => { // the storm breaks: the rain thickens in a rush, a gust, and a strike overhead
+    const D = 4.2, w = gn(d), wb = flt(w, 'bandpass', 2600, 0.5), wh = flt(gn(w, 0.6), 'highpass', 5500);
+    noi(t, D + 0.3, wb); noi(t, D + 0.3, wh);
+    w.gain.setValueAtTime(0.0001, t); w.gain.exponentialRampToValueAtTime(0.3, t + D * 0.6); w.gain.exponentialRampToValueAtTime(0.0001, t + D + 0.2);
+    grains(d, t + 0.3, 60, D - 0.6, 0.12, 0.002, 0.006, 2500, 8000, 3, 0); // the first heavy drops
+    const g = gn(d), gf = flt(g, 'bandpass', 500, 1.2); noi(t, D, gf, bufPink); sw(gf.frequency, t, 300, 1300, D * 0.6); gf.frequency.exponentialRampToValueAtTime(500, t + D);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.4, t + D * 0.5); g.gain.exponentialRampToValueAtTime(0.0001, t + D);
+    thunderV(d, t + 0.3, 1, 0.9);
+  };
+
   // Boss entrance stings: short and different for each boss, played the first time one is seen.
   function stingHit(d, t, vel) { // a drum and a dull thud under each stab
     drumHit(d, t, vel, 50);
@@ -7919,6 +7979,15 @@ const AU = (function () {
       for (let i = 0; i < 4; i++) { const g = gn(d); osc('sine', 98 * R[i], tg, 2.4, g); g.gain.setValueAtTime(0.0001, tg); g.gain.linearRampToValueAtTime(0.2 / (1 + i), tg + 0.04 + i * 0.05); g.gain.exponentialRampToValueAtTime(0.0001, tg + 2.3 - i * 0.4); }
       stingHit(d, tg, 0.8);
     },
+    leviathan: (d, t) => { // the drowned king rises: a sub drop under a breaking wave, a drowned choir on a Phrygian clash, a buoy bell
+      const sh = shape(d, 2);
+      const g = gn(sh), o = osc('sine', 55, t, 2.2, g); sw(o.frequency, t, 72, 27, 1.6); ad(g.gain, t, 0.8, 0.02, 1.9);
+      const r = gn(d), rf = flt(r, 'lowpass', 300, 0.7); noi(t, 2.4, rf, bufBrown); sw(rf.frequency, t, 900, 150, 2); ad(r.gain, t, 0.7, 0.05, 2.1);
+      stingHit(d, t, 0.8);
+      [45, 52, 57, 58].forEach((n, i) => choirTone(d, t + 0.15 + i * 0.06, n, 2.0, 0.2)); // A E A Bb
+      hornNote(d, t + 0.2, mtof(33), 1.8, 0.14, 0.7);
+      const lp = flt(d, 'lowpass', 5000); belld(lp, t + 0.9, mtof(69), 0.06, 2.4); belld(lp, t + 1.9, mtof(69), 0.04, 2.2);
+    },
   };
   let stingKey = 'giant';
   S.bossSting = (d, t) => { (STING[stingKey] || STING.giant)(d, t); };
@@ -7964,6 +8033,17 @@ const AU = (function () {
         { n: [33, 45, 52, 57, 60], m: [64, 69, 72, 76], to: [0, 4, 2] }, // Am
         { n: [40, 47, 50, 56, 59], m: [64, 68, 71, 74, 76], to: [0, 1] }], // E7
       arr: [[0, 4, 0.3], [0.25, 5, 0.3], [0.5, 4, 0.3], [0.75, 2, 0.3], [1.0, 1, 0.4], [1.45, 0, 1.6]] },
+    storm: { semi: -5, tonic: 45, scale: AEOLIAN, pad: 'strings', calm: 'cello', kit: 'storm', lead: 'concertina', bpm: -2, lvl: 0.85, // stormy A minor: low strings, timpani and taiko, a squeezebox shanty
+      ch: [{ n: [33, 45, 48, 52, 57], m: [57, 60, 64, 69, 72], to: [1, 2, 3] }, // Am
+        { n: [29, 41, 45, 48, 53], m: [57, 60, 65, 69], to: [0, 4, 2] }, // F
+        { n: [31, 43, 47, 50, 55], m: [59, 62, 67, 71], to: [0, 3] }, // G
+        { n: [28, 40, 47, 52, 55], m: [59, 64, 67, 71], to: [0, 1, 4] }, // Em: the minor v, no leading tone
+        { n: [26, 38, 45, 50, 53], m: [57, 62, 65, 69], to: [0, 1] }], // Dm
+      // Its own motifs, sea-shanty shapes in place of the shared ones: a falling lament, a hauling call and answer, a long descent.
+      motifs: [[[0, 4, 4], [4, 4, 2], [6, 3, 2], [8, 2, 4], [12, 0, 4], [16, 1, 6], [22, 2, 2], [24, 0, 8]],
+        [[0, 0, 2], [2, 0, 2], [4, 2, 4], [8, 4, 6], [14, 5, 2], [16, 4, 4], [20, 2, 4], [24, 1, 8]],
+        [[0, 7, 6], [6, 6, 2], [8, 4, 4], [12, 3, 4], [16, 2, 6], [22, 1, 2], [24, 0, 8]]],
+      arr: [[0, 4, 0.45], [0.45, 3, 0.3], [0.8, 2, 0.35], [1.2, 0, 0.6], [1.9, 1, 0.35], [2.3, 0, 1.6]] },
   };
   const LM = { def: LANDMUS.ashen, key: 'ashen', bus: null, old: [] };
   const deg = (L, d) => { const n = L.scale.length, o = Math.floor(d / n); return L.tonic + 12 * o + L.scale[((d % n) + n) % n]; };
@@ -8005,6 +8085,24 @@ const AU = (function () {
     pl(t, m, vel);
     if (rnd() < 0.35) pl(t + 0.12, m, vel * 0.4);
   }
+  function celloTone(d, t, m, dur, vel) { // a bowed low string: two saws, a wooden body, a slow bow, vibrato that comes in late, some rosin
+    const f = mtof(m), env = gn(d), body = flt(env, 'peaking', 280, 1.2), lp = flt(body, 'lowpass', Math.min(3000, f * 6), 0.7), pk = flt(lp, 'peaking', 1100, 1.5);
+    body.gain.value = 5; pk.gain.value = 3;
+    const vib = gn(null, 0); osc('sine', rr(5, 5.8), t, dur + 0.6, vib);
+    for (let i = 0; i < 2; i++) { const o = osc('sawtooth', f, t, dur + 0.6, gn(pk, 0.4)); o.detune.value = i ? 4 : -4; vib.connect(o.detune); }
+    vib.gain.setValueAtTime(0, t + 0.2); vib.gain.linearRampToValueAtTime(14, t + Math.max(0.3, dur * 0.7));
+    const a = Math.min(0.22, dur * 0.4);
+    env.gain.setValueAtTime(0.0001, t); env.gain.linearRampToValueAtTime(vel * 0.12, t + a); env.gain.linearRampToValueAtTime(vel * 0.1, t + Math.max(a + 0.01, dur * 0.7)); env.gain.setTargetAtTime(0.0001, t + dur, 0.15);
+    const b = gn(d), bf = flt(b, 'bandpass', Math.min(5000, f * 8), 1); noi(t, dur + 0.3, bf, bufPink);
+    b.gain.setValueAtTime(0.0001, t); b.gain.linearRampToValueAtTime(vel * 0.02, t + a * 0.5); b.gain.linearRampToValueAtTime(vel * 0.006, t + a * 2); b.gain.setTargetAtTime(0.0001, t + dur, 0.1);
+  }
+  function concertina(d, t, m, dur, vel) { // a squeezebox: free reeds in pairs tuned a little apart so they beat, and the bellows swell
+    const f = mtof(m), env = gn(d), lp = flt(env, 'lowpass', Math.min(4200, f * 7), 0.6), pk = flt(lp, 'peaking', 1400, 1.2); pk.gain.value = 5;
+    [[-7, 'square', 0.22], [6, 'square', 0.22], [0, 'sawtooth', 0.16]].forEach((r) => { const o = osc(r[1], f, t, dur + 0.3, gn(pk, r[2])); o.detune.value = r[0]; });
+    osc('sawtooth', f / 2, t, dur + 0.3, gn(pk, 0.08));
+    const a = Math.min(0.05, dur * 0.3);
+    env.gain.setValueAtTime(0.0001, t); env.gain.linearRampToValueAtTime(vel * 0.8, t + a); env.gain.linearRampToValueAtTime(vel, t + Math.max(a + 0.01, dur * 0.55)); env.gain.setTargetAtTime(0.0001, t + dur, 0.06);
+  }
   function timpHit(d, t, vel, f) { // a kettle drum with partials a small speaker still plays
     const g = gn(d), o = osc('sine', f, t, 1.0, g); sw(o.frequency, t, f * 1.08, f, 0.06); ad(g.gain, t, vel, 0.004, 0.8);
     const g2 = gn(d); osc('sine', f * 1.5, t, 0.6, g2); ad(g2.gain, t, vel * 0.4, 0.004, 0.45);
@@ -8022,6 +8120,7 @@ const AU = (function () {
     else if (c === 'reed') reedTone(d, t, m, rr(1.3, 2.2), vel * 0.9);
     else if (c === 'lowbrass') brassNote(d, t, mtof(m - 12), rr(1.6, 2.3), 0.1 * vel, 0.75);
     else if (c === 'oud') oudTone(d, t, m - 12, vel, rnd() < 0.6);
+    else if (c === 'cello') celloTone(d, t, m - 12, rr(1.8, 2.8), vel);
     else pianoTone(d, t, m, vel);
   }
   // A chord swell in the land's pad colour, for the arrival stinger.
@@ -8061,18 +8160,19 @@ const AU = (function () {
     const L = landNow(), c = L.ch[0], t1 = t + 0.9;
     landSwell(d, t + 0.2, c.n.slice(1), 4.2, 0.5, L);
     for (let i = 0; i < L.arr.length; i++) { const e = L.arr[i], m = deg(L, e[1]) + 12;
-      if (L.calm === 'reed') reedTone(d, t1 + e[0], m, e[2], 0.9); else if (L.calm === 'lowbrass') brassNote(d, t1 + e[0], mtof(m - 12), e[2], 0.22, 0.9); else if (L.calm === 'oud') oudTone(d, t1 + e[0], m - 12, 1.5, i === 0); else calmTone(d, t1 + e[0], m, 0.9, L); }
+      if (L.calm === 'reed') reedTone(d, t1 + e[0], m, e[2], 0.9); else if (L.calm === 'lowbrass') brassNote(d, t1 + e[0], mtof(m - 12), e[2], 0.22, 0.9); else if (L.calm === 'oud') oudTone(d, t1 + e[0], m - 12, 1.5, i === 0); else if (L.calm === 'cello') celloTone(d, t1 + e[0], m - 12, e[2] + 0.25, 1.3); else calmTone(d, t1 + e[0], m, 0.9, L); }
     const te = t1 + L.arr[L.arr.length - 1][0];
     if (L.kit === 'hand') { dumD(d, te, 0.5); tekD(d, te + 0.18, 0.35); tekD(d, te + 0.3, 0.3); }
     else if (L.kit === 'glass') { const lp = flt(d, 'lowpass', 9000); for (let i = 0; i < 5; i++) belld(lp, te + i * 0.05, mtof(deg(L, 7 + i * 2) + 24), 0.03, 1.4); }
     else if (L.kit === 'frame') { frameD(d, te, 0.45); frameD(d, te + 0.36, 0.3); }
+    else if (L.kit === 'storm') { for (let i = 0; i < 8; i++) timpHit(d, te + i * 0.06, 0.08 + 0.05 * i, mtof(L.tonic - 12)); }
     else timpHit(d, te, L.kit === 'heavy' ? 0.55 : 0.4, mtof(deg(L, 0) - 24));
   };
   // A wave is cleared: the land's voice plays a small rising figure, very soft.
   S.waveClear = (d, t) => {
     const L = landNow(), D = [0, 2, 4, 7];
     for (let i = 0; i < D.length; i++) { const m = deg(L, D[i]) + 12, tt = t + i * 0.13, v = i === 3 ? 0.7 : 0.5;
-      if (L.calm === 'reed') reedTone(d, tt, m, i === 3 ? 0.7 : 0.14, v); else if (L.calm === 'lowbrass') brassNote(d, tt, mtof(m), i === 3 ? 0.7 : 0.14, 0.2 * v, 1); else if (L.calm === 'oud') oudTone(d, tt, m, v * 2.5, false); else if (L.calm === 'glass') glassTone(d, tt, m + 12, v * 1.4); else pianoTone(d, tt, m + 12, v); }
+      if (L.calm === 'reed') reedTone(d, tt, m, i === 3 ? 0.7 : 0.14, v); else if (L.calm === 'lowbrass') brassNote(d, tt, mtof(m), i === 3 ? 0.7 : 0.14, 0.2 * v, 1); else if (L.calm === 'oud') oudTone(d, tt, m, v * 2.5, false); else if (L.calm === 'glass') glassTone(d, tt, m + 12, v * 1.4); else if (L.calm === 'cello') concertina(d, tt, m, i === 3 ? 0.7 : 0.14, v * 0.14); else pianoTone(d, tt, m + 12, v); }
     const a = gn(d), af = flt(a, 'bandpass', 2500, 0.7); noi(t, 0.9, af, bufPink); ad(a.gain, t, 0.025, 0.25, 0.6);
   };
   // Menus.
@@ -8285,13 +8385,15 @@ const AU = (function () {
     }
   };
   // Pad colours: oscillators, lowpass [start, open min, open max, end], Q, detune and vibrato ranges, levels [root, others], attack,
-  // and extras: up (upper notes an octave higher), harm (extra sine partials), sub (an octave-down root), peak (a nasal formant).
+  // and extras: up (upper notes an octave higher), harm (extra sine partials), sub (an octave-down root), peak (a nasal formant),
+  // trem (bowed tremolo depth, which grows with the danger when the chord starts).
   const PADV = {
     saw: { w: ['sawtooth'], lp: [380, 560, 700, 400], q: 0.5, det: [4, 8], vib: [2.5, 4], vhz: [4.4, 5.2], lv: [0.05, 0.036], att: 3.5 },
     glass: { w: ['triangle'], lp: [1100, 1700, 2300, 1100], q: 0.4, det: [2, 4], vib: [1, 2], vhz: [3.5, 4.5], lv: [0.045, 0.034], att: 4.5, up: 12, harm: [2, 0.2, 4.01, 0.05] },
     murk: { w: ['sawtooth'], lp: [240, 360, 440, 260], q: 1.6, det: [9, 15], vib: [5, 8], vhz: [2.2, 3.0], lv: [0.06, 0.042], att: 4 },
     brass: { w: ['sawtooth', 'square'], lp: [330, 560, 720, 350], q: 1.3, det: [3, 6], vib: [2, 3], vhz: [4.8, 5.4], lv: [0.04, 0.027], att: 2.8, sub: 0.045, peak: [520, 1.3, 6] },
     nasal: { w: ['sawtooth'], lp: [520, 800, 950, 560], q: 0.7, det: [5, 9], vib: [3, 5], vhz: [5.5, 6.5], lv: [0.04, 0.03], att: 3, peak: [1050, 1.6, 6] },
+    strings: { w: ['sawtooth'], lp: [420, 760, 1000, 460], q: 0.7, det: [6, 11], vib: [5, 9], vhz: [4.8, 5.8], lv: [0.05, 0.034], att: 4.5, sub: 0.04, peak: [300, 1.0, 4], trem: 0.35 },
   };
   // Hand and frame percussion, written to a destination node.
   function dumD(d, t, vel) { // doumbek "dum": a round low tone with a skin slap
@@ -8395,17 +8497,21 @@ const AU = (function () {
     houndFire: [S.houndFire, 0.18, 0.25, 0, 0.5, 0.5, 2],
     houndDie: [S.houndDie, 0.1, 0.3, 1, 0.8, 0.6, 2],
     newFoe: [S.newFoe, 1.5, 0.5, 3, 1.8, 1.0, 1],
+    thunder: [S.thunder, 0.35, 0.45, 3, 5.6, 0.9, 3],
+    tidalWave: [S.tidalWave, 1.0, 0.5, 3, 4.0, 0.8, 1],
+    thunderstorm: [S.thunderstorm, 5, 0.5, 3, 5.6, 0.9, 1],
   });
   // Kinds that share a voice budget, and how hard a sound ducks the music and crowd.
   const FAM = { cannon: 'boom', explode: 'boom', chainBoom: 'boom', burn: 'fire', ignite: 'fire', houndFire: 'fire', ratSqueal: 'die', boneRattle: 'die', squelch: 'die', batScreech: 'die', harpyDie: 'die', houndDie: 'die', shamanDie: 'die',
     ramCreak: 'beast', shamanChant: 'beast', harpyWings: 'beast', houndSnarl: 'beast', houndPant: 'beast' };
   const FAMCAP = LOW ? { boom: 4, fire: 3, die: 5, beast: 3 } : { boom: 5, fire: 4, die: 7, beast: 5 };
   const DUCK = { cannon: 0.3, explode: 0.4, chainBoom: 0.3, zap: 0.2, roar: 0.5, bossStep: 0.35, bossDie: 0.8, horn: 0.35, hornBoss: 0.5, horde: 0.6, crumble: 0.7, beaconOut: 0.8, rise: 0.5,
-    branch: 0.4, frostNova: 0.3, rally: 0.3, rockslide: 0.4, blizzard: 0.3, bogfog: 0.3, lavaSurge: 0.4, sandstorm: 0.3, bossSting: 0.6, ramHit: 0.15, ramDie: 0.3, houndHowl: 0.25 };
+    branch: 0.4, frostNova: 0.3, rally: 0.3, rockslide: 0.4, blizzard: 0.3, bogfog: 0.3, lavaSurge: 0.4, sandstorm: 0.3, bossSting: 0.6, ramHit: 0.15, ramDie: 0.3, houndHowl: 0.25,
+    thunder: 0.35, tidalWave: 0.45, thunderstorm: 0.35 };
   // Ducks that land later than the call (the meteor hits after its whistle).
   const DUCK_LATE = { meteor: [meteorFall, 0.8] };
   // Exact gaps, no jitter: these are one per event, and the gap is what stops a double start.
-  const NOJIT = { rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1, fanfare: 1, lament: 1, arrival: 1, waveClear: 1, houndHowl: 1, newFoe: 1, ramDie: 1 };
+  const NOJIT = { rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1, fanfare: 1, lament: 1, arrival: 1, waveClear: 1, houndHowl: 1, newFoe: 1, ramDie: 1, thunderstorm: 1 };
   // UI sounds go to their own bus so they still play while the game is paused.
   const UIS = { uiHover: 1, uiClick: 1, uiDeny: 1, menuOpen: 1, uiPreview: 1, spellArm: 1, spellCancel: 1 };
   // Stingers are music: they go to their own bus (the music volume, not ducked), and they hold the music down while they play.
@@ -8463,6 +8569,7 @@ const AU = (function () {
     if (DUCK[name]) duckE = Math.max(duckE, DUCK[name] * cl(g, 0, 1));
     if (HOLD[name] && holds.length < 8) holds.push([t + HOLD[name][0], HOLD[name][1]]);
     if (DUCK_LATE[name] && lateDuck.length < 8) lateDuck.push([t + DUCK_LATE[name][0](), DUCK_LATE[name][1] * cl(g, 0, 1)]);
+    if (name === 'thunder') { TH.strikeAt = now; TH.pend.length = 0; } // a strike brings its own thunder: no second, delayed one for its flash
     const sup = SUPER[name];
     if (sup) for (let i = 0; i < act.length - 1; i++) if (act[i].end > now && sup.indexOf(act[i].name) >= 0) steal(act[i], now);
   }
@@ -8511,7 +8618,9 @@ const AU = (function () {
   function landBus() { const b = gn(nPad, 1); b.connect(gn(RV.music, 0.5)); b.rv = RV.music; return b; }
   function padChord(t, c, dur) {
     const L = LM.def, P = PADV[L.pad] || PADV.saw, v = voice(0, 1, 0, LM.bus || nPad); V = v;
-    const env = gn(v.out), hp = flt(env, 'highpass', 50), sides = [], open = rr(P.lp[1], P.lp[2]);
+    const env = gn(v.out), sides = [], open = rr(P.lp[1], P.lp[2]), td = P.trem ? P.trem * cl((SEQ.I - 0.2) / 0.6, 0, 1) : 0;
+    let tr = env; if (td > 0.02) { tr = gn(env, 1 - td); osc('sine', rr(6, 8), t, dur + 5.5, gn(tr.gain, td)); }
+    const hp = flt(tr, 'highpass', 50);
     let pre = hp; if (P.peak) { pre = flt(hp, 'peaking', P.peak[0], P.peak[1]); pre.gain.value = P.peak[2]; }
     for (let s = 0; s < 2; s++) {
       const l = flt(panNode(s ? 0.4 : -0.4, pre), 'lowpass', P.lp[0], P.q);
@@ -8605,6 +8714,7 @@ const AU = (function () {
     queen: { perc: 'skitter', lead: 'trem', bpm: 4, m: [[0, 62, 8], [8, 63, 8], [16, 62, 8], [24, 61, 8]] },
     colossus: { perc: 'anvil', lead: 'dist', bpm: 0, m: [[0, 26, 8], [8, 26, 4], [12, 29, 4], [16, 32, 8], [24, 31, 8]] },
     king: { perc: 'ritual', lead: 'reed', bpm: -4, m: [[0, 62, 4], [4, 63, 4], [8, 65, 6], [14, 63, 2], [16, 62, 6], [22, 60, 2], [24, 62, 8]] },
+    leviathan: { perc: 'tide', lead: 'choir', bpm: -8, m: [[0, 57, 8], [8, 60, 8], [16, 59, 6], [22, 55, 2], [24, 57, 4], [28, 58, 4]] }, // A C B G A Bb: a drowned choir
   };
   const SEQ = { next: 0, step: 0, bar: 0, phrase: 0, bpm: 80, I: 0, tI: 0, lay: {}, pat: 0, ost: 0, motif: -1, rest: false, boss: null, bossKey: null, rage: false, horde: 0, hordeT: 0, hordeWas: false, heard: typeof WeakSet === 'function' ? new WeakSet() : null, seenBoss: typeof WeakSet === 'function' ? new WeakSet() : null, stingTill: 0, low: 0, lastNow: 0, scanAt: 0, choir: null };
 
@@ -8672,6 +8782,7 @@ const AU = (function () {
     else if (ln === 'reed') reed(t, m + 12, dur, vel * 0.7);
     else if (ln === 'ney') { const v = sv(rr(-0.2, 0.2), 0.5); reedTone(v.out, t, m + 12, dur, vel * 6); finishVoice(v); }
     else if (ln === 'lowbrass') brassV(t, m, dur, vel * 1.2, false);
+    else if (ln === 'concertina') { const v = sv(rr(-0.25, 0.25), 0.45); concertina(v.out, t, m + 12, dur, vel * 0.6); finishVoice(v); }
     else brassV(t, m, dur, vel, false);
   }
 
@@ -8701,7 +8812,7 @@ const AU = (function () {
     if (SEQ.bar === 0) {
       SEQ.phrase++; SEQ.pat = (rnd() * 3) | 0; SEQ.ost = I > 0.75 ? 1 + ((rnd() * 3) | 0) : (rnd() * 3) | 0;
       SEQ.rest = I < 0.7 && SEQ.phrase % 4 === 3;
-      SEQ.motif = I > 0.45 && SEQ.phrase % 2 === 0 ? (rnd() * MOTIF.length) | 0 : -1;
+      SEQ.motif = I > 0.45 && SEQ.phrase % 2 === 0 ? (rnd() * (LM.def.motifs || MOTIF).length) | 0 : -1;
     }
     SEQ.boss = SEQ.bossKey ? BOSS[SEQ.bossKey] || BOSS.giant : null;
     SEQ.bpm = 76 + 24 * I + LM.def.bpm + (SEQ.boss ? SEQ.boss.bpm + (SEQ.rage ? 14 : 0) : 0) + (SEQ.horde > 0.5 ? 8 : 0);
@@ -8712,6 +8823,18 @@ const AU = (function () {
     else if (ln === 'dist') brassV(t, mi + 12, dur * 0.9, 0.09, true);
     else if (ln === 'bell') bell(t, mi, 0.12, rr(-0.5, 0.5));
     else if (ln === 'reed') reed(t, mi, dur * 0.92, 0.09);
+    else if (ln === 'choir') { // low voices, and the sea under them an octave and more below
+      const v = sv(rr(-0.2, 0.2), 0.6); choirTone(v.out, t, mi, dur * 0.95, 0.5); choirTone(v.out, t, mi - 12, dur * 0.95, 0.35);
+      const g = gn(v.out); osc('sine', mtof(mi - 24), t, dur + 0.3, g); ad(g.gain, t, 0.12, Math.min(0.4, dur * 0.3), dur);
+      finishVoice(v);
+    }
+  }
+  function swellS(t, len) { // a wave rising over two bars and breaking on the next downbeat
+    const v = sv(rr(-0.3, 0.3), 0.5), g = gn(v.out), f = flt(g, 'lowpass', 200, 0.7), te = t + len; noi(t, len + 1.0, f, bufBrown);
+    sw(f.frequency, t, 160, 1300, len); f.frequency.exponentialRampToValueAtTime(250, te + 0.8);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.2, te); g.gain.exponentialRampToValueAtTime(0.0001, te + 0.9);
+    const h = gn(v.out), hf = flt(h, 'highpass', 2500); noi(te - 0.05, 1.0, hf); ad(h.gain, te - 0.05, 0.03, 0.06, 0.8);
+    finishVoice(v);
   }
   function bossStepMusic(t, s, sd) {
     const B = SEQ.boss, b2 = (SEQ.bar & 1) * 16 + s, pc = B.perc, up = SEQ.bar & 2 ? 12 : 0;
@@ -8723,6 +8846,11 @@ const AU = (function () {
     else if (pc === 'skitter') { if (rnd() < 0.55) click(t + rr(0, sd * 0.5), rr(0.06, 0.15), rr(3500, 6000), rr(-0.6, 0.6)); }
     else if (pc === 'anvil') { if (s === 4 || s === 12) anvil(t, 0.13); }
     else if (pc === 'ritual') { if (s === 0 || s === 6 || s === 10) drum(t, s ? 0.25 : 0.38, 70); if (s === 8) bell(t, 93, 0.035, 0); }
+    else if (pc === 'tide') { // deep timpani, a wave every two bars, a buoy bell now and then
+      if (s === 0) timpS(t, SEQ.bar & 1 ? 0.3 : 0.42); else if (s === 10 && SEQ.bar & 1) timpS(t, 0.22);
+      if (s === 0 && (SEQ.bar & 1) === 0) swellS(t, sd * 32);
+      if (s === 8 && SEQ.bar % 4 === 2) bell(t, 69, 0.03, rr(-0.6, 0.6));
+    }
   }
   function playStep(t) {
     const s = SEQ.step;
@@ -8738,6 +8866,7 @@ const AU = (function () {
           if (kit === 'frame') kitHit(frameD, t, v * 1.1, rr(-0.1, 0.1), 0.25);
           else if (kit === 'glass') drum(t, v * 0.6, 62);
           else if (kit === 'heavy') { drum(t, v * 0.85, 50); kitHit(frameD, t, v * 0.7, 0, 0.3); kitHit(heavyD, t, v, rr(-0.1, 0.1), 0.3); }
+          else if (kit === 'storm') { const f = mtof(LD.tonic - 12 + (s === 8 ? 7 : 0)); kitHit((d, tt, vv) => timpHit(d, tt, vv, f), t, v * 0.9, rr(-0.15, 0.15), 0.4); } // timpani on the tonic and fifth
           else drum(t, v, 55);
         }
       }
@@ -8749,16 +8878,16 @@ const AU = (function () {
       else if (kit === 'hand') kitHit(riqD, t, v * 1.4, rr(-0.45, 0.45), 0.1);
       else shaker(t, v);
     }
-    if (L.bass && !SEQ.rest && (sp >= 1 || s % 4 === 0)) { const o = OST[SEQ.ost][s]; if (o !== null) pluck(t, r + o, (0.09 + 0.07 * I) * hv() * (s % 4 === 0 ? 1.15 : 1) * (kit === 'glass' ? 0.8 : 1), sd * (kit === 'glass' ? 2.4 : 1.6), kit === 'frame' ? 3.5 : kit === 'glass' ? 3 : 6); }
+    if (L.bass && !SEQ.rest && (sp >= 1 || s % 4 === 0)) { const o = OST[SEQ.ost][s]; if (o !== null) pluck(t, r + o, (0.09 + 0.07 * I) * hv() * (s % 4 === 0 ? 1.15 : 1) * (kit === 'glass' ? 0.8 : 1), sd * (kit === 'glass' ? 2.4 : 1.6), kit === 'frame' ? 3.5 : kit === 'glass' || kit === 'storm' ? 3 : 6); }
     if (L.war) {
       if (kit === 'hand') { const w = MAQW[s]; if (w) { if (w > 0) taiko(t, w * (0.25 + 0.3 * I) * hv(), 70); else kitHit(tekD, t, -w * (0.3 + 0.3 * I) * hv(), rr(-0.4, 0.4), 0.3); } }
-      else { const w = WAR[SEQ.pat][s]; if (w && (sp >= 1 || s % 4 === 0)) { const tv = w * (0.25 + 0.3 * I) * hv() * (kit === 'glass' ? 0.7 : kit === 'heavy' ? 1.05 : 1); taiko(t, tv, kit === 'heavy' ? 50 : kit === 'frame' ? 54 : kit === 'glass' ? 68 : 60); if (kit === 'heavy') kitHit(heavyD, t, tv * 0.8, rr(-0.25, 0.25), 0.4); } }
+      else { const w = WAR[SEQ.pat][s]; if (w && (sp >= 1 || s % 4 === 0)) { const tv = w * (0.25 + 0.3 * I) * hv() * (kit === 'glass' ? 0.7 : kit === 'heavy' ? 1.05 : 1); taiko(t, tv, kit === 'heavy' ? 50 : kit === 'storm' ? 52 : kit === 'frame' ? 54 : kit === 'glass' ? 68 : 60); if (kit === 'heavy' || kit === 'storm') kitHit(heavyD, t, tv * (kit === 'storm' ? 0.6 : 0.8), rr(-0.25, 0.25), 0.4); } }
       if (SEQ.bar === 7 && s >= 12) taiko(t + sd * 0.5, 0.18 * hv(), 78 + (s - 12) * 6);
       if (kit === 'heavy' && I > 0.7 && (s === 4 || s === 12) && !SEQ.boss) anvil(t, 0.06);
     }
     if (L.gong && SEQ.bar === 0 && s === 0 && SEQ.phrase % 2 === 1) { if (kit === 'glass') bell(t, 88, 0.06, 0); else gong(t, 0.09); }
     if (SEQ.motif >= 0 && !SEQ.boss) {
-      const b2 = SEQ.bar * 16 + s, M = MOTIF[SEQ.motif], oct = SEQ.bar >= 4 ? 12 : 0, off = SEQ.bar >= 4 ? 64 : 0;
+      const MM = LD.motifs || MOTIF, b2 = SEQ.bar * 16 + s, M = MM[SEQ.motif % MM.length], oct = SEQ.bar >= 4 ? 12 : 0, off = SEQ.bar >= 4 ? 64 : 0;
       if (SEQ.bar < 2 || (SEQ.bar >= 4 && SEQ.bar < 6 && I > 0.75)) for (let i = 0; i < M.length; i++) if (M[i][0] === b2 - off) leadNote(t, deg(LD, M[i][1]) + oct, M[i][2] * sd * 0.92, 0.1 + 0.05 * I);
     }
     if (SEQ.boss) bossStepMusic(t, s, sd);
@@ -8923,6 +9052,57 @@ const AU = (function () {
     const c = gn(d), cf = flt(c, 'bandpass', 800 * k, 1.4); noi(t, 0.16, cf); ad(c.gain, t, vel * 0.7, 0.001, 0.1);
   }
 
+  // Stormreach details: surf on the cliffs, gusts, ship timbers, far gulls, rain patter (louder the closer the camera).
+  function surf(d, t) { // a wave rolls in and breaks against the rocks below, then drains back
+    const k = rr(0.85, 1.15), tc = t + rr(1.6, 2.6);
+    const s = gn(d), sf = flt(s, 'lowpass', 300, 0.6); noi(t, tc - t + 3.5, sf, bufBrown); sw(sf.frequency, t, 180 * k, 700 * k, tc - t); sf.frequency.exponentialRampToValueAtTime(220 * k, tc + 3);
+    s.gain.setValueAtTime(0.0001, t); s.gain.exponentialRampToValueAtTime(0.5, tc); s.gain.exponentialRampToValueAtTime(0.0001, tc + 3.2);
+    const c = gn(d), cf = flt(c, 'bandpass', 900 * k, 0.5); noi(tc - 0.1, 2.6, cf, bufPink); sw(cf.frequency, tc - 0.1, 1600 * k, 500 * k, 2.2);
+    c.gain.setValueAtTime(0.0001, tc - 0.1); c.gain.linearRampToValueAtTime(0.45, tc + 0.08); c.gain.exponentialRampToValueAtTime(0.0001, tc + 2.4);
+    const th = gn(d), to = osc('sine', 60 * k, tc, 0.6, th); sw(to.frequency, tc, 75 * k, 38 * k, 0.4); ad(th.gain, tc, 0.25, 0.02, 0.5); // the thud on the rock
+    const f = gn(d), ff = flt(f, 'highpass', 2600); noi(tc + 0.4, 3.0, ff); f.gain.setValueAtTime(0.0001, tc + 0.4); f.gain.linearRampToValueAtTime(0.06, tc + 1.0); f.gain.exponentialRampToValueAtTime(0.0001, tc + 3.2); // foam
+    grains(d, tc + 1.0, 14, 2.0, 0.08, 0.004, 0.015, 900, 3000, 4, 1); // pebbles dragged back
+  }
+  function gust(d, t) {
+    const D = rr(2, 4), g = gn(d), b = flt(g, 'bandpass', 500, 1.5), f0 = rr(300, 500); noi(t, D + 0.1, b, bufPink);
+    b.frequency.setValueAtTime(f0, t); b.frequency.linearRampToValueAtTime(f0 * rr(2, 3), t + D * 0.45); b.frequency.exponentialRampToValueAtTime(f0 * 0.8, t + D);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.5, t + D * 0.45); g.gain.exponentialRampToValueAtTime(0.0001, t + D);
+    if (rnd() < 0.4) { // the gust whistles through the rigging
+      const w = gn(d), wf = flt(w, 'bandpass', rr(900, 1400), 18); noi(t, D, wf, bufPink); sw(wf.frequency, t + D * 0.2, wf.frequency.value, wf.frequency.value * 1.3, D * 0.4);
+      w.gain.setValueAtTime(0.0001, t); w.gain.linearRampToValueAtTime(0.5, t + D * 0.5); w.gain.exponentialRampToValueAtTime(0.0001, t + D);
+    }
+  }
+  function timber(d, t) { // old ship timbers groaning as they shift
+    const n = rnd() < 0.5 ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      const ti = t + i * rr(0.6, 1.1), D = rr(0.6, 1.4), g = gn(d), src = gn(null, 1), fb = rr(260, 420);
+      src.connect(flt(g, 'bandpass', fb, 8)); src.connect(flt(gn(g, 0.5), 'bandpass', fb * 2.3, 10));
+      const o = osc('sawtooth', 20, ti, D + 0.05, src); o.frequency.setValueAtTime(rr(9, 14), ti); o.frequency.linearRampToValueAtTime(rr(22, 40), ti + D * 0.5); o.frequency.linearRampToValueAtTime(rr(10, 16), ti + D);
+      g.gain.setValueAtTime(0.0001, ti); g.gain.linearRampToValueAtTime(0.5, ti + D * 0.35); g.gain.linearRampToValueAtTime(0.35, ti + D * 0.75); g.gain.exponentialRampToValueAtTime(0.0001, ti + D);
+    }
+    if (rnd() < 0.3) knock(d, t + rr(0.2, 1), 0.2, rr(150, 220));
+  }
+  function gull(d, t, k) { // "kee-ow"
+    const D = rr(0.35, 0.55), g = gn(d), src = gn(null, 1); src.connect(flt(g, 'bandpass', 1900 * k, 3)); src.connect(flt(gn(g, 0.5), 'bandpass', 3100 * k, 4));
+    const o = osc('sawtooth', 900 * k, t, D + 0.05, src); o.frequency.setValueAtTime(950 * k, t); o.frequency.linearRampToValueAtTime(1350 * k, t + D * 0.3); o.frequency.exponentialRampToValueAtTime(800 * k, t + D);
+    osc('sine', rr(20, 30), t, D, gn(o.frequency, 25 * k)); // rasp
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.12, t + 0.06); g.gain.setValueAtTime(0.12, t + D * 0.4); g.gain.exponentialRampToValueAtTime(0.0001, t + D);
+  }
+  function gulls(d, t) { const n = 2 + ((rnd() * 3) | 0), k = rr(0.9, 1.15), lp = flt(d, 'lowpass', 3500); for (let i = 0; i < n; i++) gull(lp, t + i * rr(0.4, 0.7), k * rr(0.96, 1.04)); }
+  function patter(d, t) { // drops on rock and wood near the camera
+    grains(d, t, 10 + ((rnd() * 10) | 0), 1.2, 0.22 * (0.35 + 0.65 * STORM.near), 0.002, 0.008, 2000, 7000, 3, 0);
+    if (rnd() < 0.3) drip(d, t + rr(0, 1));
+  }
+  // The steady bed: far rain (a soft wash), near rain (bright hiss whose level and brightness follow the camera zoom),
+  // and the open sea's low roar rising and falling.
+  const STORM = { close: null, closeF: null, near: 0.5, aN: -1 };
+  function stormBed(g) {
+    const close = gn(g, 0.11), lp = flt(close, 'lowpass', 4600, 0.5), hp = flt(lp, 'highpass', 2200, 0.6);
+    STORM.close = close; STORM.closeF = lp; STORM.aN = -1;
+    return nbed(g, bufPink, 'lowpass', 1400, 0.5, 0.24, 0.05, 0.25).concat(nbed(g, bufPink, 'bandpass', 3000, 0.5, 0.1, 0.07, 0.3),
+      [loopSrc(bufWhite, hp, 1.0)], nbed(g, bufBrown, 'lowpass', 160, 0.7, 0.3, 0.09, 0.6));
+  }
+
   // Loop helper for beds: a noise source through a filter, its level and pitch wandering on slow LFOs.
   function nbed(g, buf, type, f, q, lvl, lfoHz, lfoAmt, fHz, fAmt) {
     const m = gn(g, lvl), b = flt(m, type, f, q), out = [loopSrc(buf, b, 1.0)];
@@ -8952,9 +9132,12 @@ const AU = (function () {
     dunes: { lvl: 0.48, rev: 0.25, // dry wind with sand in it, palms rustling, birds far away
       bed: (g) => nbed(g, bufPink, 'bandpass', 1100, 0.9, 0.25, 0.09, 0.8, 0.05, 300).concat(nbed(g, bufWhite, 'highpass', 5500, 0.7, 0.05, 0.09, 0.8)),
       ev: [[rustle, 6, 0.5], [chirps, 9, 0.5], [hawk, 24, 0.6]] },
+    storm: { lvl: 0.41, rev: 0.3, // rain near and far, surf on the cliffs, gusts, ship timbers, far gulls (thunder: stormTick)
+      bed: (g) => stormBed(g),
+      ev: [[surf, 8, 0.8, 0.5], [gust, 9, 0.5], [timber, 12, 0.45, 0.7], [gulls, 26, 0.3, 0.9], [patter, 1.3, 0.4]] },
   };
   // The general wind bed's colour per land: [filter multiplier, whistle multiplier].
-  const WINDK = { ashen: [1, 1], frost: [1.3, 1.7], fen: [0.75, 0.5], ember: [0.85, 0.7], dunes: [1.45, 0.8] };
+  const WINDK = { ashen: [1, 1], frost: [1.3, 1.7], fen: [0.75, 0.5], ember: [0.85, 0.7], dunes: [1.45, 0.8], storm: [1.15, 1.3] };
   const WIND_LVL = 0.42;
 
   // Land events: a swell under the one-shot that starts them.
@@ -8968,6 +9151,9 @@ const AU = (function () {
       ev: [[lavaPops, 0.8, 0.7], [steam, 3.5, 0.6], [ember, 1.2, 0.6]] },
     sandstorm: { lvl: 0.35, rev: 0.3, bed: (g) => nbed(g, bufPink, 'bandpass', 1200, 0.8, 0.7, 0.16, 0.6, 0.08, 500).concat(nbed(g, bufWhite, 'highpass', 3800, 0.7, 0.14, 0.21, 0.6)),
       ev: [[(d, t) => grains(d, t, 30, 1.2, 0.2, 0.002, 0.006, 2500, 7000, 2, 0), 0.9, 0.6]] },
+    thunderstorm: { lvl: 0.45, rev: 0.35, // the rain hammering down, the wind howling, thunder rolling beyond the board
+      bed: (g) => nbed(g, bufWhite, 'bandpass', 4500, 0.6, 0.22, 0.15, 0.4).concat(nbed(g, bufPink, 'bandpass', 1300, 0.8, 0.45, 0.12, 0.6, 0.07, 400), nbed(g, bufPink, 'bandpass', 520, 5, 0.45, 0.14, 0.7, 0.09, 220)),
+      ev: [[(d, t) => thunderV(d, t, rr(0, 0.4), rr(0.5, 0.8)), 7, 0.6], [gust, 4, 0.5], [patter, 0.8, 0.5]] },
   };
 
   // Which land and event are playing now.
@@ -8991,7 +9177,52 @@ const AU = (function () {
       } else if (!ek && was && G.phase === 'play' && !paused) play('eventEnd', 0, 1, 0);
     }
     if (!paused && !api.muted) { if (LS.land) scapeTick(LS.land, now); if (LS.ev) scapeTick(LS.ev, now); }
+    stormTick(now, paused);
   }
+  // Thunder in Stormreach. A storm flash (Ash's G.flashT: seconds since the last flash, reset to 0 by each one) brings its
+  // thunder: right away for a near one, after a short delay for a distant one (G.flashX / G.flashZ place it, if given;
+  // otherwise the whole sky lit and it is usually far). A strike that plays sfx('thunder') itself mutes its flash's echo.
+  // Without the hook, distant thunder of its own now and then (far only: nothing lights up).
+  const TH = { ft: -1, hook: false, next: 0, pend: [], n: 0, strikeAt: -9 };
+  function queueThunder(t, near, vel, pan) { if (TH.pend.length < 4) TH.pend.push([t, near, vel, pan === undefined ? rr(-0.6, 0.6) : pan]); }
+  function flashSeen(now) {
+    if (now - TH.strikeAt < 0.6) return;
+    TH.n++;
+    let near = Math.pow(rnd(), 1.6), pan = rr(-0.6, 0.6);
+    const fx = G.flashX, fz = G.flashZ;
+    if (typeof fx === 'number' && typeof fz === 'number' && fx === fx && fz === fz) {
+      const dx = fx - CAM.x, dz = fz - CAM.z;
+      near = cl(1 - Math.hypot(dx, dz) / 60, 0, 1); pan = cl((dx * Math.cos(CAM.yaw) - dz * Math.sin(CAM.yaw)) / ((R.viewW || 40) * 0.5), -1, 1) * 0.7;
+    }
+    queueThunder(now + (near > 0.8 ? 0 : (0.25 + 2.6 * (1 - near)) * rr(0.85, 1.15)), near, rr(0.75, 1), pan);
+  }
+  function stormTick(now, paused) {
+    const on = LS.key === 'storm' || LS.evKind === 'thunderstorm', ft = typeof G.flashT === 'number' ? G.flashT : typeof FX !== 'undefined' && FX ? FX.flashT : undefined;
+    if (typeof ft === 'number' && ft === ft) {
+      TH.hook = true;
+      if (TH.ft >= 0 && ft < TH.ft && on && !paused) flashSeen(now);
+      TH.ft = ft;
+    } else if (on && !paused) {
+      if (!TH.next) TH.next = now + rr(6, 16);
+      else if (now >= TH.next) { TH.next = now + rr(14, 34) * (LS.evKind === 'thunderstorm' ? 0.4 : 1); queueThunder(now + rr(0.1, 0.4), rr(0, 0.35), rr(0.55, 0.85)); }
+    }
+    if (!on) { TH.next = 0; TH.pend.length = 0; }
+    for (let i = TH.pend.length - 1; i >= 0; i--) {
+      const p = TH.pend[i]; if (now < p[0] - 0.03) continue;
+      TH.pend.splice(i, 1);
+      if (paused || api.muted) continue;
+      const t = Math.max(p[0], now + 0.005), v = voice(p[3], 1, 0.5, nLand); V = v;
+      try { thunderV(v.out, t, p[1], p[2] * THUNDER_LVL); } catch (e) { if (!ST.err) ST.err = 'thunder: ' + e.message; }
+      finishVoice(v); ST.amb++;
+      if (p[1] > 0.4 && lateDuck.length < 8) lateDuck.push([t + 0.05, 0.35 * p[1]]);
+    }
+    if (STORM.close && LS.key === 'storm') { // the near rain follows the camera: louder and brighter zoomed in
+      const z = typeof CAM !== 'undefined' && CAM && CAM.zoom > 0 ? CAM.zoom : 1, nr = cl((z - 0.7) / 1.4, 0, 1);
+      STORM.near = nr;
+      if (Math.abs(nr - STORM.aN) > 0.02) { STORM.aN = nr; STORM.close.gain.setTargetAtTime(0.09 + 0.1 * nr, now, 0.5); STORM.closeF.frequency.setTargetAtTime(3800 + 4000 * nr, now, 0.5); }
+    }
+  }
+  const THUNDER_LVL = 1;
 
   // ---- Reading the battlefield (about 8 times a second). ----
   // Same pan and distance law as sfx() in 90-main, for sounds the audio plays on its own.
@@ -9220,7 +9451,7 @@ const AU = (function () {
   }
   function stats() {
     const L = SEQ.lay;
-    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(','), land: LS.key, music: LM.key || '', beasts: BT.list.length, beastBeds: Object.keys(BT.beds).filter((k) => BT.beds[k].src).join(','), event: LS.evKind, paused: PZ.on, hidden: hidden, state: ctx ? ctx.state : 'none' });
+    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(','), land: LS.key, music: LM.key || '', beasts: BT.list.length, beastBeds: Object.keys(BT.beds).filter((k) => BT.beds[k].src).join(','), event: LS.evKind, flashes: TH.n, flashHook: TH.hook, paused: PZ.on, hidden: hidden, state: ctx ? ctx.state : 'none' });
   }
 
   function softClip() {
@@ -9260,7 +9491,7 @@ const AU = (function () {
     nRevIn = gn(null, 1); nRevIn.connect(flt(conv, 'highpass', 120));
     // Reverb sends per bus, so turning a bus down in the settings turns its echo down too.
     RV.sfx = gn(nRevIn, VOL.sfx); RV.music = gn(nRevIn, VOL.music); RV.amb = gn(nRevIn, VOL.ambience); RV.crowd = gn(nRevIn, VOL.crowd);
-    nSfx.rv = nUi.rv = RV.sfx; nSting.rv = nPad.rv = nSeq.rv = RV.music;
+    nSfx.rv = nUi.rv = RV.sfx; nSting.rv = nPad.rv = nSeq.rv = RV.music; nLand.rv = RV.amb; // the land's thunder echoes with the ambience volume
     LM.bus = landBus();
     PZ.crowd.connect(gn(nRevIn, 0.15));
     startBeds();
