@@ -55,7 +55,7 @@ const ELITE_BOUNTY = 2.5;
 // From the third land on the cap rises (and elites get tougher, see makeElite).
 function eliteChance(k, level) { const w = level * G.wavesPerLand + k; return w < 6 ? 0 : Math.min(.3 + .03 * Math.max(0, level - 1), .045 + .016 * (w - 6)) * (k <= 2 ? .35 : k <= 4 ? .7 : 1); }
 function pickElite(type, k, level, mul = 1) {
-  const d = MON[type]; if (d.boss || type === 'scarab' || type === 'slimelet' || rnd() >= eliteChance(k, level) * mul) return undefined;
+  const d = MON[type]; if (d.boss || type === 'scarab' || type === 'slimelet' || rnd() >= eliteChance(k, level) * mul * modMul('elite')) return undefined;
   const opts = d.fly ? ['shielded', 'hasted'] : ELITE_KINDS;
   return opts[Math.floor(rnd() * opts.length)];
 }
@@ -201,7 +201,7 @@ function buildWave(k, level) {
   // (the board was just rebuilt), the last ones get the full step and a bit more.
   const lvF = .5 + .5 * (k - 1) / (W - 1), lv = 1 + .3 * level * lvF;
   // Budget ramps over the land; the boss wave carries less escort because the boss is the threat (more of it on later lands).
-  let budget = (30 + 19 * (k - 1)) * lv * G.press * (boss ? .6 + .15 * Math.min(level, 6) : 1), heavy = 0, air = budget * .42;
+  let budget = (30 + 19 * (k - 1)) * lv * G.press * (boss ? .6 + .15 * Math.min(level, 6) : 1) * modMul('budget'), heavy = 0, air = budget * .42;
   const hpMul = (1 + .1 * (k - 1)) * (1 + .33 * level * lvF + .045 * level * level * lvF * lvF * lvF) * pressHp();
   // Later lands (and high pressure) also pack the monsters closer together.
   const gm = 1 / ((1 + .08 * level) * Math.pow(Math.max(1, G.press / 1.8), level ? .35 : 0));

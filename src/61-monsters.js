@@ -70,6 +70,7 @@ function removeMonster(m) { if (m.carry) dropPrey(m); if (m.prey) { if (m.prey.s
 function slowMonster(m, f, t) { if (m.def.boss) { f *= .4; t *= .6; } if (m.def.slowRes) f *= 1 - m.def.slowRes; m.slowF = Math.max(m.slowF, f); m.slowT = Math.max(m.slowT, t); }
 function hitMonster(m, dmg, kind, dx, dz, tower) {
   if (m.dead || m.hp <= 0) return false;
+  if (!m.def.boss) dmg *= modMul('dmgIn');
   if (m.eth) { if (kind === 'arrow' || kind === 'sword') { if (rnd() < .5) fxTimed(0, m.x + rr(-.2, .2), m.y + m.hitH + rr(-.2, .3), m.z + rr(-.2, .2), .5, .5, .5, .9, 1.8, .7, .18); return false; } dmg *= .5; }
   if (kind === 'arrow' && m.def.armor) { const ap = (tower && tower.def && tower.def.ap) || 0; dmg *= m.def.armor + (1 - m.def.armor) * ap; if (rnd() < .6) { fxSparks(m.x, m.y + m.hitH, m.z, 3, 3, 2.4, 2.2, 1.6, { size: .05 }); } }
   if (tower && tower.oc) dmg *= 1 + OC_DMG * tower.oc;
@@ -129,6 +130,7 @@ function killMonster(m, kind, dx, dz, tower) {
   const bounty = Math.max(1, Math.round(def.bounty * G.bountyMul * (m.bmul || 1)));
   dropCoins(m.x, m.y + m.hitH * .6, m.z, bounty, clamp(Math.round(bounty / 3), 1, 6));
   removeMonster(m);
+  modOnKill(m);
   if (def.explode) {
     if (kind === 'blast') G.chain.push({ t: rr(.12, .24), x: m.x, y: m.y, z: m.z, ex: def.explode });
     else blastAround(m, def.explode);
@@ -390,7 +392,7 @@ function updateUnits(dt) {
     if (def.tide && m.vis && m.s > B.cave.s + 3) { m.tdT -= dt; if (m.tdT <= 0) { m.tdT = def.tide.every * (m.rage ? .65 : 1); startTide(m); } }
     if (def.wardCast && m.vis && !m.dying) shamanWard(m, dt);
     if (m.shove > 0) m.shove = Math.max(0, m.shove - dt * 2.5);
-    let want = def.spd * m.spdMul * (1 - m.slowF) * (1 + m.haste) * (m.evMul || 1) * (m.tideT > 0 ? 1 + m.tideH : 1), hopMul = 1;
+    let want = def.spd * m.spdMul * (1 - m.slowF) * (1 + m.haste) * (m.evMul || 1) * modMul('spd') * (m.tideT > 0 ? 1 + m.tideH : 1), hopMul = 1;
     if (def.back) {
       // Hangs back: with no ally a few steps ahead it slows down and lets the column lead.
       let lo = 0, hi = nu, ahead = false; while (lo < hi) { const md = (lo + hi) >> 1; if (U[md].s <= m.s) lo = md + 1; else hi = md; }
