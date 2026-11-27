@@ -281,7 +281,10 @@ const UI = (() => {
   }
   function onTap(x, y, held) {
     const now = performance.now();
-    const b = held && inRect(held, x, y, U.touch ? 44 : 8) ? held : btnAt(x, y);
+    let b = held && inRect(held, x, y, U.touch ? 44 : 8) ? held : btnAt(x, y);
+    // Menus rebuild their buttons every frame: a finger held for a few frames holds last frame's object, so find the
+    // same button (by id) in this frame's lists, or modal menus treat the tap as outside (every phone tap failed).
+    if (b && b.id) b = U.btns.find(o => o.id === b.id) || U.hud.find(o => o.id === b.id) || b;
     if (U.offer) { if (b && (b.id === 'cont' || b.id === 'newg')) b.fn(x, y); return; }
     if (now - (U.offerShut || -1e9) < 450) return; // a double tap on Continue must not land on the board behind it
     // Settings and the run summary are modal: a tap outside the settings closes them; nothing reaches the board or the HUD underneath.

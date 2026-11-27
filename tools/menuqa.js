@@ -18,11 +18,19 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function run(name) {
   const browser = await chromium.launch({ args: [...require('./chrome.js').gl, '--autoplay-policy=no-user-gesture-required'] });
-  const ctx = await browser.newContext({ ...PROFILES[name], deviceScaleFactor: 1 });
+  const ctx = await browser.newContext({ ...PROFILES[name], ...(process.env.DSF ? { deviceScaleFactor: +process.env.DSF } : name === 'phone' ? {} : { deviceScaleFactor: 1 }) });
   const page = await ctx.newPage(), errors = [], log = [];
   page.on('pageerror', e => errors.push(String(e.stack || e).slice(0, 600)));
   page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text().slice(0, 300)); });
   const touch = name === 'phone';
+  // A real finger or click stays down for several frames (menus rebuild their buttons every frame), so hold ~150 ms.
+  const cdp = touch ? await ctx.newCDPSession(page) : null, HOLD = +(process.env.HOLD || 150);
+  async function hold(x, y) {
+    if (touch) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }] }); await sleep(HOLD);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    } else { await page.mouse.move(x, y); await page.mouse.down(); await sleep(HOLD); await page.mouse.up(); }
+  }
   const step = msg => { log.push(msg); console.log(`[${name}] ${msg}`); };
   const shot = async n => { await page.screenshot({ path: path.join(SHOTS, `menuqa-${name}-${n}.png`) }); };
   const state = () => page.evaluate(() => { const w = window.__cw; if (!w) return null; return { scr: w.UI.scr, story: w.STORY.on(), mode: w.G.mode, phase: w.G.phase, cine: !!(w.CINE && w.CINE.on && w.CINE.on()), btns: w.UI.btns.concat(w.UI.hud || []).map(b => b.id) }; });
@@ -35,7 +43,7 @@ async function run(name) {
     const s = await waitFor(s => s.btns.includes(id), 'button ' + id);
     const p = await page.evaluate(id => { const w = window.__cw, d = w.R.dpr || 1, b = w.UI.btns.concat(w.UI.hud || []).find(b => b.id === id); return b && [(b.x + b.w / 2) / d, (b.y + b.h / 2) / d]; }, id);
     if (!p) throw new Error('button vanished: ' + id + ' ' + JSON.stringify(s));
-    if (touch) await page.touchscreen.tap(p[0], p[1]); else await page.mouse.click(p[0], p[1]);
+    await hold(p[0], p[1]);
     step(`press ${id} at ${p.map(Math.round)}`);
     await sleep(350);
   }
@@ -43,7 +51,7 @@ async function run(name) {
   async function clearStory() {
     for (let i = 0; i < 40; i++) {
       const s = await state(); if (!s.story) return;
-      if (touch) { const vp = page.viewportSize(); await page.touchscreen.tap(vp.width / 2, vp.height * .5); } else await page.keyboard.press('Enter');
+      if (touch) { const vp = page.viewportSize(); await hold(vp.width / 2, vp.height * .5); } else await page.keyboard.press('Enter');
       await sleep(300);
     }
     throw new Error('story never closed');
