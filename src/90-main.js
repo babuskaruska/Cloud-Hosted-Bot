@@ -156,8 +156,10 @@ function step(rdt) {
       for (let i = 0; i < B.pads.length; i++) {
         const p = B.pads[i]; if (p.tower) continue;
         _mm.compose(_mv.set(p.x, p.y, p.z), _mq.setFromAxisAngle(_upv, p.face + Math.sin(G.t * 1.3 + i * 2.1) * .3), _ms); KIT.marker.put(_mm, 0, null);
-        const w = .5 + .5 * Math.sin(G.t * 2.1 + i * 1.7), sz = 3.7 + .25 * w, a = (.3 + .25 * w) * k0;
-        FX.add.push(p.x, p.y + .07, p.z, sz, sz, 0, 0, 2.6, 1.6, .55, a, 4, 0, .52, 1);
+        // A soft gold ring on each free pad, and a faint ripple that keeps running outward from it ("build here").
+        const w = .5 + .5 * Math.sin(G.t * 2.1 + i * 1.7), sz = 3.7 + .25 * w, a = (.27 + .2 * w) * k0, ph = (G.t * .42 + i * .37) % 1;
+        FX.add.push(p.x, p.y + .07, p.z, sz, sz, 0, 0, 2.4, 1.55, .62, a, 4, 0, .52, 1);
+        FX.add.push(p.x, p.y + .07, p.z, sz * 1.08, sz * 1.08, 0, 0, 2.1, 1.5, .75, .2 * k0 * smooth(0, .15, ph), 4, 0, .18 + ph * .72, 1);
       }
     }
   }

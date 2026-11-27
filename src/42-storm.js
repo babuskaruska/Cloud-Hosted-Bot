@@ -99,6 +99,8 @@ function setStormLand(B, instant) {
   if (b.sea && !STORM.sea) initStormMeshes();
   if (b.sea) {
     STORM.level = b.sea[0]; STORM.sea.position.y = STORM.level;
+    // Sea colours: deep water and foam (bio.seaCol, as a generated land tints them; else Stormreach's).
+    const sc = b.seaCol || [.008, .02, .026, .4, .46, .5]; STORM.u.uDeep.value.set(sc[0], sc[1], sc[2]); STORM.u.uFoam.value.set(sc[3], sc[4], sc[5]);
     const f = B.fallAt; STORM.fall = null;
     if (f) { const tau = Math.sqrt(Math.max(0, f.y - STORM.level) / 4.5), o = f.ext + f.v0 * tau; STORM.fall = [f.x + f.ox * o, f.z + f.oz * o]; }
     if (instant) STORM.vis = 1;

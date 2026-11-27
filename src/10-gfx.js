@@ -256,8 +256,8 @@ if (uGlint > 0.0 && (uWat.x < 1.5 || uWat.x > 2.5)) {
   vec3 Hm = normalize(uMoonV + vec3(0.0, 0.0, 1.0));
   float nh = max(dot(normal, Hm), 0.0), sp = pow(nh, 14.0), tf = uTime * (0.5 + 1.2 * min(vSurf.z, 1.0));
   float tw = cwN(vTuv * vec2(7.0, 4.0) + vec2(tf * 0.4, -tf)) * cwN(vTuv * vec2(13.0, 9.0) - vec2(tf * 0.7, tf * 1.3));
-  float gl = sp * (0.12 + 4.0 * smoothstep(0.4, 0.6, tw)) + pow(nh, 5.0) * 0.04;
-  outgoingLight += uMoonC * gl * (1.0 - wMask * 0.85) * uGlint * 0.16;
+  float gl = sp * (0.12 + 3.0 * smoothstep(0.45, 0.65, tw)) + pow(nh, 5.0) * 0.04;
+  outgoingLight += uMoonC * gl * (1.0 - wMask * 0.85) * uGlint * 0.13;
 }` : ''}
 #include <opaque_fragment>`);
   };

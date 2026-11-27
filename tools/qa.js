@@ -56,6 +56,14 @@ const SIM = (secs) => {
     out.smoke[land] = r; if (!(r.lives > 0)) fails.push(land + ': lost all lives in the first ' + (QUICK ? 20 : 45) + ' s');
     await p.close();
   }
+  // Generated lands (The Long Night, procBiome): two of them, rendered and screenshotted.
+  for (const [name, h] of [['proc7', 'seed=5&level=7'], ['proc12', 'seed=9&level=12']]) {
+    const p = await page(browser, `${h}&ff=${QUICK ? 20 : 45}&manual=1`, errs);
+    const r = await p.evaluate(() => { const { G, tick } = window.__cw; for (let i = 0; i < 30; i++) tick(1 / 30, i % 10 === 0); tick(1 / 30, true); return { lives: G.lives, mons: G.mons.length, towers: G.towers.length, phase: G.phase, land: G.B.bio.name, key: G.B.bio.key }; });
+    await p.screenshot({ path: path.join(SHOTS, 'qa-' + name + '.png') });
+    out.smoke[name] = r; if (r.key !== 'proc') fails.push(name + ': not a generated land'); if (!(r.lives > 0)) fails.push(name + ': lost all lives in the first ' + (QUICK ? 20 : 45) + ' s');
+    await p.close();
+  }
   { // boss wave on a later level
     const p = await page(browser, `seed=8&biome=frost&level=1&k=7&ff=40&manual=1`, errs);
     out.smoke.boss = await p.evaluate(() => { const { G, tick } = window.__cw; for (let i = 0; i < 20; i++) tick(1 / 30, i % 5 === 0); return { phase: G.phase, k: G.k, mons: G.mons.length }; });

@@ -202,7 +202,7 @@ function procBiome(seed, i) {
   const sea = A.sea ? A.sea.slice() : (water === 4 || D.key === 'storm') && rng() < .3 ? [-4.3, 1] : null;
 
   // ---- Ground cover (snow, moss, ash, sand).
-  const CS = weather === 'snow' ? BIOMES[1] : rng() < .72 ? A : D;
+  const CS = weather === 'snow' ? BIOMES.find(b => b.key === 'frost') : rng() < .72 ? A : D;
   const cover = CS.cover.slice(), coverCol = CS.coverCol.map((v, k) => v * lerp(1, pal[k], .5)), coverP = CS.coverP.slice();
   if (weather === 'snow' && CS !== A) cover[0] = rng.range(.55, .95);
 
@@ -248,8 +248,7 @@ function procBiome(seed, i) {
   if (A.noRuin) bio.noRuin = 1;
   if (water === 2) { bio.bankGlow = 1; bio.vein = 1; bio.cracks = 1; } else if (D.key === 'ember' && rng() < .5) bio.vein = 1;
   if (weather === 'rain') bio.wet = [rng.range(.42, .62), rng.range(.1, .16)];
-  if (sea) { bio.sea = sea; if (A.lighthouse) bio.lighthouse = 1; if (weather === 'rain') bio.lightning = rng.range(9, 16); if (water === 4) bio.wat[0] = 4; }
-  // Ponds stay frozen when the water is ice, so the ice light and crystals of a frost base still make sense.
+  if (sea) { bio.sea = sea; bio.seaCol = [.008, .02, .026, .4, .46, .5].map((v, k) => v * wTint[k % 3]); if (A.lighthouse) bio.lighthouse = 1; if (weather === 'rain') bio.lightning = rng.range(9, 16); if (water === 4) bio.wat[0] = 4; }
   PROC.cache.set(id, bio);
   if (PROC.cache.size > 48) PROC.cache.delete(PROC.cache.keys().next().value);
   return bio;

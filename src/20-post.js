@@ -281,7 +281,7 @@ function renderFrame() {
   cam.getWorldDirection(u.uCamDir.value);
   u.uAO.value.y = 0.85 / R.px;
   u.uWind.value.set(SH.uTime.value * 0.05, SH.uTime.value * 0.021); u.uRes.value.set(R.iw, R.ih); u.uBack.value.x = (CAM.yaw - PI / 4) * 1.2;
-  u.uHalo.value.x = R.lite ? 0 : .016;
+  u.uHalo.value.x = R.lite || R.quality < .7 ? 0 : .016; // the Fast setting (quality .6) and lite mode skip the halos
   fsPass(M.atmo, T.atmo);
   u = M.dof.uniforms; u.tColor.value = T.atmo.texture; u.tDepth.value = T.scene.depthTexture; u.uPx.value.copy(px);
   const zr = cam.far - cam.near;
