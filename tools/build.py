@@ -33,7 +33,11 @@ def game():
     parts = []
     for path in sorted(glob.glob(os.path.join(ROOT, 'src', '*.js'))):
         parts.append(open(path, encoding='utf-8').read())
-    code = "(function(){\n'use strict';\n" + '\n'.join(parts) + '\n})();'
+    import datetime, subprocess
+    try: rev = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=ROOT).decode().strip()
+    except Exception: rev = 'dev'
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%m%d-%H%M') + '-' + rev
+    code = "(function(){\n'use strict';\nconst BUILD = '" + stamp + "';\n" + '\n'.join(parts) + '\n})();'
     assert '</script' not in code
     return code
 
