@@ -65,6 +65,23 @@ const BIOMES = [
     mobs: { mummy: 3, scarab: 2.4, spider: .6, bomber: 1.3, ghoul: 1.3, toad: 0, slime: .4, ram: 2.2, harpy: 2, shaman: .6 }, early: { mummy: 4, scarab: 2, ram: 5, harpy: 3 }, boss: ['king'], tints: { golem: [1.5, 1.1, .72], wolf: [1.5, 1.2, .8], wisp: [1.4, 1.0, .4], gargoyle: [1.5, 1.2, .9], toad: [1.3, 1.1, .7] }, wispHex: 0xffc060,
     trees: [['palm', 9, 3.0, 4.6], ['tree', 2, 2.4, 3.4]], stumps: 2, rocks: 44, tufts: 150, webs: 0,
   },
+  {
+    // Stormreach: a storm-lashed sea cliff at night. The slab stands in a churning sea (STORM.sea, 42-storm.js:
+    // sea = [level, foam]), rain slants on the wind, lightning lights the whole board every 6-14 s (lightning: the
+    // mean gap), the stream is a tidal channel with foam (water mode 4), everything is wet (wet = [shine, darken]),
+    // and the beacon is a lighthouse whose lamp sweeps two beams over the sea (lighthouse).
+    key: 'storm', name: 'Stormreach',
+    col: { stone: 0x40464f, stoneD: 0x22262d, stoneL: 0x626b76, earth: 0x30342f, earthD: 0x20231f, grass: 0x46553f, grassD: 0x323e2f, moss: 0x3c4e36, road: 0x6a6f76, roadD: 0x43474e, mud: 0x25272a, bark: 0x3a3631, tuftA: 0x58663f, tuftB: 0x9a9262, leaf: 0x283a2a, leafL: 0x3c5434 },
+    strata: [0x343a44, 0x1c2027, 0x4c525c, 0x272b32, 0x3c3a38, 0x20252c, 0x5c626a, 0x2c2f33],
+    hemi: [0x6a8cb6, 0x141c24, 1.25], moon: [0xb4ccf0, 1.5], fill: [0x3a6e86, .36], moonPos: [-10, 40, -36],
+    clear: [.003, .0055, .009], mistAmb: [.045, .07, .09], mist: [-.2, .55, .85, .12], sky: [.014, .026, .04], lift: [.01, .018, .03], sat: .8, expo: .96, sprAmb: [.055, .075, .095],
+    cover: [0, .55, .3, .5], coverCol: [1, 1, 1], coverP: [.7, .6, 0, 0], wet: [.62, .16],
+    wat: [4, .9, 1.15, .45], watA: [.008, .02, .024], watB: [.5, .58, .62], fall: [0, 1.3, 1, 0], fallA: [.02, .04, .05], fallB: [.42, .52, .58], spray: 'water',
+    relief: [1.6, .55, 1.25, 0], puddles: 16, ponds: 3, sway: 1.5, wind: 1.6, beacon: .4, lighthouse: 1, sea: [-4.3, 1], lightning: 10,
+    wx: { n: [.62, .08], velA: [3.4, -15, 1.7], swayA: [.04, .6], sizeA: [.016, .026], colA: [.72, .8, .95, 1], alA: [.42, 0, 1.6], yA: [-2, 14], velB: [5.5, -1.4, 2.6], swayB: [.3, 1.4], sizeB: [.025, .045], colB: [.8, .88, .95, 1], alB: [.35, 0, .7], yB: [-1.5, 5], amb: [.3, .38, .48] },
+    mobs: { harpy: 2, wraith: 1.8, knight: 1.5, ghoul: 1.2, toad: 1, wisp: .9, necro: 1.2, scarab: 0, mummy: 0, spider: .5, hound: .4, ram: .8, shaman: .6 }, early: { harpy: 3, wraith: 3, knight: 3 }, boss: ['leviathan'], tints: { wisp: [.45, 1.25, 1.3], golem: [.7, .9, 1.0], wolf: [.75, .85, .9], toad: [.65, .95, .9], gargoyle: [.8, .95, 1.05], ghoul: [.8, 1.15, 1.2] }, wispHex: 0x60e0d0,
+    trees: [['windbent', 8, 2.2, 3.6]], stumps: 2, rocks: 86, tufts: 380, tuft: 'seagrass', webs: 0, noRuin: 1,
+  },
 ];
 const BIOME = { start: 0 };
 function biomeFor(index) { return BIOMES[((BIOME.start + index) % BIOMES.length + BIOMES.length) % BIOMES.length]; }
@@ -89,14 +106,15 @@ function setBiomeLook(B, instant) {
   if (instant || !LOOK.cur) LOOK.cur = lookOf(b);
   SH.uCover.value.fromArray(b.cover); SH.uCoverCol.value.fromArray(b.coverCol); SH.uCoverP.value.fromArray(b.coverP);
   SH.uWat.value.fromArray(b.wat); SH.uWatA.value.fromArray(b.watA); SH.uWatB.value.fromArray(b.watB); SH.uWind.value = b.sway;
+  SH.uWet.value.fromArray(b.wet || [0, 0]);
   const f = MAT.fall.uniforms; f.uFP.value.fromArray(b.fall); f.uFA.value.fromArray(b.fallA); f.uFB.value.fromArray(b.fallB);
   setWeather(b.wx, instant);
   const m = B.mirrored, p = b.moonPos; LT.moon.position.set(m ? p[2] : p[0], p[1], m ? p[0] : p[2]); LT.moon.target.position.set(0, 0, 0);
-  applyLook(LOOK.cur);
+  applyLook(LOOK.cur); setStormLand(B, instant);
 }
 function updateBiomeLook(dt) {
   if (!LOOK.cur) return;
   const k = 1 - Math.exp(-dt * 1.6), a = LOOK.cur, b = LOOK.to;
   for (const key in a) { const x = a[key], y = b[key]; for (let i = 0; i < x.length; i++) x[i] += (y[i] - x[i]) * k; }
-  applyLook(a); if (typeof eventLook === 'function') eventLook(); WX.fade = Math.min(1, WX.fade + dt * .5); WX.u.uFade.value = WX.fade;
+  applyLook(a); if (typeof eventLook === 'function') eventLook(); updateStorm(dt); WX.fade = Math.min(1, WX.fade + dt * .5); WX.u.uFade.value = WX.fade;
 }

@@ -122,6 +122,8 @@ const SH = {
   uSky: { value: new THREE.Color(0.012, 0.022, 0.045) }, uWind: { value: 1 },
   uCover: { value: new THREE.Vector4(0, 0.55, 0.3, 0.5) }, uCoverCol: { value: new THREE.Vector3(1, 1, 1) }, uCoverP: { value: new THREE.Vector4(0.7, 0.6, 0.0, 0.0) },
   uWat: { value: new THREE.Vector4(0, 1, 1, 0) }, uWatA: { value: new THREE.Vector3(0.012, 0.02, 0.03) }, uWatB: { value: new THREE.Vector3(0.3, 0.4, 0.5) },
+  // Rain-wet surfaces (Stormreach): x = how much shinier (roughness cut, most in the low spots), y = how much darker.
+  uWet: { value: new THREE.Vector2(0, 0) },
 };
 
 function litMaterial(kind, params = {}) {
@@ -130,7 +132,7 @@ function litMaterial(kind, params = {}) {
   mat.customProgramCacheKey = () => 'cw-' + kind;
   mat.onBeforeCompile = sh => {
     sh.uniforms.uTime = SH.uTime; sh.uniforms.uTexA = SH.uTexA; sh.uniforms.uTexH = SH.uTexH; sh.uniforms.uBump = SH.uBump; sh.uniforms.uSky = SH.uSky; sh.uniforms.uWind = SH.uWind;
-    sh.uniforms.uCover = SH.uCover; sh.uniforms.uCoverCol = SH.uCoverCol; sh.uniforms.uCoverP = SH.uCoverP; sh.uniforms.uWat = SH.uWat; sh.uniforms.uWatA = SH.uWatA; sh.uniforms.uWatB = SH.uWatB;
+    sh.uniforms.uCover = SH.uCover; sh.uniforms.uCoverCol = SH.uCoverCol; sh.uniforms.uCoverP = SH.uCoverP; sh.uniforms.uWat = SH.uWat; sh.uniforms.uWatA = SH.uWatA; sh.uniforms.uWatB = SH.uWatB; sh.uniforms.uWet = SH.uWet;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec4 aSurf; varying vec4 vSurf; varying vec2 vTuv; uniform float uTime; uniform float uWind;
@@ -150,7 +152,7 @@ ${world ? `if (aSurf.z > 0.0) {
       .replace('#include <common>', `#include <common>
 precision highp sampler2DArray;
 uniform sampler2DArray uTexA; uniform sampler2DArray uTexH; uniform float uBump; uniform float uTime; uniform vec3 uSky;
-uniform vec4 uCover; uniform vec3 uCoverCol; uniform vec4 uCoverP; uniform vec4 uWat; uniform vec3 uWatA; uniform vec3 uWatB;
+uniform vec4 uCover; uniform vec3 uCoverCol; uniform vec4 uCoverP; uniform vec4 uWat; uniform vec3 uWatA; uniform vec3 uWatB; uniform vec2 uWet;
 varying vec4 vSurf; varying vec2 vTuv;
 ${world ? 'varying vec3 vWpos;' : ''}
 ${inst ? 'varying float vFlash;' : ''}
@@ -188,15 +190,25 @@ if (uWat.x > 0.5 && uWat.x < 1.5) {
   float crack = max(pow(ra, 3.2), pow(rb, 4.4) * 0.8), pool = smoothstep(0.56, 0.74, c1 * 0.55 + c3 * 0.45);
   wHeat = clamp(crack * 0.85 + pool, 0.0, 1.0); wMask = 1.0 - smoothstep(0.38, 0.7, wHeat);
   diffuseColor.rgb = mix(uWatA, uWatB * (0.6 + 0.8 * c3), wMask);
+} else if (uWat.x > 3.5) {
+  // Tidal water (Stormreach): dark sea water with foam streaks running with the flow, white water along the banks
+  // of the channel, and still, dark tide pools and puddles (flow 0).
+  float fl = min(vSurf.z, 1.0), t = wFlow;
+  float f1 = cwN(vec2(vTuv.x * 1.8, vTuv.y * 0.8 - t * 0.6)), f2 = cwN(vec2(vTuv.x * 4.4 + 5.0, vTuv.y * 2.0 - t * 1.2)), f3 = cwN(vec2(vTuv.x * 10.0 - 2.0, vTuv.y * 4.6 - t * 2.0));
+  float streak = smoothstep(0.55, 0.78, f1 * 0.5 + f2 * 0.33 + f3 * 0.17);
+  float bank = smoothstep(0.42, 0.78, abs(vTuv.x) + (f2 - 0.5) * 0.35) * step(0.5, vSurf.z);
+  wMask = clamp((streak * 0.75 + bank * (0.55 + 0.45 * f3)) * fl, 0.0, 1.0);
+  diffuseColor.rgb = mix(uWatA * (0.75 + 0.5 * wn2), uWatB * (0.8 + 0.3 * f3), wMask);
 } else if (uWat.x > 2.5) {
   wMask = smoothstep(0.56, 0.68, wn1 * 0.55 + wn2 * 0.45 + 0.12 * (1.0 - min(vSurf.z, 1.0))) * step(0.01, vSurf.z);
   diffuseColor.rgb = mix(uWatA, uWatB * (0.75 + 0.5 * wn2), wMask);
-}` : 'vec4 cwT = texture(uTexA, vec3(vTuv, cwL)); diffuseColor.rgb *= cwT.rgb * 2.0;'}`)
+}` : 'vec4 cwT = texture(uTexA, vec3(vTuv, cwL)); diffuseColor.rgb *= cwT.rgb * 2.0 * (1.0 - uWet.y);'}`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor = clamp(vSurf.y * (1.15 - 0.3 * cwT.a), 0.045, 1.0);
 ${water ? `if (uWat.x > 0.5 && uWat.x < 1.5) roughnessFactor = mix(0.09, 0.62, wMask);
 else if (uWat.x > 1.5 && uWat.x < 2.5) roughnessFactor = mix(0.55, 0.96, wMask);
-else if (uWat.x > 2.5) roughnessFactor = mix(roughnessFactor, 0.9, wMask);` : ''}`)
+else if (uWat.x > 3.5) roughnessFactor = mix(0.07, 0.75, wMask);
+else if (uWat.x > 2.5) roughnessFactor = mix(roughnessFactor, 0.9, wMask);` : 'roughnessFactor *= 1.0 - uWet.x * mix(0.8, 0.4, cwT.a);'}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 ${water ? `{
   float h0 = cwRipple(vTuv, wFlow, vSurf.z) + wMask * uWat.w;

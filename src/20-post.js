@@ -63,7 +63,7 @@ uniform sampler2D tColor; uniform sampler2D tDepth;
 uniform mat4 uInvVP; uniform vec3 uCamDir; uniform vec2 uPx; uniform float uTime;
 uniform vec3 uLightPos[${R.NL}]; uniform vec3 uLightCol[${R.NL}];
 uniform vec3 uMistAmb; uniform vec4 uMist;
-uniform vec3 uAO;
+uniform vec3 uAO; uniform float uAOFloor;
 uniform vec2 uDither; uniform vec2 uWind;
 ${GLSL_BAYER}
 vec3 wpos(vec2 uv, float d){ vec4 p = uInvVP * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return p.xyz / p.w; }
@@ -80,7 +80,8 @@ void main(){
     vec3 ddy = abs(du - d) < abs(d - dd) ? wpos(vUv + vec2(0.0, uPx.y), du) - P : P - wpos(vUv - vec2(0.0, uPx.y), dd);
     vec3 N = normalize(cross(ddx, ddy)); if (dot(N, uCamDir) > 0.0) N = -N;
     float occ = 0.0, ang = bayer4(gl_FragCoord.xy + uDither) * 6.2831853;
-    for (int i = 0; i < 10; i++) {
+    // No ambient occlusion below uAOFloor (the open sea around Stormreach: flat, and a lot of pixels).
+    if (P.y > uAOFloor) for (int i = 0; i < 10; i++) {
       float fi = (float(i) + 0.5) / 10.0, a = ang + float(i) * 2.39996;
       vec2 suv = vUv + vec2(cos(a), sin(a)) * uAO.y * sqrt(fi) * uPx;
       vec3 V = wpos(suv, texture2D(tDepth, suv).x) - P;
@@ -100,7 +101,7 @@ void main(){
 }`, {
     tColor: { value: null }, tDepth: { value: null }, uInvVP: { value: new THREE.Matrix4() }, uCamDir: { value: new THREE.Vector3() }, uPx: { value: new THREE.Vector2() }, uTime: SH.uTime,
     uLightPos: { value: R.lightPos }, uLightCol: { value: R.lightCol }, uMistAmb: { value: new THREE.Vector3(0.05, 0.08, 0.14) }, uMist: { value: new THREE.Vector4(-0.3, 0.42, 0.75, 0.1) },
-    uAO: { value: new THREE.Vector3(1.0, 18, 0.7) }, uDither: { value: R.ditherOfs }, uWind: { value: new THREE.Vector2() },
+    uAO: { value: new THREE.Vector3(1.0, 18, 0.7) }, uAOFloor: { value: -1e9 }, uDither: { value: R.ditherOfs }, uWind: { value: new THREE.Vector2() },
   });
 
   M.dof = fsMat(`

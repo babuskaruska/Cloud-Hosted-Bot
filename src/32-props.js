@@ -277,21 +277,39 @@ function buildKeep(B) {
   for (const s of [-1, 1]) { TG.seg([s * 1.32, 1.9, -.08], [s * 1.32, 2.1, .32], .035, .03, COL.iron, { l: L_METAL, n: 4 }); TG.cyl(.09, .14, s * 1.32, 2.14, .34, COL.iron, { n: 6, l: L_METAL, rt: 1.4 }); B.fires.push({ x: kx + s * 1.32, y: ky + 2.3, z: oz + .34, size: .42, type: 'sconce' }); }
   TG.cyl(1.5, 2.4, 2.4, 1.2, -4.2, sdk, { n: 8, l: L_MASON, rt: .92 });
   for (let k = 0; k < 8; k++) { const a = (k + .5) / 8 * TAU, h = rng.range(.2, 1.3); if (rng() < .3) continue; mas(TG, .9, h, .4, 2.4 + Math.cos(a) * 1.2, 2.4 + h / 2, -4.2 + Math.sin(a) * 1.2, null, { r: [0, -a + HPI, 0] }); }
-  const bx = -2.6, bz = -.95, bh = 7.3;
+  const bx = -2.6, bz = -.95, bh = 7.3, LH = !!B.bio.lighthouse;
   TT.cyl(1.9, 1.3, bx, .65, bz, sdk, { n: 8, l: L_MASON, rt: .84 });
-  TT.cyl(1.52, bh, bx, bh / 2, bz, st, { n: 8, l: L_MASON, rt: .9, jit: .03 });
-  for (let c = 0; c < 6; c++) TT.cyl(1.54 - c * .027, .2, bx, 1.7 + c * 1.0, bz, mc(), { n: 8, l: L_MASON });
+  if (LH) {
+    // Stormreach: a lighthouse. Whitewashed and red bands, a railed gallery and a lantern room with a copper roof.
+    const wht = C(0xaaa69a), red = C(0x7e2e26), nb = 6, hb = (bh - 1.3) / nb;
+    for (let c = 0; c < nb; c++) TT.cyl(1.52 - c * .03, hb, bx, 1.3 + (c + .5) * hb, bz, mulC(c & 1 ? red : wht, .9 + .15 * rng()), { n: 10, l: L_MASON, rt: (1.49 - c * .03) / (1.52 - c * .03), jit: .03 });
+    TT.cyl(1.56, .2, bx, 1.3, bz, mulC(wht, .7), { n: 10, l: L_MASON });
+  } else {
+    TT.cyl(1.52, bh, bx, bh / 2, bz, st, { n: 8, l: L_MASON, rt: .9, jit: .03 });
+    for (let c = 0; c < 6; c++) TT.cyl(1.54 - c * .027, .2, bx, 1.7 + c * 1.0, bz, mc(), { n: 8, l: L_MASON });
+  }
   TT.cyl(1.42, .55, bx, bh - .15, bz, sl, { n: 8, l: L_MASON, rt: 1.26 });
   TT.cyl(1.82, .22, bx, bh + .22, bz, st, { n: 8, l: L_MASON });
-  for (let k = 0; k < 8; k++) { const a = (k + .5) / 8 * TAU; if (k === 1) continue; mas(TT, .6, .5, .32, bx + Math.cos(a) * 1.6, bh + .58, bz + Math.sin(a) * 1.6, null, { r: [0, -a + HPI, 0] }); }
-  for (let k = 0; k < 4; k++) { const a = k / 4 * TAU + .4; TT.box(.12, .9, .12, bx + Math.cos(a) * 1.45, bh * (.4 + (k & 1) * .22), bz + Math.sin(a) * 1.45, COL.black, { jit: 0, r: [0, -a, 0] }); }
-  for (let k = 0; k < 5; k++) { const a = k / 5 * TAU + .2; TT.seg([bx + Math.cos(a) * 1.4, bh - .55, bz + Math.sin(a) * 1.4], [bx + Math.cos(a) * 2.2, bh - .4, bz + Math.sin(a) * 2.2], .07, .06, COL.woodD, { l: L_WOOD, n: 4 }); }
+  if (LH) {
+    const rail = C(0x2a2e34), cu = C(0x4a7a6a), top = bh + 4.1;
+    for (let k = 0; k < 16; k++) { const a = k / 16 * TAU; TT.box(.05, .62, .05, bx + Math.cos(a) * 1.72, bh + .63, bz + Math.sin(a) * 1.72, rail, { l: L_METAL, jit: 0 }); }
+    for (const y of [bh + .95, bh + .62]) TT.add(gTorus(16, .03, 3), { s: 1.72, p: [bx, y, bz], r: [HPI, 0, 0], c: rail, l: L_METAL });
+    for (let k = 0; k < 8; k++) { const a = (k + .5) / 8 * TAU; TT.box(.07, top - bh - .85, .07, bx + Math.cos(a) * 1.02, (top + bh + .85) / 2, bz + Math.sin(a) * 1.02, rail, { l: L_METAL, jit: 0 }); }
+    TT.add(gTorus(8, .05, 3), { s: 1.04, p: [bx, top, bz], r: [HPI, 0, 0], c: rail, l: L_METAL });
+    TT.cyl(1.36, 1.0, bx, top + .5, bz, cu, { n: 8, rt: .12, l: L_METAL, rough: .45 });
+    TT.sph(.15, bx, top + 1.1, bz, cu, { l: L_METAL, rough: .45 }); TT.cone(.05, .5, bx, top + 1.45, bz, rail, { n: 4, l: L_METAL });
+    for (let k = 0; k < 4; k++) { const a = k / 4 * TAU + .4; TT.box(.14, .7, .12, bx + Math.cos(a) * 1.5, bh * (.36 + (k & 1) * .26), bz + Math.sin(a) * 1.5, C(0xffc070), { jit: 0, r: [0, -a, 0], emis: .14 }); }
+  } else {
+    for (let k = 0; k < 8; k++) { const a = (k + .5) / 8 * TAU; if (k === 1) continue; mas(TT, .6, .5, .32, bx + Math.cos(a) * 1.6, bh + .58, bz + Math.sin(a) * 1.6, null, { r: [0, -a + HPI, 0] }); }
+    for (let k = 0; k < 4; k++) { const a = k / 4 * TAU + .4; TT.box(.12, .9, .12, bx + Math.cos(a) * 1.45, bh * (.4 + (k & 1) * .22), bz + Math.sin(a) * 1.45, COL.black, { jit: 0, r: [0, -a, 0] }); }
+    for (let k = 0; k < 5; k++) { const a = k / 5 * TAU + .2; TT.seg([bx + Math.cos(a) * 1.4, bh - .55, bz + Math.sin(a) * 1.4], [bx + Math.cos(a) * 2.2, bh - .4, bz + Math.sin(a) * 2.2], .07, .06, COL.woodD, { l: L_WOOD, n: 4 }); }
+  }
   TT.cyl(.6, .55, bx, bh + .6, bz, sdk, { n: 8, l: L_MASON });
   TT.cyl(.72, .4, bx, bh + 1.06, bz, COL.iron, { n: 8, l: L_METAL, rt: 1.4, rough: .7 });
   for (let k = 0; k < 4; k++) { const a = k / 4 * TAU + .5; TT.seg([bx + Math.cos(a) * .72, bh + .35, bz + Math.sin(a) * .72], [bx + Math.cos(a) * .96, bh + 1.22, bz + Math.sin(a) * .96], .04, .04, COL.iron, { l: L_METAL, n: 4 }); }
   TT.cyl(.9, .1, bx, bh + 1.24, bz, COL.ember, { n: 8, emis: .5, jit: 0 });
   for (let k = 0; k < 4; k++) { const a = k * 1.3; TT.seg([bx + Math.cos(a) * .7, bh + 1.28, bz + Math.sin(a) * .7], [bx - Math.cos(a) * .6, bh + 1.48, bz - Math.sin(a) * .6], .1, .09, mulC(COL.bark, .7), { l: L_WOOD, n: 5, emis: .05 }); }
-  clothPanel(TT, { x0: bx - .45, x1: bx + .45, yTop: 5.2, len: 2.3, z: bz + 1.5, col: COL.clothR, col2: mulC(COL.gold, .6), rng, sway: .45 });
+  if (!LH) clothPanel(TT, { x0: bx - .45, x1: bx + .45, yTop: 5.2, len: 2.3, z: bz + 1.5, col: COL.clothR, col2: mulC(COL.gold, .6), rng, sway: .45 });
   B.structs.push({ soup: new Soup().merge(TG, { p: [kx, ky, oz], ao: [0, .9, .7] }), cx: kx, cy: ky, cz: oz - 2.5, kind: 'keep' });
   B.structs.push({ soup: new Soup().merge(TT, { p: [kx, ky, oz], ao: [0, 1.4, .65] }), cx: kx + bx, cy: ky, cz: oz + bz, kind: 'beaconTower' });
   B.beacon = { x: kx + bx, y: ky + bh + 1.45, z: oz + bz };
@@ -354,12 +372,15 @@ function scatterProps(B) {
   };
   const bio = B.bio;
   const at = (x, z, build, r, T0) => { if (Math.abs(x) > BH - .8 || Math.abs(z) > BH - .8) return; const T = T0 || new Soup(); if (!T0) build(T); B.put(T, x, z, { ry: rng() * TAU }); if (r) placed.push([x, z, r]); };
-  drop(T => PROP.towerRuin(T, rng), 2.9, { far: 3.6 });
+  const X = { B, rng, drop, find, beside, free, at, H, placed, slope };
+  // A land's big set pieces go down first, where there is still room (BIOME_DRESS.<key>First).
+  if (BIOME_DRESS[bio.key + 'First']) BIOME_DRESS[bio.key + 'First'](X);
+  if (!bio.noRuin) drop(T => PROP.towerRuin(T, rng), 2.9, { far: 3.6 });
   drop(T => PROP.well(T, rng), 1.3, { near: 5.5, far: 2.6 });
   drop(T => PROP.statue(T, rng), 1.2, { near: 6, far: 2.4 });
   drop(T => PROP.ribcage(T, rng), 2.4, { far: 2.8 });
   for (let k = 0; k < 3; k++) { const len = rng.range(4, 7); drop(T => PROP.wallRun(T, rng, len, rng.range(1.8, 3.2)), len * .5, { far: 1.6 }); }
-  { const g = find(3.2, { far: 3.4 }); if (g) {
+  { const g = bio.noRuin ? null : find(3.2, { far: 3.4 }); if (g) {
       const ry = rng() * TAU, cs = Math.cos(ry), sn = Math.sin(ry);
       for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) { if (rng() < .2) continue; const lx = (c - 1.5) * 1.15 + rng.range(-.15, .15), lz = (r - 1) * 1.5 + rng.range(-.15, .15), T = new Soup(); PROP.grave(T, rng); B.put(T, g[0] + lx * cs + lz * sn, g[1] - lx * sn + lz * cs, { ry: ry + rng.range(-.2, .2) }); }
       for (const [lx, lz, a, len] of [[0, -2.5, 0, 4.6], [-2.8, -.2, HPI, 4.2], [2.8, .5, HPI, 3]]) { const T = new Soup(); PROP.fence(T, rng, len); B.put(T, g[0] + lx * cs + lz * sn, g[1] - lx * sn + lz * cs, { ry: ry + a }); }
@@ -382,9 +403,9 @@ function scatterProps(B) {
   for (let k = 0; k < 6; k++) { const x = B.lay.cave.x + rng.range(1.8, 7), z = B.zc + rng.sign() * rng.range(1.9, 5); if (free(x, z, .4, .2)) drop(T => PROP.bones(T, rng, rng.int(4, 7)), .5, { at: [x, z], ao: null }); }
   for (let k = 0; k < 5; k++) drop(T => PROP.bones(T, rng, rng.int(3, 5)), .45, { ao: null });
   for (let k = 0; k < 3; k++) drop(T => PROP.cairn(T, rng), .5, {});
-  BIOME_DRESS[bio.key]({ B, rng, drop, find, beside, free, at, H, placed, slope });
+  BIOME_DRESS[bio.key](X);
   const trees = [];
-  for (const [kind, cnt, h0, h1] of bio.trees) for (let k = 0; k < cnt; k++) { const h = rng.range(h0, h1), p = drop(T => PROP[kind](T, rng, h), kind === 'tree' || kind === 'charred' ? .55 : .8, { far: 1.0, water: kind === 'palm' && k < 6 ? 5.5 : 0 }); if (p && kind === 'tree') trees.push([p, h]); }
+  for (const [kind, cnt, h0, h1] of bio.trees) for (let k = 0; k < cnt; k++) { const h = rng.range(h0, h1), p = drop(T => PROP[kind](T, rng, h), kind === 'tree' || kind === 'charred' ? .55 : kind === 'windbent' ? 1.1 : .8, { far: 1.0, water: kind === 'palm' && k < 6 ? 5.5 : 0 }); if (p && kind === 'tree') trees.push([p, h]); }
   for (let k = 0; k < bio.webs && k < trees.length; k++) {
     const [p, h] = trees[k], y = H(p[0], p[1]), a = rng() * TAU, T = new Soup();
     PROP.web(T, [0, h * .42, 0], [Math.cos(a) * .9, h * .55, Math.sin(a) * .9], [Math.cos(a) * .7, h * .18, Math.sin(a) * .7]);
@@ -396,7 +417,7 @@ function scatterProps(B) {
     const x = rng.range(-BH + .8, BH - .8), z = rng.range(-BH + .8, BH - .8);
     if (B.dRoadAt(x, z) < ROAD_HALF + .35 || waterD(x, z) < 1.1 || slope(x, z) > .5) continue;
     if (Math.abs(x - B.kx) < 5.4 && z < -11.6) continue;
-    const T = new Soup(); PROP.tuft(T, rng); B.put(T, x, z, { ao: null, s: rng.range(.8, 1.5) });
+    const T = new Soup(); PROP[bio.tuft || 'tuft'](T, rng); B.put(T, x, z, { ao: null, s: rng.range(.8, 1.5) });
   }
   for (let k = 0; k < 60; k++) {
     const i = rng.int(16, B.n - 12), side = rng.sign(), d = ROAD_HALF + rng.range(.1, .45), x = B.px[i] - B.tz[i] * side * d, z = B.pz[i] + B.tx[i] * side * d;

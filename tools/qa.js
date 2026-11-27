@@ -8,7 +8,7 @@ const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path');
 const ROOT = path.dirname(__dirname), BASE = path.join(__dirname, 'qa-baseline.json'), SHOTS = path.join(__dirname, 'shots');
 const argv = process.argv.slice(2), QUICK = argv.includes('--quick'), SAVE = argv.includes('--save');
-const LANDS = ['ashen', 'frost', 'fen', 'ember', 'dunes'];
+const LANDS = ['ashen', 'frost', 'fen', 'ember', 'dunes', 'storm'];
 const SIM_SECONDS = QUICK ? 600 : 1500, SEEDS = QUICK ? [3] : [3, 11, 27];
 const chrome = require('./chrome.js');
 fs.mkdirSync(SHOTS, { recursive: true });
