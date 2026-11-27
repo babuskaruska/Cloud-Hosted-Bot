@@ -1,6 +1,6 @@
 
 const CAM = { yaw: PI / 4, elev: 38 * PI / 180, dist: 90, x: 0, y: 0, z: 0, zoom: 1, fx: 0, fz: 0, sx: 0, sz: 0, man: false, mx: 0, mz: 0, mzoom: 1, base: 27, aspect: 1.6, za: null, ent: null,
-  // Title backdrop: while CAM.menuMode is true (the main menu sets it) the camera drifts in a slow arc over the demo
+  // Title backdrop: while CAM.menuMode is true (or a main-menu screen is open over the demo, UI.mainMenu) the camera drifts in a slow arc over the demo
   // board, lower and wider, with the board framed below the logo. menuK eases 0..1 in and out, so setting it back to
   // false hands the view to the follow camera smoothly. menuT: the arc's clock.
   menuMode: false, menuK: 0, menuR: 0, menuT: 0 };
@@ -12,7 +12,7 @@ function applyCamera() {
   const aspect = R.dw / R.dh, base = Math.max(R.viewH, lerp(R.fitTall, R.fitW, smooth(.62, 1.15, aspect)) / aspect), vh = base / CAM.zoom;
   CAM.base = base; CAM.aspect = aspect;
   R.px = vh / R.ih; R.viewW = vh * aspect; R.dofScale = base / R.viewH / CAM.zoom;
-  _ct.set(CAM.x, CAM.y, CAM.z).addScaledVector(_cr, FX.shakeX).addScaledVector(_cu, FX.shakeY - R.shiftY + (R.hudTop || 0) / R.dh * vh * .5 * (1 - CAM.menuK) + CAM.menuK * vh * .13);
+  _ct.set(CAM.x, CAM.y, CAM.z).addScaledVector(_cr, FX.shakeX).addScaledVector(_cu, FX.shakeY - R.shiftY + (R.hudTop || 0) / R.dh * vh * .5 * (1 - CAM.menuK) + CAM.menuK * vh * (aspect < .8 ? .26 : .05));
   const u = _ct.dot(_cr), v = _ct.dot(_cu), us = Math.round(u / R.px) * R.px, vs = Math.round(v / R.px) * R.px;
   R.sub.set((u - us) / R.px, (v - vs) / R.px);
   R.ditherOfs.set(((Math.round(us / R.px) % 8) + 8) % 8, ((Math.round(vs / R.px) % 8) + 8) % 8);
@@ -60,15 +60,17 @@ function updateCamera(dt) {
 // The title backdrop's arc (see CAM.menuMode), blended over the follow camera by menuK.
 function updateMenuCamera(dt) {
   dt = Math.min(dt, .1);
-  CAM.menuR = sat(CAM.menuR + (CAM.menuMode ? dt / 2.4 : -dt / 1.6));
+  // On while CAM.menuMode is set, or by itself while a main-menu screen is open over the AI demo (UI.mainMenu).
+  const on = CAM.menuMode || !!UI.mainMenu;
+  CAM.menuR = sat(CAM.menuR + (on ? dt / 2.4 : -dt / 1.6));
   const k = CAM.menuK = CAM.menuR * CAM.menuR * (3 - 2 * CAM.menuR);
   if (k <= 0) { CAM.yaw = CAM_YAW; CAM.elev = CAM_ELEV; return; }
   const t = CAM.menuT += dt;
-  if (CAM.menuMode) { CAM.man = false; CAM.za = null; CAM.ent = null; }
+  if (on) { CAM.man = false; CAM.za = null; CAM.ent = null; }
   CAM.yaw = lerp(CAM_YAW, CAM_YAW + .46 * Math.sin(t * .041 + .5) + .08 * Math.sin(t * .013), k);
   CAM.elev = lerp(CAM_ELEV, (30.5 + 3.5 * Math.sin(t * .067 + 1.3)) * PI / 180, k);
   CAM.x = lerp(CAM.x, 2.6 * Math.sin(t * .029 + .8), k); CAM.z = lerp(CAM.z, 2.2 * Math.sin(t * .023 + 2.1), k);
-  CAM.zoom = lerp(CAM.zoom, (CAM.aspect < .8 ? .72 : .8) + .04 * Math.sin(t * .053), k);
+  CAM.zoom = lerp(CAM.zoom, (CAM.aspect < .8 ? .8 : .82) + .04 * Math.sin(t * .053), k);
 }
 function camGrab() { if (!CAM.man) { CAM.man = true; CAM.mx = CAM.x; CAM.mz = CAM.z; CAM.mzoom = CAM.zoom; } }
 function camZoomMin() { return Math.min(1, CAM.base * CAM.aspect / 56, CAM.base / 46); }
@@ -263,8 +265,12 @@ function boot() {
   window.addEventListener('pagehide', saveOnHide);
   for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => setTimeout(resizeRenderer, 60));
   window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, render() { applyCamera(); renderFrame(); }, autoScale, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, save: { SAVE, snapshot, write: writeSave, read: continueOffer, valid: validSave, clear: clearSave, restore: restoreRun, onHide: saveOnHide }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
-  // A saved run is offered over the demo, except in test sessions (these URL flags set up a run of their own).
-  if (!['seed', 'manual', 'ff', 'biome', 'level', 'k', 'board', 'phase', 'nosave'].some(f => HASH[f] !== undefined)) { const sv = continueOffer(); if (sv) UI.offerContinue(sv); }
+  window.__cw.META = META; window.__cw.STORY = STORY; window.__cw.MENU = MENU; window.__cw.TUT = TUT;
+  window.__cw.meta = { startRun, startDemo, abandonRun, bankRun, buyUpgrade, applyMeta, embersFor, heatRules, UPGRADES, HEAT, saveMeta, loadMeta, rerollMods, activeMods };
+  // The main menu over the AI demo (Continue there replaces the old "Welcome back" offer), except in test sessions:
+  // their URL flags set up a run of their own and play exactly as before.
+  G.runSeed = G.boardSeed;
+  if (!TEST_SESSION) MENU.open('title');
   if (HASH.k) G.k = +HASH.k;
   if (HASH.ff) { const n = Math.round(+HASH.ff * 30); for (let i = 0; i < n; i++) step(1 / 30); CAM.sx = CAM.fx; CAM.sz = CAM.fz; R.fade = 1; }
   if (HASH.phase) setPhase(HASH.phase);
@@ -276,6 +282,6 @@ function boot() {
 }
 function start() {
   try { boot(); }
-  catch (e) { const ld = document.getElementById('load'); if (ld) ld.innerHTML = 'Cinderwatch could not start.<br><small>It needs a browser with WebGL 2 turned on.</small>'; throw e; }
+  catch (e) { const ld = document.getElementById('load'); if (ld) ld.innerHTML = 'Lanternhold could not start.<br><small>It needs a browser with WebGL 2 turned on.</small>'; throw e; }
 }
 if (HASH.manual || HASH.ff) start(); else requestAnimationFrame(() => setTimeout(start, 0));

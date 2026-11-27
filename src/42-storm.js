@@ -181,13 +181,14 @@ function updateStorm(dt) {
   STORM.vis = damp(STORM.vis, STORM.want, STORM.want ? 1.1 : 1.6, dt);
   const live = G.phase === 'play' || G.phase === 'defeat' || G.phase === 'clear';
   // Ambient lightning: far out at sea, behind the board as the camera sees it.
-  if (b.lightning && STORM.vis > .5) {
+  // (A land with lightning but no sea, a generated rain land, has its bolts fall into the dark below the slab.)
+  if (b.lightning && (b.sea ? STORM.vis > .5 : G.phase !== 'crumble' && G.phase !== 'rise')) {
     STORM.next -= dt;
     if (STORM.next <= 0) {
       STORM.next = b.lightning * frr(.6, 1.4);
       const dist = frr(.35, 1), back = Math.atan2(-Math.sin(CAM.yaw), -Math.cos(CAM.yaw)) + frr(-1.15, 1.15), r = lerp(21, 31, dist);
       const x = CAM.x + Math.cos(back) * r, z = CAM.z + Math.sin(back) * r, fl = stormFlash(x, z, dist, frr(.75, 1.05));
-      if (frnd() < .8) { fl.bolt = makeBolt([x + frr(-6, 6), 46, z + frr(-6, 6)], [x, STORM.level, z], .2, 2 + Math.floor(frr(0, 3))); fl.w = [.11, .75]; fl.strike = [x, z]; }
+      if (frnd() < .8) { fl.bolt = makeBolt([x + frr(-6, 6), 46, z + frr(-6, 6)], [x, b.sea ? STORM.level : -7, z], .2, 2 + Math.floor(frr(0, 3))); fl.w = [.11, .75]; fl.strike = [x, z]; }
     }
   }
   let k = 0, sx = 0, sz = 0, sk = 0;

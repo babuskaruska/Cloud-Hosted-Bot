@@ -17,8 +17,9 @@ const PROC_KEY = 'proc';
 const PROC = { cache: new Map() };
 
 // The seed of the procedural lands: the run seed when the game sets one, else the boot seed (BIOME.seed).
+// (A campaign or Long Night run sets G.runSeed at its start and saves it; the AI demo and test sessions use the boot seed.)
 function procSeed() {
-  if (typeof G !== 'undefined' && G && Number.isFinite(G.runSeed)) return G.runSeed;
+  if (typeof G !== 'undefined' && G && G.mode && G.mode !== 'demo' && Number.isFinite(G.runSeed) && G.runSeed > 0) return G.runSeed;
   return Number.isFinite(BIOME.seed) ? BIOME.seed : 1;
 }
 // The land at absolute land index j (BIOME.start + board index): a hand-made one below 6, a generated one from 6 on.
@@ -247,7 +248,7 @@ function procBiome(seed, i) {
   if (A.tuft) bio.tuft = A.tuft;
   if (A.noRuin) bio.noRuin = 1;
   if (water === 2) { bio.bankGlow = 1; bio.vein = 1; bio.cracks = 1; } else if (D.key === 'ember' && rng() < .5) bio.vein = 1;
-  if (weather === 'rain') bio.wet = [rng.range(.42, .62), rng.range(.1, .16)];
+  if (weather === 'rain') { bio.wet = [rng.range(.42, .62), rng.range(.1, .16)]; if (rng() < .6) bio.lightning = rng.range(11, 20); }
   if (sea) { bio.sea = sea; bio.seaCol = [.008, .02, .026, .4, .46, .5].map((v, k) => v * wTint[k % 3]); if (A.lighthouse) bio.lighthouse = 1; if (weather === 'rain') bio.lightning = rng.range(9, 16); if (water === 4) bio.wat[0] = 4; }
   PROC.cache.set(id, bio);
   if (PROC.cache.size > 48) PROC.cache.delete(PROC.cache.keys().next().value);

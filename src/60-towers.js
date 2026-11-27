@@ -352,7 +352,7 @@ function findDense(x, z, range, minRange, splash) {
 }
 function findTarget(x, z, range, air, ground, minRange = 0) {
   if (G.phase !== 'play' || TOWER_STUN) return null;
-  range *= G.rangeMul || 1;
+  range *= (G.rangeMul || 1) * modMul('range');
   let best = null, bp = -1; const r2 = range * range, m2 = minRange * minRange;
   for (const m of G.mons) {
     if (m.dead || m.hp <= 0 || !m.vis) continue; if (m.fly ? !air : !ground) continue;
@@ -730,7 +730,7 @@ function addGroundFire(x, z, r, secs, dps, tower) {
   sfx('burn', x, z, .5);
 }
 function updateHazards(dt) {
-  updateEvents(dt);
+  updateEvents(dt); updateEndless(dt);
   if (G.phase !== 'play') { G.chain.length = 0; G.burns.length = 0; return; }
   for (let i = G.chain.length - 1; i >= 0; i--) {
     const c = G.chain[i]; c.t -= dt; if (c.t > 0) continue; swapRemove(G.chain, i);

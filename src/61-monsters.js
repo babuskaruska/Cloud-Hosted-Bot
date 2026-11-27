@@ -70,9 +70,11 @@ function removeMonster(m) { if (m.carry) dropPrey(m); if (m.prey) { if (m.prey.s
 function slowMonster(m, f, t) { if (m.def.boss) { f *= .4; t *= .6; } if (m.def.slowRes) f *= 1 - m.def.slowRes; m.slowF = Math.max(m.slowF, f); m.slowT = Math.max(m.slowT, t); }
 function hitMonster(m, dmg, kind, dx, dz, tower) {
   if (m.dead || m.hp <= 0) return false;
+  if (!m.def.boss) dmg *= modMul('dmgIn');
   if (m.eth) { if (kind === 'arrow' || kind === 'sword') { if (rnd() < .5) fxTimed(0, m.x + rr(-.2, .2), m.y + m.hitH + rr(-.2, .3), m.z + rr(-.2, .2), .5, .5, .5, .9, 1.8, .7, .18); return false; } dmg *= .5; }
   if (kind === 'arrow' && m.def.armor) { const ap = (tower && tower.def && tower.def.ap) || 0; dmg *= m.def.armor + (1 - m.def.armor) * ap; if (rnd() < .6) { fxSparks(m.x, m.y + m.hitH, m.z, 3, 3, 2.4, 2.2, 1.6, { size: .05 }); } }
   if (tower && tower.oc) dmg *= 1 + OC_DMG * tower.oc;
+  if (tower && G.towerDmg !== 1) dmg *= G.towerDmg; // Keen Steel (66-meta.js); exactly 1 outside a run
   if (m.def.weak && m.def.weak[kind]) dmg *= m.def.weak[kind];
   if (m.low) dmg *= m.def.swoop.low;
   if (m.ward > 0) { const d0 = dmg; dmg = wardAbsorb(m, dmg); if (tower) tower.recent += d0 - dmg; if (dmg <= 0) { m.flash = .6; m.hitAt = G.t; return false; } }
@@ -129,6 +131,7 @@ function killMonster(m, kind, dx, dz, tower) {
   const bounty = Math.max(1, Math.round(def.bounty * G.bountyMul * (m.bmul || 1)));
   dropCoins(m.x, m.y + m.hitH * .6, m.z, bounty, clamp(Math.round(bounty / 3), 1, 6));
   removeMonster(m);
+  modOnKill(m);
   if (def.explode) {
     if (kind === 'blast') G.chain.push({ t: rr(.12, .24), x: m.x, y: m.y, z: m.z, ex: def.explode });
     else blastAround(m, def.explode);
@@ -212,7 +215,7 @@ function drawMonster(m, t) {
   if (m.slowT > 0 && rnd() < .2) { const a = rnd() * TAU; fxBolt([m.x, m.y + m.hitH, m.z], [m.x + Math.cos(a) * m.rad * 1.4, m.y + m.hitH + rr(-.3, .4), m.z + Math.sin(a) * m.rad * 1.4], .08, [.4, .65, 1.3], .028); }
   if (m.frozen > 0) { drawFrozen(m, sc); const a = Math.min(1, m.frozen * 2); FX.add.push(m.x, m.y + m.hitH, m.z, (1.2 + m.rad * 2.5) * sc, (1.4 + m.rad * 2.5) * sc, 0, 0, .5, .85, 1.3, .3 * a, 2, 0, 0, 0); if (rnd() < .15) fxPart(m.x + rr(-.25, .25), m.y + rr(.1, m.hitH * 2), m.z + rr(-.25, .25), 0, rr(-.2, .3), 0, rr(.4, .8), .045, 1.2, 1.6, 2, { drag: 1 }); }
   // Health bars only where they say something: hurt monsters, elites, warded ones and bosses. Full-health ordinary ones stay clean.
-  if ((m.vis || m.fly) && (m.hp < m.maxHp * .995 || m.def.boss || m.elite || m.ward > 0)) G.hbars.push({ x: m.x, y: m.y + m.def.top * sc / m.def.scale + .22, z: m.z, f: sat(m.hp / m.maxHp), boss: !!m.def.boss, man: false, name: m.def.boss ? m.def.name : m.elite ? eliteName(m) : null, elite: m.elite || null, sh: m.ward > 0 ? sat(m.ward / m.maxHp) : 0 });
+  if ((m.vis || m.fly) && (m.hp < m.maxHp * .995 || m.def.boss || m.elite || m.ward > 0)) G.hbars.push({ x: m.x, y: m.y + m.def.top * sc / m.def.scale + .22, z: m.z, f: sat(m.hp / m.maxHp), boss: !!m.def.boss, man: false, name: m.def.boss ? m.affixName || m.def.name : m.elite ? eliteName(m) : null, elite: m.elite || null, sh: m.ward > 0 ? sat(m.ward / m.maxHp) : 0 });
 }
 
 // A monster that is not drawn this step still makes the same calls into the gameplay random stream as
@@ -390,7 +393,7 @@ function updateUnits(dt) {
     if (def.tide && m.vis && m.s > B.cave.s + 3) { m.tdT -= dt; if (m.tdT <= 0) { m.tdT = def.tide.every * (m.rage ? .65 : 1); startTide(m); } }
     if (def.wardCast && m.vis && !m.dying) shamanWard(m, dt);
     if (m.shove > 0) m.shove = Math.max(0, m.shove - dt * 2.5);
-    let want = def.spd * m.spdMul * (1 - m.slowF) * (1 + m.haste) * (m.evMul || 1) * (m.tideT > 0 ? 1 + m.tideH : 1), hopMul = 1;
+    let want = def.spd * m.spdMul * (1 - m.slowF) * (1 + m.haste) * (m.evMul || 1) * modMul('spd') * (m.tideT > 0 ? 1 + m.tideH : 1), hopMul = 1;
     if (def.back) {
       // Hangs back: with no ally a few steps ahead it slows down and lets the column lead.
       let lo = 0, hi = nu, ahead = false; while (lo < hi) { const md = (lo + hi) >> 1; if (U[md].s <= m.s) lo = md + 1; else hi = md; }

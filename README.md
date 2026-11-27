@@ -1,17 +1,25 @@
-# Cinderwatch
+# Lanternhold
 
-A self-playing 3D isometric tower defense in a single HTML file.
+A dark-fantasy 3D isometric tower defense in a single HTML file.
 
-A handful of firelit towers hold the great beacon of a ruined keep against endless columns of monsters, across six lands from a dark mountain pass to a snowfield, a bog, a lava scar, a desert at dusk and a storm-lashed sea cliff. An AI commander plays from the moment the page loads, and you can take over at any time.
+The Hollowing has risen: a creeping dark that wakes the dead, and every beacon from the mountains to the sea has gone out. You are the Lanternkeeper, guided by the ghost of the old keeper, and your work is to light them again. Play the six-land **Campaign** and its story, then carry the lantern into **The Long Night**, an endless road of changing lands. Every run banks **embers** for the **Keeper's Tree**, and **Heat** tiers make the road harder for those who want more.
+
+Lanternhold grew out of **Cinderwatch** by kevintngo (MIT): a handful of firelit towers hold the great beacon of a ruined keep against endless columns of monsters, across six lands from a dark mountain pass to a snowfield, a bog, a lava scar, a desert at dusk and a storm-lashed sea cliff. An AI commander plays from the moment the page loads, and you can take over at any time.
 
 **[Play it in your browser](https://kevintngo.github.io/cinderwatch/)** · [Watch 20 seconds of gameplay](https://kevintngo.github.io/cinderwatch/media/gameplay-20s.mp4)
 
-> Imported from [kevintngo/cinderwatch](https://github.com/kevintngo/cinderwatch) (MIT). All credit to the original author.
+> Built on [kevintngo/cinderwatch](https://github.com/kevintngo/cinderwatch) (MIT). All credit for the original game to its author.
 
-The play link above is the original game. The build in this repository adds the features below; open `index.html` to play it.
+The play link above is the original Cinderwatch. Open `index.html` in this repository to play Lanternhold.
 
 ## What's new in this build
 
+- **Lanternhold:** a main menu over the AI demo (Continue, Campaign, The Long Night, Keeper's Tree, Codex, Settings) that works with touch, keys and a gamepad.
+- **Story:** an intro, a beat at the start of each land, a line from each boss, an ending after the sixth land and interludes in the Long Night, in a dialogue panel with pixel portraits. Each beat shows once; the Codex replays them.
+- **Embers and the Keeper's Tree:** every run that ends (by defeat or abandon) banks embers for waves, bosses, depth and story, times the Heat. Fourteen upgrades: starting gold, tower damage, lives, mana, spell cooldown and power, free first towers, bounty, wave gold, overcharge, branch and mend costs, mutator rerolls and Ember Heart.
+- **Heat 0 to 10:** each tier adds a rule (tougher, faster monsters, an extra mutator, fewer lives, earlier elites, less gold, crowned bosses, bigger waves...) and pays more embers. Beating the campaign opens Heat 1; reaching land 10 at Heat N opens N+1.
+- **A first-run tutorial** (build, upgrade, call a wave, cast a spell), skippable, shown once.
+- **The Codex:** the monsters you have met, the story so far, and lifetime records.
 - **Bigger battles:** up to 260 monsters alive at once (190 on phones), horde waves, and elite monsters (burning, shielded, hasted, splitting).
 - **Longer lands, a real economy:**
   - 8 waves per land, with the boss on the last.
@@ -76,8 +84,9 @@ The game needs no input. Your first command puts you in charge, and the AI comma
 | Drag the ground, arrow keys or `W` `A` `S` `D` | Move the view |
 | Double-click the ground | Zoom in there; again to zoom back out |
 | `F`, `0`, or the Follow the fight button | Hand the view back to the camera |
-| `Esc` | Close the menu |
-| Gamepad | Stick or D-pad selects a pad, A opens and confirms, B closes, X upgrades, Y calls the next wave |
+| `Esc` | Close the menu; with nothing open, the in-game menu (Resume, Settings, Abandon run) |
+| Main menu | Arrows or `W` `S` move, `Enter` or `Space` picks, `Esc` goes back; in a story beat `Space` goes on and `Esc` skips |
+| Gamepad | Stick or D-pad selects a pad, A opens and confirms, B closes, X upgrades, Y calls the next wave, Start opens the in-game menu |
 
 Browsers keep audio off until a gesture, so the first click, tap or key press turns the sound on.
 
@@ -92,7 +101,7 @@ The game plays in portrait and in landscape, and follows the screen when it turn
 | Tap a built tower | Upgrade, or sell (sell asks for a second tap) |
 | Tap a spell, then the road | Cast it (tap the spell again, or Cancel, to put it away) |
 | Tap Mend, under your gold | Buy back lives for the beacon |
-| Tap the gear | Settings and help: volumes, sound, graphics, how to play |
+| Tap the gear | The in-game menu: Resume, Settings (volumes, graphics, how to play), Abandon run |
 | Tap the wave plate | Call the next wave early |
 | Tap the commander plate | Hand command back to the AI, or take it |
 | Drag | Move the view |
@@ -132,7 +141,9 @@ This joins `src/*.js` into `index.html` and inlines three.js from `vendor/`.
 | `src/40-fx.js`, `41-weather.js` | Lights, particles, lightning, decals, snow, ash, dust and fireflies |
 | `src/50-rig.js`, `51-bestiary.js` | Characters built from instanced parts, debris, the models of the later monsters |
 | `src/60-towers.js`, `61-monsters.js`, `62-game.js` | Towers, monsters and the crowd, waves and the AI commander |
-| `src/70-pixelfont.js`, `72-ui.js` | Pixel font, HUD, menus, input |
+| `src/64-endless.js` | Long Night mutators and boss affixes |
+| `src/65-story.js`, `66-meta.js`, `67-tutorial.js` | Story beats and portraits; embers, the Keeper's Tree, Heat and run modes; the first-run tutorial |
+| `src/70-pixelfont.js`, `72-ui.js`, `73-menu.js` | Pixel font, HUD, input; the main menu and the other Lanternhold screens |
 | `src/80-audio.js` | Synthesized sound |
 | `src/90-main.js` | Camera and main loop |
 | `tools/` | Build script and test tools |
@@ -158,7 +169,7 @@ node tools/record.js capture 4 5130-5490,9870-10230 out.mp4
 
 `record.js` steps the game at a fixed 1/60 s, so a seed always replays the same way. `scan` logs what happens when, `stills` saves frames, and `capture` writes a video of the given frame ranges with the game's own audio.
 
-URL flags, for example `index.html#seed=4&fps=1`:
+URL flags, for example `index.html#seed=4&fps=1`. Any of `seed`, `manual`, `ff`, `biome`, `level`, `k`, `board`, `phase` or `nosave` makes a test session: no main menu, the AI demo rules (no upgrades, Heat or story), and nothing is saved.
 
 | Flag | Effect |
 | --- | --- |
@@ -174,4 +185,4 @@ URL flags, for example `index.html#seed=4&fps=1`:
 
 ## License
 
-[MIT](LICENSE). The build includes [three.js](https://threejs.org) r170, also MIT ([notice](vendor/LICENSE-three.txt)).
+[MIT](LICENSE), from the original Cinderwatch by kevintngo. The build includes [three.js](https://threejs.org) r170, also MIT ([notice](vendor/LICENSE-three.txt)).
