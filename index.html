@@ -11074,8 +11074,8 @@ const AU = (function () {
   };
   S.bossStep = (d, t, p) => {
     const k = rr(0.9, 1.1) * (1 - 0.2 * p), sh = shape(d, 1.6);
-    const g = gn(sh), o = osc('sine', 60 * k, t, 0.5, g); sw(o.frequency, t, 66 * k, 29 * k, 0.26); ad(g.gain, t, 1.0, 0.004, 0.36);
-    const n = gn(sh), nf = flt(n, 'lowpass', 150); noi(t, 0.4, nf, bufBrown); ad(n.gain, t, 0.9, 0.004, 0.25);
+    const g = gn(sh), o = osc('sine', 60 * k, t, 0.5, g); sw(o.frequency, t, 66 * k, 29 * k, 0.26); ad(g.gain, t, 0.75, 0.004, 0.36); // the sub, trimmed in round 10 (boss fights were 29% sub)
+    const n = gn(sh), nf = flt(n, 'lowpass', 150); noi(t, 0.4, nf, bufBrown); ad(n.gain, t, 0.7, 0.004, 0.25);
     // what a phone speaker can play: a woody body near 200 Hz and a dull crunch of earth
     const b = gn(d), bo = osc('triangle', 220 * k, t, 0.25, flt(b, 'lowpass', 800)); sw(bo.frequency, t, 250 * k, 120 * k, 0.12); ad(b.gain, t, 0.9, 0.002, 0.17);
     const m = gn(d), mf = flt(m, 'bandpass', 380 * k, 1.2); noi(t, 0.3, mf, bufPink); ad(m.gain, t, 1.6, 0.003, 0.2);
@@ -12147,6 +12147,42 @@ const AU = (function () {
   function glassTickD(d, t, vel) { const f = rr(4800, 7200), g = gn(d); osc('sine', f, t, 0.12, g); ad(g.gain, t, vel, 0.001, 0.09); const g2 = gn(d); osc('sine', f * 1.5, t, 0.06, g2); ad(g2.gain, t, vel * 0.3, 0.001, 0.04); }
 
   //  name: [fn, min gap s, reverb send, priority 0-3, duration s, gain, max voices of this kind]
+  // ---- Round 10: the Long Night's new mutators and the daily run. ----
+  // An Echo ghost rising where an elite fell (heard from G.mons: m.echo): a breathy swell that climbs, a glass tone that
+  // bends up a tritone through a hollow ring, and a soft whisper under it. Pale and short (about 1.2 s), so a few at once
+  // stay a shiver, not a siren.
+  S.echoRise = (d, t) => {
+    const k = rr(0.95, 1.05), lp = flt(d, 'lowpass', 4200);
+    const w = gn(lp), wf = flt(w, 'bandpass', 600, 3); noi(t, 1.1, wf, bufPink); sw(wf.frequency, t, 380 * k, 1900 * k, 0.95);
+    w.gain.setValueAtTime(0.0001, t); w.gain.exponentialRampToValueAtTime(0.22, t + 0.7); w.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+    const tg = gn(lp), hol = flt(tg, 'peaking', 900, 3); hol.gain.value = 6; // a hollow ring (no feedback, so nothing is left running)
+    for (let i = 0; i < 2; i++) { const o = osc(i ? 'triangle' : 'sine', 440 * k, t, 1.2, gn(hol, i ? 0.35 : 0.6)); o.detune.value = i ? 11 : 0; sw(o.frequency, t + 0.05, (i ? 440 : 466) * k, (i ? 622 : 659) * k, 0.9); }
+    tg.gain.setValueAtTime(0.0001, t); tg.gain.linearRampToValueAtTime(0.09, t + 0.5); tg.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+    const s = gn(d), sf = flt(s, 'highpass', 3500); noi(t + 0.15, 0.8, sf); ad(s.gain, t + 0.15, 0.035, 0.45, 0.4);
+  };
+  // Siege: a war horn from the far side when a wave rolls rams in. Two long low calls, the second a fourth up and
+  // rough, two war-drum hits under them, and the rumble of wheels. A small-speaker body near 240 Hz carries it on phones.
+  S.siegeHorn = (d, t) => {
+    const f = 87.31 * rr(0.99, 1.01); // F2, under the wave horn's D3
+    hornNote(d, t, f, 0.9, 0.42, 0.75);
+    const os = hornNote(d, t + 1.05, f, 1.4, 0.5, 0.9);
+    for (let i = 0; i < os.length; i++) { const fr = os[i][0].frequency, b = os[i][1]; fr.setValueAtTime(b, t + 1.4); fr.exponentialRampToValueAtTime(b * 1.3348, t + 1.5); }
+    timpHit(d, t, 0.45, 55); knock(d, t, 0.35, 180); timpHit(d, t + 1.05, 0.5, 55); knock(d, t + 1.05, 0.4, 170);
+    const r = gn(d), rf = flt(flt(r, 'bandpass', 240, 1.2), 'highpass', 90); noi(t + 0.2, 2.4, rf, bufBrown); ad(r.gain, t + 0.2, 0.5, 0.8, 1.5);
+  };
+  // The Daily Long Night begins: a short dawn-bell sting of its own (about 2 s). An hourglass tick, the lantern motif
+  // rising in fourths and fifths over a hushed open chord, and a long high bell. Unlike the fanfare, it never lands on
+  // a full major chord: today's road is still unknown.
+  S.dailySting = (d, t) => {
+    const lp = flt(d, 'lowpass', 7000);
+    for (let i = 0; i < 2; i++) { const c = gn(lp), cf = flt(c, 'bandpass', 3200 - i * 600, 6); noi(t + i * 0.16, 0.05, cf); ad(c.gain, t + i * 0.16, 0.12, 0.001, 0.03); }
+    const t0 = t + 0.38;
+    [[0, 62], [0.12, 69], [0.24, 74], [0.36, 76], [0.6, 81]].forEach((e, i) => lanternTone(d, t0 + e[0], e[1], i === 4 ? 1.0 : 0.7));
+    softChord(lp, t0, [50, 57, 64], 1.9, 0.07);
+    belld(lp, t0 + 0.6, mtof(93), 0.03, 1.4);
+    timpHit(d, t0, 0.25, mtof(38));
+    const s = gn(d), sf = flt(s, 'bandpass', 1600, 1); noi(t, 0.5, sf, bufPink); sw(sf.frequency, t, 600, 3600, 0.4); ad(s.gain, t, 0.03, 0.3, 0.2);
+  };
   const DEF = Object.assign(Object.create(null), {
     bow: [S.bow, 0.05, 0.18, 1, 0.3, 0.55, 4],
     arrowHit: [S.arrowHit, 0.045, 0.12, 0, 0.15, 0.5, 4],
@@ -12237,23 +12273,26 @@ const AU = (function () {
     emberTick: [S.emberTick, 0.03, 0.15, 1, 0.08, 0.6, 3],
     cineVictory: [S.cineVictory, 3, 0.5, 3, 4.6, 1.2, 1],
     cineDefeat: [S.cineDefeat, 3, 0.5, 3, 4.4, 1.2, 1],
+    echoRise: [S.echoRise, 0.35, 0.45, 1, 1.3, 0.7, 2],
+    siegeHorn: [S.siegeHorn, 4, 0.6, 3, 3.0, 0.75, 1],
+    dailySting: [S.dailySting, 5, 0.5, 3, 2.8, 1.2, 1],
   });
   // Kinds that share a voice budget, and how hard a sound ducks the music and crowd.
   const FAM = { cannon: 'boom', explode: 'boom', chainBoom: 'boom', burn: 'fire', ignite: 'fire', houndFire: 'fire', ratSqueal: 'die', boneRattle: 'die', squelch: 'die', batScreech: 'die', harpyDie: 'die', houndDie: 'die', shamanDie: 'die',
     ramCreak: 'beast', shamanChant: 'beast', harpyWings: 'beast', houndSnarl: 'beast', houndPant: 'beast' };
   const FAMCAP = LOW ? { boom: 4, fire: 3, die: 5, beast: 3 } : { boom: 5, fire: 4, die: 7, beast: 5 };
-  const DUCK = { cannon: 0.3, explode: 0.4, chainBoom: 0.3, zap: 0.2, roar: 0.5, bossStep: 0.35, bossDie: 0.8, horn: 0.35, hornBoss: 0.5, horde: 0.6, crumble: 0.7, beaconOut: 0.8, rise: 0.5,
+  const DUCK = { cannon: 0.3, explode: 0.4, chainBoom: 0.3, zap: 0.2, roar: 0.5, bossStep: 0.35, bossDie: 0.8, horn: 0.35, hornBoss: 0.5, siegeHorn: 0.35, horde: 0.6, crumble: 0.7, beaconOut: 0.8, rise: 0.5,
     branch: 0.4, frostNova: 0.3, rally: 0.3, rockslide: 0.4, blizzard: 0.3, bogfog: 0.3, lavaSurge: 0.4, sandstorm: 0.3, bossSting: 0.6, ramHit: 0.15, ramDie: 0.3, houndHowl: 0.25,
     thunder: 0.35, tidalWave: 0.45, thunderstorm: 0.35 };
   // Ducks that land later than the call (the meteor hits after its whistle).
   const DUCK_LATE = { meteor: [meteorFall, 0.8] };
   // Exact gaps, no jitter: these are one per event, and the gap is what stops a double start.
-  const NOJIT = { rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1, fanfare: 1, lament: 1, arrival: 1, waveClear: 1, houndHowl: 1, newFoe: 1, ramDie: 1, thunderstorm: 1, storyOpen: 1, storyLine: 1, cineVictory: 1, cineDefeat: 1 };
+  const NOJIT = { siegeHorn: 1, dailySting: 1, rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1, fanfare: 1, lament: 1, arrival: 1, waveClear: 1, houndHowl: 1, newFoe: 1, ramDie: 1, thunderstorm: 1, storyOpen: 1, storyLine: 1, cineVictory: 1, cineDefeat: 1 };
   // UI sounds go to their own bus so they still play while the game is paused.
   const UIS = { uiHover: 1, uiClick: 1, uiDeny: 1, menuOpen: 1, uiPreview: 1, spellArm: 1, spellCancel: 1, storyOpen: 1, storyLine: 1, emberGain: 1, upgradeBuy: 1, heatSelect: 1, menuMove: 1, menuSelect: 1, menuBack: 1, achievement: 1, unlock: 1, emberTick: 1 };
   // Stingers are music: they go to their own bus (the music volume, not ducked), and they hold the music down while they play.
-  const STB = { fanfare: 1, lament: 1, arrival: 1, waveClear: 1, newFoe: 1, cineVictory: 1, cineDefeat: 1 };
-  const HOLD = { fanfare: [3.6, 0.75], lament: [6.6, 0.8], arrival: [4.6, 0.55], waveClear: [1.3, 0.25], newFoe: [1.3, 0.3], cineVictory: [4.2, 0.7], cineDefeat: [4.0, 0.7] }, holds = [];
+  const STB = { dailySting: 1, fanfare: 1, lament: 1, arrival: 1, waveClear: 1, newFoe: 1, cineVictory: 1, cineDefeat: 1 };
+  const HOLD = { dailySting: [2.2, 0.45], fanfare: [3.6, 0.75], lament: [6.6, 0.8], arrival: [4.6, 0.55], waveClear: [1.3, 0.25], newFoe: [1.3, 0.3], cineVictory: [4.2, 0.7], cineDefeat: [4.0, 0.7] }, holds = [];
   const lateDuck = [];
   // Total live voices allowed for each priority (a priority-3 sound may use all of them).
   // A sound that cuts off another (the horde alarm replaces the ordinary wave horn).
@@ -13277,7 +13316,7 @@ const AU = (function () {
   // The mood comes from setScene('results', { win }) or 'win' / 'defeat', else META.last.how, else G.phase. The music
   // waits for the defeat lament or the victory fanfare to finish before it starts. ----
   const RS = { bus: null, mg: null, on: false, mood: 'rest', dawn: false, opt: null, next: 0, sec: 0, bar: 0, loops: 0, pi: 0, plan: [0, 1, 2], stopAt: 0 };
-  const RS_LVL = 2.2, RS_MOOD = { win: 0.8, rest: 1, defeat: 0.9 }; // each mood trimmed to sit a little under the title in loudness
+  const RS_LVL = 3.3, RS_MOOD = { win: 0.8, rest: 1, defeat: 0.9 }; // each mood trimmed to sit a little under the title in loudness (round 10 meter: 2.2 sat 4 LU under it)
   const RCH = { Dm9: [38, 50, 53, 57, 64], Bbmaj7: [34, 46, 50, 53, 57], Gm7: [43, 50, 53, 58, 62], Asus: [33, 50, 52, 57, 62], Fmaj7: [41, 48, 52, 57, 60],
     D: [38, 50, 54, 57, 62], Dmaj9: [38, 50, 54, 57, 64], G: [43, 50, 55, 59, 62], Gmaj7: [43, 50, 54, 59, 62], Bm7: [35, 50, 54, 57, 62], A: [33, 49, 52, 57, 61],
     DF: [42, 50, 54, 57, 62], Em7: [40, 50, 55, 59, 62], C: [36, 48, 52, 55, 60] };
@@ -13434,11 +13473,12 @@ const AU = (function () {
   function scan() {
     if (typeof G === 'undefined' || !G || !G.mons) return;
     const live = G.phase === 'play', cy = Math.cos(CAM.yaw), sy = Math.sin(CAM.yaw), half = (R.viewW || 40) * 0.5;
-    let n = 0, ground = 0, near = 0, maxP = 0, wl = 0, wr = 0, big = 0, swarm = 0, boss = null;
+    let n = 0, ground = 0, near = 0, maxP = 0, wl = 0, wr = 0, big = 0, swarm = 0, boss = null, echoed = false;
     const P = CR.pick; P.length = 0;
     for (let i = 0; i < G.mons.length; i++) {
       const m = G.mons[i]; if (m.dead) continue;
       const bk = beastKey(m); if (bk) beastMark(m, bk);
+      if (m.echo === true && ghostSeen(m) && live && !echoed) { echoed = true; playAt('echoRise', m.x, m.z, 1); } // an Echo ghost rising (Round 10)
       if (!m.vis && !m.fly) continue;
       const d = m.def;
       // (An elite is announced once, by makeElite's own sfx('elite') when it spawns; a second chime here doubled it.)
@@ -13584,16 +13624,55 @@ const AU = (function () {
   }
   function stats() {
     const L = SEQ.lay;
-    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(','), land: LS.key, music: LM.key || '', beasts: BT.list.length, beastBeds: Object.keys(BT.beds).filter((k) => BT.beds[k].src).join(','), event: LS.evKind, scene: SC.cur, title: TT.on ? 'sec' + TT.sec + ' bar' + TT.bar + (TT.loops ? ' loop' + TT.loops : '') : '', musicDesc: describe(LM.def), flashes: TH.n, flashHook: TH.hook, paused: PZ.on, hidden: hidden, state: ctx ? ctx.state : 'none', results: RS.on ? RS.mood + (RS.dawn ? '+dawn' : '') + ' sec' + RS.sec + ' bar' + RS.bar + (RS.loops ? ' loop' + RS.loops : '') : '', live: live(), meter: meterOut() });
+    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(','), land: LS.key, music: LM.key || '', beasts: BT.list.length, beastBeds: Object.keys(BT.beds).filter((k) => BT.beds[k].src).join(','), event: LS.evKind, scene: SC.cur, title: TT.on ? 'sec' + TT.sec + ' bar' + TT.bar + (TT.loops ? ' loop' + TT.loops : '') : '', musicDesc: describe(LM.def), flashes: TH.n, flashHook: TH.hook, paused: PZ.on, hidden: hidden, state: ctx ? ctx.state : 'none', results: RS.on ? RS.mood + (RS.dawn ? '+dawn' : '') + ' sec' + RS.sec + ' bar' + RS.bar + (RS.loops ? ' loop' + RS.loops : '') : '', live: live(), eclipse: +EC.a.toFixed(2), meter: meterOut() });
   }
 
   // ---- Round 9: a level meter for tests (off unless AU.meter(true)): peak and loudness after the soft clipper, in dBFS,
   // read from the audio itself every frame. And the live counts that must stay flat over a long session.
-  const MT = { clip: null, an: null, buf: null, on: false, peak: 0, max: 0, ms: 0, n: 0, t0: 0 };
+  // Round 10: it also hears every sample (a script tap, built only when the meter is first turned on): integrated
+  // loudness in approximate LUFS (K-weighted, 400 ms blocks with the BS.1770 gates), the loudest moment, and how the
+  // energy splits across five bands (sub < 150 Hz, which phone speakers can't play; low, mid, presence; air > 6 kHz).
+  const MT = { clip: null, an: null, buf: null, sp: null, on: false, peak: 0, max: 0, ms: 0, n: 0, t0: 0, sub: [], blk: [], acc: 0, accN: 0, band: [0, 0, 0, 0, 0], smp: 0, sPk: 0 };
+  const MT_BANDS = [[0, 150], [150, 500], [500, 2500], [2500, 6000], [6000, 0]], MT_NAMES = ['sub', 'low', 'mid', 'pres', 'air'];
+  function meterTap() {
+    const NB = MT_BANDS.length, mg = ctx.createChannelMerger(4 + NB), spl = ctx.createChannelSplitter(2);
+    MT.clip.connect(spl);
+    for (let c = 0; c < 2; c++) {
+      const hs = flt(null, 'highshelf', 1500); hs.gain.value = 4; // K-weighting: a +4 dB shelf over 1.5 kHz and a 38 Hz high-pass
+      spl.connect(hs, c); hs.connect(flt(null, 'highpass', 38, 0.5)).connect(mg, 0, c);
+      spl.connect(mg, c, 2 + c);
+    }
+    const mono = gn(null, 1); mono.channelCount = 1; mono.channelCountMode = 'explicit'; MT.clip.connect(mono);
+    for (let b = 0; b < NB; b++) {
+      let n = mono; const lo = MT_BANDS[b][0], hi = MT_BANDS[b][1];
+      if (lo) n = n.connect(flt(null, 'highpass', lo, 0.707)).connect(flt(null, 'highpass', lo, 0.707));
+      if (hi) n = n.connect(flt(null, 'lowpass', hi, 0.707)).connect(flt(null, 'lowpass', hi, 0.707));
+      n.connect(mg, 0, 4 + b);
+    }
+    const sp = ctx.createScriptProcessor(4096, 4 + NB, 1), blkLen = Math.round(sr * 0.1);
+    mg.connect(sp); sp.connect(gn(ctx.destination, 0));
+    sp.onaudioprocess = (ev) => {
+      if (!MT.on) return;
+      const I = ev.inputBuffer, kl = I.getChannelData(0), kr = I.getChannelData(1), l = I.getChannelData(2), r = I.getChannelData(3), len = kl.length;
+      let pk = MT.sPk;
+      for (let i = 0; i < len; i++) {
+        const a = Math.max(l[i] < 0 ? -l[i] : l[i], r[i] < 0 ? -r[i] : r[i]); if (a > pk) pk = a;
+        MT.acc += kl[i] * kl[i] + kr[i] * kr[i];
+        if (++MT.accN >= blkLen) { MT.sub.push(MT.acc / MT.accN); MT.acc = 0; MT.accN = 0; if (MT.sub.length >= 4) { const s = MT.sub; MT.blk.push((s[s.length - 1] + s[s.length - 2] + s[s.length - 3] + s[s.length - 4]) / 4); if (s.length > 8) s.splice(0, 4); } }
+      }
+      MT.sPk = pk;
+      for (let b = 0; b < NB; b++) { const d = I.getChannelData(4 + b); let ss = 0; for (let i = 0; i < len; i++) ss += d[i] * d[i]; MT.band[b] += ss; }
+      MT.smp += len;
+      if (MT.blk.length > 9000) MT.blk.splice(0, 1500);
+    };
+    MT.sp = sp;
+  }
   function meter(on) {
     if (!ctx || !MT.clip) return false;
     if (on && !MT.an) { MT.an = ctx.createAnalyser(); MT.an.fftSize = 2048; MT.buf = new Float32Array(MT.an.fftSize); MT.clip.connect(MT.an); }
+    if (on && !MT.sp && ctx.createScriptProcessor && ctx.createChannelMerger) { try { meterTap(); } catch (e) { MT.sp = null; } }
     MT.on = !!on; MT.peak = MT.max = MT.ms = 0; MT.n = 0; MT.t0 = ctx.currentTime;
+    MT.sub.length = 0; MT.blk.length = 0; MT.acc = 0; MT.accN = 0; MT.smp = 0; MT.sPk = 0; for (let b = 0; b < MT.band.length; b++) MT.band[b] = 0;
     return MT.on;
   }
   function meterTick() {
@@ -13605,10 +13684,30 @@ const AU = (function () {
     MT.peak = Math.max(pk, MT.peak * 0.9); MT.ms += ms; MT.n++;
   }
   const db = (x) => (x > 1e-6 ? +(20 * Math.log10(x)).toFixed(1) : -120);
-  function meterOut() { return MT.on && MT.n ? { peak: db(MT.peak), max: db(MT.max), rms: db(Math.sqrt(MT.ms / MT.n)), secs: +(ctx.currentTime - MT.t0).toFixed(1) } : null; }
+  const lufs = (ms) => (ms > 1e-12 ? -0.691 + 10 * Math.log10(ms) : -120);
+  function loudness() {
+    const B = MT.blk; if (!B.length) return null;
+    let s = 0, n = 0, mx = 0;
+    for (let i = 0; i < B.length; i++) { if (B[i] > mx) mx = B[i]; if (lufs(B[i]) > -70) { s += B[i]; n++; } }
+    if (!n) return { lufs: -120, mMax: +lufs(mx).toFixed(1) };
+    const rel = lufs(s / n) - 10; s = 0; n = 0;
+    for (let i = 0; i < B.length; i++) { const v = lufs(B[i]); if (v > -70 && v > rel) { s += B[i]; n++; } }
+    return { lufs: +lufs(s / n).toFixed(1), mMax: +lufs(mx).toFixed(1) };
+  }
+  function meterOut() {
+    if (!MT.on || !MT.n) return null;
+    const o = { peak: db(MT.peak), max: db(MT.max), rms: db(Math.sqrt(MT.ms / MT.n)), secs: +(ctx.currentTime - MT.t0).toFixed(1) };
+    if (MT.smp) {
+      const L = loudness(); if (L) { o.lufs = L.lufs; o.mMax = L.mMax; }
+      o.tp = db(MT.sPk);
+      let tot = 0; for (let b = 0; b < MT.band.length; b++) tot += MT.band[b];
+      o.bands = {}; for (let b = 0; b < MT.band.length; b++) o.bands[MT_NAMES[b]] = tot > 0 ? Math.round(100 * MT.band[b] / tot) : 0;
+    }
+    return o;
+  }
   function live() {
     let ca = 0; const now = ctx ? ctx.currentTime : 0; for (let i = 0; i < act.length; i++) if (act[i].end > now) ca++;
-    return { act: ca, actList: act.length, lmOld: LM.old.length, fades: LS.fades.length, holds: holds.length, thunder: TH.pend.length, choir: SEQ.choir ? 1 : 0, crowd: CR.src ? 1 : 0, lineQ: SC.lineQ.length, gen: genN };
+    return { act: ca, actList: act.length, lmOld: LM.old.length, fades: LS.fades.length, holds: holds.length, thunder: TH.pend.length, choir: SEQ.choir ? 1 : 0, crowd: CR.src ? 1 : 0, lineQ: SC.lineQ.length, gen: genN, ecl: EC.src ? 1 : 0 };
   }
   function softClip() {
     // Input is pre-scaled by 0.5, so the curve covers +-2: linear to 0.7, then bends to a 0.9 ceiling (about -0.9 dBFS).
@@ -13631,7 +13730,10 @@ const AU = (function () {
     lim.threshold.value = -9; lim.knee.value = 5; lim.ratio.value = 14; lim.attack.value = 0.002; lim.release.value = 0.2;
     lim.connect(pre);
     const sh = (dest, type, f, g, q) => { const b = flt(dest, type, f, q); b.gain.value = g; return b; };
-    nMaster = gn(sh(sh(sh(flt(flt(lim, 'highpass', 32, 0.7), 'highpass', 32, 0.7), 'highshelf', 3000, 6), 'peaking', 1200, 3, 0.7), 'lowshelf', 180, -10), 0); nMaster.gain.setValueAtTime(0.0001, ctx.currentTime); nMaster.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.6);
+    // Round 10 meter: a fifth of the battle's energy sat under 150 Hz, which a phone speaker cannot play but which still
+    // drives the limiter; phones cut it more steeply (24 dB/octave from 100 Hz), so the parts they can play come up.
+    const hpF = LOW ? 100 : 36;
+    nMaster = gn(sh(sh(sh(flt(flt(lim, 'highpass', hpF, 0.7), 'highpass', hpF, 0.7), 'highshelf', 3000, 6), 'peaking', 1200, 3, 0.7), 'lowshelf', 180, -10), 0); nMaster.gain.setValueAtTime(0.0001, ctx.currentTime); nMaster.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.6);
     nPage = gn(nMaster, 1); // fades out before the page is hidden and the context suspended
     nMute = gn(nPage, api.muted ? 0 : 1);
     // Glue compressor on effects only, so a pile-up of hits thickens instead of spiking.
@@ -13645,7 +13747,7 @@ const AU = (function () {
     nSfx = gn(PZ.sfx, VOL.sfx); nUi = gn(nMute, VOL.sfx); nAmb = gn(PZ.amb, 0.9 * VOL.ambience);
     // Music: the duck (loud hits, stingers), the story duck, the music volume, then the land's music and the title theme.
     nMusDuck = gn(nMute, 1); SC.duck = gn(nMusDuck, 1); nMusic = gn(SC.duck, 0.5 * VOL.music);
-    SC.game = gn(nMusic, 1);
+    EC.tilt = flt(nMusic, 'peaking', 350, 0.8); EC.tilt.gain.value = 0; SC.game = gn(EC.tilt, 1); // Eclipse colours the land's music (eclTick)
     { const hs = flt(flt(nMusic, 'lowpass', 6500, 0.5), 'highshelf', 3200); hs.gain.value = -4.5; TT.bus = gn(hs, 0); RS.bus = gn(hs, 0); } // the title and results music: softer highs
     PZ.pad = gn(SC.game, 1); PZ.seq = gn(SC.game, 1); nPad = gn(PZ.pad, 1); nSeq = gn(PZ.seq, 1.5);
     PZ.sting = gn(nMute, 1); nSting = gn(PZ.sting, STING_LVL * VOL.music);
@@ -13787,6 +13889,71 @@ const AU = (function () {
     }
     CN.on = on;
   }
+  // ---- Round 10: Eclipse (Forge's mutator; G.eclA fades 0..1 over a few seconds). A low drone comes in under the land,
+  // in the land's key: a hollow fifth that beats slowly against itself, a sub for headphones and a thin cold whistle of
+  // air high above. The mix goes colder with it: the music's warm body (around 350 Hz) is scooped and the fire bed thins.
+  // Built only while the eclipse is up; stopped two seconds after it has faded out.
+  const EC = { src: null, g: null, tilt: null, a: 0, aL: -1, tl: 0, idle: 0, semi: 0, os: [] };
+  function eclA() { const v = typeof G !== 'undefined' && G ? +G.eclA : 0; return v > 0 && v <= 1.5 ? Math.min(1, v) : 0; } // a missing or bad value is no eclipse
+  function eclTick(now, dt) {
+    const a = eclA(); EC.a = a;
+    if (EC.tilt) { const tv = -7 * a; if (Math.abs(tv - EC.tl) > 0.05) { EC.tl = tv; EC.tilt.gain.setTargetAtTime(tv, now, 0.4); } }
+    if (a > 0.01 && !EC.src) {
+      const g = gn(nAmb, 0); g.connect(gn(RV.amb, 0.35));
+      const semi = LM.def && isFinite(LM.def.semi) ? LM.def.semi : 0, r = Math.pow(2, semi / 12), lp = flt(g, 'lowpass', 700, 0.5), os = [];
+      const dv = gn(null, 3); // a slow wobble on the pitch
+      try {
+        [[110, 0, 0.5, 'triangle'], [110, 9, 0.4, 'triangle'], [164.81, -4, 0.3, 'triangle'], [220, 5, 0.12, 'sine'], [55, 0, 0.1, 'sine']].forEach((e) => {
+          const o = loopOsc(e[3], e[0] * r, gn(lp, e[2])); o.detune.value = e[1]; dv.connect(o.detune); os.push([o, e[0]]);
+        });
+        const wob = loopOsc('sine', 0.13, dv);
+        const air = gn(g, 0), af = flt(air, 'bandpass', 2900 * r, 9); const an = loopSrc(bufPink, af, 1.0); const alfo = loopOsc('sine', 0.07, gn(air.gain, 0.8));
+        air.gain.value = 1.6; // with the LFO: 0.8..2.4
+        const swell = gn(lp.frequency, 160); const sl = loopOsc('sine', 0.05, swell); // the drone opens and closes, very slowly
+        EC.src = [wob, an, alfo, sl].concat(os.map((x) => x[0]));
+      } catch (e) { EC.src = os.map((x) => x[0]); if (!ST.err) ST.err = 'eclipse: ' + e.message; }
+      EC.g = g; EC.os = os; EC.semi = semi; EC.aL = -1; EC.idle = 0;
+    } else if (EC.src && a <= 0.01 && (EC.idle += dt) > 2) {
+      const src = EC.src, g = EC.g; EC.src = null; EC.os = [];
+      g.gain.cancelScheduledValues(now); g.gain.setTargetAtTime(0, now, 0.05);
+      for (let i = 0; i < src.length; i++) { try { src[i].stop(now + 0.3); } catch (e) {} }
+      if (src.length) src[0].onended = () => { try { g.disconnect(); } catch (e) {} };
+    }
+    if (EC.src) {
+      if (a > 0.01) EC.idle = 0;
+      const lv = 0.065 * a * a; // eases in: the drone arrives after the dark does (round 10 meter: under the battle, not over it)
+      if (Math.abs(lv - EC.aL) > 0.002) { EC.aL = lv; EC.g.gain.setTargetAtTime(lv, now, 0.5); }
+      const semi = LM.def && isFinite(LM.def.semi) ? LM.def.semi : 0;
+      if (semi !== EC.semi) { EC.semi = semi; const r = Math.pow(2, semi / 12); for (let i = 0; i < EC.os.length; i++) EC.os[i][0].frequency.setTargetAtTime(EC.os[i][1] * r, now, 1.5); }
+    }
+  }
+  // ---- Round 10: watched moments for the new mutators and the daily. An Echo ghost rising (G.mons, m.echo === true,
+  // each heard once, at most one a scan), the Siege war horn a beat after the wave horn when G.mods has 'siege', and
+  // the daily's sting when a Daily Long Night begins (a new META.run with G.mode === 'daily'), once the menu is gone.
+  const MW = { ghosts: typeof WeakSet === 'function' ? new WeakSet() : null, siegeAt: 0, siegeK: -1, run: undefined, dailyAt: 0, dailyBy: 0 };
+  function ghostSeen(m) {
+    if (!MW.ghosts || MW.ghosts.has(m)) return false;
+    MW.ghosts.add(m); return m.hp > 0;
+  }
+  function modsWatch(now) {
+    const ph = G.phase, mods = Array.isArray(G.mods) ? G.mods : null;
+    if (ph === 'play') {
+      if (G.k !== MW.siegeK) {
+        const fresh = MW.siegeK >= 0 || G.spawning; MW.siegeK = G.k;
+        if (fresh && G.k > 0 && G.spawning && mods && mods.indexOf('siege') >= 0) MW.siegeAt = now + (G.horde ? 2.6 : 1.3); // after the wave horn (or the horde alarm)
+      }
+      if (MW.siegeAt && now >= MW.siegeAt) { MW.siegeAt = 0; const c = G.B && G.B.cave; if (c) playAt('siegeHorn', c.x, c.z, 1.1); else play('siegeHorn', 0, 0.9, 0); }
+    } else { MW.siegeK = -1; MW.siegeAt = 0; }
+    const run = typeof META !== 'undefined' && META ? META.run || null : null;
+    if (run !== MW.run) {
+      if (run && G.mode === 'daily' && (MW.run !== undefined || !(run.t > 5))) { MW.dailyAt = now + 0.35; MW.dailyBy = now + 10; }
+      MW.run = run;
+    }
+    if (MW.dailyAt && now >= MW.dailyAt) {
+      if (G.mode !== 'daily' || now > MW.dailyBy) MW.dailyAt = 0;
+      else if (SC.cur !== 'menu' && SC.cur !== 'results') { MW.dailyAt = 0; play('dailySting', 0, 1, 0); }
+    }
+  }
   let lastUpd = -1;
   function update() {
     if (!ctx) return;
@@ -13800,7 +13967,7 @@ const AU = (function () {
     pauseMix(paused, now);
     const k = 1 - Math.exp(-dt * 2.5);
     cur.fire += (tgt.fire - cur.fire) * k; cur.wind += (tgt.wind - cur.wind) * k; cur.tension += (tgt.tension - cur.tension) * k;
-    setP('fire', bed.fireG.gain, cur.fire, now);
+    setP('fire', bed.fireG.gain, cur.fire * (1 - 0.35 * EC.a), now);
     setP('wind', bed.windG.gain, cur.wind * WIND_LVL, now);
     bed.timer -= dt;
     if (bed.timer <= 0) {
@@ -13823,7 +13990,7 @@ const AU = (function () {
     // The reactive parts never take the game down: any fault is recorded in stats().err.
     for (let i = LM.old.length - 1; i >= 0; i--) if (now >= LM.old[i][1]) { try { LM.old[i][0].disconnect(); } catch (e) {} LM.old.splice(i, 1); }
     for (let i = LM.kill.length - 1; i >= 0; i--) if (now >= LM.kill[i][1]) { try { LM.kill[i][0].disconnect(); } catch (e) {} LM.kill.splice(i, 1); }
-    try { scapes(now, paused); watch(now); cineWatch(now); if (!paused) reactive(now); else { duckTick(now, cl(now - SEQ.lastNow, 0, 0.25)); SEQ.lastNow = now; SEQ.next = 0; } } catch (e) { if (!ST.err) ST.err = String(e && e.stack || e).slice(0, 300); }
+    try { scapes(now, paused); watch(now); if (typeof G !== 'undefined' && G) modsWatch(now); eclTick(now, dt); cineWatch(now); if (!paused) reactive(now); else { duckTick(now, cl(now - SEQ.lastNow, 0, 0.25)); SEQ.lastNow = now; SEQ.next = 0; } } catch (e) { if (!ST.err) ST.err = String(e && e.stack || e).slice(0, 300); }
   }
 
   if (typeof window !== 'undefined') window.__cwAudio = api;
