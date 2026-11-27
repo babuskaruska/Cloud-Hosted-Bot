@@ -8201,7 +8201,7 @@ function bossEmpower(m) {
   if (m.affix.swift) m.spdMul = (m.spdMul || 1) * 1.25;
   if (m.affix.warded) { m.wardT = 20; m.ward = m.wardMax = m.maxHp * .22; }
   m.affixName = (/^The /.test(m.def.name) ? 'The ' : '') + pick.map(k => BOSS_AFFIX[k].name).join(' ') + ' ' + m.def.name.replace(/^The /, ''); // 'The Undying Drowned King', not 'Undying The Drowned King'
-  if (UI.banner) UI.banner(m.affixName, 3, true);
+  if (UI.banner && typeof UI.bossCard !== 'function') UI.banner(m.affixName, 3, true); // the boss card already shows the affixed name
 }
 // Called from killMonster: Volatile bursts (they reuse the sapper chain, so they can set each other off).
 function modOnKill(m) {
@@ -12683,6 +12683,7 @@ const AU = (function () {
     cineVictory: [S.cineVictory, 3, 0.5, 3, 4.6, 1.2, 1],
     cineDefeat: [S.cineDefeat, 3, 0.5, 3, 4.4, 1.2, 1],
     echoRise: [S.echoRise, 0.35, 0.45, 1, 1.3, 0.7, 2],
+    heraldCall: [S.echoRise, 0.35, 0.6, 1, 1.3, 0.7, 2], // Forge: the herald's summons reuses the ghost rise until Echo voices it
     siegeHorn: [S.siegeHorn, 4, 0.6, 3, 3.0, 0.75, 1],
     dailySting: [S.dailySting, 5, 0.5, 3, 2.8, 1.2, 1],
     snuff: [S.snuff, 0.12, 0.4, 2, 0.9, 0.7, 3],

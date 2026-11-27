@@ -73,7 +73,7 @@ function bossEmpower(m) {
   if (m.affix.swift) m.spdMul = (m.spdMul || 1) * 1.25;
   if (m.affix.warded) { m.wardT = 20; m.ward = m.wardMax = m.maxHp * .22; }
   m.affixName = (/^The /.test(m.def.name) ? 'The ' : '') + pick.map(k => BOSS_AFFIX[k].name).join(' ') + ' ' + m.def.name.replace(/^The /, ''); // 'The Undying Drowned King', not 'Undying The Drowned King'
-  if (UI.banner) UI.banner(m.affixName, 3, true);
+  if (UI.banner && typeof UI.bossCard !== 'function') UI.banner(m.affixName, 3, true); // the boss card already shows the affixed name
 }
 // Called from killMonster: Volatile bursts (they reuse the sapper chain, so they can set each other off).
 function modOnKill(m) {

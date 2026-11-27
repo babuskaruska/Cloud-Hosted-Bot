@@ -1527,6 +1527,7 @@ const AU = (function () {
     cineVictory: [S.cineVictory, 3, 0.5, 3, 4.6, 1.2, 1],
     cineDefeat: [S.cineDefeat, 3, 0.5, 3, 4.4, 1.2, 1],
     echoRise: [S.echoRise, 0.35, 0.45, 1, 1.3, 0.7, 2],
+    heraldCall: [S.echoRise, 0.35, 0.6, 1, 1.3, 0.7, 2], // Forge: the herald's summons reuses the ghost rise until Echo voices it
     siegeHorn: [S.siegeHorn, 4, 0.6, 3, 3.0, 0.75, 1],
     dailySting: [S.dailySting, 5, 0.5, 3, 2.8, 1.2, 1],
     snuff: [S.snuff, 0.12, 0.4, 2, 0.9, 0.7, 3],
