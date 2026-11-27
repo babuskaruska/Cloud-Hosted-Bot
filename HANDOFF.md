@@ -74,7 +74,7 @@ Nothing merges unless `node tools/qa.js` passes: no page errors, no NaN, no earl
 - **Forge:** land events (`src/63-events.js`), QA checks for events, merges.
 - **QA after round 2:** no defeats in 1500 s or 4000 s sims, lives drop to 7–18 under pressure, up to 260 alive, 15–20 branches and about 45 spells per sim. Playtests of the branch menu and spell arming on desktop and iPhone 13 worked. Build published as version 3.
 
-## Round 3 results (merged; Echo's still pending)
+## Round 3 results (all merged; build version 5)
 
 - **Ash:** knight, pikeman and militia footmen; rockslide boulders and rubble, and sandstorm wind and tint; boss entrance (ground cracks, flare, a 1.6 s camera push); archer spotters and quivers; the Frost Jotun tint fixed.
 - **Mira:**
@@ -83,7 +83,8 @@ Nothing merges unless `node tools/qa.js` passes: no page errors, no NaN, no earl
   - First-takeover gold reserve, a "Not enough gold yet" message, a "Building..." state, one-time help lines, a fix for taps passing through panels, README controls.
   - Human sims: battlefield 1 ends at 20/20 lives; doing nothing loses at wave 4.
 - **Forge:** checks passed. Memory is flat over 6 battlefields, `record.js` replays are identical, and the game survives the strict sandbox (blocked storage, wake lock and fullscreen).
-- The build is published as version 4.
+- **Echo:** stingers (land cleared, defeat, arrival, wave cleared) triggered by phase changes; menu sounds; music for each land (its own mode, kit and tempo); midrange for phone speakers; reverb follows the volume settings; a fix syncing the meteor whistle to game speed. There are no game-file hooks; everything is detected in the audio update. 23 min live at 3× with no errors or node growth.
+- The build is published as version 5.
 
 ## Round 4 contracts: new monsters
 
