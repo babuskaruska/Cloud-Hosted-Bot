@@ -68,7 +68,7 @@ function updateLights(dt, t, focusX, focusZ) {
     if (e) {
       e._spot = s.fade;
       s.l.position.set(e.x, e.y + .25, e.z); s.l.target.position.set(e.x + (e.dx || 0) * 1.2, e.y - 3, e.z + (e.dz || 0) * 1.2);
-      s.l.color.setRGB(e.r, e.g, e.b); s.l.intensity = e.I * e.on * (e.fl || 1) * s.fade * 1.25;
+      s.l.color.setRGB(e.r, e.g, e.b); s.l.intensity = e.I * e.on * (e.fl || 1) * (e.snf === undefined ? 1 : e.snf) * s.fade * 1.25;
     } else s.l.intensity = 0;
   }
   for (let i = 0; i < LT.env.length; i++) {
@@ -80,7 +80,8 @@ function updateLights(dt, t, focusX, focusZ) {
     if (e && e.alive) {
       e.fl = .86 + .1 * n1(t * 7 + e.seed, e.seed) + .05 * n1(t * 19 + e.seed, e.seed + 1);
       l.position.set(e.x, e.y, e.z); l.color.setRGB(e.r, e.g, e.b); l.distance = e.range * (1 - .3 * (G.eclA || 0)); // Eclipse shrinks tower light
-      l.intensity = e.I * e.on * e.fl * (1 - .68 * (e._spot || 0));
+      e.snf = FX.snuffs.length ? snuffMul(e.x, e.z) : 1; // the Hollow Herald's snuff (FX.snuff) dims it
+      l.intensity = e.I * e.on * e.fl * e.snf * (1 - .68 * (e._spot || 0));
     } else l.intensity = 0;
   }
 }
@@ -107,7 +108,7 @@ function collectMistLights() {
   put(LT.beacon, .05);
   for (const f of LT.flashes) put(f.l, .06);
   // Tower lanterns at their full strength (a tower whose spotlight is on dims its point light, not its glow in the air).
-  const tw = LT.towers.filter((l, i) => l.intensity > 0 || (LT.emitters[i] && LT.emitters[i]._spot > 0)).map(l => { const e = LT.emitters[LT.towers.indexOf(l)]; l.userData.full = e && e.alive ? e.I * e.on * (e.fl || 1) : l.intensity; return l; }).sort((a, b) => b.userData.full - a.userData.full);
+  const tw = LT.towers.filter((l, i) => l.intensity > 0 || (LT.emitters[i] && LT.emitters[i]._spot > 0)).map(l => { const e = LT.emitters[LT.towers.indexOf(l)]; l.userData.full = e && e.alive ? e.I * e.on * (e.fl || 1) * (e.snf === undefined ? 1 : e.snf) : l.intensity; return l; }).sort((a, b) => b.userData.full - a.userData.full);
   for (const l of tw) { if (k >= R.NL) break; R.lightPos[k].copy(l.position); R.lightCol[k].set(l.color.r, l.color.g, l.color.b).multiplyScalar(l.userData.full * .16); k++; }
   for (const l of LT.env) if (l.intensity > 0) put(l, .1);
   for (; k < R.NL; k++) R.lightCol[k].set(0, 0, 0);
@@ -314,7 +315,7 @@ const DECAL_MIN_LIFE = 150;
 
 const FX = {
   add: null, alpha: null, segs: null, decals: null,
-  parts: [], smokes: [], flames: [], timed: [], bolts: [], fires: [], scorch: [], meteors: [], novas: [], lit: [], keep: 1, shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, shakeT: 0, flash: 0, flashK: 1, dt: 0, calm: false, groundAt: () => 0,
+  parts: [], smokes: [], flames: [], timed: [], bolts: [], fires: [], scorch: [], meteors: [], novas: [], snuffs: [], lit: [], keep: 1, shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, shakeT: 0, flash: 0, flashK: 1, dt: 0, calm: false, groundAt: () => 0,
 };
 function initFX() {
   FX.add = new SpriteBatch(4000, false); FX.alpha = new SpriteBatch(800, true); FX.segs = new SegBatch(900); FX.decals = new DecalBatch(200);
@@ -369,8 +370,9 @@ function updateFX(dt, t) {
   const A = FX.add, AL = FX.alpha, SG = FX.segs, groundAt = FX.groundAt;
   A.begin(); AL.begin(); SG.begin(); FX.dt = dt;
   const rx = Math.cos(CAM.yaw), rz = -Math.sin(CAM.yaw), se = Math.sin(CAM.elev), ce = Math.cos(CAM.elev), ux = -se * Math.sin(CAM.yaw), uy = ce, uz = -se * Math.cos(CAM.yaw);
+  const sn = FX.snuffs.length > 0;
   for (const f of FX.flames) {
-    const on = f.on; if (on <= .01) continue;
+    const on = sn ? f.on * snuffMul(f.x, f.z) : f.on; if (on <= .01) continue;
     const s = f.size * (.9 + .1 * on), fl = .88 + .12 * n1(t * 8 + f.seed * 3, f.seed);
     for (let k = 0; k < f.layers; k++) {
       const kk = k / Math.max(1, f.layers), w = s * (1 - kk * .28) * (.92 + .08 * fl), h = s * (1.55 - kk * .2) * (.75 + .25 * on);
@@ -424,14 +426,14 @@ function updateFX(dt, t) {
     for (let j = 0; j < b.pts.length - 1; j++) { const p = b.pts[j], q = b.pts[j + 1]; SG.push(p[0], p[1], p[2], w, q[0], q[1], q[2], w, c[0] * 4, c[1] * 4, c[2] * 4, k); SG.push(p[0], p[1], p[2], w * 3.5, q[0], q[1], q[2], w * 3.5, c[0], c[1], c[2], k * .35); }
     if (b.fork > 0) { const p = b.pts[b.fork]; SG.push(p[0], p[1], p[2], w * .7, p[0] + b.fd[0] * .7, p[1] + b.fd[1] * .7, p[2] + b.fd[2] * .7, w * .2, c[0] * 3, c[1] * 3, c[2] * 3, k); }
   }
-  updateFires(dt, t); updateSpellFX(dt, t); updateBossIn(dt);
+  updateFires(dt, t); updateSpellFX(dt, t); updateSnuffs(dt); updateBossIn(dt);
   const calm = G.phase === 'play' && !G.spawning && !G.mons.length;
   if (calm && !FX.calm) FX.decals.fadeAll(4.5);
   FX.calm = calm;
   FX.decals.update(dt);
 }
 function endFX() { FX.add.end(); FX.alpha.end(); FX.segs.end(); }
-function clearFX() { for (const o of FX.lit) o.alive = false; FX.lit.length = 0; FX.bossIn.length = 0; FX.meteors.length = 0; FX.novas.length = 0; FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; for (const f of FX.fires) f.alive = false; FX.fires.length = 0; FX.scorch.length = 0; FX.decals.clear(); }
+function clearFX() { for (const o of FX.lit) o.alive = false; FX.lit.length = 0; FX.bossIn.length = 0; FX.meteors.length = 0; FX.novas.length = 0; FX.snuffs.length = 0; FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; for (const f of FX.fires) f.alive = false; FX.fires.length = 0; FX.scorch.length = 0; FX.decals.clear(); }
 
 // ---- Camera shake, hit-stop and flash ----------------------------------------------------------------
 // shake(amount): adds trauma that decays smoothly. ~.2 shell, ~.5 sapper, ~1 boss stomp; the total is capped
@@ -576,6 +578,54 @@ FX.frostNova = function (x, z, r = 3, secs = 3) {
   shake(.25);
   return o;
 };
+// FX.snuff(x, z, r, seconds = 4): the Hollow Herald puts out the lights. A dark ring sweeps out from (x, z) to r
+// with a thin cold edge; every tower light, lantern flame and spotlight the ring passes over drops to a faint
+// glow (a puff of black smoke from each tower as it goes out), the ground under it stays dim, and the lights come
+// back over the last second. Looks only: the gameplay side (MON.herald) decides what being snuffed does.
+// snuffMul(x, z) is the light left at a point (1 = untouched, down to .12). Returns the handle, or null.
+const SNUFF_SWEEP = .6;
+FX.snuff = function (x, z, r = 5, secs = 4) {
+  if (!isFinite(x) || !isFinite(z) || !G.B || G.phase === 'crumble' || G.phase === 'rise') return null;
+  r = clamp(+r || 5, 1, 14); secs = clamp(+secs || 4, 1.2, 20);
+  const gy = FX.groundAt(x, z), puffs = [];
+  for (const e of LT.emitters) if (e && e.alive) { const d = Math.hypot(e.x - x, e.z - z); if (d < r) puffs.push({ x: e.x, y: e.y, z: e.z, at: SNUFF_SWEEP * Math.pow(d / r, 1 / .6) }); }
+  const o = { x, z, r, gy, t: 0, T: secs, puffs, seed: frnd() * 50 };
+  if (FX.snuffs.length >= 4) FX.snuffs.shift();
+  FX.snuffs.push(o);
+  fxTimed(4, x, gy + .14, z, r * 2.15, r * 2.15, .2, .27, .6, .45, SNUFF_SWEEP * 1.3, { ground: true });
+  fxTimed(5, x, gy + 1.2, z, 2.2, 2.2, .4, .55, 1.2, .6, .25);
+  for (let i = 0; i < 12; i++) { const a = i / 12 * TAU + frnd() * .4, s = r / SNUFF_SWEEP * frr(.5, .8); fxSmoke(x + Math.cos(a) * .4, gy + frr(.1, .5), z + Math.sin(a) * .4, Math.cos(a) * s, frr(.1, .5), Math.sin(a) * s, frr(.8, 1.4), frr(.5, .8), 1.2, .02, .02, .035, .6, { drag: 2.6 }); }
+  return o;
+};
+function snuffMul(x, z) {
+  let m = 1;
+  for (const s of FX.snuffs) {
+    const u = Math.min(1, s.t / SNUFF_SWEEP), R = s.r * Math.pow(u, .6), d = Math.hypot(x - s.x, z - s.z);
+    if (d > R + .01) continue;
+    const k = sat((R - d) / .8 + .25) * sat((s.T - s.t) / .9);
+    m = Math.min(m, 1 - .88 * k);
+  }
+  return m;
+}
+function updateSnuffs(dt) {
+  const L = FX.snuffs, AL = FX.alpha;
+  for (let i = L.length - 1; i >= 0; i--) {
+    const s = L[i]; s.t += dt; if (s.t >= s.T) { L.splice(i, 1); continue; }
+    const u = Math.min(1, s.t / SNUFF_SWEEP), R = s.r * Math.pow(u, .6), fin = sat((s.T - s.t) / .9);
+    // The sweeping ring: flat black blots along the front, fading as it reaches the edge.
+    if (u < 1) {
+      const n = clamp(Math.round(TAU * R / .6), 6, 44), a0 = s.seed + s.t * .7, al = .9 * (1 - u * u * u);
+      for (let k = 0; k < n; k++) { const a = a0 + k / n * TAU, px = s.x + Math.cos(a) * R, pz = s.z + Math.sin(a) * R; AL.push(px, FX.groundAt(px, pz) + .16, pz, 1.7, 1.7, a, 0, 0, 0, .002, al, 0, s.seed + k * 3.1, .3, 1); }
+    }
+    // The dimmed ground inside, while it lasts.
+    AL.push(s.x, s.gy + .12, s.z, R * 2.1, R * 2.1, s.seed, 0, 0, 0, .002, .42 * fin, 0, s.seed, .2, 1);
+    for (const p of s.puffs) if (p.at >= 0 && s.t >= p.at) {
+      p.at = -1;
+      for (let k = 0; k < 4; k++) fxSmoke(p.x + frr(-.1, .1), p.y + frr(0, .2), p.z + frr(-.1, .1), frr(-.2, .2), frr(.5, 1.1), frr(-.2, .2), frr(1, 1.8), frr(.25, .4), .7, .006, .006, .01, .7, { drag: 1, rise: .2 });
+      for (let k = 0; k < 5; k++) fxPart(p.x, p.y + .1, p.z, frr(-.6, .6), frr(.3, 1.2), frr(-.6, .6), frr(.3, .6), .04, 1.6, .7, .25, { drag: 1.5 });
+    }
+  }
+}
 const _spM = new THREE.Matrix4(), _spQ = new THREE.Quaternion(), _spV = new THREE.Vector3(), _spS = new THREE.Vector3(), _spE = new THREE.Euler();
 function fxMeteorImpact(m) {
   const { x, z, r, gy } = m, sc = r / 2.2;
@@ -660,7 +710,7 @@ function drawFrozen(m, sc) {
 // cracks with heaved slabs, a dust ring rolls out, a light flare in the boss's colour, a short flash and shake,
 // and the camera is asked to frame the boss for a moment (CAM.ent, read by updateCamera; skipped while the
 // player holds the view). Visual only: effects random stream, no hit-stop, so the simulation is unchanged.
-const BOSS_GLOW = { giant: [1.2, .95, .6], ogre: [1.3, .8, .45], jotun: [.55, .9, 1.5], queen: [1.1, .45, 1.4], colossus: [1.8, .6, .18], king: [.45, 1.4, 1.15], leviathan: [.4, 1.3, 1.25] };
+const BOSS_GLOW = { giant: [1.2, .95, .6], ogre: [1.3, .8, .45], jotun: [.55, .9, 1.5], queen: [1.1, .45, 1.4], colossus: [1.8, .6, .18], king: [.45, 1.4, 1.15], leviathan: [.4, 1.3, 1.25], herald: [.55, .7, 1.5] };
 FX.bossIn = [];
 function bossEntrance(m) {
   if (!G.B || G.phase !== 'play') return;

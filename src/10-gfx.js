@@ -129,10 +129,26 @@ const SH = {
   uMoonV: { value: new THREE.Vector3(0, 1, 0) }, uMoonC: { value: new THREE.Vector3(1, 1, 1) }, uGlint: { value: 1 },
 };
 
+// The Echo ghost's screen-door (a discard in the monster shader) only where it is cheap: not on touch devices
+// (phones and tablets, tile-based GPUs) and not on the Fast setting. HASH.dither=0/1 forces it for tests.
+function echoDitherWanted() {
+  if (HASH.dither !== undefined) return HASH.dither !== '0';
+  if (R.coarse === undefined) R.coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+  return !R.coarse && !(HASH.noscale && R.quality < .75);
+}
+// Switches MAT.inst to the program with or without the screen-door (a one-time recompile, on a settings change).
+function syncEchoDither() {
+  const m = MAT.inst; if (!m) return;
+  const want = echoDitherWanted(), has = !!m.defines && m.defines.CW_DITHER !== undefined;
+  if (want === has) return;
+  if (!m.defines) m.defines = {};
+  if (want) m.defines.CW_DITHER = ''; else delete m.defines.CW_DITHER;
+  m.needsUpdate = true;
+}
 function litMaterial(kind, params = {}) {
   const mat = new THREE.MeshStandardMaterial(Object.assign({ vertexColors: kind !== 'water', roughness: 1, metalness: 0 }, params));
   const inst = kind === 'inst', water = kind === 'water', world = !inst && !water;
-  mat.customProgramCacheKey = () => 'cw-' + kind;
+  mat.customProgramCacheKey = () => 'cw-' + kind + (mat.defines && mat.defines.CW_DITHER !== undefined ? '-d' : '');
   mat.onBeforeCompile = sh => {
     sh.uniforms.uTime = SH.uTime; sh.uniforms.uTexA = SH.uTexA; sh.uniforms.uTexH = SH.uTexH; sh.uniforms.uBump = SH.uBump; sh.uniforms.uSky = SH.uSky; sh.uniforms.uWind = SH.uWind;
     sh.uniforms.uCover = SH.uCover; sh.uniforms.uCoverCol = SH.uCoverCol; sh.uniforms.uCoverP = SH.uCoverP; sh.uniforms.uWat = SH.uWat; sh.uniforms.uWatA = SH.uWatA; sh.uniforms.uWatB = SH.uWatB; sh.uniforms.uWet = SH.uWet; sh.uniforms.uMoonV = SH.uMoonV; sh.uniforms.uMoonC = SH.uMoonC; sh.uniforms.uGlint = SH.uGlint;
@@ -243,12 +259,20 @@ ${inst ? `{
   float cwEc = floor(vFlash * 0.25 + 0.002), cwFl = vFlash - cwEc * 4.0;
   totalEmissiveRadiance += vec3(1.0, 0.8, 0.55) * cwFl * 0.55;
   if (cwEc > 4.5) {
-    // An Echo ghost (m.echo, code 5): a screen-door see-through in drifting bands, a pale cold body and a flickering rim.
+    // An Echo ghost (m.echo, code 5): a pale cold body, a flickering rim and drifting bands. With CW_DITHER (desktop,
+    // not on Fast: echoDitherWanted) the bands are a screen-door see-through. Phones and Fast get no discard at all:
+    // any discard in this shader costs every monster part on tile-based GPUs (no early depth / hidden-surface
+    // removal), so there the bands are drawn as darker stripes in a plain cold tint instead.
     float cwSl = fract(gl_FragCoord.y * 0.045 - uTime * 0.7 + vViewPosition.x * 0.3);
+    #ifdef CW_DITHER
     if (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 0.5 && cwSl < 0.6) discard;
+    #endif
     float cwFk = 0.78 + 0.22 * sin(uTime * 17.0 + vViewPosition.x * 2.3) * sin(uTime * 3.7 + vViewPosition.y);
     float cwFr = pow(1.0 - clamp(abs(normal.z), 0.0, 1.0), 2.0);
     diffuseColor.rgb = vec3(dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15))) * vec3(0.5, 0.68, 0.95);
+    #ifndef CW_DITHER
+    diffuseColor.rgb *= 0.55 + 0.45 * smoothstep(0.5, 0.65, cwSl);
+    #endif
     totalEmissiveRadiance += vec3(0.42, 0.7, 1.5) * (cwFr * 1.15 + 0.1 + cwSl * 0.06) * cwFk;
   } else if (cwEc > 0.5) {
     vec3 cwRc = cwEc < 1.5 ? vec3(1.7, 0.55, 0.1) : cwEc < 2.5 ? vec3(0.55, 0.9, 1.7) : cwEc < 3.5 ? vec3(1.5, 1.2, 0.18) : vec3(0.4, 1.6, 0.35);

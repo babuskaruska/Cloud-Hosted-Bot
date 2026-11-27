@@ -27,12 +27,13 @@ const PORT_RAMP = {
   seaD: ['#061618', '#0e3234', '#1a4c48', '#2c6e66'],
   coral: ['#4a1a22', '#8a3040', '#d0606a', '#ffa8a0'],
   shade: ['#07080c', '#0f1118', '#191c26', '#252a38'],
+  robe: ['#0a0b12', '#161a28', '#262c42', '#3c4564'],
 };
-const PORT_GLOW = { giant: '#ff5a2a', ogre: '#ffb040', jotun: '#8fd8ff', queen: '#ff3a5a', colossus: '#ff8a2a', king: '#5ff0d8', leviathan: '#5ff0e0' };
+const PORT_GLOW = { giant: '#ff5a2a', ogre: '#ffb040', jotun: '#8fd8ff', queen: '#ff3a5a', colossus: '#ff8a2a', king: '#5ff0d8', leviathan: '#5ff0e0', herald: '#8aa4ff' };
 // Titles under the name on the card (a fallback for any other boss).
 const BOSS_TITLE = {
   giant: 'Lord of the Barrows', ogre: 'Eater of Keepers', jotun: 'The Winter That Walks', queen: 'Mother of the Dark Brood',
-  colossus: 'The Mountain\'s Fury', king: 'Sovereign of the Sands', leviathan: 'Tyrant of the Deep',
+  colossus: 'The Mountain\'s Fury', king: 'Sovereign of the Sands', leviathan: 'Tyrant of the Deep', herald: 'Thief of Lanterns',
 };
 const BAYER2 = [0, .5, .75, .25];
 
@@ -177,6 +178,23 @@ const PORT_ART = {
     P.put(15, 15, R.seaD[0]); P.put(17, 15, R.seaD[0]);
     for (let i = 0; i < 6; i++) { const x = 10 + i * 2.4, len = 6 + (i % 3) * 3; for (let k = 0; k < len; k++) P.put(Math.round(x + Math.sin(k * .7 + i) * 1.2), 18 + k, k < 2 ? R.sea[1] : R.seaD[2 - (k & 1)]); }
   },
+  herald(P, R) {
+    // A tall pointed hood over a ragged mantle; no face, just the dark and two cold pinpoints. Its cage lantern,
+    // full of stolen warm light, hangs on a chain at the lower left.
+    P.poly([[0, 32], [2, 25], [8, 21], [24, 21], [30, 25], [32, 32]], R.robe, { k: .9 });
+    for (let x = 3; x <= 29; x += 3) P.line(x, 23 + (x % 2), x + 1, 26 + (x % 3), R.robe[0]);
+    P.poly([[16, 0], [21, 6], [25, 15], [26, 23], [6, 23], [7, 15], [11, 6]], R.robe);
+    P.line(16, 0, 11, 6, R.robe[3]); P.line(11, 6, 7, 15, R.robe[2]);
+    P.ell(16, 15.5, 6.2, 7.5, R.shade, { k: .25 });
+    P.ell(16, 16, 4.6, 6, [R.shade[0]], {});
+    for (let a = 0; a < 20; a++) { const t = a / 20 * TAU; P.put(Math.round(16 + Math.cos(t) * 6.6), Math.round(15.5 + Math.sin(t) * 7.9), t > PI * .9 && t < PI * 1.6 ? '#56607e' : R.robe[1]); }
+    P.eye(13, 14, '#e8f0ff'); P.eye(19, 14, '#e8f0ff'); P.eye(13, 15, '#7f9cff', .5); P.eye(19, 15, '#7f9cff', .5);
+    // The lantern: a chain from the top edge, the cage, the warm core.
+    for (let y = 16; y < 24; y++) P.put(4, y, y & 1 ? R.iron[2] : R.iron[1]);
+    P.poly([[2, 24], [7, 24], [6, 26], [3, 26]], R.iron); P.poly([[2, 30], [7, 30], [6, 31], [3, 31]], R.iron);
+    for (let y = 26; y < 30; y++) { P.put(2, y, R.iron[1]); P.put(7, y, R.iron[1]); P.put(3, y, '#ff9a3c'); P.put(5, y, '#ffcf70'); P.put(6, y, '#ff9a3c'); P.put(4, y, R.iron[0]); }
+    P.eye(5, 27, '#fff0b8', .9); P.eye(5, 28, '#ffcf70', .7);
+  },
 };
 // A shape for any boss without a painting: horns and a shadowed head, with its own eye colour.
 function portSilhouette(P, R, kind) {
@@ -248,7 +266,10 @@ const BOSSCARD = {
     }
     if (ps < 2) { ps = 2; nameS = 2; }
     const ein = sat(t / .28), eout = sat((this.DUR - t) / .4), slide = (1 - ein * ein * (3 - 2 * ein)) * (w + 8 * s) + (1 - eout) * 14 * s;
-    const x = Math.round(x0 + 2 * s - slide), y = Math.round(y0 + 4 * s), a = Math.min(1, ein * 1.4) * eout;
+    // Under an Eclipse the black sun hangs in the sky at the top left (20-post.js), so the card comes in from the
+    // right instead and leaves the disc clear.
+    const right = (G.eclA || 0) > .05;
+    const x = right ? Math.round(Wr - 2 * s - w + slide) : Math.round(x0 + 2 * s - slide), y = Math.round(y0 + 4 * s), a = Math.min(1, ein * 1.4) * eout;
     c.save(); c.globalAlpha = a;
     // A dark strip with an ember edge, the portrait in a gold frame on its left.
     UI.plate(x, y, w, h, { bd: UI.COLR.ember, bg: 'rgba(12,8,10,0.9)', hi: 'rgba(255,138,60,0.22)' });
