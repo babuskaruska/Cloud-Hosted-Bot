@@ -29,6 +29,8 @@ Nothing merges unless `node tools/qa.js` passes: no page errors, no NaN, no earl
 
 ## Status
 
+- **Live site (GitHub Pages, from `main`):** https://babuskaruska.github.io/Cloud-Hosted-Bot/. It installs as an offline home-screen app (`manifest.webmanifest`, `sw.js`, `icon-*.png`; the icons are written by `build.py`). Pushing `main` updates it. Bump `V` in `sw.js` only if cached files change name.
+
 - **Playable build (private to the owner):** https://claude.ai/artifact/53H8ujm4JWWLAGVr5KhyHs. To update it, copy `index.html` to the scratchpad as `cinderwatch.html` and republish it with the Artifact tool (pass this URL as `url` from a new session).
 - Phase 0 done: the game is imported, the tools run on Linux, and `tools/qa.js` plus a baseline exist.
 - Round 1 merged:
