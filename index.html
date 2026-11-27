@@ -2714,7 +2714,7 @@ function updateLights(dt, t, focusX, focusZ) {
     const l = LT.towers[i], e = LT.emitters[i];
     if (e && e.alive) {
       e.fl = .86 + .1 * n1(t * 7 + e.seed, e.seed) + .05 * n1(t * 19 + e.seed, e.seed + 1);
-      l.position.set(e.x, e.y, e.z); l.color.setRGB(e.r, e.g, e.b); l.distance = e.range;
+      l.position.set(e.x, e.y, e.z); l.color.setRGB(e.r, e.g, e.b); l.distance = e.range * (1 - .3 * (G.eclA || 0)); // Eclipse shrinks tower light
       l.intensity = e.I * e.on * e.fl * (1 - .68 * (e._spot || 0));
     } else l.intensity = 0;
   }
@@ -7016,6 +7016,13 @@ const WX_KEYS = ['sizeA', 'sizeB', 'colA', 'colB', 'alA', 'alB'], wxU = k => WX.
 function eventLook() {
   const ev = G.event, B = G.B; if (!B || !WX.u) return;
   drawEventFX(ev, B);
+  // Eclipse mutator (64-endless.js): the land fades darker and colder over a few seconds; tower lights shrink in 60-towers.
+  G.eclA = (G.eclA || 0) + ((G.eclipse && G.phase !== 'menu' ? 1 : 0) - (G.eclA || 0)) * Math.min(1, .016 * 1.5);
+  if (G.eclA > .002) {
+    const ea = G.eclA, lf = R.mats.comp.uniforms.uLift.value;
+    R.exposure *= lerp(1, .8, ea); LT.moon.intensity *= lerp(1, .4, ea); LT.hemi.intensity *= lerp(1, .72, ea);
+    lf.set(lf.x - .004 * ea, lf.y - .002 * ea, lf.z + .01 * ea);
+  }
   if (!ev || ev.amt <= 0) { if (_evLookOn) { _evLookOn = false; const w = B.bio.wx; WX.u.uN.value.fromArray(w.n); WX.u.uVelA.value.fromArray(w.velA); WX.u.uVelB.value.fromArray(w.velB); for (const k of WX_KEYS) wxU(k).fromArray(w[k]); } return; }
   _evLookOn = true;
   const E = ev.def, a = ev.amt, u = R.mats.atmo.uniforms, mi = u.uMist.value, ma = u.uMistAmb.value;
@@ -7126,6 +7133,9 @@ const MUTATORS = {
   famine: { name: 'Famine', tip: 'Monsters drop less gold.', icon: 'coin', curse: 1, m: { bounty: .72 } },
   plague: { name: 'Plague', tip: 'Monsters heal when they are left alone.', icon: 'skull', curse: 1, m: {} },
   titan: { name: 'Titan', tip: 'The boss is bigger, tougher and carries an extra power.', icon: 'crown', curse: 1, m: {} },
+  eclipse: { name: 'Eclipse', tip: 'The land goes dark: towers see less far and their lights shrink.', icon: 'moon', curse: 1, m: { range: .92 } },
+  siege: { name: 'Siege', tip: 'Siege rams join every wave.', icon: 'shield', curse: 1, m: {} },
+  echoes: { name: 'Echoes', tip: 'A slain elite rises once more as a ghost.', icon: 'skull', curse: 1, m: {} },
   gilded: { name: 'Gilded', tip: 'A boon: monsters drop more gold.', icon: 'coin', boon: 1, m: { bounty: 1.3 } },
   kindled: { name: 'Kindled', tip: 'A boon: monsters take more damage.', icon: 'flame', boon: 1, m: { dmgIn: 1.15 } },
 };
@@ -7140,6 +7150,7 @@ function modMul(stat) { const v = G.modM[stat]; return v === undefined ? 1 : v; 
 function modCount(level) { const deep = level < 6 ? 0 : Math.min(5, 1 + Math.floor((level - 6) / 3)); return deep + (G.heatMods | 0); }
 function setMods(keys) {
   G.mods = keys.slice(); G.modM = {};
+  G.eclipse = G.mods.indexOf('eclipse') >= 0;
   for (const k of G.mods) { const M = MUTATORS[k]; if (!M) continue; for (const s in M.m) G.modM[s] = (G.modM[s] === undefined ? 1 : G.modM[s]) * M.m[s]; }
 }
 // Rolls this land's mutators from the gameplay random stream (deterministic per run). Returns the keys.
@@ -7154,12 +7165,15 @@ function rollMods(level) {
 function bossAffixes(level) { return (level < 6 ? 0 : Math.min(3, 1 + Math.floor((level - 6) / 6))) + (modOn('titan') ? 1 : 0) + (G.heatAffix | 0); }
 
 function updateEndless(dt) {
-  if (G.phase !== 'play') return;
+  if (G.phase !== 'play') { if (G.echoQ) G.echoQ.length = 0; return; }
+  updateEchoes(dt);
   if (G.modLevel !== G.level) {
     G.modLevel = G.level;
     const keys = rollMods(G.level);
     if (keys.length) { G.bountyMul *= modMul('bounty'); if (UI.banner && !UI.mutCard) UI.banner(keys.map(k => MUTATORS[k].name).join(' · '), 3.2, false); }
   }
+  if (G.spawning && G.siegeK !== G.k) { G.siegeK = G.k; if (modOn('siege')) addSiege(); }
+  if (!G.spawning) G.siegeK = -1;
   const plague = modOn('plague');
   for (const m of G.mons) {
     if (m.dead || m.hp <= 0) continue;
@@ -7184,8 +7198,37 @@ function bossEmpower(m) {
 }
 // Called from killMonster: Volatile bursts (they reuse the sapper chain, so they can set each other off).
 function modOnKill(m) {
+  if (m.elite && modOn('echoes')) echoRise(m);
   if (!modOn('volatile') || m.def.boss || m.small || rnd() >= .22) return;
   G.chain.push({ t: rr(.25, .45), x: m.x, y: m.y, z: m.z, ex: { r: 1.3, dmg: 22 * (1 + .25 * G.level), men: 18 * (1 + .2 * G.level) } });
+}
+// Siege: 1-3 rams spread through the wave's queue, as tough as the wave around them.
+function addSiege() {
+  const q = G.queue; if (!q.length) return;
+  const n = 1 + Math.min(2, Math.floor(Math.max(0, G.level - 3) / 4)), end = q[q.length - 1].t;
+  let hp = 0; for (const e of q) hp += e.hpMul || 1; hp /= q.length;
+  for (let i = 0; i < n; i++) {
+    const t = end * (i + .5) / n, e = { t, type: 'ram', hpMul: hp, bm: .8 };
+    let j = 0; while (j < q.length && q[j].t <= t) j++;
+    q.splice(j, 0, e);
+  }
+}
+// Echoes: a slain ground elite rises once as a pale ghost where it fell (no elite power, half bounty).
+function echoRise(m) {
+  if (m.fly || m.echo || m.def.boss || G.mons.length >= MAX_ALIVE) return;
+  G.echoQ = G.echoQ || [];
+  G.echoQ.push({ t: .9, type: m.type, s: m.s, lat: m.lat, hp: m.maxHp * .6 / Math.max(1, m.def.hp) });
+}
+function updateEchoes(dt) {
+  if (!G.echoQ || !G.echoQ.length) return;
+  for (let i = G.echoQ.length - 1; i >= 0; i--) {
+    const e = G.echoQ[i]; e.t -= dt; if (e.t > 0) continue;
+    G.echoQ.splice(i, 1);
+    if (G.phase !== 'play' || G.mons.length >= MAX_ALIVE) continue;
+    const g = spawnMonster(e.type, { hpMul: e.hp, s: e.s, lat: e.lat });
+    g.echo = true; g.bmul = .5; g.tint = [.62, .78, 1]; g.pop = .5;
+    if (G.spdMul !== 1) g.spdMul *= G.spdMul;
+  }
 }
 window.__cwEndless = { MUTATORS, BOSS_AFFIX, rollMods, setMods, modOn, modMul };
 

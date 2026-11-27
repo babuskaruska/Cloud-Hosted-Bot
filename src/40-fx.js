@@ -79,7 +79,7 @@ function updateLights(dt, t, focusX, focusZ) {
     const l = LT.towers[i], e = LT.emitters[i];
     if (e && e.alive) {
       e.fl = .86 + .1 * n1(t * 7 + e.seed, e.seed) + .05 * n1(t * 19 + e.seed, e.seed + 1);
-      l.position.set(e.x, e.y, e.z); l.color.setRGB(e.r, e.g, e.b); l.distance = e.range;
+      l.position.set(e.x, e.y, e.z); l.color.setRGB(e.r, e.g, e.b); l.distance = e.range * (1 - .3 * (G.eclA || 0)); // Eclipse shrinks tower light
       l.intensity = e.I * e.on * e.fl * (1 - .68 * (e._spot || 0));
     } else l.intensity = 0;
   }
