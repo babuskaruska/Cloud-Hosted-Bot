@@ -1,7 +1,8 @@
 {
-  "name": "Lanternhold",
-  "short_name": "Lanternhold",
-  "description": "Re-light the beacons against the Hollowing. A dark-fantasy tower defense.",
+  "name": "Laternalinnus",
+  "short_name": "Laternalinnus",
+  "description": "Süüta majakad uuesti ja tõrju Õõnsust. Sünge muinasjutuline tornikaitsemäng.",
+  "lang": "et",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

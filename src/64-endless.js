@@ -3,25 +3,25 @@
 // for that stat; game code reads it at a few hook points (wave budget, elite chance, tower range, monster speed,
 // damage monsters take, bounty). Campaign lands (level < 6) roll none unless Heat asks for some (G.heatMods).
 const MUTATORS = {
-  bloodmoon: { name: 'Blood Moon', tip: 'Elites come twice as often.', icon: 'moon', curse: 1, m: { elite: 2.2 } },
-  swarm: { name: 'Swarm', tip: 'A third more monsters in every wave.', icon: 'swarm', curse: 1, m: { budget: 1.35 } },
-  ironhide: { name: 'Ironhide', tip: 'Monsters take a fifth less damage.', icon: 'shield', curse: 1, m: { dmgIn: .8 } },
-  fog: { name: 'Hollow Fog', tip: 'Towers see less far.', icon: 'fog', curse: 1, m: { range: .86 } },
-  haste: { name: 'Haste', tip: 'Monsters move faster.', icon: 'boot', curse: 1, m: { spd: 1.15 } },
-  volatile: { name: 'Volatile', tip: 'Some monsters burst when they die, hurting what stands near.', icon: 'bomb', curse: 1, m: {} },
-  famine: { name: 'Famine', tip: 'Monsters drop less gold.', icon: 'coin', curse: 1, m: { bounty: .72 } },
-  plague: { name: 'Plague', tip: 'Monsters heal when they are left alone.', icon: 'skull', curse: 1, m: {} },
-  titan: { name: 'Titan', tip: 'The boss is bigger, tougher and carries an extra power.', icon: 'crown', curse: 1, m: {} },
-  eclipse: { name: 'Eclipse', tip: 'The land goes dark: towers see less far and their lights shrink.', icon: 'moon', curse: 1, m: { range: .92 } },
-  siege: { name: 'Siege', tip: 'Siege rams join every wave.', icon: 'shield', curse: 1, m: {} },
-  echoes: { name: 'Echoes', tip: 'A slain elite rises once more as a ghost.', icon: 'skull', curse: 1, m: {} },
-  gilded: { name: 'Gilded', tip: 'A boon: monsters drop more gold.', icon: 'coin', boon: 1, m: { bounty: 1.3 } },
-  kindled: { name: 'Kindled', tip: 'A boon: monsters take more damage.', icon: 'flame', boon: 1, m: { dmgIn: 1.15 } },
+  bloodmoon: { name: 'Verikuu', tip: 'Eliitkoletisi tuleb kaks korda sagedamini.', icon: 'moon', curse: 1, m: { elite: 2.2 } },
+  swarm: { name: 'Parv', tip: 'Igas laines on kolmandiku võrra rohkem koletisi.', icon: 'swarm', curse: 1, m: { budget: 1.35 } },
+  ironhide: { name: 'Raudnahk', tip: 'Koletised saavad viiendiku võrra vähem kahju.', icon: 'shield', curse: 1, m: { dmgIn: .8 } },
+  fog: { name: 'Õõnesudu', tip: 'Tornid ei näe nii kaugele.', icon: 'fog', curse: 1, m: { range: .86 } },
+  haste: { name: 'Kiirus', tip: 'Koletised liiguvad kiiremini.', icon: 'boot', curse: 1, m: { spd: 1.15 } },
+  volatile: { name: 'Plahvatus', tip: 'Mõned koletised lõhkevad surres ja teevad lähedal olijatele haiget.', icon: 'bomb', curse: 1, m: {} },
+  famine: { name: 'Nälg', tip: 'Koletistelt saab vähem kulda.', icon: 'coin', curse: 1, m: { bounty: .72 } },
+  plague: { name: 'Katk', tip: 'Koletised paranevad, kui keegi neid ei löö.', icon: 'skull', curse: 1, m: {} },
+  titan: { name: 'Titaan', tip: 'Pealik on suurem, tugevam ja tal on üks lisavõime.', icon: 'crown', curse: 1, m: {} },
+  eclipse: { name: 'Varjutus', tip: 'Maa läheb pimedaks: tornid ei näe nii kaugele ja nende tuled kahanevad.', icon: 'moon', curse: 1, m: { range: .92 } },
+  siege: { name: 'Piiramine', tip: 'Igas laines on müürilõhkujaid.', icon: 'shield', curse: 1, m: {} },
+  echoes: { name: 'Kajad', tip: 'Langenud eliitkoletis tõuseb veel korra kummitusena.', icon: 'skull', curse: 1, m: {} },
+  gilded: { name: 'Kuldne', tip: 'Õnnistus: koletistelt saab rohkem kulda.', icon: 'coin', boon: 1, m: { bounty: 1.3 } },
+  kindled: { name: 'Süüdatud', tip: 'Õnnistus: koletised saavad rohkem kahju.', icon: 'flame', boon: 1, m: { dmgIn: 1.15 } },
 };
 const BOSS_AFFIX = {
-  warded: { name: 'Warded', tip: 'A ward soaks damage and returns every 20 s.' },
-  swift: { name: 'Swift', tip: 'Moves faster.' },
-  regen: { name: 'Undying', tip: 'Heals when left alone.' },
+  warded: { name: 'Kaitstud', tip: 'Kaitsekilp neelab kahju ja tuleb iga 20 s tagasi.' },
+  swift: { name: 'Väle', tip: 'Liigub kiiremini.' },
+  regen: { name: 'Surematu', tip: 'Paraneb, kui keegi teda ei löö.' },
 };
 G.mods = []; G.modM = {}; G.modLevel = -1; G.heatMods = G.heatMods || 0;
 function modOn(k) { return G.mods.indexOf(k) >= 0; }
@@ -72,7 +72,7 @@ function bossEmpower(m) {
   m.affix = {}; for (const k of pick) m.affix[k] = 1;
   if (m.affix.swift) m.spdMul = (m.spdMul || 1) * 1.25;
   if (m.affix.warded) { m.wardT = 20; m.ward = m.wardMax = m.maxHp * .22; }
-  m.affixName = (/^The /.test(m.def.name) ? 'The ' : '') + pick.map(k => BOSS_AFFIX[k].name).join(' ') + ' ' + m.def.name.replace(/^The /, ''); // 'The Undying Drowned King', not 'Undying The Drowned King'
+  m.affixName = pick.map((k, i) => i ? BOSS_AFFIX[k].name.toLowerCase() : BOSS_AFFIX[k].name).join(' ') + ' ' + m.def.name.charAt(0).toLowerCase() + m.def.name.slice(1); // 'Surematu uppunud kuningas'
   if (UI.banner && typeof UI.bossCard !== 'function') UI.banner(m.affixName, 3, true); // the boss card already shows the affixed name
 }
 // Called from killMonster: Volatile bursts (they reuse the sapper chain, so they can set each other off).

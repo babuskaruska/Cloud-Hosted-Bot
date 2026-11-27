@@ -578,7 +578,7 @@ function initLeviathan() {
   for (const k of ['uArm', 'lArm', 'uLeg', 'lLeg']) K[k].mesh.castShadow = true;
   RIGS.leviathan = rigLeviathan; EYES.leviathan = [.055, .125, .185, .06]; RIG_DEATH.leviathan = 'drown';
   // Stand-in stats so the model can be tried on its own. The game's own MON.leviathan (Mira's) replaces this.
-  if (!MON.leviathan) MON.leviathan = { name: 'The Drowned King', tip: 'Calls drowned skeletons from the sea.', hp: 1250, spd: .82, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 2.1, top: 4.0, dmg: 50, atkT: 1.8, eye: [.5, 3.2, 2.6], scale: 2.7, boss: true, summon: { type: 'skel', n: 2, every: 9, max: 99, hp: .8 }, death: 'flesh', blade: true, cat: 'armor', rig: 'leviathan' };
+  if (!MON.leviathan) MON.leviathan = { name: 'Uppunud kuningas', tip: 'Kutsub merest uppunud luukeresid.', hp: 1250, spd: .82, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 2.1, top: 4.0, dmg: 50, atkT: 1.8, eye: [.5, 3.2, 2.6], scale: 2.7, boss: true, summon: { type: 'skel', n: 2, every: 9, max: 99, hp: .8 }, death: 'flesh', blade: true, cat: 'armor', rig: 'leviathan' };
 }
 function rigLeviathan(e) {
   e.weapon = KIT.item.anchor; e.wScale = 1.25; e.heavy = true;
@@ -702,7 +702,7 @@ function initHerald() {
   }, 2, { rad: .1 });
   RIGS.herald = rigHerald; EYES.herald = null; RIG_DEATH.herald = 'hollow';
   // Stand-in stats so the model works on its own. The game's own MON.herald (Mira's) replaces this.
-  if (!MON.herald) MON.herald = { name: 'The Hollow Herald', tip: 'Snuffs your tower lights and calls the echoes of the slain.', hp: 1300, spd: .72, rad: .9, mass: 40, bounty: 220, lives: 5, hitH: 2.2, top: 4.3, dmg: 42, atkT: 1.9, eye: [1.3, 1.7, 2.6], scale: 2.5, boss: true, summon: { type: 'wraith', n: 2, every: 9, max: 99, hp: .6 }, death: 'flesh', cat: 'armor', rig: 'herald' };
+  if (!MON.herald) MON.herald = { name: 'Õõnsuse kuulutaja', tip: 'Kustutab su tornide tuled ja kutsub langenute kajasid.', hp: 1300, spd: .72, rad: .9, mass: 40, bounty: 220, lives: 5, hitH: 2.2, top: 4.3, dmg: 42, atkT: 1.9, eye: [1.3, 1.7, 2.6], scale: 2.5, boss: true, summon: { type: 'wraith', n: 2, every: 9, max: 99, hp: .6 }, death: 'flesh', cat: 'armor', rig: 'herald' };
 }
 const _hA = new THREE.Vector3();
 function rigHerald(e) {

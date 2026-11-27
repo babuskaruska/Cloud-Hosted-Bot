@@ -75,10 +75,10 @@ function heraldCall(m, dt) {
 
 // Elites: tougher, richer monsters with one twist each. m.elite is the key; Ash draws the aura from it.
 const ELITE = {
-  burning: { name: 'Burning', col: '#ff9a4a', hp: 1.6, tip: 'Leaves fire on the road that burns your footmen.' },
-  shielded: { name: 'Shielded', col: '#9fd4ff', hp: 1.25, tip: 'A ward soaks up the first big chunk of damage.' },
-  hasted: { name: 'Hasted', col: '#f2e27a', hp: 1.3, tip: 'Much faster than the rest of its kind.' },
-  splitting: { name: 'Splitting', col: '#b4f08a', hp: 1.4, tip: 'Splits into two smaller copies when it falls.' },
+  burning: { name: 'Põlev', col: '#ff9a4a', hp: 1.6, tip: 'Jätab teele tule, mis põletab su sõdureid.' },
+  shielded: { name: 'Kilbiga', col: '#9fd4ff', hp: 1.25, tip: 'Kaitsekilp neelab esimese suure tüki kahjust.' },
+  hasted: { name: 'Kiire', col: '#f2e27a', hp: 1.3, tip: 'Palju kiirem kui teised omasugused.' },
+  splitting: { name: 'Jagunev', col: '#b4f08a', hp: 1.4, tip: 'Langedes jaguneb kaheks väiksemaks koopiaks.' },
 };
 const ELITE_KINDS = ['burning', 'shielded', 'hasted', 'splitting'];
 const ELITE_BOUNTY = 2.5;
@@ -102,7 +102,7 @@ function makeElite(m, kind) {
   return m;
 }
 const ECHO_COL = '#a9c6ff'; // Echoes (64-endless.js): a slain elite's pale ghost gets a tag of its own colour
-function eliteName(m) { return ELITE[m.elite] ? ELITE[m.elite].name + ' ' + m.def.name : m.def.name; }
+function eliteName(m) { return ELITE[m.elite] ? ELITE[m.elite].name + ' ' + m.def.name.charAt(0).toLowerCase() + m.def.name.slice(1) : m.def.name; }
 // Called from hitMonster: the ward absorbs damage first. Returns the damage that gets through.
 function wardAbsorb(m, dmg) {
   const a = Math.min(m.ward, dmg); m.ward -= a;
@@ -279,9 +279,9 @@ function pressCap() { return 2.2 + .3 * G.level + .1 * G.heat; }
 function startWave() {
   const W = G.wavesPerLand;
   G.k = G.k % W + 1; dailyReseed(G.level, G.k); G.queue = buildWave(G.k, G.level); if (waveNumber() > G.best && (inRun() || TEST_SESSION)) { G.best = waveNumber(); if (!TEST_SESSION) try { localStorage.setItem('lanternhold.best', '' + G.best); } catch (e) {} } G.waveT = 0; G.spawning = true; G.bossWave = isBossK(G.k); G.horde = isHordeK(G.k, G.level); G.waveKills = 0; G.waveLeaks = 0; G.bossDown = false; G.trickle = 6; G.trickleN = 0;
-  const cv = G.B.cave, wl = 'Wave ' + G.k + '/' + W;
+  const cv = G.B.cave, wl = 'Laine ' + G.k + '/' + W;
   sfx(G.bossWave ? 'hornBoss' : 'horn', cv.x, cv.z, 1.1);
-  if (G.horde) { sfx('horde', cv.x, cv.z, 1.1); UI.banner(wl + ' · The horde is coming!', 3.4, true); }
+  if (G.horde) { sfx('horde', cv.x, cv.z, 1.1); UI.banner(wl + ' · Hord tuleb!', 3.4, true); }
   else UI.banner(G.bossWave ? wl + ' · ' + MON[bossType()].name : wl, G.bossWave ? 3.6 : 2.2, G.bossWave);
   G.restored = false; autosave(G.k, false);
 }
@@ -321,13 +321,37 @@ function updateWaves(dt) {
     G.clearT += dt;
     if (!G.mons.some(m => !m.dead) || G.clearT > 40) { setPhase('clear'); }
   } else {
-    G.nextIn -= dt;
+    updateCount(dt);
+    if (!(G.count > 0)) G.nextIn -= dt; // the countdown holds the land's first wave
     if (G.nextIn <= 0) startWave();
   }
   if (G.lives <= 0 && G.phase === 'play') setPhase('defeat');
 }
+// Round 12: a countdown before each land's first wave: 6, 5, 4, 3, 2, 1, then 0 ("Alusta!", the wave comes), one a second.
+// G.count is the number on screen (null when there is none); G.countT the seconds counted (-1: no countdown). It waits
+// while a story beat or a card is up, and runs in real seconds whatever the game speed. A tap on it, Space or Enter skip
+// it (countSkip). Not in the demo, under the tutorial (which holds the wave itself) or in test sessions (QA stays as it was).
+// Sounds (Echo): sfx('countTick', 0, 0, 1) on 6 to 1, sfx('countGo') on 0. Drawn by MENU (73-menu.js, drawCount).
+const COUNT_FROM = 6;
+function countStart() {
+  G.count = null; G.countT = -1;
+  if (inRun() && !TEST_SESSION && !(typeof TUT !== 'undefined' && TUT.active())) G.countT = 0;
+}
+function updateCount(dt) {
+  if (!(G.countT >= 0)) { G.count = null; return; }
+  if (G.phaseT < .3 || STORY.on() || STORY.queue.length || UI.scr) return;
+  G.countT += (R.frameDt || dt) / Math.max(1, G.speed);
+  if (G.countT >= COUNT_FROM + .9) { G.countT = -1; G.count = null; return; }
+  const n = Math.max(0, COUNT_FROM - Math.floor(G.countT));
+  if (n !== G.count) { G.count = n; if (n > 0) sfx('countTick', 0, 0, 1); else { sfx('countGo', CAM.x, CAM.z, 1); G.nextIn = Math.min(G.nextIn, .05); } }
+}
+function countSkip() {
+  if (!(G.count > 0) && !(G.countT >= 0 && G.count === null)) return false;
+  G.countT = COUNT_FROM; G.count = 0; sfx('countGo', CAM.x, CAM.z, 1); G.nextIn = Math.min(G.nextIn, .05);
+  return true;
+}
 // After a restore the first wave pays no early-call gold (reloading must not become a gold tap).
-function callWaveEarly() { if (G.phase === 'play' && !G.spawning && !G.bossWave && G.nextIn > .4) { if (!G.restored) G.gold += Math.round(G.nextIn * 3); G.nextIn = .05; return true; } return false; }
+function callWaveEarly() { if (G.count > 0 || (G.countT >= 0 && G.count === null)) return countSkip(); if (G.phase === 'play' && !G.spawning && !G.bossWave && G.nextIn > .4) { if (!G.restored) G.gold += Math.round(G.nextIn * 3); G.nextIn = .05; return true; } return false; }
 
 // Every purchase goes through pay() and every refund through refund(), so the run summary can count the gold earned.
 function pay(c) { G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); if (G.runStats) G.runStats.last -= c; }
@@ -384,9 +408,9 @@ function sellTower(t) {
 // Spells. Mana (G.mana up to G.manaMax) fills from kills and slowly while a wave runs; each spell also has a cooldown.
 // castSpell(kind, x, z) is the one entry point (UI, keys and the AI commander all use it).
 const SPELL = {
-  meteor: { name: 'Meteor', key: 'Q', mana: 60, cd: 26, r: 3.2, icon: 'meteor', desc: 'A burning rock: a huge blast, then fire.' },
-  frost: { name: 'Frost', key: 'E', mana: 40, cd: 22, r: 3.6, icon: 'frost', desc: 'Freezes every monster in the circle.' },
-  rally: { name: 'Rally', key: 'T', mana: 35, cd: 20, r: 1.4, icon: 'rally', desc: 'Four militia hold the road for a while.' },
+  meteor: { name: 'Meteoor', key: 'Q', mana: 60, cd: 26, r: 3.2, icon: 'meteor', desc: 'Põlev kivi: suur pauk ja siis tuli.' },
+  frost: { name: 'Jää', key: 'E', mana: 40, cd: 22, r: 3.6, icon: 'frost', desc: 'Külmutab kõik koletised ringis.' },
+  rally: { name: 'Abivägi', key: 'T', mana: 35, cd: 20, r: 1.4, icon: 'rally', desc: 'Neli maakaitsjat hoiavad teed mõnda aega kinni.' },
 };
 const SPELL_KINDS = ['meteor', 'frost', 'rally'];
 const METEOR_FALL = .8, RALLY_TIME = 20;
@@ -671,8 +695,8 @@ function restartRun(byPlayer) {
 }
 function setPhase(p) {
   G.phase = p; G.phaseT = 0; if (p !== 'play') G.horde = false;
-  if (p === 'clear') { recordTowers(); if (G.runStats) G.runStats.lands++; G.advance = true; metaLandClear(); autosave(1, true); UI.banner('The pass holds', 3.2, false); UI.closeMenu(); }
-  if (p === 'defeat') { recordTowers(); if (G.runStats) G.runStats.sum = runSummary(); clearSave(); if (inRun()) bankRun('defeat'); UI.banner('The beacon is out', 4.2, true); UI.closeMenu(); sfx('beaconOut', G.B.beacon.x, G.B.beacon.z, 1.2); fxEmbers(G.B.beacon.x, G.B.beacon.y, G.B.beacon.z, 60, .8); for (let i = 0; i < 14; i++) fxSmoke(G.B.beacon.x + rr(-.4, .4), G.B.beacon.y + rr(0, 1), G.B.beacon.z + rr(-.4, .4), rr(-.3, .3), rr(.8, 2), rr(-.3, .3), rr(2, 4), 1, 2, .2, .2, .22, .6, { drag: .5, rise: .2 }); }
+  if (p === 'clear') { recordTowers(); if (G.runStats) G.runStats.lands++; G.advance = true; metaLandClear(); autosave(1, true); UI.banner('Maa on kaitstud!', 3.2, false); UI.closeMenu(); }
+  if (p === 'defeat') { recordTowers(); if (G.runStats) G.runStats.sum = runSummary(); clearSave(); if (inRun()) bankRun('defeat'); UI.banner('Majakas kustus', 4.2, true); UI.closeMenu(); sfx('beaconOut', G.B.beacon.x, G.B.beacon.z, 1.2); fxEmbers(G.B.beacon.x, G.B.beacon.y, G.B.beacon.z, 60, .8); for (let i = 0; i < 14; i++) fxSmoke(G.B.beacon.x + rr(-.4, .4), G.B.beacon.y + rr(0, 1), G.B.beacon.z + rr(-.4, .4), rr(-.3, .3), rr(.8, 2), rr(-.3, .3), rr(2, 4), 1, 2, .2, .2, .22, .6, { drag: .5, rise: .2 }); }
   if (p === 'crumble') startCrumble();
   if (p === 'rise') startRise();
 }
@@ -713,7 +737,7 @@ function activateBoard(B, lit) {
 function beginBattle(first, S) {
   const B = G.B; dailyReseed(G.level, 0);
   G.mix = {}; G.mana = Math.max(G.mana * .5, 30); for (const k in G.spellCd) G.spellCd[k] = 0; G.pending.length = 0; G.rallies.length = 0;
-  G.lives = G.maxLives; G.gold = 300 + 100 * G.level + 12 * G.level * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.snatched = 0; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; G.queue = []; AI.think = .15; AI.wait = 0;
+  G.lives = G.maxLives; G.gold = 300 + 100 * G.level + 12 * G.level * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.snatched = 0; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; if (!S) countStart(); G.queue = []; AI.think = .15; AI.wait = 0;
   const n = S || TUT.active() ? 0 : 4 + Math.min(3, G.level);
   for (let i = 0; i < n; i++) spawnMonster(i === n - 1 && G.level > 0 ? 'knight' : 'skel', { s: B.cave.s + 2.2 + i * 1.15, lat: rr(-.7, .7), hpMul: 1 + .22 * G.level });
   if (first || G.newRun || !G.runStats) { G.newRun = false; newRun(); }
@@ -862,7 +886,7 @@ function restoreRun(S) {
   } finally { AU.ready = ar; }
   SAVE.last = S.fresh ? null : S;
   sfx('ignite', G.B.beacon.x, G.B.beacon.z, 1, 1);
-  UI.banner(G.B.bio.name + (G.level >= BIOMES.length ? ' · Night land ' + (G.level - BIOMES.length + 1) : ' · Land ' + (G.level + 1)), 3, false);
+  UI.banner(G.B.bio.name + (G.level >= BIOMES.length ? ' · Öömaa ' + (G.level - BIOMES.length + 1) : ' · Maa ' + (G.level + 1)), 3, false);
   return true;
 }
 // A saved tower, built at once: no scaffolding, at its level and branch, with its overcharge.

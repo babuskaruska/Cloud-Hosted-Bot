@@ -8,7 +8,8 @@ const TUT = {
   maybeStart() { this.step = null; this.pending = !META.tut && G.mode === 'campaign' && META.on; },
   stop() { this.step = null; this.pending = false; },
   finish() { this.stop(); META.tut = 1; saveMeta(); },
-  skip() { sfx('uiClick', CAM.x, CAM.z, .6); this.finish(); },
+  // Skipped before the first wave: the countdown (62-game.js) runs instead.
+  skip() { sfx('uiClick', CAM.x, CAM.z, .6); this.finish(); if (G.k === 0 && !G.spawning && G.phase === 'play' && typeof countStart === 'function') countStart(); },
   go(step) { this.step = step; this.t = 0; if (step !== 'done') sfx('storyLine', CAM.x, CAM.z, .6); },
   // The pad to suggest: a free one that covers a lot of road, near the middle of it.
   pickPad() {
@@ -40,11 +41,11 @@ const TUT = {
   // [head, line] for the guide plate.
   text() {
     const tch = UI.touch, s = this.step;
-    if (s === 'build') return ['Build a tower', (tch ? 'Tap' : 'Click') + ' the glowing pad, then pick a tower. Archers are a fine start.'];
-    if (s === 'upgrade') return ['Make it stronger', (tch ? 'Tap' : 'Click') + ' your tower and choose Upgrade.'];
-    if (s === 'call') return ['Call the wave', (tch ? 'Tap' : 'Click') + ' the wave plate at the top to call it early, for extra gold.'];
-    if (s === 'spell') return anySpellReady() ? ['Cast a spell', (tch ? 'Tap a lit spell, then tap the road.' : 'Click a lit spell (or Q, E, T), then the road.')] : ['Spells', 'Kills fill the blue mana bar. When a spell lights up, cast it.'];
-    if (s === 'done') return ['The beacon is yours', 'Hold the pass, Keeper. The old keeper is watching.'];
+    if (s === 'build') return ['Ehita torn', (tch ? 'Puuduta' : 'Klõpsa') + ' helendavat platsi ja vali torn. Vibutorn on hea algus.'];
+    if (s === 'upgrade') return ['Tee see tugevamaks', (tch ? 'Puuduta' : 'Klõpsa') + ' oma torni ja vali Täiusta.'];
+    if (s === 'call') return ['Kutsu laine', (tch ? 'Puuduta' : 'Klõpsa') + ' üleval laine silti, et see varem kutsuda. Saad lisakulda.'];
+    if (s === 'spell') return anySpellReady() ? ['Loitsi!', (tch ? 'Puuduta helendavat loitsu ja siis teed.' : 'Klõpsa helendavat loitsu (või Q, E, T) ja siis teed.')] : ['Loitsud', 'Iga tapetud koletis täidab sinist manariba. Kui loits süttib, kasuta seda.'];
+    if (s === 'done') return ['Majakas on sinu', 'Hoia maad, hoidja. Vana hoidja vaatab sind.'];
     return null;
   },
 };

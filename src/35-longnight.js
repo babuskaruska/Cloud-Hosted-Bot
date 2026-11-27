@@ -89,31 +89,33 @@ const WATER_SRC = ['ashen', 'frost', 'ember', 'fen', 'storm'];
 
 // Names. Each land lends words; moods and weather lend adjectives.
 const NAMEW = {
-  ashen: { pre: ['Ash', 'Grey', 'Gloam', 'Barrow', 'Raven'], place: ['Pass', 'Hollow', 'Barrows', 'Crags', 'Tors'], adj: ['Ashen', 'Hollow', 'Grey'] },
-  frost: { pre: ['Frost', 'Rime', 'Winter', 'Hoar', 'Snow'], place: ['Fells', 'Peaks', 'Hold', 'Fall', 'Heights'], adj: ['Frozen', 'Silent', 'Rimed'] },
-  fen: { pre: ['Mire', 'Bog', 'Moss', 'Reed', 'Rot'], place: ['Marsh', 'Fen', 'Mire', 'Slough', 'Bog'], adj: ['Weeping', 'Sunken', 'Rotting'] },
-  ember: { pre: ['Ember', 'Cinder', 'Brand', 'Slag', 'Smoke'], place: ['Scar', 'Caldera', 'Rift', 'Forge', 'Wastes'], adj: ['Burning', 'Scorched', 'Smouldering'] },
-  dunes: { pre: ['Dusk', 'Sand', 'Sun', 'Dust', 'Bone'], place: ['Mesa', 'Steppe', 'Flats', 'Dunes', 'Wastes'], adj: ['Bleached', 'Forgotten', 'Buried'] },
-  storm: { pre: ['Storm', 'Gale', 'Brine', 'Wrack', 'Tide'], place: ['Reach', 'Strand', 'Cliffs', 'Head', 'Shore'], adj: ['Drowned', 'Howling', 'Wind-torn'] },
+  ashen: { pre: ['Tuha', 'Halli', 'Hämara', 'Kääpa', 'Ronga'], place: ['Kuru', 'Lohk', 'Kalme', 'Kalju', 'Küngas'], adj: ['Tuhkne', 'Õõnes', 'Hall'] },
+  frost: { pre: ['Külma', 'Härma', 'Talve', 'Jää', 'Lume'], place: ['Mägi', 'Tipp', 'Kindlus', 'Kosk', 'Kõrgustik'], adj: ['Jäine', 'Vaikne', 'Härmas'] },
+  fen: { pre: ['Soo', 'Raba', 'Sambla', 'Roo', 'Mäda'], place: ['Soo', 'Raba', 'Laugas', 'Mülgas', 'Õõtsik'], adj: ['Nutev', 'Uppunud', 'Mädanev'] },
+  ember: { pre: ['Söe', 'Tule', 'Räbu', 'Suitsu', 'Kuuma'], place: ['Arm', 'Kraater', 'Lõhe', 'Sepikoda', 'Kõnnumaa'], adj: ['Põlev', 'Kõrbenud', 'Hõõguv'] },
+  dunes: { pre: ['Õhtu', 'Liiva', 'Päikse', 'Tolmu', 'Luu'], place: ['Plato', 'Stepp', 'Tasandik', 'Luide', 'Kõrb'], adj: ['Pleekinud', 'Unustatud', 'Maetud'] },
+  storm: { pre: ['Tormi', 'Tuule', 'Soola', 'Vraki', 'Mõõna'], place: ['Neem', 'Rand', 'Pank', 'Nukk', 'Kallas'], adj: ['Uppunud', 'Ulguv', 'Tuuline'] },
 };
-const MOOD_W = { night: ['Starless', 'Lightless', 'Black'], dusk: ['Gloaming', 'Dimming', 'Amber'], blood: ['Crimson', 'Bleeding', 'Red'], aurora: ['Ghostlit', 'Veiled', 'Glimmering'], dawn: ['Pale', 'Waning', 'Hushed'], plain: ['Lost', 'Last', 'Nameless'] };
-const MOOD_N = { night: 'the Long Dark', dusk: 'the Last Light', blood: 'the Red Moon', aurora: 'the Green Veil', dawn: 'the Pale Dawn', plain: 'the Hollowing' };
-const WX_W = { rain: ['Weeping', 'Drowned'], snow: ['Frozen', 'White'], ash: ['Ashen', 'Smothered'], embers: ['Burning', 'Smouldering'], spores: ['Blighted', 'Whispering'], sand: ['Scoured', 'Shifting'], none: ['Still', 'Quiet'] };
-const PLACE_ANY = ['Hollow', 'Vale', 'Reach', 'Deep', 'Barrow', 'Moor', 'Hold', 'Gate', 'Fells', 'Rest', 'Watch', 'March'];
-const SYL = [['Ka', 'Vha', 'Mor', 'I', 'Se', 'Dra', 'A', 'Thu', 'Y', 'Co', 'Mae', 'Bra', 'E', 'Ru', 'Ve', 'O', 'Ha', 'Ga', 'Ne', 'Ti', 'Lo', 'Ul'],
-  ['', '', 'r', 'l', 'th', 'n', 'v', 'dr', 'sk', 'rv', 'lm', 'nd'], ['el', 'arn', 'ow', 'un', 'eth', 'ae', 'wyn', 'is', 'och', 'a', 'elm', 'ar', 'en', 'ith', 'ra', 'os']];
-function procProper(rng) { let s = rng.pick(SYL[0]) + rng.pick(SYL[1]) + rng.pick(SYL[2]); if (s.length < 4) s += rng.pick(['n', 'th', 'r', 'l']); return s; }
+const MOOD_W = { night: ['Tähetu', 'Valgusetu', 'Must'], dusk: ['Hämar', 'Tuhmuv', 'Kuldne'], blood: ['Verine', 'Veritsev', 'Punane'], aurora: ['Kumav', 'Looritatud', 'Helkiv'], dawn: ['Kahvatu', 'Kahanev', 'Vaikiv'], plain: ['Kadunud', 'Viimane', 'Nimetu'] };
+const MOOD_N = { night: 'Pika Pimeduse', dusk: 'Viimase Valguse', blood: 'Punase Kuu', aurora: 'Rohelise Loori', dawn: 'Kahvatu Koidu', plain: 'Õõnsuse' };
+const WX_W = { rain: ['Nutev', 'Uppunud'], snow: ['Jäätunud', 'Valge'], ash: ['Tuhkne', 'Lämbunud'], embers: ['Põlev', 'Hõõguv'], spores: ['Närtsinud', 'Sosistav'], sand: ['Kulunud', 'Rändav'], none: ['Vaikne', 'Tasane'] };
+const PLACE_ANY = ['Lohk', 'Org', 'Neem', 'Sügavik', 'Kalme', 'Nõmm', 'Kindlus', 'Värav', 'Mägi', 'Ase', 'Vahitorn', 'Piirimaa'];
+const SYL = [['Ka', 'Vaa', 'Mõr', 'I', 'Se', 'Tra', 'A', 'Tuu', 'Ü', 'Ko', 'Mää', 'Bra', 'E', 'Ru', 'Ve', 'O', 'Ha', 'Ga', 'Ne', 'Ti', 'Lo', 'Ul'],
+  ['', '', 'r', 'l', 'ht', 'n', 'v', 'dr', 'sk', 'rv', 'lm', 'nd'], ['el', 'arn', 'oo', 'un', 'eti', 'ae', 'vun', 'is', 'ohk', 'a', 'elm', 'ar', 'en', 'ist', 'ra', 'os']];
+function procProper(rng) { let s = rng.pick(SYL[0]) + rng.pick(SYL[1]) + rng.pick(SYL[2]); if (s.length < 4) s += rng.pick(['n', 't', 'r', 'l']); return s; }
+// A made-up name in the genitive ('Mõrvela', 'Kaskeli'), for 'Kaskeli Hall Kuru'.
+const procGen = s => /[aeiouõäöü]$/.test(s) ? s : s + 'i';
 function procName(rng, base, donor, mood, weather) {
   const A = NAMEW[base], D = NAMEW[donor], adjs = [...MOOD_W[mood], ...(WX_W[weather] || []), ...A.adj];
   const kind = rng();
-  if (kind < .3) return 'The ' + rng.pick(adjs) + ' ' + rng.pick(A.place) + ' of ' + procProper(rng);
+  if (kind < .3) { const ad = rng.pick(adjs), pl = rng.pick(A.place); return procGen(procProper(rng)) + ' ' + ad + ' ' + pl; }
   if (kind < .55) {
     let p1 = rng.pick(A.pre), p2 = rng.pick(D.pre); if (p1 === p2) p2 = rng.pick(D.place);
     return p1 + p2.toLowerCase() + ' ' + rng.pick(PLACE_ANY);
   }
-  if (kind < .72) return procProper(rng) + "'s " + rng.pick([...A.place, ...PLACE_ANY]);
-  if (kind < .87) return rng.pick(A.place) + ' of ' + MOOD_N[mood];
-  return 'The ' + rng.pick(adjs) + ' ' + rng.pick([...A.place, ...D.place]);
+  if (kind < .72) return procGen(procProper(rng)) + ' ' + rng.pick([...A.place, ...PLACE_ANY]);
+  if (kind < .87) return MOOD_N[mood] + ' ' + rng.pick(A.place);
+  return rng.pick(adjs) + ' ' + rng.pick([...A.place, ...D.place]);
 }
 
 

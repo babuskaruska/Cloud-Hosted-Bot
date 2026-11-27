@@ -41,12 +41,12 @@ const MENU = (() => {
   // ---- starting things ----
   function pickMode(mode) {
     M.heatMode = mode;
-    if (mode === 'night' && !META.stats.campaigns) return confirm('The Long Night', ['The endless lands past the sixth beacon, for keepers who have finished the campaign.', 'Enter anyway?'], 'Enter the night', () => afterWarn(mode), 'title');
+    if (mode === 'night' && !META.stats.campaigns) return confirm('Pikk Öö', ['Lõputud maad kuuenda majaka taga. Need on hoidjatele, kes on seikluse läbi teinud.', 'Kas lähed ikkagi?'], 'Mine öösse', () => afterWarn(mode), 'title');
     afterWarn(mode);
   }
   function afterWarn(mode) {
     const S = continueOffer();
-    if (S) { const r = embersForSave(S); return confirm('Start a new run?', ['Your saved run ends here' + (r && r.total ? ' and banks ' + r.total + ' embers.' : '.')], 'Start anew', () => toHeat(mode), 'title'); }
+    if (S) { const r = embersForSave(S); return confirm('Alustad uut mängu?', ['Su salvestatud mäng lõpeb siin' + (r && r.total ? ' ja annab ' + r.total + ' sütt.' : '.')], 'Alusta uuesti', () => toHeat(mode), 'title'); }
     toHeat(mode);
   }
   function toHeat(mode) { if (mode === 'daily') return begin('daily', 0); if (META.heatMax > 0) { M.heatPick = clamp(M.heatPick || META.heatMax, 0, META.heatMax); M.open('heat'); } else begin(mode, 0); }
@@ -69,18 +69,18 @@ const MENU = (() => {
   // the run's achievements, a daily best.
   function fanfare(r) {
     const c = C(), out = [], before = r.before || 0, after = r.after || 0;
-    for (const n of r.notes || []) out.push({ text: n, col: c.ember, heat: /^Heat/.test(n) });
-    if (r.daily && r.daily.newBest) out.push({ text: "New best for today: " + r.daily.waves + ' waves', col: c.amber });
-    for (const id of r.ach || []) if (ACH_BY[id]) out.push({ text: 'Achievement: ' + ACH_BY[id].name, col: c.amber, icon: ACH_BY[id].icon });
+    for (const n of r.notes || []) out.push({ text: n, col: c.ember, heat: /^Kuumus/.test(n) });
+    if (r.daily && r.daily.newBest) out.push({ text: 'Tänane uus rekord: ' + r.daily.waves + ' lainet', col: c.amber });
+    for (const id of r.ach || []) if (ACH_BY[id]) out.push({ text: 'Saavutus: ' + ACH_BY[id].name, col: c.amber, icon: ACH_BY[id].icon });
     const ups = UPGRADES.filter(u => { const k = upCost(u.key); return k && k <= after && k > before; });
-    if (ups.length) out.push({ text: (ups.length > 2 ? ups.length + ' upgrades' : ups.map(u => u.name).join(' and ')) + ' now in reach', col: c.ok, icon: 'ember' });
-    if (out.length > 5) { const n = out.length - 4; out.length = 4; out.push({ text: 'and ' + n + ' more', col: c.dim }); }
+    if (ups.length) out.push({ text: (ups.length > 2 ? ups.length + ' oskust' : ups.map(u => u.name).join(' ja ')) + ' nüüd käeulatuses', col: c.ok, icon: 'ember' });
+    if (out.length > 5) { const n = out.length - 4; out.length = 4; out.push({ text: 'ja veel ' + n, col: c.dim }); }
     return out;
   }
   // The ember rows of a result, in the order they count up.
   function emberRows(r) {
-    const rows = [['Embers for waves', r.waves], ['Embers for bosses', r.boss]];
-    if (r.depth) rows.push(['The Long Night', r.depth]); if (r.story) rows.push(['The story', r.story]);
+    const rows = [['Söed lainete eest', r.waves], ['Söed pealike eest', r.boss]];
+    if (r.depth) rows.push(['Pikk Öö', r.depth]); if (r.story) rows.push(['Lugu', r.story]);
     return rows;
   }
   const RC = { row: .28, lead: .35, total: 1.1, fan: .55 };
@@ -287,15 +287,15 @@ const MENU = (() => {
   // ---- the screens ----
   function titleList() {
     const c = C(), S = M.save, list = [];
-    if (S) { const mins = Math.max(0, (Date.now() - S.t) / 6e4), ago = mins < 1 ? 'just now' : mins < 60 ? Math.round(mins) + ' min ago' : mins < 2880 ? Math.round(mins / 60) + ' h ago' : Math.round(mins / 1440) + ' days ago';
-      list.push({ id: 'mcont', label: 'Continue', sub: (S.mode === 'daily' ? 'Daily · Night land ' + (S.level - CAMPAIGN_LANDS + 1) : S.level >= CAMPAIGN_LANDS ? 'Night land ' + (S.level - CAMPAIGN_LANDS + 1) : 'Land ' + (S.level + 1)) + ' · Wave ' + S.k + (S.heat ? ' · Heat ' + S.heat : '') + ' · ' + ago, fn: doContinue, col: c.amber }); }
-    list.push({ id: 'mcamp', label: 'Campaign', sub: META.stats.campaigns ? 'Six lands · beaten ' + META.stats.campaigns + 'x' : 'Six lands. Light the beacons.', fn: () => pickMode('campaign'), col: S ? null : c.amber });
-    list.push({ id: 'mnight', label: 'The Long Night', short: 'Long Night', sub: META.stats.campaigns ? (META.stats.bestNight ? 'Deepest: night land ' + META.stats.bestNight : 'Endless lands') : 'Endless lands · after the campaign', fn: () => pickMode('night') });
+    if (S) { const mins = Math.max(0, (Date.now() - S.t) / 6e4), ago = mins < 1 ? 'just praegu' : mins < 60 ? Math.round(mins) + ' min tagasi' : mins < 2880 ? Math.round(mins / 60) + ' h tagasi' : Math.round(mins / 1440) + ' päeva tagasi';
+      list.push({ id: 'mcont', label: 'Jätka', sub: (S.mode === 'daily' ? 'Päev · Öömaa ' + (S.level - CAMPAIGN_LANDS + 1) : S.level >= CAMPAIGN_LANDS ? 'Öömaa ' + (S.level - CAMPAIGN_LANDS + 1) : 'Maa ' + (S.level + 1)) + ' · Laine ' + S.k + (S.heat ? ' · Kuumus ' + S.heat : '') + ' · ' + ago, fn: doContinue, col: c.amber }); }
+    list.push({ id: 'mcamp', label: 'Seiklus', sub: META.stats.campaigns ? 'Kuus maad · läbitud ' + META.stats.campaigns + '×' : 'Kuus maad. Süüta majakad!', fn: () => pickMode('campaign'), col: S ? null : c.amber });
+    list.push({ id: 'mnight', label: 'Pikk Öö', short: 'Pikk Öö', sub: META.stats.campaigns ? (META.stats.bestNight ? 'Sügavaim: öömaa ' + META.stats.bestNight : 'Lõputud maad') : 'Lõputud maad · pärast seiklust', fn: () => pickMode('night') });
     const db = dailyBest();
-    list.push({ id: 'mdaily', label: 'Daily Long Night', short: 'Daily', sub: db ? "Today's best: " + db + ' waves' : 'One road for everyone today', fn: () => pickMode('daily') });
-    list.push({ id: 'mtree', label: "Keeper's Tree", short: 'Tree ' + META.embers, sub: META.embers + ' embers', fn: () => M.open('tree', { from: 'title' }), icon: 'ember' });
-    list.push({ id: 'mcodex', label: 'Codex', sub: 'Bestiary, story, feats, records', fn: () => { M.page = 0; M.open('codex'); } });
-    list.push({ id: 'mset', label: 'Settings', fn: () => UI.openSettings(true), nosub: true });
+    list.push({ id: 'mdaily', label: 'Päeva väljakutse', short: 'Päevane', sub: db ? 'Tänane parim: ' + db + ' lainet' : 'Täna on kõigil sama tee', fn: () => pickMode('daily') });
+    list.push({ id: 'mtree', label: 'Hoidja puu', short: 'Puu ' + META.embers, sub: META.embers + ' sütt', fn: () => M.open('tree', { from: 'title' }), icon: 'ember' });
+    list.push({ id: 'mcodex', label: 'Raamat', sub: 'Koletised, lugu, saavutused, rekordid', fn: () => { M.page = 0; M.open('codex'); } });
+    list.push({ id: 'mset', label: 'Seaded', fn: () => UI.openSettings(true), nosub: true });
     return list;
   }
   // Phones: a compact bottom sheet (and a small logo up top), so the commander's demo shows in between.
@@ -307,7 +307,7 @@ const MENU = (() => {
     dim(.32); const g = ctx.createRadialGradient(W / 2, H * .45, Math.min(W, H) * .2, W / 2, H * .45, Math.max(W, H) * .75); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.6)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     const wide = W > H * 1.25 && H < 560 * E.dpr;
     // Fit: logo scale k and button font ps.
-    const lw0 = PX.measure('LANTERNHOLD');
+    const lw0 = PX.measure('LATERNALINNUS');
     const fit = ps => {
       const L = PX.LINE * ps, p = 5 * ps, gap = 3 * ps, bh2 = touchH(ps, 2), bh1 = touchH(ps, 1);
       let bw = 0; for (const it of list) bw = Math.max(bw, mw(it.label, ps) + (it.icon ? 12 * ps : 0) + 4 * p, it.sub ? mw(it.sub, ps) + 2 * p : 0);
@@ -348,7 +348,7 @@ const MENU = (() => {
     const gt = ctx.createLinearGradient(0, 0, 0, H * .3); gt.addColorStop(0, 'rgba(4,5,10,0.7)'); gt.addColorStop(1, 'rgba(4,5,10,0)'); ctx.fillStyle = gt; ctx.fillRect(0, 0, W, H * .3);
     const gb = ctx.createLinearGradient(0, sy - 40 * s, 0, H); gb.addColorStop(0, 'rgba(4,5,10,0)'); gb.addColorStop(1, 'rgba(4,5,10,0.75)'); ctx.fillStyle = gb; ctx.fillRect(0, sy - 40 * s, W, H - sy + 40 * s);
     // The logo, small, up top.
-    const lw0 = PX.measure('LANTERNHOLD'), k = Math.max(2, Math.floor(Math.min((port ? .8 : .5) * (E.Wr - E.iL) / lw0, (port ? .045 : .09) * H / PX.LINE)));
+    const lw0 = PX.measure('LATERNALINNUS'), k = Math.max(2, Math.floor(Math.min((port ? .8 : .5) * (E.Wr - E.iL) / lw0, (port ? .045 : .09) * H / PX.LINE)));
     drawLogo(W / 2, E.iT + (port ? 14 : 6) * s, k, ps);
     // The sheet.
     ctx.globalAlpha = sat(M.t * 5 + .3);
@@ -367,9 +367,9 @@ const MENU = (() => {
     const fs = Math.max(1, ps - 1), ft = '';
     if (mw(ft, fs) < E.Wr - E.iL - 8 * s) tx(ft, W / 2, sy - PX.LINE * fs - 3 * s, fs, 'rgba(167,158,138,0.6)', { align: 'c' });
   }
-  // The logo: LANTERNHOLD in the pixel font, big, with an ember glow and sparks rising from it.
+  // The logo: LATERNALINNUS (Lanternhold) in the pixel font, big, with an ember glow and sparks rising from it.
   function drawLogo(cx, y, k, ps) {
-    const t = 'LANTERNHOLD', w = PX.measure(t) * k, x = Math.round(cx - w / 2), pulse = .75 + .25 * Math.sin(M.t * 2.2), c = C();
+    const t = 'LATERNALINNUS', w = PX.measure(t) * k, x = Math.round(cx - w / 2), pulse = .75 + .25 * Math.sin(M.t * 2.2), c = C();
     // The lantern above the word.
     const [lw, lh] = PX.iconSize('lantern'), lk = Math.max(2, Math.round(k * .6));
     ctx.save(); ctx.shadowColor = 'rgba(255,170,80,' + (.7 * pulse) + ')'; ctx.shadowBlur = lk * 6; PX.icon(ctx, 'lantern', Math.round(cx - lw * lk / 2), y, lk, 1); ctx.restore();
@@ -385,63 +385,63 @@ const MENU = (() => {
     // Sparks.
     if (M.sparks.length < 26 && Math.random() < .5) M.sparks.push({ x: x + Math.random() * w, y: wy + PX.LINE * k * .4, v: (20 + Math.random() * 40) * E.dpr, t: 0, life: 1 + Math.random() * 1.6, ph: Math.random() * 6, sz: Math.max(1, Math.round(k * (.3 + Math.random() * .4))) });
     for (const p of M.sparks) { const a = 1 - p.t / p.life; ctx.fillStyle = 'rgba(255,' + Math.round(140 + 90 * a) + ',60,' + a.toFixed(2) + ')'; ctx.fillRect(Math.round(p.x), Math.round(p.y), p.sz, p.sz); }
-    const tag = 'The Hollowing rises. Keep the light.';
+    const tag = 'Õõnsus tõuseb. Hoia valgust!';
     tx(tag, cx, wy + PX.LINE * k + 5 * ps, ps, c.dim, { align: 'c' });
   }
   function drawHeat() {
     dim(.45);
-    const h = M.heatPick, c = C(), items = [{ t: 'title', text: M.heatMode === 'night' ? 'The Long Night' : 'Campaign' }];
-    items.push({ t: 'btns', list: [{ id: 'hdn', label: '<', fn: () => heatStep(-1), off: h <= 0 }, { id: 'hcur', label: 'Heat ' + h, fn: () => {}, on: true, nav: false, col: h ? c.ember : c.amber }, { id: 'hup', label: '>', fn: () => heatStep(1), off: h >= META.heatMax }] });
+    const h = M.heatPick, c = C(), items = [{ t: 'title', text: M.heatMode === 'night' ? 'Pikk Öö' : 'Seiklus' }];
+    items.push({ t: 'btns', list: [{ id: 'hdn', label: '<', fn: () => heatStep(-1), off: h <= 0 }, { id: 'hcur', label: 'Kuumus ' + h, fn: () => {}, on: true, nav: false, col: h ? c.ember : c.amber }, { id: 'hup', label: '>', fn: () => heatStep(1), off: h >= META.heatMax }] });
     items.push({ t: 'text', text: h ? HEAT[h].name + ': ' + HEAT[h].tip : HEAT[0].tip, col: '#ffd9a8' });
     if (h > 1) { items.push({ t: 'sep' }); for (let i = 1; i < h; i++) items.push({ t: 'text', text: HEAT[i].name + ': ' + HEAT[i].tip, col: c.dim, c: false }); }
     items.push({ t: 'gap' });
-    items.push({ t: 'row', l: 'Embers', r: '×' + heatMul(h).toFixed(2), rc: c.amber });
-    if (META.heatMax < HEAT_MAX) items.push({ t: 'text', text: 'Reach land ' + HEAT_UNLOCK_LAND + ' at Heat ' + META.heatMax + ' to unlock Heat ' + (META.heatMax + 1) + '.', col: c.dim });
-    items.push({ t: 'btns', list: [{ id: 'hgo', label: 'Begin', fn: () => begin(M.heatMode, h), col: c.amber }, { id: 'hback', label: 'Back', fn: () => M.open('title') }] });
+    items.push({ t: 'row', l: 'Söed', r: '×' + heatMul(h).toFixed(2), rc: c.amber });
+    if (META.heatMax < HEAT_MAX) items.push({ t: 'text', text: 'Jõua Kuumusel ' + META.heatMax + ' maale ' + HEAT_UNLOCK_LAND + ', et avada Kuumus ' + (META.heatMax + 1) + '.', col: c.dim });
+    items.push({ t: 'btns', list: [{ id: 'hgo', label: 'Alusta', fn: () => begin(M.heatMode, h), col: c.amber }, { id: 'hback', label: 'Tagasi', fn: () => M.open('title') }] });
     panel(items, { cap: 210 });
   }
   function drawConfirm() {
     dim(.45); const cf = M.conf || { title: '?', lines: [] }, c = C();
-    panel([{ t: 'title', text: cf.title }].concat(cf.lines.map(l => ({ t: 'text', text: l }))).concat([{ t: 'gap' }, { t: 'btns', list: [{ id: 'cyes', label: cf.yes, fn: cf.fn, col: c.amber }, { id: 'cno', label: 'Back', fn: () => M.back() }] }]), { cap: 190 });
+    panel([{ t: 'title', text: cf.title }].concat(cf.lines.map(l => ({ t: 'text', text: l }))).concat([{ t: 'gap' }, { t: 'btns', list: [{ id: 'cyes', label: cf.yes, fn: cf.fn, col: c.amber }, { id: 'cno', label: 'Tagasi', fn: () => M.back() }] }]), { cap: 190 });
   }
   function drawPause() {
     dim(.4); const c = C(), mods = activeMods();
-    const items = [{ t: 'title', text: 'Paused' }, { t: 'text', text: G.B.bio.name + ' · Land ' + landNo() + ' · Wave ' + Math.max(1, landWave()) + '/' + G.wavesPerLand, col: c.tx }];
-    if (G.heat || mods.length) items.push({ t: 'text', text: (G.heat ? 'Heat ' + G.heat : '') + (G.heat && mods.length ? ' · ' : '') + mods.map(m => m.name).join(', '), col: c.dim });
+    const items = [{ t: 'title', text: 'Paus' }, { t: 'text', text: G.B.bio.name + ' · Maa ' + landNo() + ' · Laine ' + Math.max(1, landWave()) + '/' + G.wavesPerLand, col: c.tx }];
+    if (G.heat || mods.length) items.push({ t: 'text', text: (G.heat ? 'Kuumus ' + G.heat : '') + (G.heat && mods.length ? ' · ' : '') + mods.map(m => m.name).join(', '), col: c.dim });
     items.push({ t: 'gap' }, { t: 'btns', stack: true, list: [
-      { id: 'presume', label: 'Resume', fn: () => M.close(), col: c.amber },
-      { id: 'pset', label: 'Settings', fn: () => UI.openSettings(true) },
-      { id: 'pquit', label: 'Abandon run', fn: () => { const n = runEmbersNow(); confirm('Abandon the run?', ['You keep the embers it has earned: ' + n + '.'], 'Abandon', () => { M.res = abandonRun(); openResults(); }, 'pause', () => { M.open('pause'); }); }, col: c.ember },
+      { id: 'presume', label: 'Jätka', fn: () => M.close(), col: c.amber },
+      { id: 'pset', label: 'Seaded', fn: () => UI.openSettings(true) },
+      { id: 'pquit', label: 'Loobu mängust', fn: () => { const n = runEmbersNow(); confirm('Loobud mängust?', ['Teenitud söed jäävad sulle: ' + n + '.'], 'Loobu', () => { M.res = abandonRun(); openResults(); }, 'pause', () => { M.open('pause'); }); }, col: c.ember },
     ] });
     panel(items, { cap: 200, minW: 150 });
   }
   function runEmbersNow() { const run = META.run; if (!run) return 0; const sm = runSummary() || {}; return embersFor({ waves: sm.waves, bosses: sm.lands, level: G.level, level0: run.level0, heat: G.heat, ending: run.ending && !run.endingPaid }).total; }
   function drawResults() {
     dim(.35); const c = C(), r = M.res || META.last;
-    if (!r) { panel([{ t: 'title', text: 'The beacon is out' }, { t: 'btns', list: [{ id: 'rmenu', label: 'Main menu', fn: toMenu }] }]); return; }
+    if (!r) { panel([{ t: 'title', text: 'Majakas kustus' }, { t: 'btns', list: [{ id: 'rmenu', label: 'Peamenüü', fn: toMenu }] }]); return; }
     const rc = M.rc || { t: 99, fan: [], fanAt: 0 }, T = rcTimes(r), win = r.how === 'victory';
-    const sm = r.sum || {}, title = win ? 'Six fires burn' : r.how === 'abandon' ? 'Run abandoned' : r.how === 'rest' ? 'The keeper rests' : 'The beacon is out';
-    const where = r.mode === 'daily' ? 'Daily Long Night' + (r.daily ? ' · ' + r.daily.day : '') : (r.landName ? r.landName + ' · ' : '') + 'Land ' + r.land + (r.heat ? ' · Heat ' + r.heat : '');
+    const sm = r.sum || {}, title = win ? 'Kuus tuld põleb' : r.how === 'abandon' ? 'Mängust loobutud' : r.how === 'rest' ? 'Hoidja puhkab' : 'Majakas kustus';
+    const where = r.mode === 'daily' ? 'Päeva väljakutse' + (r.daily ? ' · ' + r.daily.day : '') : (r.landName ? r.landName + ' · ' : '') + 'Maa ' + r.land + (r.heat ? ' · Kuumus ' + r.heat : '');
     const items = [{ t: 'title', text: title, col: win ? c.amber : '#ffd9a8' }, { t: 'text', text: where, col: c.dim }];
-    items.push({ t: 'row', l: 'Waves survived', r: '' + (sm.waves || 0) }, { t: 'row', l: 'Lands cleared', r: '' + (sm.lands || 0) }, { t: 'row', l: 'Monsters slain', r: '' + (sm.slain || 0) });
-    if (sm.tower) items.push({ t: 'row', l: 'Best tower', r: sm.tower.name + ' · ' + sm.tower.kills });
-    if (r.daily) items.push({ t: 'row', l: "Today's best", r: r.daily.best + ' waves', rc: r.daily.newBest ? c.amber : c.tx });
+    items.push({ t: 'row', l: 'Läbitud laineid', r: '' + (sm.waves || 0) }, { t: 'row', l: 'Kaitstud maid', r: '' + (sm.lands || 0) }, { t: 'row', l: 'Võidetud koletisi', r: '' + (sm.slain || 0) });
+    if (sm.tower) items.push({ t: 'row', l: 'Parim torn', r: sm.tower.name + ' · ' + sm.tower.kills });
+    if (r.daily) items.push({ t: 'row', l: 'Tänane parim', r: r.daily.best + ' lainet', rc: r.daily.newBest ? c.amber : c.tx });
     items.push({ t: 'sep' });
     // The ember sources count up one after another, then the total.
     emberRows(r).forEach(([l, v], i) => { const k = sat((rc.t - RC.lead - i * RC.row) / RC.row); items.push({ t: 'row', l, r: '' + Math.round(v * k), rc: k >= 1 ? c.tx : c.amber }); });
-    if (r.heat) items.push({ t: 'row', l: 'Heat ' + r.heat, r: '×' + r.mul.toFixed(2), rc: c.ember });
+    if (r.heat) items.push({ t: 'row', l: 'Kuumus ' + r.heat, r: '×' + r.mul.toFixed(2), rc: c.ember });
     const kt = sat((rc.t - T.t0) / RC.total), tot = Math.round(r.total * (1 - Math.pow(1 - kt, 2)));
-    items.push({ t: 'big', text: '+' + tot + ' embers' + (win ? ' so far' : ''), col: kt >= 1 && (rc.t - T.end) < .25 ? '#fff0c8' : c.amber });
-    items.push({ t: 'text', text: win ? 'Banked when the run ends. You have ' + META.embers + '.' : 'You have ' + Math.round((r.before || 0) + (r.after - (r.before || 0)) * (1 - Math.pow(1 - kt, 2))) + ' embers.', col: c.tx });
+    items.push({ t: 'big', text: '+' + tot + ' sütt' + (win ? ' seni' : ''), col: kt >= 1 && (rc.t - T.end) < .25 ? '#fff0c8' : c.amber });
+    items.push({ t: 'text', text: win ? 'Lähevad kirja, kui mäng lõpeb. Sul on ' + META.embers + '.' : 'Sul on ' + Math.round((r.before || 0) + (r.after - (r.before || 0)) * (1 - Math.pow(1 - kt, 2))) + ' sütt.', col: c.tx });
     const port = E.H > E.W * 1.1;
     const list = win ? [
-      { id: 'rnight', label: 'Into the Long Night', fn: intoNight, col: c.amber },
-      { id: 'rtree', label: "Keeper's Tree", fn: () => M.open('tree', { from: 'results' }), icon: 'ember' },
-      { id: 'rrest', label: 'Bank and rest', fn: restRun },
+      { id: 'rnight', label: 'Pikka Öösse', fn: intoNight, col: c.amber },
+      { id: 'rtree', label: 'Hoidja puu', fn: () => M.open('tree', { from: 'results' }), icon: 'ember' },
+      { id: 'rrest', label: 'Kogu söed ja puhka', fn: restRun },
     ] : [
-      { id: 'ragain', label: 'Play again', fn: () => { const h = r.heat || 0, md = r.mode; UI.scr = null; M.wasPaused = false; startRun(md, h); }, col: c.amber },
-      { id: 'rtree', label: "Keeper's Tree", fn: () => M.open('tree', { from: 'results' }), icon: 'ember' },
-      { id: 'rmenu', label: 'Main menu', fn: toMenu },
+      { id: 'ragain', label: 'Mängi uuesti', fn: () => { const h = r.heat || 0, md = r.mode; UI.scr = null; M.wasPaused = false; startRun(md, h); }, col: c.amber },
+      { id: 'rtree', label: 'Hoidja puu', fn: () => M.open('tree', { from: 'results' }), icon: 'ember' },
+      { id: 'rmenu', label: 'Peamenüü', fn: toMenu },
     ];
     items.push({ t: 'btns', stack: port, list });
     // The unlocks ring one by one under the buttons, each line fading in as it rings. The panel keeps their room below
@@ -453,12 +453,12 @@ const MENU = (() => {
   }
   function drawArrival() {
     dim(.25); const c = C(), mods = activeMods();
-    const items = [{ t: 'title', text: G.B.bio.name }, { t: 'text', text: G.mode === 'daily' ? 'Daily Long Night · Land ' + nightDepth() + ' · ' + ((META.run && META.run.day) || dailyDate()) : G.level >= CAMPAIGN_LANDS ? 'The Long Night · Land ' + landNo() : 'Land ' + landNo() + ' of ' + CAMPAIGN_LANDS, col: c.dim }];
-    if (G.heat) items.push({ t: 'text', text: 'Heat ' + G.heat + ' · ' + HEAT[G.heat].name, col: c.ember });
+    const items = [{ t: 'title', text: G.B.bio.name }, { t: 'text', text: G.mode === 'daily' ? 'Päeva väljakutse · Maa ' + nightDepth() + ' · ' + ((META.run && META.run.day) || dailyDate()) : G.level >= CAMPAIGN_LANDS ? 'Pikk Öö · Maa ' + landNo() : 'Maa ' + landNo() + '/' + CAMPAIGN_LANDS, col: c.dim }];
+    if (G.heat) items.push({ t: 'text', text: 'Kuumus ' + G.heat + ' · ' + HEAT[G.heat].name, col: c.ember });
     items.push({ t: 'sep' });
     for (const m of mods) items.push({ t: 'mod', icon: m.icon, name: m.name, tip: m.tip, col: MUTATORS[m.key] && MUTATORS[m.key].boon ? c.ok : c.amber });
-    const list = [{ id: 'abegin', label: 'Begin', fn: () => M.close(), col: c.amber }];
-    if (G.rerolls > 0 && typeof rollMods === 'function') list.push({ id: 'areroll', label: 'Reroll (' + G.rerolls + ')', fn: () => { if (rerollMods()) M.t = .1; }, icon: 'lantern' });
+    const list = [{ id: 'abegin', label: 'Alusta', fn: () => M.close(), col: c.amber }];
+    if (G.rerolls > 0 && typeof rollMods === 'function') list.push({ id: 'areroll', label: 'Uus loos (' + G.rerolls + ')', fn: () => { if (rerollMods()) M.t = .1; }, icon: 'lantern' });
     items.push({ t: 'gap' }, { t: 'btns', list });
     panel(items, { cap: 200 });
   }
@@ -482,7 +482,7 @@ const MENU = (() => {
     M.treeCols = cols; UI.panelRect = { x, y, w, h };
     ctx.globalAlpha = sat(M.t * 6 + .25);
     UI.plate(x, y, w, h, { bd: c.bdHi });
-    tx("Keeper's Tree", x + p, y + p, ps + 1, '#ffd9a8');
+    tx('Hoidja puu', x + p, y + p, ps + 1, '#ffd9a8');
     const et = '' + META.embers, ew = mw(et, ps + 1); tx(et, x + w - p, y + p, ps + 1, c.amber, { align: 'r' }); PX.icon(ctx, 'ember', x + w - p - ew - 11 * (ps + 1) / 1.2, y + p, ps + 1, 1);
     const y0 = y + p + head;
     UPGRADES.forEach((u, i) => {
@@ -496,17 +496,17 @@ const MENU = (() => {
       const ty = by + Math.round((ch - L * 2) / 2) + ps;
       tx(u.name, bx + p + icw * ps, ty, ps, lv ? '#ffd9a8' : c.tx);
       for (let k = 0; k < u.max; k++) { const px = bx + cw - p - (u.max - k) * 5 * ps + ps, q = Math.max(1, ps >> 1); ctx.fillStyle = c.dark; ctx.fillRect(px, ty + ps, 4 * ps, 4 * ps); ctx.fillStyle = k < lv ? c.amber : '#3a342c'; ctx.fillRect(px + q, ty + ps + q, 4 * ps - 2 * q, 4 * ps - 2 * q); }
-      tx(lv ? u.fmt(u.v(lv)) : 'Not learned', bx + p + icw * ps, ty + L, ps, lv ? c.ok : c.dim);
+      tx(lv ? u.fmt(u.v(lv)) : 'Õppimata', bx + p + icw * ps, ty + L, ps, lv ? c.ok : c.dim);
       if (cost) { const ct = '' + cost; tx(ct, bx + cw - p, ty + L, ps, can ? c.amber : c.red, { align: 'r' }); PX.icon(ctx, 'ember', bx + cw - p - mw(ct, ps) - 10 * ps, ty + L, ps, can ? 1 : .5); }
-      else tx('Max', bx + cw - p, ty + L, ps, c.amber, { align: 'r' });
+      else tx('Täis', bx + cw - p, ty + L, ps, c.amber, { align: 'r' });
     });
     // The chosen upgrade: what it does now and next, and Buy.
     const u = UPGRADES[M.treeSel], lv = META.up[u.key] || 0, cost = upCost(u.key), can = cost && META.embers >= cost, fy = y0 + Ly.rows * (ch + gap) + gap;
     tx(u.name + ': ' + u.desc, x + p, fy, ps, c.tx);
-    tx((lv ? 'Now ' + u.fmt(u.v(lv)) : 'Not learned yet') + (cost ? ' · Next ' + u.fmt(u.v(lv + 1)) : ' · fully learned'), x + p, fy + L + ps, ps, cost ? c.ok : c.dim);
+    tx((lv ? 'Nüüd ' + u.fmt(u.v(lv)) : 'Veel õppimata') + (cost ? ' · Järgmine ' + u.fmt(u.v(lv + 1)) : ' · täiesti õpitud'), x + p, fy + L + ps, ps, cost ? c.ok : c.dim);
     const bh = touchH(ps), bw = Math.floor((w - 2 * p - gap) / 2), by = y + h - p - bh;
-    button('tbuy', x + p, by, bw, bh, cost ? 'Learn · ' + cost : 'Learned', ps, () => tryBuy(M.treeSel), { off: !can, col: can ? c.amber : null, icon: cost ? 'ember' : null });
-    button('tback', x + p + bw + gap, by, bw, bh, 'Back', ps, () => M.back(), { icon: 'back' });
+    button('tbuy', x + p, by, bw, bh, cost ? 'Õpi · ' + cost : 'Õpitud', ps, () => tryBuy(M.treeSel), { off: !can, col: can ? c.amber : null, icon: cost ? 'ember' : null });
+    button('tback', x + p + bw + gap, by, bw, bh, 'Tagasi', ps, () => M.back(), { icon: 'back' });
     ctx.globalAlpha = 1;
   }
   function tryBuy(i) {
@@ -518,25 +518,25 @@ const MENU = (() => {
     const c = C(), s = E.s, avW = E.Wr - E.iL - 8 * s, avH = E.Hb - E.iT - 8 * s, tab = M.tab;
     let ps = s; const p0 = ps => 5 * ps;
     // Width first: about 230 font pixels where the screen allows.
-    while (ps > 2 && (mw('Bestiary', ps) + mw('Story', ps) + mw('Feats', ps) + mw('Records', ps) + 16 * p0(ps) + 9 * ps > avW || PX.LINE * ps * 14 > avH)) ps--;
-    const p = p0(ps), L = PX.LINE * ps, gap = 3 * ps, w = Math.min(avW, Math.max(230 * ps, mw('Bestiary', ps) * 4)), inner = w - 2 * p, bh = touchH(ps);
+    while (ps > 2 && (mw('Koletised', ps) + mw('Lugu', ps) + mw('Trofeed', ps) + mw('Rekordid', ps) + 16 * p0(ps) + 9 * ps > avW || PX.LINE * ps * 14 > avH)) ps--;
+    const p = p0(ps), L = PX.LINE * ps, gap = 3 * ps, w = Math.min(avW, Math.max(230 * ps, mw('Koletised', ps) * 4)), inner = w - 2 * p, bh = touchH(ps);
     const h = Math.min(avH, Math.max(L * 16, Math.round(avH * .9))), x = Math.round((E.iL + E.Wr) / 2 - w / 2), y = Math.round(clamp((E.H - h) / 2, E.iT + 4 * s, E.Hb - h));
     UI.panelRect = { x, y, w, h };
     ctx.globalAlpha = sat(M.t * 6 + .25);
     UI.plate(x, y, w, h, { bd: c.bdHi });
     // Tabs.
-    const tw = Math.floor((inner - 3 * gap) / 4), tabs = [['beasts', 'Bestiary'], ['story', 'Story'], ['feats', mw('Achievements', ps) + 2 * p <= tw ? 'Achievements' : 'Feats'], ['records', 'Records']];
+    const tw = Math.floor((inner - 3 * gap) / 4), tabs = [['beasts', 'Koletised'], ['story', 'Lugu'], ['feats', mw('Saavutused', ps) + 2 * p <= tw ? 'Saavutused' : 'Trofeed'], ['records', 'Rekordid']];
     tabs.forEach(([k, l], i) => button('ct' + k, x + p + i * (tw + gap), y + p, tw, bh, l, ps, () => { M.tab = k; M.page = 0; }, { on: tab === k }));
     const y0 = y + p + bh + gap * 2, foot = bh + gap, avail = y + h - p - foot - y0;
     let rows = [];
     if (tab === 'beasts') {
       const keys = Object.keys(MON).filter(k => k !== 'slimelet'), seen = keys.filter(k => META.seen[k]).length;
-      tx('Met in your runs: ' + seen + ' of ' + keys.length, x + p, y0, ps, c.dim);
+      tx('Kohatud: ' + seen + '/' + keys.length, x + p, y0, ps, c.dim);
       const rh = L * 3 + gap, per = Math.max(1, Math.floor((avail - L - gap) / rh)); M.pages = Math.ceil(keys.length / per); M.page = Math.min(M.page, M.pages - 1);
       keys.slice(M.page * per, M.page * per + per).forEach((k, i) => {
         const d = MON[k], yy = y0 + L + gap + i * rh, known = META.seen[k];
-        tx(known ? (d.boss ? 'Boss: ' : '') + d.name : '???', x + p, yy, ps, known ? (d.boss ? c.ember : c.amber) : '#5a5448');
-        if (known) wrap(d.tip || 'Bones and spite. The plainest of the dead.', inner, ps).slice(0, 2).forEach((l, j) => tx(l, x + p, yy + L * (j + 1), ps, c.tx));
+        tx(known ? (d.boss ? 'Pealik: ' : '') + d.name : '???', x + p, yy, ps, known ? (d.boss ? c.ember : c.amber) : '#5a5448');
+        if (known) wrap(d.tip || 'Luud ja viha. Kõige tavalisem surnu.', inner, ps).slice(0, 2).forEach((l, j) => tx(l, x + p, yy + L * (j + 1), ps, c.tx));
       });
     } else if (tab === 'story') {
       const ids = BEAT_ORDER.filter(k => BEATS[k]), rh = Math.max(bh, L + 2 * p) + gap, per = Math.max(1, Math.floor(avail / rh)); M.pages = Math.ceil(ids.length / per); M.page = Math.min(M.page, M.pages - 1);
@@ -546,7 +546,7 @@ const MENU = (() => {
       });
     } else if (tab === 'feats') {
       // Achievements: earned ones lit, the rest dim with the way to earn them.
-      tx('Earned: ' + achCount() + ' of ' + ACH.length, x + p, y0, ps, c.dim);
+      tx('Teenitud: ' + achCount() + '/' + ACH.length, x + p, y0, ps, c.dim);
       const rh = L * 2 + gap * 2, per = Math.max(1, Math.floor((avail - L - gap) / rh)); M.pages = Math.ceil(ACH.length / per); M.page = Math.min(M.page, M.pages - 1);
       ACH.slice(M.page * per, M.page * per + per).forEach((a, i) => {
         const yy = y0 + L + gap + i * rh, got = !!META.ach[a.id], ic = PX.iconSize(a.icon)[0] ? a.icon : 'star', [iw, ih] = PX.iconSize(ic);
@@ -557,7 +557,7 @@ const MENU = (() => {
       tx((M.page + 1) + '/' + M.pages, x + w - p, y0, ps, c.dim, { align: 'r' });
     } else {
       const S = META.stats, tm = Math.round(S.time / 60);
-      rows = [['Runs', S.runs], ['Embers earned', META.earned], ['Embers now', META.embers], ['Best wave', S.bestWave], ['Deepest land', S.bestLand], ['Deepest night land', S.bestNight], ['Campaigns beaten', S.campaigns], ['Heat unlocked', META.heatMax], ['Monsters slain', S.slain], ['Bosses slain', S.bosses], ['Time keeping', (tm >= 60 ? Math.floor(tm / 60) + ' h ' : '') + (tm % 60) + ' min'], ['Runs abandoned', S.abandons], ['Elites slain', S.elites], ['Achievements', achCount() + '/' + ACH.length], ['Daily runs', S.dailies], ["Today's daily best", dailyBest() + ' waves']];
+      rows = [['Mänge', S.runs], ['Teenitud sütt', META.earned], ['Sütt praegu', META.embers], ['Parim laine', S.bestWave], ['Sügavaim maa', S.bestLand], ['Sügavaim öömaa', S.bestNight], ['Läbitud seiklusi', S.campaigns], ['Avatud Kuumus', META.heatMax], ['Võidetud koletisi', S.slain], ['Võidetud pealikke', S.bosses], ['Mänguaeg', (tm >= 60 ? Math.floor(tm / 60) + ' h ' : '') + (tm % 60) + ' min'], ['Pooleli jäetud', S.abandons], ['Võidetud eliite', S.elites], ['Saavutusi', achCount() + '/' + ACH.length], ['Päeva väljakutseid', S.dailies], ['Tänane parim', dailyBest() + ' lainet']];
       const rh = L + ps, per = Math.max(1, Math.floor(avail / rh)); M.pages = Math.ceil(rows.length / per); M.page = Math.min(M.page, M.pages - 1);
       rows.slice(M.page * per, M.page * per + per).forEach((r, i) => { const yy = y0 + i * rh; tx(r[0], x + p, yy, ps, c.dim); tx('' + r[1], x + w - p, yy, ps, c.tx, { align: 'r' }); });
     }
@@ -568,7 +568,7 @@ const MENU = (() => {
       button('cnext', x + w - p - bw3, fy, bw3, bh, '>', ps, () => pageStep(1), { off: M.page >= M.pages - 1 });
       if (tab === 'beasts') tx((M.page + 1) + '/' + M.pages, x + w - p, y0, ps, c.dim, { align: 'r' });
     }
-    button('cback', nb ? x + p + bw3 + gap : x + p, fy, nb ? bw3 : inner, bh, 'Back', ps, () => M.back(), { icon: 'back' });
+    button('cback', nb ? x + p + bw3 + gap : x + p, fy, nb ? bw3 : inner, bh, 'Tagasi', ps, () => M.back(), { icon: 'back' });
     ctx.globalAlpha = 1;
   }
 
@@ -603,9 +603,9 @@ const MENU = (() => {
     const wl = wrap(ln[1], tw, ps); let left = Math.floor(STORY.chars);
     wl.forEach((l, i) => { if (left <= 0) return; const part = l.slice(0, left); left -= l.length + 1; tx(part, tx0, y + p + L + gap(ps) + i * L, ps, c.tx); });
     // Continue hint and Skip.
-    const done = STORY.chars >= ln[1].length, hint = (STORY.line < lines.length - 1 ? (E.tch ? 'Tap' : 'Space') + ' →' : (E.tch ? 'Tap to close' : 'Space to close')) + '  ' + (STORY.line + 1) + '/' + lines.length;
+    const done = STORY.chars >= ln[1].length, hint = (STORY.line < lines.length - 1 ? (E.tch ? 'Puuduta' : 'Tühik') + ' →' : (E.tch ? 'Puuduta, et sulgeda' : 'Tühik sulgeb')) + '  ' + (STORY.line + 1) + '/' + lines.length;
     if (done) tx(hint, x + w - p, y + h - p - L + ps, ps, (M.t * 2) % 2 < 1.4 ? c.amber : c.dim, { align: 'r' });
-    const sk = 'Skip', sw = mw(sk, ps) + 2 * p, sh = Math.max(L + p, E.tch ? Math.round(32 * E.dpr) : 0);
+    const sk = 'Jäta vahele', sw = mw(sk, ps) + 2 * p, sh = Math.max(L + p, E.tch ? Math.round(32 * E.dpr) : 0);
     button('stskip', x + w - sw - ps, y - sh - 2 * ps, sw, sh, sk, ps, () => STORY.skip(), { nav: false });
     ctx.globalAlpha = 1;
   }
@@ -615,7 +615,7 @@ const MENU = (() => {
     const tt = TUT.text(); if (!tt) return;
     const c = C(), s = E.s, avW = E.Wr - E.iL - 8 * s, ps = Math.max(2, s - (E.tch ? 0 : 0)), p = 5 * ps, L = PX.LINE * ps;
     const w = Math.min(avW, Math.max(mw(tt[0], ps) + 60 * ps, Math.min(avW, 200 * ps))), lines = wrap(tt[1], w - 2 * p, ps);
-    const sk = 'Skip tutorial', skw = mw(sk, Math.max(2, ps - 1)) + 2 * p, skh = Math.max(L + p, E.tch ? Math.round(30 * E.dpr) : 0);
+    const sk = 'Jäta õpetus vahele', skw = mw(sk, Math.max(2, ps - 1)) + 2 * p, skh = Math.max(L + p, E.tch ? Math.round(30 * E.dpr) : 0);
     const h = p + L + lines.length * L + p, x = Math.round((E.iL + E.Wr) / 2 - w / 2), y = Math.round(Math.max((R.hudTop || E.iT) + 30 * s, (UI.yUp || E.Hb) - h - 3 * s));
     const a = TUT.step === 'done' ? sat((4.5 - TUT.t) * 2) : sat(TUT.t * 3);
     ctx.globalAlpha = a;
@@ -641,7 +641,7 @@ const MENU = (() => {
     if (!inRun() || G.phase !== 'play' || UI.scr) return;
     const mods = activeMods(); if (!mods.length && !G.heat) return;
     const c = C(), s = E.s, ps = Math.max(2, s - 1), p = 2 * ps, sz = 10 * ps + 2 * p, gap = 2 * ps, ents = [];
-    if (G.heat) ents.push({ id: 'hudheat', icon: 'heat', label: '' + G.heat, head: 'Heat ' + G.heat + ' · ' + HEAT[G.heat].name, tip: HEAT.slice(1, G.heat + 1).map(h => h.tip).join(' ') });
+    if (G.heat) ents.push({ id: 'hudheat', icon: 'heat', label: '' + G.heat, head: 'Kuumus ' + G.heat + ' · ' + HEAT[G.heat].name, tip: HEAT.slice(1, G.heat + 1).map(h => h.tip).join(' ') });
     for (const m of mods) ents.push({ id: 'hudmod' + m.key, icon: m.icon && PX.iconSize(m.icon)[0] ? m.icon : 'heat', head: m.name, tip: m.tip, boon: MUTATORS[m.key] && MUTATORS[m.key].boon });
     let tw = 0; for (const e of ents) tw += sz + (e.label ? mw(e.label, ps) + ps : 0) + gap; tw -= gap;
     let x = Math.round((E.iL + E.Wr) / 2 - tw / 2); const y = Math.round((R.hudTop || E.iT) + 3 * s);
@@ -660,11 +660,32 @@ const MENU = (() => {
     }
   }
 
+  // ---- the countdown before a land's first wave (G.count, 62-game.js): big pixel numbers, then "Alusta!" ----
+  // Each number pops in and settles; a tap on it (or Space, Enter) starts the wave at once.
+  function drawCount() {
+    const n = G.count; if (n === null || n === undefined || !inRun() || G.phase !== 'play' || STORY.on()) return;
+    const c = C(), s = E.s, txt = n > 0 ? '' + n : 'Alusta!', f = Math.max(0, G.countT - Math.floor(G.countT));
+    const k0 = Math.max(4, Math.floor(Math.min(E.W, E.H) * (n > 0 ? .2 : .1) / PX.LINE));
+    let k = Math.round(k0 * (1 + .3 * Math.max(0, 1 - f * 5)));
+    while (k > 2 && PX.measure(txt) * k > (E.Wr - E.iL) * .9) k--;
+    const a = n > 0 ? .65 + .35 * sat((1 - f) * 2) : sat((COUNT_FROM + .9 - G.countT) * 3);
+    const w = PX.measure(txt) * k, h = PX.LINE * k, cx = Math.round((E.iL + E.Wr) / 2), cy = Math.round((E.iT + E.Hb) / 2 - h * .8);
+    ctx.save(); ctx.globalAlpha = a; ctx.shadowColor = n > 0 ? 'rgba(255,150,60,0.8)' : 'rgba(255,215,130,0.9)'; ctx.shadowBlur = k * 4;
+    PX.text(ctx, txt, cx, cy, k, n > 0 ? '#ffc870' : '#ffe2a0', { align: 'c', outline: '#2a0c04' });
+    ctx.restore();
+    if (n > 0) {
+      const hs = Math.max(2, s - 1), hint = E.tch ? 'Puuduta, et kohe alustada' : 'Tühik alustab kohe';
+      ctx.globalAlpha = .85; tx(hint, cx, cy + h + 4 * s, hs, c.tx, { align: 'c', outline: c.dark }); ctx.globalAlpha = 1;
+      const bw = Math.max(w, PX.measure(hint) * hs) + 16 * s;
+      UI.hud.push({ id: 'cntskip', x: cx - bw / 2, y: cy - 8 * s, w: bw, h: h + 16 * s + PX.LINE * hs, hud: true, fn: () => { if (countSkip()) buzz(10); } });
+    }
+  }
+
   // Called from UI.draw. hidden: the HUD was skipped (a screen is up). Returns nothing; registers controls.
   M.draw = (c, env) => {
     E = env; ctx = c; M.items.length = 0;
     const s = UI.scr;
-    if (!s) { drawModHud(); if (TUT.step && !STORY.on()) drawTutorial(); }
+    if (!s) { drawModHud(); if (TUT.step && !STORY.on()) drawTutorial(); if (!cineOn()) drawCount(); }
     if (s === 'title') drawTitle(); else if (s === 'heat') drawHeat(); else if (s === 'tree') drawTree(); else if (s === 'codex') drawCodex();
     else if (s === 'pause') drawPause(); else if (s === 'confirm') drawConfirm(); else if (s === 'results') drawResults(); else if (s === 'arrival') drawArrival();
     // A story beat (a Codex replay too) sits over everything: the controls under it stop taking taps.

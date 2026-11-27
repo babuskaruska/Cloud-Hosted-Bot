@@ -1,5 +1,7 @@
 const PX = (() => {
-  const LINE = 9, CAP = 7, GAP = 1, CACHE_MAX = 500;
+  // TOP: rows above the line for the marks on Estonian capitals (Ä Ö Ü Õ Š Ž). They spill into the space above the text
+  // box (the box itself, LINE rows, and so every measure and layout, is unchanged).
+  const LINE = 9, CAP = 7, GAP = 1, CACHE_MAX = 500, TOP = 3, ROWS = LINE + TOP;
 
   const SRC = {
     '!': '#/#/#/#/#/./#',
@@ -103,27 +105,51 @@ const PX = (() => {
     '↑': '..#../.###./#.#.#/..#../..#../..#../..#..',
     '↓': '..#../..#../..#../..#../#.#.#/.###./..#..',
     '–': '3:####',
+    '—': '3:######',
     '…': '6:#.#.#',
+    // Estonian (round 12). Capital marks sit above the cap line (negative row offsets, see TOP); small ones fit in the line.
+    'Ä': '-2:.#.#./...../.###./#...#/#...#/#####/#...#/#...#/#...#',
+    'Ö': '-2:.#.#./...../.###./#...#/#...#/#...#/#...#/#...#/.###.',
+    'Ü': '-2:.#.#./...../#...#/#...#/#...#/#...#/#...#/#...#/.###.',
+    'Õ': '-3:.#..#/#.##./...../.###./#...#/#...#/#...#/#...#/#...#/.###.',
+    'Š': '-3:.#.#./..#../...../.###./#...#/#..../.###./....#/#...#/.###.',
+    'Ž': '-3:.#.#./..#../...../#####/....#/...#./..#../.#.../#..../#####',
+    'ä': '.#.#./...../.###./....#/.####/#...#/.####',
+    'ö': '.#.#./...../.###./#...#/#...#/#...#/.###.',
+    'ü': '.#.#./...../#...#/#...#/#...#/#...#/.####',
+    'õ': '-1:.#..#/#.##./...../.###./#...#/#...#/#...#/.###.',
+    'š': '-1:.#.#./..#../...../.####/#..../.###./....#/####.',
+    'ž': '-1:.#.#./..#../...../#####/...#./..#../.#.../#####',
+    'é': '-1:...#/..#./...../.###./#...#/#####/#..../.###.',
+    '„': '6:.#.#/.#.#/#.#.',
+    '“': '.#.#/#.#./#.#.',
+    '”': '.#.#/.#.#/#.#.',
+    '‘': '.#/#./#.',
+    '’': '.#/.#/#.',
+    '«': '2:..#.#/.#.#./#.#../.#.#./..#.#',
+    '»': '2:#.#../.#.#./..#.#/.#.#./#.#..',
   };
   const UNKNOWN_SRC = '1:####/#..#/#..#/#..#/#..#/####';
 
   function parse(def) {
     let off = 0, s = def;
-    if (s.length > 1 && s[1] === ':' && s[0] >= '0' && s[0] <= '9') { off = +s[0]; s = s.slice(2); }
+    const m = /^(-?\d):/.exec(s);
+    if (m) { off = +m[1]; s = s.slice(m[0].length); }
     const rows = s.split('/');
     let w = 0;
     for (const r of rows) if (r.length > w) w = r.length;
-    const bits = new Uint8Array(LINE);
+    const bits = new Uint8Array(ROWS);
     for (let i = 0; i < rows.length && off + i < LINE; i++) {
+      if (off + i < -TOP) continue;
       const r = rows[i]; let b = 0;
       for (let x = 0; x < r.length; x++) if (r[x] === '#') b |= 1 << x;
-      bits[off + i] = b;
+      bits[TOP + off + i] = b;
     }
     return { w, bits };
   }
 
   const glyphs = new Map();
-  glyphs.set(' ', { w: 3, bits: new Uint8Array(LINE) });
+  glyphs.set(' ', { w: 3, bits: new Uint8Array(ROWS) });
   for (const ch in SRC) glyphs.set(ch, parse(SRC[ch]));
   const UNKNOWN = parse(UNKNOWN_SRC);
 
@@ -154,12 +180,12 @@ const PX = (() => {
     const o = outline ? 1 : 0, sh = shadow ? 1 : 0;
     const cv = document.createElement('canvas');
     cv.width = Math.max(1, w + 2 * o + sh);
-    cv.height = LINE + 2 * o + sh;
+    cv.height = ROWS + 2 * o + sh;
     const c = cv.getContext('2d');
     const paint = (dx, dy) => {
       let x = o + dx;
       for (const g of gl) {
-        for (let r = 0; r < LINE; r++) {
+        for (let r = 0; r < ROWS; r++) {
           let b = g.bits[r], cx = 0;
           while (b) { if (b & 1) c.fillRect(x + cx, o + r + dy, 1, 1); b >>= 1; cx++; }
         }
@@ -194,7 +220,7 @@ const PX = (() => {
     if (ctx.imageSmoothingEnabled) ctx.imageSmoothingEnabled = false;
     const ga = ctx.globalAlpha;
     if (a < 1) ctx.globalAlpha = ga * a;
-    ctx.drawImage(e.cv, dx - e.o * s, dy - e.o * s, e.cv.width * s, e.cv.height * s);
+    ctx.drawImage(e.cv, dx - e.o * s, dy - (e.o + TOP) * s, e.cv.width * s, e.cv.height * s);
     if (a < 1) ctx.globalAlpha = ga;
     return wpx;
   }
