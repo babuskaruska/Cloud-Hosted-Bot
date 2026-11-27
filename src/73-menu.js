@@ -69,7 +69,7 @@ const MENU = (() => {
   // the run's achievements, a daily best.
   function fanfare(r) {
     const c = C(), out = [], before = r.before || 0, after = r.after || 0;
-    for (const n of r.notes || []) out.push({ text: n, col: c.ember });
+    for (const n of r.notes || []) out.push({ text: n, col: c.ember, heat: /^Heat/.test(n) });
     if (r.daily && r.daily.newBest) out.push({ text: "New best for today: " + r.daily.waves + ' waves', col: c.amber });
     for (const id of r.ach || []) if (ACH_BY[id]) out.push({ text: 'Achievement: ' + ACH_BY[id].name, col: c.amber, icon: ACH_BY[id].icon });
     const ups = UPGRADES.filter(u => { const k = upCost(u.key); return k && k <= after && k > before; });
@@ -93,7 +93,7 @@ const MENU = (() => {
     shown += Math.round(r.total * sat((rc.t - T.t0) / RC.total));
     if (shown !== rc.shown && rc.t - rc.tickT > .06 && rc.t < T.end + .1) { rc.tickT = rc.t; sfx('emberTick', CAM.x, CAM.z, .7, clamp((rc.t - RC.lead) / (T.end - RC.lead), 0, 1)); }
     rc.shown = shown;
-    while (rc.fanAt < rc.fan.length && rc.t > T.end + .3 + rc.fanAt * RC.fan) { sfx('unlock', CAM.x, CAM.z, 1, rc.fanAt / Math.max(1, rc.fan.length - 1)); rc.fanAt++; }
+    while (rc.fanAt < rc.fan.length && rc.t > T.end + .3 + rc.fanAt * RC.fan) { sfx('unlock', CAM.x, CAM.z, 1, rc.fan[rc.fanAt].heat ? 1 : .5 * rc.fanAt / Math.max(1, rc.fan.length - 1)); // p = 1: a Heat tier rc.fanAt++; }
   }
   // A tap, Enter or Space while the count runs: jump to the end of it.
   function skipCount() {
@@ -120,7 +120,7 @@ const MENU = (() => {
     // Echo's audio scene: the main menu (the demo behind it), a story beat, the results screen, or the game.
     const scene = STORY.on() ? 'story' : UI.scr === 'results' ? 'results' : UI.scr && G.mode === 'demo' ? 'menu' : 'game';
     UI.mainMenu = scene === 'menu'; G.scene = scene;
-    if (scene !== M.scene) { M.scene = scene; if (typeof AU.setScene === 'function') try { AU.setScene(scene); } catch (e) {} }
+    if (scene !== M.scene) { M.scene = scene; if (typeof AU.setScene === 'function') try { const r = M.res || META.last; AU.setScene(scene, scene === 'results' ? (r && r.how === 'victory' ? 'win' : 'defeat') : undefined); } catch (e) {} }
     if (UI.mx !== M.lmx || UI.my !== M.lmy) { if (M.lmx !== undefined) M.kb = false; M.lmx = UI.mx; M.lmy = UI.my; } // the mouse took over from the keys
     // A defeat: the dark swallows the keep (Ash's cinematic), then the results.
     if (inRun() && G.phase === 'defeat' && !UI.scr && !STORY.on()) {
