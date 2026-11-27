@@ -8,106 +8,106 @@
 // Sounds (Echo): 'storyOpen' when a beat opens, 'storyLine' on each new line.
 
 const SPEAKERS = {
-  keeper: { name: 'The Lanternkeeper', col: '#ffd9a8' },
-  ghost: { name: 'Old Keeper Aldric', col: '#bfe4ff' },
-  hollow: { name: 'The Hollowing', col: '#c8a8ff' },
-  giant: { name: 'Bone Giant', col: '#efe4cd' }, ogre: { name: 'Ogre', col: '#c8d890' }, jotun: { name: 'Frost Jotun', col: '#9fd4ff' },
-  queen: { name: 'Brood Queen', col: '#e0a0e8' }, colossus: { name: 'Magma Colossus', col: '#ffa060' }, king: { name: 'The Buried King', col: '#f0d890' },
-  leviathan: { name: 'The Drowned King', col: '#90e8d8' }, herald: { name: 'The Hollow Herald', col: '#e8d8a0' },
+  keeper: { name: 'Laternahoidja', col: '#ffd9a8' },
+  ghost: { name: 'Vana hoidja Aldrik', col: '#bfe4ff' },
+  hollow: { name: 'Õõnsus', col: '#c8a8ff' },
+  giant: { name: 'Luuhiid', col: '#efe4cd' }, ogre: { name: 'Inimsööja', col: '#c8d890' }, jotun: { name: 'Jäähiid', col: '#9fd4ff' },
+  queen: { name: 'Ämblikkuninganna', col: '#e0a0e8' }, colossus: { name: 'Magmakolossus', col: '#ffa060' }, king: { name: 'Maetud kuningas', col: '#f0d890' },
+  leviathan: { name: 'Uppunud kuningas', col: '#90e8d8' }, herald: { name: 'Õõnsuse kuulutaja', col: '#e8d8a0' },
 };
 // Each beat: a title (for the Codex) and its lines as [speaker, text].
 const BEATS = {
-  intro: { title: 'The Waking', lines: [
-    ['ghost', 'Wake, Keeper. The Hollowing has risen, and every beacon from here to the sea has gone dark.'],
-    ['ghost', 'Where the dark spreads, the dead get up and walk. Only fire turns them back.'],
-    ['keeper', 'Then I will light them again. All six.'],
+  intro: { title: 'Ärkamine', lines: [
+    ['ghost', 'Ärka, hoidja! Õõnsus on tõusnud ja kõik majakad siit mereni on kustunud.'],
+    ['ghost', 'Kuhu pimedus jõuab, seal tõusevad surnud püsti. Ainult tuli ajab nad tagasi.'],
+    ['keeper', 'Siis süütan ma need uuesti. Kõik kuus.'],
   ] },
-  'land:ashen': { title: 'Ashen Pass', lines: [
-    ['ghost', 'The Ashen Pass. I kept this fire for forty winters, until the dark took me.'],
-    ['ghost', 'Build on the old stones. They remember the light.'],
+  'land:ashen': { title: 'Tuhakuru', lines: [
+    ['ghost', 'Tuhakuru. Ma hoidsin seda tuld nelikümmend talve, kuni pimedus mu endaga viis.'],
+    ['ghost', 'Ehita vanadele kividele. Nad mäletavad valgust.'],
   ] },
-  'land:frost': { title: 'Frostfall', lines: [
-    ['keeper', 'Snow on the road, and footprints that never melt it.'],
-    ['ghost', 'The frozen dead walk lightly. Fire walks heavier.'],
+  'land:frost': { title: 'Külmakosk', lines: [
+    ['keeper', 'Teel on lumi ja jäljed, mis seda kunagi ei sulata.'],
+    ['ghost', 'Külmunud surnud astuvad kergelt. Tuli astub raskemalt.'],
   ] },
-  'land:fen': { title: 'Mirefen', lines: [
-    ['ghost', 'Mirefen. The bog keeps what it drowns, and the Hollowing lends it all back.'],
-    ['keeper', 'Then we burn the fog off the water.'],
+  'land:fen': { title: 'Udusoo', lines: [
+    ['ghost', 'Udusoo. Raba hoiab kõike, mis ta uputab, ja Õõnsus annab selle kõik tagasi.'],
+    ['keeper', 'Siis põletame udu vee pealt ära.'],
   ] },
-  'land:ember': { title: 'Emberscar', lines: [
-    ['keeper', 'Even the ground burns here. What does the dark want with fire?'],
-    ['ghost', 'Heat without light. That is all the Hollowing ever was.'],
+  'land:ember': { title: 'Tulearm', lines: [
+    ['keeper', 'Siin põleb isegi maa. Mida tahab pimedus tulega peale hakata?'],
+    ['ghost', 'Kuumus ilma valguseta. Seda Õõnsus alati oligi.'],
   ] },
-  'land:dunes': { title: 'Duskmesa', lines: [
-    ['ghost', 'Duskmesa. Kings were buried here with their gold, and they want it back.'],
-    ['keeper', 'They can have the gold. Not the beacon.'],
+  'land:dunes': { title: 'Hämarkõrb', lines: [
+    ['ghost', 'Hämarkõrb. Siia maeti kuningad koos oma kullaga ja nüüd tahavad nad seda tagasi.'],
+    ['keeper', 'Kulla võivad nad saada. Majakat mitte.'],
   ] },
-  'land:storm': { title: 'Stormreach', lines: [
-    ['ghost', 'The last beacon stands over the sea. The Hollowing began beneath it.'],
-    ['keeper', 'Then that is where it ends.'],
+  'land:storm': { title: 'Tormineem', lines: [
+    ['ghost', 'Viimane majakas seisab mere kohal. Õõnsus sai alguse selle alt.'],
+    ['keeper', 'Siis seal see ka lõpeb.'],
   ] },
-  'boss:giant': { title: 'The Bone Giant', lines: [['giant', 'Bones remember, little flame. Bones remember being tall.']] },
-  'boss:ogre': { title: 'The Ogre', lines: [['ogre', 'I ate the last keeper\'s bread. Then I ate the last keeper.']] },
-  'boss:jotun': { title: 'The Frost Jotun', lines: [['jotun', 'Every fire goes out in the end. I am the end of yours.']] },
-  'boss:queen': { title: 'The Brood Queen', lines: [['queen', 'My children are so hungry, and your light is so warm.']] },
-  'boss:colossus': { title: 'The Magma Colossus', lines: [['colossus', 'I was fire before your kind learned to fear it.']] },
-  'boss:king': { title: 'The Buried King', lines: [['king', 'Kneel, torch-bearer. The dead are owed their tribute.']] },
-  'boss:leviathan': { title: 'The Drowned King', lines: [['leviathan', 'The sea took every keeper before you. The sea is patient.']] },
-  'boss:herald': { title: 'The Hollow Herald', lines: [
-    ['herald', 'Hush, little flame. I carry a hundred beacons in this cage. Yours will make a hundred and one.'],
-    ['ghost', 'That light in its lantern was ours once. Break the cage, Keeper.'],
+  'boss:giant': { title: 'Luuhiid', lines: [['giant', 'Luud mäletavad, väike leek. Luud mäletavad, kuidas nad olid pikad.']] },
+  'boss:ogre': { title: 'Inimsööja', lines: [['ogre', 'Ma sõin eelmise hoidja leiva ära. Siis sõin ma eelmise hoidja.']] },
+  'boss:jotun': { title: 'Jäähiid', lines: [['jotun', 'Iga tuli kustub lõpuks. Mina olen sinu tule lõpp.']] },
+  'boss:queen': { title: 'Ämblikkuninganna', lines: [['queen', 'Mu lapsed on nii näljased ja sinu valgus on nii soe.']] },
+  'boss:colossus': { title: 'Magmakolossus', lines: [['colossus', 'Ma olin tuli juba siis, kui teie veel ei osanud seda karta.']] },
+  'boss:king': { title: 'Maetud kuningas', lines: [['king', 'Põlvita, tõrvikukandja. Surnutele tuleb andam maksta.']] },
+  'boss:leviathan': { title: 'Uppunud kuningas', lines: [['leviathan', 'Meri võttis iga hoidja enne sind. Meri on kannatlik.']] },
+  'boss:herald': { title: 'Õõnsuse kuulutaja', lines: [
+    ['herald', 'Tasa, väike leek. Ma kannan selles puuris sadat majakat. Sinust saab sada esimene.'],
+    ['ghost', 'See valgus tema laternas oli kunagi meie oma. Lõhu puur, hoidja!'],
   ] },
   // The Long Night: the first land where the Herald walks (STORY.landStart, heraldLand in 62-game.js).
-  herald: { title: 'The Herald', lines: [
-    ['ghost', 'Something walks ahead of the dark tonight. A tall thing, carrying a lantern that does not burn.'],
-    ['ghost', 'The Hollowing\'s herald. It steals light. Do not crowd your towers where it walks.'],
-    ['keeper', 'Then it can try to steal mine.'],
+  herald: { title: 'Kuulutaja', lines: [
+    ['ghost', 'Täna öösel kõnnib keegi pimeduse ees. Pikk olend, kes kannab laternat, mis ei põle.'],
+    ['ghost', 'See on Õõnsuse kuulutaja. Ta varastab valgust. Ära ehita oma torne tema teele liiga tihedalt.'],
+    ['keeper', 'Las ta proovib minu oma varastada.'],
   ] },
-  ending: { title: 'Six Fires', lines: [
-    ['ghost', 'Six fires burn again. I could rest now, Keeper... almost.'],
-    ['ghost', 'But the Hollowing has no bottom. Past the last beacon the night goes on, and the lands change shape in it.'],
-    ['keeper', 'Then I carry the lantern into it. As far as it goes.'],
+  ending: { title: 'Kuus tuld', lines: [
+    ['ghost', 'Kuus tuld põlevad jälle. Ma võiksin nüüd puhata, hoidja... peaaegu.'],
+    ['ghost', 'Aga Õõnsusel pole põhja. Viimase majaka taga jätkub öö ja maad muudavad seal oma kuju.'],
+    ['keeper', 'Siis kannan ma laterna sinna. Nii kaugele, kui tee läheb.'],
   ] },
   // The Long Night: an interlude every third land, from this pool (min: the first depth it can show at).
-  'night:1': { title: 'Unmapped', min: 3, lines: [['ghost', 'These lands are on no map I ever kept. The Hollowing dreams them up as you walk.'], ['keeper', 'Then I will dream a fire into each one.']] },
-  'night:2': { title: 'Forever', min: 3, lines: [['hollow', 'You light. I swallow. We could do this forever, little keeper.'], ['keeper', 'Good. I am not tired.']] },
-  'night:3': { title: 'The Weight', min: 3, lines: [['keeper', 'The lantern is heavier tonight.'], ['ghost', 'That is the light you carry for the ones who fell. It is meant to be heavy.']] },
-  'night:4': { title: 'Counting', min: 6, lines: [['ghost', 'I counted the beacons once. Six. Now I cannot stop counting.'], ['ghost', 'Every fire you leave behind pushes the dark back one more step.']] },
-  'night:5': { title: 'Lanterns', min: 6, lines: [['hollow', 'Every keeper burns out. I have buried a thousand lanterns.'], ['keeper', 'Then you know what comes next. Another one.']] },
-  'night:6': { title: 'Wrong Stars', min: 9, lines: [['ghost', 'Deeper than I ever went. The stars are wrong down here.'], ['keeper', 'The fire is not.']] },
-  'night:7': { title: 'Quiet', min: 9, lines: [['hollow', 'Why fight the night? It is so quiet here.'], ['keeper', 'Quiet is what the dead want. I am not dead.']] },
-  'night:8': { title: 'The Choir', min: 12, lines: [['ghost', 'I hear the old keepers in the wind down here. They are cheering, I think.'], ['keeper', 'Let them cheer. I will keep walking.']] },
-  'night:9': { title: 'Names', min: 12, lines: [['hollow', 'I know your name, keeper. I learned it from the ones who came before you.'], ['keeper', 'Then say it louder. It keeps me warm.']] },
-  'night:10': { title: 'Ash and Oil', min: 15, lines: [['keeper', 'The oil runs low. The lantern burns anyway.'], ['ghost', 'It never burned on oil. It burns on stubbornness. Yours is bottomless.']] },
-  'night:11': { title: 'A Door', min: 15, lines: [['hollow', 'There is a door at the bottom of the night. Would you like to see what is behind it?'], ['ghost', 'Do not answer it, Keeper. Doors down here only open one way.']] },
-  'night:12': { title: 'Morning', min: 18, lines: [['keeper', 'Aldric. Is there a morning, somewhere past all this?'], ['ghost', 'There is one behind you. Every land you lit is a little dawn.']] },
-  'night:13': { title: 'Tired', min: 21, lines: [['hollow', 'I am so tired, little keeper. Why will you not let me rest?'], ['keeper', 'You rest on top of people. Find a softer bed.']] },
-  'night:14': { title: 'The Bottom', min: 24, lines: [['ghost', 'I think we are past the bottom now. The dark is just... thinner here.'], ['keeper', 'Thin dark burns quick. Keep the light high.']] },
+  'night:1': { title: 'Kaardita', min: 3, lines: [['ghost', 'Neid maid pole üheski kaardis, mida ma kunagi hoidsin. Õõnsus unistab need välja, kui sa kõnnid.'], ['keeper', 'Siis unistan ma igasse ühe tule.']] },
+  'night:2': { title: 'Igavesti', min: 3, lines: [['hollow', 'Sina süütad. Mina neelan. Me võiksime seda igavesti teha, väike hoidja.'], ['keeper', 'Hea. Ma ei ole väsinud.']] },
+  'night:3': { title: 'Raskus', min: 3, lines: [['keeper', 'Latern on täna raskem.'], ['ghost', 'See on valgus, mida sa kannad langenute eest. See peabki raske olema.']] },
+  'night:4': { title: 'Lugemine', min: 6, lines: [['ghost', 'Kunagi lugesin ma majakaid kokku. Kuus. Nüüd ei suuda ma lugemist lõpetada.'], ['ghost', 'Iga tuli, mille sa maha jätad, lükkab pimedust sammu võrra tagasi.']] },
+  'night:5': { title: 'Laternad', min: 6, lines: [['hollow', 'Iga hoidja põleb läbi. Ma olen matnud tuhat laternat.'], ['keeper', 'Siis tead sa, mis tuleb järgmisena. Veel üks.']] },
+  'night:6': { title: 'Valed tähed', min: 9, lines: [['ghost', 'Sügavamal, kui ma kunagi käisin. Tähed on siin all valed.'], ['keeper', 'Tuli ei ole.']] },
+  'night:7': { title: 'Vaikus', min: 9, lines: [['hollow', 'Miks võidelda ööga? Siin on nii vaikne.'], ['keeper', 'Vaikust tahavad surnud. Mina ei ole surnud.']] },
+  'night:8': { title: 'Koor', min: 12, lines: [['ghost', 'Ma kuulen siin all tuules vanu hoidjaid. Ma arvan, et nad hõiskavad.'], ['keeper', 'Las hõiskavad. Ma kõnnin edasi.']] },
+  'night:9': { title: 'Nimed', min: 12, lines: [['hollow', 'Ma tean su nime, hoidja. Ma õppisin selle neilt, kes tulid enne sind.'], ['keeper', 'Siis ütle seda valjemini. See hoiab mind soojas.']] },
+  'night:10': { title: 'Tuhk ja õli', min: 15, lines: [['keeper', 'Õli saab otsa. Latern põleb ikkagi.'], ['ghost', 'See pole kunagi õliga põlenud. See põleb jonniga. Ja sinu jonnil pole põhja.']] },
+  'night:11': { title: 'Uks', min: 15, lines: [['hollow', 'Öö põhjas on uks. Kas tahaksid näha, mis selle taga on?'], ['ghost', 'Ära vasta, hoidja. Siin all avanevad uksed ainult ühte pidi.']] },
+  'night:12': { title: 'Hommik', min: 18, lines: [['keeper', 'Aldrik. Kas kusagil kõige selle taga on hommik?'], ['ghost', 'Üks on sinu selja taga. Iga maa, mille sa süütasid, on väike koit.']] },
+  'night:13': { title: 'Väsinud', min: 21, lines: [['hollow', 'Ma olen nii väsinud, väike hoidja. Miks sa ei lase mul puhata?'], ['keeper', 'Sa puhkad teiste peal. Otsi endale pehmem voodi.']] },
+  'night:14': { title: 'Põhi', min: 24, lines: [['ghost', 'Ma arvan, et oleme nüüd põhjast möödas. Pimedus on siin lihtsalt... õhem.'], ['keeper', 'Õhuke pimedus põleb kiiresti. Hoia valgust kõrgel.']] },
   // More campaign beats.
-  'clear:first': { title: 'First Light', lines: [
-    ['ghost', 'Look at it burn. Forty winters I watched that fire, and I never saw it so bright.'],
-    ['keeper', 'One down. The road goes on.'],
+  'clear:first': { title: 'Esimene valgus', lines: [
+    ['ghost', 'Vaata, kuidas see põleb! Nelikümmend talve vaatasin ma seda tuld ega näinud seda kunagi nii eredana.'],
+    ['keeper', 'Üks tehtud. Tee läheb edasi.'],
   ] },
-  halfway: { title: 'Halfway', lines: [
-    ['hollow', 'Three little fires. Do you think I do not see them, keeper?'],
-    ['ghost', 'It speaks. Good. It means you are hurting it.'],
-    ['keeper', 'Then I will hurt it three more times.'],
+  halfway: { title: 'Poolel teel', lines: [
+    ['hollow', 'Kolm väikest tuld. Kas sa arvad, et ma ei näe neid, hoidja?'],
+    ['ghost', 'See räägib. Hea. See tähendab, et sa teed talle haiget.'],
+    ['keeper', 'Siis teen ma talle veel kolm korda haiget.'],
   ] },
-  return: { title: 'Again', lines: [
-    ['ghost', 'Back to the Ashen Pass? The fires you lit have gone out again.'],
-    ['keeper', 'The Hollowing always comes back. So do I.'],
+  return: { title: 'Jälle', lines: [
+    ['ghost', 'Tagasi Tuhakurule? Tuled, mis sa süütasid, on jälle kustunud.'],
+    ['keeper', 'Õõnsus tuleb alati tagasi. Mina ka.'],
   ] },
-  heat: { title: 'Heat', lines: [
-    ['ghost', 'The dark has grown teeth since your last walk. Can you feel it?'],
-    ['keeper', 'I asked for it. A fire needs something to burn.'],
+  heat: { title: 'Kuumus', lines: [
+    ['ghost', 'Pimedusel on pärast su viimast retke hambad kasvanud. Kas sa tunned seda?'],
+    ['keeper', 'Ma ise palusin seda. Tuli vajab midagi, mida põletada.'],
   ] },
-  'night:enter': { title: 'Straight to the Dark', lines: [
-    ['ghost', 'Past the sixth beacon already? Most keepers walk the old road first.'],
-    ['keeper', 'The old road is lit. The dark is down here.'],
+  'night:enter': { title: 'Otse pimedusse', lines: [
+    ['ghost', 'Juba kuuendast majakast möödas? Enamik hoidjaid käib enne vana teed.'],
+    ['keeper', 'Vana tee on valgustatud. Pimedus on siin all.'],
   ] },
-  daily: { title: 'Today\'s Road', lines: [
-    ['ghost', 'Every keeper walks the same night today, Keeper. The same lands, the same curses.'],
-    ['keeper', 'Then let us see who carries the light the farthest.'],
+  daily: { title: 'Tänane tee', lines: [
+    ['ghost', 'Täna kõnnib iga hoidja sama ööd. Samad maad, samad needused.'],
+    ['keeper', 'Vaatame siis, kes kannab valguse kõige kaugemale.'],
   ] },
 };
 const NIGHT_POOL = Object.keys(BEATS).filter(k => /^night:\d+$/.test(k));

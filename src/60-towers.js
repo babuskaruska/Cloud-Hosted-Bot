@@ -4,29 +4,29 @@ const G = {
   towers: [], mons: [], men: [], arrows: [], shells: [], stuck: [], hbars: [], phase: 'play',
 };
 const TOWER = {
-  archer: { name: 'Archer tower', short: 'Archers', icon: 'archer', cost: [70, 90, 140], range: [6.2, 6.8, 7.4], dmg: [9, 11, 14], rate: [.85, .78, .7], n: [1, 2, 3], air: true, ground: true, light: [80, 105, 140], desc: ['Fast flaming arrows.', 'Can hit flyers.'] },
-  bombard: { name: 'Bombard', short: 'Bombard', icon: 'bombard', cost: [120, 130, 190], range: [7.4, 8.0, 8.6], minRange: 2.3, dmg: [36, 60, 98], splash: [1.55, 1.8, 2.1], rate: [2.9, 2.7, 2.5], air: false, ground: true, light: [50, 62, 80], desc: ['Slow shells that burst.', 'Ground targets only.'] },
-  spire: { name: 'Storm spire', short: 'Spire', icon: 'spire', cost: [110, 120, 180], range: [5.5, 6.0, 6.5], dmg: [17, 25, 35], jumps: [3, 4, 6], rate: [2.3, 2.1, 1.9], slow: [.36, .42, .48], slowT: [1.3, 1.5, 1.7], air: true, ground: true, light: [16, 20, 26], desc: ['Chain lightning that slows.', 'Can hit flyers.'] },
-  guard: { name: 'Guard post', short: 'Guards', icon: 'guard', cost: [80, 90, 150], range: [3.4, 3.7, 4.0], n: [2, 3, 3], hp: [62, 90, 135], dmg: [7, 10, 15], rate: [7, 6, 5], air: false, ground: true, light: [55, 70, 90], desc: ['Footmen who block', 'and duel on the road.'] },
+  archer: { name: 'Vibutorn', short: 'Vibukütid', icon: 'archer', cost: [70, 90, 140], range: [6.2, 6.8, 7.4], dmg: [9, 11, 14], rate: [.85, .78, .7], n: [1, 2, 3], air: true, ground: true, light: [80, 105, 140], desc: ['Kiired tulenooled.', 'Tabab ka lendajaid.'] },
+  bombard: { name: 'Kahur', short: 'Kahur', icon: 'bombard', cost: [120, 130, 190], range: [7.4, 8.0, 8.6], minRange: 2.3, dmg: [36, 60, 98], splash: [1.55, 1.8, 2.1], rate: [2.9, 2.7, 2.5], air: false, ground: true, light: [50, 62, 80], desc: ['Aeglased lõhkevad mürsud.', 'Ainult maapealsetele.'] },
+  spire: { name: 'Tormitorn', short: 'Torm', icon: 'spire', cost: [110, 120, 180], range: [5.5, 6.0, 6.5], dmg: [17, 25, 35], jumps: [3, 4, 6], rate: [2.3, 2.1, 1.9], slow: [.36, .42, .48], slowT: [1.3, 1.5, 1.7], air: true, ground: true, light: [16, 20, 26], desc: ['Aeglustav ahelvälk.', 'Tabab ka lendajaid.'] },
+  guard: { name: 'Valvepost', short: 'Valvurid', icon: 'guard', cost: [80, 90, 150], range: [3.4, 3.7, 4.0], n: [2, 3, 3], hp: [62, 90, 135], dmg: [7, 10, 15], rate: [7, 6, 5], air: false, ground: true, light: [55, 70, 90], desc: ['Sõdurid, kes tõkestavad', 'tee ja võitlevad.'] },
 };
 // Branches: a max-level tower (lvl 2) can specialise into one of two branches (lvl 3, t.branch).
 // Array stats in a branch become index 3 of the tower's own stat arrays (see branchDef); other keys are traits.
 // cost is the base price; branchCost() scales it per land. title names the tower once it has the branch.
 TOWER.archer.branches = {
-  longbow: { name: 'Longbow', title: 'Longbow tower', cost: 240, desc: ['Arrows pierce three foes', 'and punch through armor.'], range: 10.2, dmg: 30, rate: 1.3, n: 2, light: 150, pierce: 3, ap: .85, heavy: true },
-  volley: { name: 'Volley', title: 'Volley tower', cost: 220, desc: ['Three arrows per shot,', 'each at its own target.'], range: 7.7, dmg: 12, rate: .8, n: 3, light: 150, multi: 3, airFirst: true },
+  longbow: { name: 'Pikkvibu', title: 'Pikkvibutorn', cost: 240, desc: ['Nool läbib kolm vaenlast', 'ja soomuse.'], range: 10.2, dmg: 30, rate: 1.3, n: 2, light: 150, pierce: 3, ap: .85, heavy: true },
+  volley: { name: 'Noolesadu', title: 'Noolesaju torn', cost: 220, desc: ['Kolm noolt korraga,', 'igaüks oma sihtmärki.'], range: 7.7, dmg: 12, rate: .8, n: 3, light: 150, multi: 3, airFirst: true },
 };
 TOWER.bombard.branches = {
-  mortar: { name: 'Mortar', title: 'Mortar', cost: 300, desc: ['Huge range. Heavy shells', 'stun the densest crowd.'], range: 13, dmg: 200, splash: 3.0, rate: 4.4, light: 95, minRange: 3.4, stun: .8, dense: true },
-  firebomb: { name: 'Firebomb', title: 'Firebomb', cost: 280, desc: ['Shells leave pools of', 'fire that keep burning.'], range: 8.6, dmg: 80, splash: 2.0, rate: 2.4, light: 110, fire: [1.9, 5, 30] },
+  mortar: { name: 'Mortiir', title: 'Mortiir', cost: 300, desc: ['Hiiglaslik ulatus. Rasked', 'mürsud uimastavad hulga.'], range: 13, dmg: 200, splash: 3.0, rate: 4.4, light: 95, minRange: 3.4, stun: .8, dense: true },
+  firebomb: { name: 'Tulepomm', title: 'Tulepomm', cost: 280, desc: ['Mürsud jätavad maha', 'põlevad tulelombid.'], range: 8.6, dmg: 80, splash: 2.0, rate: 2.4, light: 110, fire: [1.9, 5, 30] },
 };
 TOWER.spire.branches = {
-  tempest: { name: 'Tempest', title: 'Tempest spire', cost: 290, desc: ['More jumps, more damage.', 'Double damage to flyers.'], range: 7.4, dmg: 50, jumps: 9, rate: 1.6, slow: .2, slowT: .8, light: 40, jumpR: 4.2, falloff: .94, airMul: 2, airFirst: true },
-  frost: { name: 'Frost', title: 'Frost spire', cost: 270, desc: ['Heavy slow. The first foe', 'hit freezes solid.'], range: 6.8, dmg: 24, jumps: 5, rate: 1.7, slow: .68, slowT: 2.8, light: 30, freeze: 1.1, chill: .3 },
+  tempest: { name: 'Maru', title: 'Marutorn', cost: 290, desc: ['Rohkem hüppeid ja kahju.', 'Lendajatele topelt.'], range: 7.4, dmg: 50, jumps: 9, rate: 1.6, slow: .2, slowT: .8, light: 40, jumpR: 4.2, falloff: .94, airMul: 2, airFirst: true },
+  frost: { name: 'Pakane', title: 'Pakasetorn', cost: 270, desc: ['Tugev aeglustus. Esimene', 'tabatu külmub jäässe.'], range: 6.8, dmg: 24, jumps: 5, rate: 1.7, slow: .68, slowT: 2.8, light: 30, freeze: 1.1, chill: .3 },
 };
 TOWER.guard.branches = {
-  knights: { name: 'Knights', title: 'Knight hall', cost: 250, desc: ['Two armored knights.', 'Each holds three foes.'], n: 2, hp: 440, dmg: 32, rate: 8, range: 4.2, light: 100, armor: .45, hold: 3 },
-  pikes: { name: 'Pikes', title: 'Pike hall', cost: 240, desc: ['Four pikemen strike first', 'and gore big monsters.'], n: 4, hp: 150, dmg: 18, rate: 3.5, range: 4.2, light: 100, reach: .55, bigMul: 2.5 },
+  knights: { name: 'Rüütlid', title: 'Rüütlisaal', cost: 250, desc: ['Kaks soomusrüütlit.', 'Kumbki peab kinni kolm.'], n: 2, hp: 440, dmg: 32, rate: 8, range: 4.2, light: 100, armor: .45, hold: 3 },
+  pikes: { name: 'Odamehed', title: 'Odameeste saal', cost: 240, desc: ['Neli odameest lööb esimesena', 'ja torkab suuri koletisi.'], n: 4, hp: 150, dmg: 18, rate: 3.5, range: 4.2, light: 100, reach: .55, bigMul: 2.5 },
 };
 const BRANCH_KEYS = { archer: ['longbow', 'volley'], bombard: ['mortar', 'firebomb'], spire: ['tempest', 'frost'], guard: ['knights', 'pikes'] };
 // The stat table for a tower with a branch: each stat array gains index 3 (the branch value, or the lvl 2 one).

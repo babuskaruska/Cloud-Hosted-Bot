@@ -6,29 +6,29 @@
 // Hooks: achLandStart() / achLandClear() from metaLandStart / metaLandClear, achTree() after a purchase,
 // achBanked(res) from bankRun, achTick(dt) from MENU.update (polls the rest twice a second), achToastTick(dt) and achDraw() for the toast.
 const ACH = [
-  { id: 'light', name: 'First Light', tip: 'Clear your first land.', icon: 'flame' },
-  { id: 'six', name: 'Six Fires', tip: 'Beat the campaign.', icon: 'lantern' },
-  { id: 'flawless', name: 'Untouched', tip: 'Clear a land without letting a single monster through.', icon: 'shield' },
-  { id: 'lastember', name: 'Last Ember', tip: 'Clear a land with 3 lives or fewer left.', icon: 'ember' },
-  { id: 'horde', name: 'Wall of Fire', tip: 'Beat a horde wave with no leaks.', icon: 'swarm' },
-  { id: 'giants', name: 'Giantsbane', tip: 'Slay 10 bosses.', icon: 'crown' },
-  { id: 'slay1k', name: 'Gravedigger', tip: 'Slay 1,000 monsters.', icon: 'skull' },
-  { id: 'slay10k', name: 'The Boneyard', tip: 'Slay 10,000 monsters.', icon: 'skull' },
-  { id: 'elites', name: 'Elite Hunter', tip: 'Slay 100 elites.', icon: 'star' },
-  { id: 'night3', name: 'Into the Dark', tip: 'Reach the third land of the Long Night.', icon: 'moon' },
-  { id: 'night10', name: 'Lantern in the Deep', tip: 'Reach the tenth land of the Long Night.', icon: 'moon' },
-  { id: 'heat3', name: 'Kindling', tip: 'Clear a land at Heat 3 or higher.', icon: 'heat' },
-  { id: 'heat5', name: 'Wildfire', tip: 'Clear a land at Heat 5 or higher.', icon: 'heat' },
-  { id: 'heat10', name: 'Endless Night', tip: 'Clear a land at Heat 10.', icon: 'heat' },
-  { id: 'cursed', name: 'Unbothered', tip: 'Clear a land under 3 or more curses.', icon: 'fog' },
-  { id: 'oc', name: 'White Hot', tip: 'Overcharge a tower to its limit.', icon: 'upgrade' },
-  { id: 'branches', name: 'Master Builder', tip: 'Have 4 branched towers standing on one land.', icon: 'guard' },
-  { id: 'spells', name: 'Stormcaller', tip: 'Cast 12 spells on one land.', icon: 'meteor' },
-  { id: 'hoard', name: "Dragon's Hoard", tip: 'Hold 3,000 gold at once.', icon: 'coin' },
-  { id: 'codex', name: 'Naturalist', tip: 'Meet 20 kinds of monster.', icon: 'banner' },
-  { id: 'daily', name: 'Daybreak', tip: 'Finish a Daily Long Night.', icon: 'hourglass' },
-  { id: 'tree10', name: 'Rooted', tip: "Learn 10 levels in the Keeper's Tree.", icon: 'ember' },
-  { id: 'treemax', name: 'Fully Grown', tip: "Learn every upgrade in the Keeper's Tree to the top.", icon: 'star' },
+  { id: 'light', name: 'Esimene valgus', tip: 'Kaitse oma esimene maa.', icon: 'flame' },
+  { id: 'six', name: 'Kuus tuld', tip: 'Läbi kogu seiklus.', icon: 'lantern' },
+  { id: 'flawless', name: 'Puutumatu', tip: 'Kaitse maa nii, et ükski koletis läbi ei pääse.', icon: 'shield' },
+  { id: 'lastember', name: 'Viimane süsi', tip: 'Kaitse maa, kui sul on alles 3 elu või vähem.', icon: 'ember' },
+  { id: 'horde', name: 'Tulemüür', tip: 'Võida hordilaine nii, et keegi läbi ei pääse.', icon: 'swarm' },
+  { id: 'giants', name: 'Hiiutapja', tip: 'Võida 10 pealikku.', icon: 'crown' },
+  { id: 'slay1k', name: 'Hauakaevaja', tip: 'Võida 1000 koletist.', icon: 'skull' },
+  { id: 'slay10k', name: 'Luuaed', tip: 'Võida 10 000 koletist.', icon: 'skull' },
+  { id: 'elites', name: 'Eliidikütt', tip: 'Võida 100 eliitkoletist.', icon: 'star' },
+  { id: 'night3', name: 'Pimedusse', tip: 'Jõua Pika Öö kolmandale maale.', icon: 'moon' },
+  { id: 'night10', name: 'Latern sügavuses', tip: 'Jõua Pika Öö kümnendale maale.', icon: 'moon' },
+  { id: 'heat3', name: 'Süütepuud', tip: 'Kaitse maa Kuumusel 3 või kõrgemal.', icon: 'heat' },
+  { id: 'heat5', name: 'Metsatulekahju', tip: 'Kaitse maa Kuumusel 5 või kõrgemal.', icon: 'heat' },
+  { id: 'heat10', name: 'Lõputu öö', tip: 'Kaitse maa Kuumusel 10.', icon: 'heat' },
+  { id: 'cursed', name: 'Kõigutamatu', tip: 'Kaitse maa, millel on 3 või rohkem needust.', icon: 'fog' },
+  { id: 'oc', name: 'Valgeks kuumutatud', tip: 'Lae torn täiesti üle.', icon: 'upgrade' },
+  { id: 'branches', name: 'Meisterehitaja', tip: 'Hoia ühel maal püsti 4 haruga torni.', icon: 'guard' },
+  { id: 'spells', name: 'Tormikutsuja', tip: 'Kasuta ühel maal 12 loitsu.', icon: 'meteor' },
+  { id: 'hoard', name: 'Draakoni aare', tip: 'Kogu korraga 3000 kulda.', icon: 'coin' },
+  { id: 'codex', name: 'Loodusuurija', tip: 'Kohta 20 eri koletist.', icon: 'banner' },
+  { id: 'daily', name: 'Koidik', tip: 'Lõpeta üks päeva väljakutse.', icon: 'hourglass' },
+  { id: 'tree10', name: 'Juurdunud', tip: 'Õpi Hoidja puus 10 taset.', icon: 'ember' },
+  { id: 'treemax', name: 'Täiskasvanud', tip: 'Õpi Hoidja puus kõik oskused lõpuni.', icon: 'star' },
 ];
 const ACH_BY = {}; for (const a of ACH) ACH_BY[a.id] = a;
 const ACHQ = []; // toasts waiting: { a, t }
@@ -78,7 +78,7 @@ function achToastTick(dt) { const q = ACHQ[0]; if (q) { q.t += dt; if (q.t > ACH
 function achDraw(ctx, E) {
   const q = ACHQ[0]; if (!q) return; const D = ACH_TOAST;
   const c = UI.COLR, s = E.s, ps = Math.max(2, s - (E.tch ? 1 : 0)), p = 4 * ps, L = PX.LINE * ps, a = q.a;
-  const head = 'Achievement', ic = PX.iconSize(a.icon)[0] ? a.icon : 'star', [iw, ih] = PX.iconSize(ic), ik = ps * 2;
+  const head = 'Saavutus', ic = PX.iconSize(a.icon)[0] ? a.icon : 'star', [iw, ih] = PX.iconSize(ic), ik = ps * 2;
   const tw = Math.max(PX.measure(head) * ps, PX.measure(a.name) * ps), w = Math.min(E.Wr - E.iL - 8 * s, iw * ik + 3 * p + tw), h = Math.max(ih * ik, 2 * L) + 2 * p;
   const k = Math.min(sat(q.t * 4), sat((D - q.t) * 3)), e = 1 - (1 - k) * (1 - k);
   const x = Math.round((E.iL + E.Wr) / 2 - w / 2), y = Math.round(E.iT + 4 * s + (UI.scr ? 0 : 32 * s) - (1 - e) * (h + 10 * s));

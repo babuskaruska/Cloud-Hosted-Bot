@@ -65,37 +65,37 @@ const nightDepth = () => Math.max(0, G.level - CAMPAIGN_LANDS + 1);
 
 // The Keeper's Tree. v(l): the effect at level l (0 = not bought); fmt(x): how it reads.
 const UPGRADES = [
-  { key: 'gold', name: 'Hoard', icon: 'coin', max: 5, cost: [20, 45, 80, 130, 200], v: l => 40 * l, fmt: x => '+' + x + ' gold per land', desc: 'More gold to build with when a land begins.' },
-  { key: 'dmg', name: 'Keen Steel', icon: 'archer', max: 5, cost: [30, 60, 110, 180, 280], v: l => 4 * l, fmt: x => '+' + x + '% tower damage', desc: 'Every tower and footman hits harder.' },
-  { key: 'lives', name: 'Deep Hearth', icon: 'flame', max: 4, cost: [25, 55, 100, 170], v: l => 2 * l, fmt: x => '+' + x + ' beacon lives', desc: 'The beacon holds out longer.' },
-  { key: 'mana', name: 'Wellspring', icon: 'mana', max: 3, cost: [25, 60, 120], v: l => 15 * l, fmt: x => '+' + x + ' mana, +' + Math.round(x * 2 / 3) + ' max', desc: 'Start each land with more mana, and hold more.' },
-  { key: 'cool', name: 'Swift Rites', icon: 'hourglass', max: 4, cost: [30, 65, 120, 200], v: l => 8 * l, fmt: x => '-' + x + '% cooldowns', desc: 'Spells come back sooner.' },
-  { key: 'spell', name: 'Kindled Rites', icon: 'meteor', max: 3, cost: [40, 90, 170], v: l => 12 * l, fmt: x => '+' + x + '% spell power', desc: 'Meteor and Frost hit harder; Rally militia are tougher.' },
-  { key: 'free', name: 'Founding Stone', icon: 'guard', max: 2, cost: [60, 180], v: l => l, fmt: x => x === 1 ? 'First tower free' : 'First ' + x + ' towers free', desc: 'Your first towers on each land cost nothing.' },
-  { key: 'bounty', name: 'Grave Tithe', icon: 'skull', max: 5, cost: [25, 55, 100, 160, 250], v: l => 5 * l, fmt: x => '+' + x + '% kill gold', desc: 'The fallen pay more.' },
-  { key: 'chest', name: 'War Chest', icon: 'banner', max: 4, cost: [30, 60, 110, 180], v: l => 6 * l, fmt: x => '+' + x + ' gold per wave', desc: 'Extra gold each time a wave is beaten.' },
-  { key: 'oc', name: 'Ember Forge', icon: 'upgrade', max: 3, cost: [40, 90, 170], v: l => 10 * l, fmt: x => '-' + x + '% overcharge', desc: 'Overcharging a branched tower costs less.' },
-  { key: 'branch', name: 'Master Plans', icon: 'star', max: 3, cost: [35, 80, 150], v: l => 10 * l, fmt: x => '-' + x + '% branch cost', desc: 'Tower branches cost less.' },
-  { key: 'mend', name: "Mender's Oil", icon: 'sell', max: 3, cost: [25, 60, 120], v: l => 12 * l, fmt: x => '-' + x + '% mend cost', desc: 'Mending the beacon costs less.' },
-  { key: 'reroll', name: "Fate's Lantern", icon: 'lantern', max: 3, cost: [50, 110, 200], v: l => l, fmt: x => x + ' reroll' + (x > 1 ? 's' : '') + ' a run', desc: 'Reroll a land\'s mutators when it begins.' },
-  { key: 'heart', name: 'Ember Heart', icon: 'ember', max: 3, cost: [50, 120, 240], v: l => l, fmt: x => '+' + x + ' heat-proof li' + (x > 1 ? 'ves' : 'fe'), desc: 'Lives on every land that no Heat can take away.' },
+  { key: 'gold', name: 'Aare', icon: 'coin', max: 5, cost: [20, 45, 80, 130, 200], v: l => 40 * l, fmt: x => '+' + x + ' kulda maa kohta', desc: 'Iga maa alguses rohkem kulda ehitamiseks.' },
+  { key: 'dmg', name: 'Terav teras', icon: 'archer', max: 5, cost: [30, 60, 110, 180, 280], v: l => 4 * l, fmt: x => '+' + x + '% tornide kahju', desc: 'Kõik tornid ja sõdurid löövad kõvemini.' },
+  { key: 'lives', name: 'Sügav kolle', icon: 'flame', max: 4, cost: [25, 55, 100, 170], v: l => 2 * l, fmt: x => '+' + x + ' majaka elu', desc: 'Majakas peab kauem vastu.' },
+  { key: 'mana', name: 'Allikas', icon: 'mana', max: 3, cost: [25, 60, 120], v: l => 15 * l, fmt: x => '+' + x + ' manat, +' + Math.round(x * 2 / 3) + ' maks', desc: 'Iga maa alguses rohkem manat ja suurem varu.' },
+  { key: 'cool', name: 'Kiired loitsud', icon: 'hourglass', max: 4, cost: [30, 65, 120, 200], v: l => 8 * l, fmt: x => '-' + x + '% ooteaeg', desc: 'Loitsud saavad kiiremini uuesti valmis.' },
+  { key: 'spell', name: 'Tulised loitsud', icon: 'meteor', max: 3, cost: [40, 90, 170], v: l => 12 * l, fmt: x => '+' + x + '% loitsu jõud', desc: 'Meteoor ja Jää löövad kõvemini, abivägi on tugevam.' },
+  { key: 'free', name: 'Nurgakivi', icon: 'guard', max: 2, cost: [60, 180], v: l => l, fmt: x => x === 1 ? 'Esimene torn tasuta' : 'Esimesed ' + x + ' torni tasuta', desc: 'Su esimesed tornid igal maal on tasuta.' },
+  { key: 'bounty', name: 'Hauamaks', icon: 'skull', max: 5, cost: [25, 55, 100, 160, 250], v: l => 5 * l, fmt: x => '+' + x + '% saagikulda', desc: 'Langenud koletised maksavad rohkem.' },
+  { key: 'chest', name: 'Sõjakirst', icon: 'banner', max: 4, cost: [30, 60, 110, 180], v: l => 6 * l, fmt: x => '+' + x + ' kulda laine kohta', desc: 'Lisakulda iga võidetud laine eest.' },
+  { key: 'oc', name: 'Söeahi', icon: 'upgrade', max: 3, cost: [40, 90, 170], v: l => 10 * l, fmt: x => '-' + x + '% ülelaadimine', desc: 'Haruga torni ülelaadimine on odavam.' },
+  { key: 'branch', name: 'Meistri plaanid', icon: 'star', max: 3, cost: [35, 80, 150], v: l => 10 * l, fmt: x => '-' + x + '% haru hind', desc: 'Tornide harud on odavamad.' },
+  { key: 'mend', name: 'Parandaja õli', icon: 'sell', max: 3, cost: [25, 60, 120], v: l => 12 * l, fmt: x => '-' + x + '% parandus', desc: 'Majaka parandamine on odavam.' },
+  { key: 'reroll', name: 'Saatuse latern', icon: 'lantern', max: 3, cost: [50, 110, 200], v: l => l, fmt: x => x + ' uus loos retke kohta', desc: 'Loosi maa needused alguses uuesti.' },
+  { key: 'heart', name: 'Söesüda', icon: 'ember', max: 3, cost: [50, 120, 240], v: l => l, fmt: x => '+' + x + ' kindel elu', desc: 'Elud igal maal, mida ükski Kuumus ära ei võta.' },
 ];
 const UPG = {}; for (const u of UPGRADES) UPG[u.key] = u;
 
 // Heat: each tier adds one rule on top of the ones below it, and pays more embers.
 // Every tier also lifts the pressure ceiling by 0.1 (pressCap in 62-game.js): strong play meets more monsters.
 const HEAT = [
-  { name: 'No Heat', tip: 'The road as the old keepers knew it.' },
-  { name: 'Thick Bones', tip: 'Monsters have 15% more health.' },
-  { name: 'Restless Dead', tip: 'Monsters move 8% faster.' },
-  { name: 'Hollow Tide', tip: 'One more mutator on every land.' },
-  { name: 'Thin Fire', tip: 'The beacon has 3 fewer lives.' },
-  { name: 'Early Elites', tip: 'Elites come a land sooner, and more often.' },
-  { name: 'Lean Times', tip: '15% less gold from kills and waves.' },
-  { name: 'Crowned Dread', tip: 'Bosses gain an affix and 20% more health.' },
-  { name: 'Swarming Dark', tip: 'Waves carry 25% more monsters.' },
-  { name: 'Brittle Beacon', tip: '3 fewer lives again; mending costs 50% more.' },
-  { name: 'Endless Night', tip: 'Monsters have 30% more health; spells cost 20% more mana.' },
+  { name: 'Kuumuseta', tip: 'Tee nii, nagu vanad hoidjad seda tundsid.' },
+  { name: 'Paksud luud', tip: 'Koletistel on 15% rohkem elu.' },
+  { name: 'Rahutud surnud', tip: 'Koletised liiguvad 8% kiiremini.' },
+  { name: 'Õõnes tõus', tip: 'Igal maal on üks needus rohkem.' },
+  { name: 'Nõrk tuli', tip: 'Majakal on 3 elu vähem.' },
+  { name: 'Varajane eliit', tip: 'Eliitkoletised tulevad maa võrra varem ja sagedamini.' },
+  { name: 'Kitsad ajad', tip: 'Koletistelt ja lainetelt 15% vähem kulda.' },
+  { name: 'Kroonitud hirm', tip: 'Pealikud saavad lisavõime ja 20% rohkem elu.' },
+  { name: 'Sigiv pimedus', tip: 'Lainetes on 25% rohkem koletisi.' },
+  { name: 'Habras majakas', tip: 'Jälle 3 elu vähem ja parandamine on 50% kallim.' },
+  { name: 'Lõputu öö', tip: 'Koletistel on 30% rohkem elu ja loitsud võtavad 20% rohkem manat.' },
 ];
 const HEAT_MAX = HEAT.length - 1;
 const heatMul = h => Math.round((1 + .35 * h) * 100) / 100;
@@ -193,7 +193,7 @@ function metaLandStart(restoring) {
   if (!restoring) {
     const S = META.stats; S.bestLand = Math.max(S.bestLand, landNo()); if (G.level >= CAMPAIGN_LANDS) S.bestNight = Math.max(S.bestNight, nightDepth());
     // Reaching land 10 at Heat N opens Heat N+1.
-    if (landNo() >= HEAT_UNLOCK_LAND && G.heat >= META.heatMax && META.heatMax < HEAT_MAX) { META.heatMax = G.heat + 1; metaUnlock('Heat ' + META.heatMax + ' unlocked'); }
+    if (landNo() >= HEAT_UNLOCK_LAND && G.heat >= META.heatMax && META.heatMax < HEAT_MAX) { META.heatMax = G.heat + 1; metaUnlock('Kuumus ' + META.heatMax + ' avatud'); }
     metaTouch();
   }
   STORY.landStart(restoring);
@@ -207,7 +207,7 @@ function metaLandClear() {
   if (G.mode === 'campaign' && G.level === CAMPAIGN_LANDS - 1) {
     // The campaign is beaten: Heat 1 opens, the ending plays, and the run carries on into the Long Night.
     META.stats.campaigns++; META.stats.heatBest = Math.max(META.stats.heatBest, G.heat);
-    if (META.heatMax < 1) { META.heatMax = 1; metaUnlock('Heat 1 unlocked'); }
+    if (META.heatMax < 1) { META.heatMax = 1; metaUnlock('Kuumus 1 avatud'); }
     if (META.run) META.run.ending = true;
     // The victory: the land holds on its clear phase while the cinematic, the ending and the results screen play
     // (MENU.victory), then the run carries on into the Long Night.

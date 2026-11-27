@@ -2,12 +2,12 @@
 // G.event = null | { kind, t, dur, amt, ... }. Effects: G.rangeMul (tower reach), m.evMul (monster speed),
 // plus thicker mist and weather through eventLook(), called from updateBiomeLook.
 const EVENTS = {
-  rockslide: { land: 'ashen', name: 'Rockslide', tip: 'Boulders crush the road, and the rubble slows the column.', dur: 15, range: 1, spd: 1, mist: .35, wx: .6, tint: [.12, .1, .09] },
-  blizzard: { land: 'frost', name: 'Blizzard', tip: 'Everything slows, and your towers see less far.', dur: 17, range: .84, spd: .78, mist: 1.3, wx: 2.6, tint: [.2, .25, .34] },
-  bogfog: { land: 'fen', name: 'Bog fog', tip: 'Thick fog shortens tower range. Wisps drift in with it.', dur: 17, range: .74, spd: 1, mist: 2.4, wx: 1.4, tint: [.07, .16, .1] },
-  lavaSurge: { land: 'ember', name: 'Lava surge', tip: 'The lava bursts out, burning monsters and stunning towers near it.', dur: 14, range: 1, spd: 1, mist: .5, wx: 2, tint: [.22, .07, .03] },
-  sandstorm: { land: 'dunes', name: 'Sandstorm', tip: 'Sand cuts tower range, speeds the column and carries scarabs.', dur: 16, range: .76, spd: 1.14, mist: 1.8, wx: 3.2, tint: [.24, .16, .08] },
-  thunderstorm: { land: 'storm', name: 'Thunderstorm', tip: 'Lightning strikes the road and burns monsters, but now and then it stuns a tower.', dur: 16, range: .92, spd: 1, mist: .8, wx: 2.6, tint: [.05, .08, .13] },
+  rockslide: { land: 'ashen', name: 'Kivivaring', tip: 'Rahnud purustavad teed ja rusud aeglustavad koletisi.', dur: 15, range: 1, spd: 1, mist: .35, wx: .6, tint: [.12, .1, .09] },
+  blizzard: { land: 'frost', name: 'Lumetorm', tip: 'Kõik liigub aeglasemalt ja su tornid ei näe nii kaugele.', dur: 17, range: .84, spd: .78, mist: 1.3, wx: 2.6, tint: [.2, .25, .34] },
+  bogfog: { land: 'fen', name: 'Rabaudu', tip: 'Paks udu lühendab tornide ulatust. Koos sellega hõljuvad sisse virvatuled.', dur: 17, range: .74, spd: 1, mist: 2.4, wx: 1.4, tint: [.07, .16, .1] },
+  lavaSurge: { land: 'ember', name: 'Laavapurse', tip: 'Laava purskab välja, põletab koletisi ja uimastab lähedal olevaid torne.', dur: 14, range: 1, spd: 1, mist: .5, wx: 2, tint: [.22, .07, .03] },
+  sandstorm: { land: 'dunes', name: 'Liivatorm', tip: 'Liiv lühendab tornide ulatust, kiirendab koletisi ja toob skarabeusi.', dur: 16, range: .76, spd: 1.14, mist: 1.8, wx: 3.2, tint: [.24, .16, .08] },
+  thunderstorm: { land: 'storm', name: 'Äike', tip: 'Välk lööb teele ja põletab koletisi, aga vahel uimastab ta ka mõne torni.', dur: 16, range: .92, spd: 1, mist: .8, wx: 2.6, tint: [.05, .08, .13] },
 };
 G.event = null; G.rangeMul = 1; G.evLevel = -1; G.evWave = 0; G.evDone = false;
 const _evp = { x: 0, y: 0, z: 0, tx: 0, tz: 0 };
