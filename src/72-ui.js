@@ -34,7 +34,7 @@ const UI = (() => {
   }
   function openSettings(on) {
     if (on === undefined) on = !U.sets; if (!!on === !!U.sets) return;
-    if (on) { U.sets = { tab: 'set', t: 0, wasPaused: G.paused }; G.paused = true; U.closeMenu(); }
+    if (on) { U.sets = { tab: 'set', t: 0, wasPaused: G.paused }; G.paused = true; U.closeMenu(); U.keys.clear(); }
     else { G.paused = U.sets.wasPaused; U.sets = null; }
     sfx('uiClick', CAM.x, CAM.z, .6);
   }
@@ -42,7 +42,7 @@ const UI = (() => {
   // While the offer is up the demo plays on behind it but does not save, so the saved run is safe until the player picks.
   U.offerContinue = S => { U.offer = { S, t: 0 }; SAVE.hold = true; U.closeMenu(); };
   function takeOffer(yes) {
-    const o = U.offer; if (!o) return; U.offer = null; SAVE.hold = false; sfx('uiClick', CAM.x, CAM.z, .8); buzz(12);
+    const o = U.offer; if (!o) return; U.offer = null; U.offerShut = performance.now(); SAVE.hold = false; sfx('uiClick', CAM.x, CAM.z, .8); buzz(12);
     if (!yes) { clearSave(); U.titleT = 0; return; }
     U.titleT = 7;
     try { if (!restoreRun(o.S)) { clearSave(); U.titleT = 0; } }
@@ -130,10 +130,10 @@ const UI = (() => {
     window.addEventListener('blur', () => U.keys.clear());
     window.addEventListener('contextmenu', e => e.preventDefault());
     window.addEventListener('keydown', e => {
-      if (PAN[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey) { U.keys.add(e.code); e.preventDefault(); }
+      if (PAN[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey) { if (!U.sets && !U.offer) U.keys.add(e.code); e.preventDefault(); }
       if (e.repeat) return; audioGesture(); U.keepAwake(); U.touch = false;
       const k = e.key;
-      if (U.offer) { if (k === ' ' || k === 'Enter') takeOffer(true); else if (k === 'n' || k === 'N' || k === 'Escape') takeOffer(false); else if (k === 'm' || k === 'M') setMute(!AU.muted); e.preventDefault(); return; }
+      if (U.offer) { if (k === ' ' || k === 'Enter') takeOffer(true); else if (k === 'n' || k === 'N') takeOffer(false); else if (k === 'm' || k === 'M') setMute(!AU.muted); e.preventDefault(); return; }
       if (k === 'o' || k === 'O' || (k === 'Escape' && U.sets)) { openSettings(); e.preventDefault(); return; }
       if (U.sets) { if (k === 'm' || k === 'M') setMute(!AU.muted); return; }
       if (G.phase === 'defeat' && (k === ' ' || k === 'Enter')) { if (restartRun(true)) sfx('uiClick', CAM.x, CAM.z, .8); e.preventDefault(); return; }
@@ -210,7 +210,7 @@ const UI = (() => {
   }
   function btnAt(x, y) {
     const m = U.touch ? 44 : 0; for (const b of U.btns) if (inRect(b, x, y, m)) return b;
-    if (inRect(U.panelRect, x, y, 0)) return null; // a modal plate covers the HUD buttons under it
+    if (inRect(U.panelRect, x, y, 0) || inRect(U.menuRect, x, y, 0)) return null; // a modal plate or a tower menu covers the HUD buttons under it
     for (const b of U.hud) if (inRect(b, x, y, m)) return b; return null;
   }
   function hudAt(x, y) { return inRect(U.menuRect, x, y, 0) || inRect(U.panelRect, x, y, 0); }
@@ -270,6 +270,7 @@ const UI = (() => {
     const now = performance.now();
     const b = held && inRect(held, x, y, U.touch ? 44 : 8) ? held : btnAt(x, y);
     if (U.offer) { if (b && (b.id === 'cont' || b.id === 'newg')) b.fn(x, y); return; }
+    if (now - (U.offerShut || -1e9) < 450) return; // a double tap on Continue must not land on the board behind it
     // Settings and the run summary are modal: a tap outside the settings closes them; nothing reaches the board or the HUD underneath.
     if (U.sets && !(b && U.btns.some(o => o.id === b.id))) { if (!inRect(U.panelRect, x, y, 0) || (b && b.id === 'gear')) openSettings(false); return; }
     if (b) { if (!b.hud) touchInput(); b.fn(x, y); return; }
@@ -478,14 +479,14 @@ const UI = (() => {
     if (nR === 3) { sq('full', xr, zb, toggleFull, 'Full screen', corners, false); xr -= zb + g3; }
     sq('zin', xr, zb, () => camZoomBy(1.5), 'Zoom in (+)', glyph('+', cur < 2.99 ? COLR.tx : '#5a5448'), false); xr -= zb + g3;
     sq('zout', xr, zb, () => camZoomBy(1 / 1.5), 'Zoom out (-)', glyph('-', cur > camZoomMin() + .01 ? COLR.tx : '#5a5448'), false);
-    let yUp = yB - g3, rightTop = yB;
+    let yUp = yB - g3, rightTop = yB, hudBot = yB; // hudBot: the top of the bottom HUD row (buttons, mana bar)
     if (G.phase === 'play') {
       // Spells: three buttons under a mana bar. Bottom centre when there is room, else left of the zoom buttons, else stacked above them.
       const n = SPELL_KINDS.length, gw = n * zb + (n - 1) * g3, mh = 4 * s;
       let xs = Math.round((iL + Wr) / 2 - gw / 2), ys = yB, stacked = false;
       if (xs < xl || xs + gw > xr - g3) { xs = xr - g3 - gw; if (xs < xl) { xs = Wr - 5 * s - gw; ys = yB - g3 - zb - mh - s; stacked = true; rightTop = ys - mh - s; } }
       if (!stacked) { yUp = Math.min(yUp, yB - mh - s - g3); xr = xs; } else yUp = Math.min(yUp, rightTop - g3);
-      const my = ys - mh - s; c.fillStyle = COLR.dark; c.fillRect(xs, my, gw, mh); c.fillStyle = '#2a3446'; c.fillRect(xs + s, my + s, gw - 2 * s, mh - 2 * s);
+      const my = ys - mh - s; hudBot = Math.min(hudBot, my); c.fillStyle = COLR.dark; c.fillRect(xs, my, gw, mh); c.fillStyle = '#2a3446'; c.fillRect(xs + s, my + s, gw - 2 * s, mh - 2 * s);
       c.fillStyle = G.mana >= G.manaMax - .01 ? '#bfe4ff' : '#5fa2e6'; c.fillRect(xs + s, my + s, Math.round((gw - 2 * s) * sat(G.mana / G.manaMax)), mh - 2 * s);
       c.fillStyle = 'rgba(239,228,205,0.55)'; for (const k of SPELL_KINDS) c.fillRect(xs + s + Math.round((gw - 2 * s) * SPELL[k].mana / G.manaMax), my, s, mh);
       SPELL_KINDS.forEach((k, i) => {
@@ -502,7 +503,7 @@ const UI = (() => {
     if (CAM.man && play) {
       const lbl = 'Follow the fight', w = tw(lbl) + pad * 2, fits = xr - g3 - w >= xl, xf2 = fits ? xr - g3 - w : Wr - w - 5 * s, yf = fits ? yB + Math.round((zb - hB) / 2) : rightTop - g3 - hB, hotF = over(xf2, yf, w, hB);
       plate(xf2, yf, w, hB, hotF ? { bd: COLR.bdHi, bg: COLR.bg2 } : { bd: '#8a6a3a' }); text(lbl, xf2 + pad, yf + pad - s, COLR.tx);
-      U.followRect = { id: 'follow', x: xf2, y: yf, w, h: hB, hot: hotF, fn: () => { camReset(); sfx('uiClick', CAM.x, CAM.z, .6); }, hud: true }; U.hud.push(U.followRect); if (hotF) U.hudHot = true; if (!fits) yUp = yf - g3;
+      U.followRect = { id: 'follow', x: xf2, y: yf, w, h: hB, hot: hotF, fn: () => { camReset(); sfx('uiClick', CAM.x, CAM.z, .6); }, hud: true }; U.hud.push(U.followRect); if (hotF) U.hudHot = true; if (!fits) yUp = yf - g3; hudBot = Math.min(hudBot, yf);
     } else U.followRect = null;
     if (tipB && !tch) { const w = tw(tipB.tip) + pad * 2, x = clamp(Math.round(tipB.x - w / 2), 4 * s + iL, Wr - w - 4 * s), ty = tipB.y || yB - g3 - hB; plate(x, ty, w, hB, { bd: COLR.bdHi }); text(tipB.tip, x + pad, ty + pad - s, COLR.tx); yUp = Math.min(yUp, ty - g3); }
     const wrap = (str, maxW) => { const out = []; let cur2 = ''; for (const wd of str.split(' ')) { const t = cur2 ? cur2 + ' ' + wd : wd; if (cur2 && tw(t) > maxW) { out.push(cur2); cur2 = wd; } else cur2 = t; } if (cur2) out.push(cur2); return out; };
@@ -547,7 +548,8 @@ const UI = (() => {
         plate(bx, by + (down ? s : 0), bw2, bh2, { bg: lit ? COLR.bg2 : 'rgba(16,18,27,0.96)', bd: lit ? COLR.bdHi : (enabled ? COLR.bd : '#3a342c'), hi: lit ? 'rgba(232,176,74,0.18)' : null });
         return { lit, dy: down ? s : 0 };
       };
-      const place = (wP, hP) => { const below = p.y - hP - 7 * s < y0 + topH + 2 * s && p.y + 26 * s + hP < Hb - 4 * s; return [clamp(Math.round(p.x - wP / 2), 4 * s + iL, Wr - wP - 4 * s), below ? Math.round(p.y + 26 * s) : clamp(Math.round(p.y - hP - 7 * s), Math.min(y0 + topH + 4 * s, Hb - hP - 4 * s), Hb - hP - 4 * s)]; };
+      // The menu stays clear of the bottom HUD row (spells, pause, speed) where it fits between the top plates and that row.
+      const place = (wP, hP) => { const bot = hudBot - g3 - hP >= y0 + topH + 2 * s ? hudBot - g3 : Hb - 4 * s, below = p.y - hP - 7 * s < y0 + topH + 2 * s && p.y + 26 * s + hP < bot; return [clamp(Math.round(p.x - wP / 2), 4 * s + iL, Wr - wP - 4 * s), below ? Math.round(p.y + 26 * s) : clamp(Math.round(p.y - hP - 7 * s), Math.min(y0 + topH + 4 * s, bot - hP), bot - hP)]; };
       c.globalAlpha = a;
       if (!m.tower) {
         const bwid = 31 * s, bh = 35 * s, gapb = 3 * s, rowW = 4 * bwid + 3 * gapb;
