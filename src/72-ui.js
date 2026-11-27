@@ -42,7 +42,7 @@ const UI = (() => {
   // While the offer is up the demo plays on behind it but does not save, so the saved run is safe until the player picks.
   U.offerContinue = S => { U.offer = { S, t: 0 }; SAVE.hold = true; U.closeMenu(); };
   function takeOffer(yes) {
-    const o = U.offer; if (!o) return; U.offer = null; SAVE.hold = false; sfx('uiClick', CAM.x, CAM.z, .8); buzz(12);
+    const o = U.offer; if (!o) return; U.offer = null; U.offerShut = performance.now(); SAVE.hold = false; sfx('uiClick', CAM.x, CAM.z, .8); buzz(12);
     if (!yes) { clearSave(); U.titleT = 0; return; }
     U.titleT = 7;
     try { if (!restoreRun(o.S)) { clearSave(); U.titleT = 0; } }
@@ -270,6 +270,7 @@ const UI = (() => {
     const now = performance.now();
     const b = held && inRect(held, x, y, U.touch ? 44 : 8) ? held : btnAt(x, y);
     if (U.offer) { if (b && (b.id === 'cont' || b.id === 'newg')) b.fn(x, y); return; }
+    if (now - (U.offerShut || -1e9) < 450) return; // a double tap on Continue must not land on the board behind it
     // Settings and the run summary are modal: a tap outside the settings closes them; nothing reaches the board or the HUD underneath.
     if (U.sets && !(b && U.btns.some(o => o.id === b.id))) { if (!inRect(U.panelRect, x, y, 0) || (b && b.id === 'gear')) openSettings(false); return; }
     if (b) { if (!b.hud) touchInput(); b.fn(x, y); return; }
