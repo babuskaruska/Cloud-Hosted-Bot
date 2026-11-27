@@ -32,8 +32,8 @@ const PORT_RAMP = {
 const PORT_GLOW = { giant: '#ff5a2a', ogre: '#ffb040', jotun: '#8fd8ff', queen: '#ff3a5a', colossus: '#ff8a2a', king: '#5ff0d8', leviathan: '#5ff0e0', herald: '#8aa4ff' };
 // Titles under the name on the card (a fallback for any other boss).
 const BOSS_TITLE = {
-  giant: 'Lord of the Barrows', ogre: 'Eater of Keepers', jotun: 'The Winter That Walks', queen: 'Mother of the Dark Brood',
-  colossus: 'The Mountain\'s Fury', king: 'Sovereign of the Sands', leviathan: 'Tyrant of the Deep', herald: 'Thief of Lanterns',
+  giant: 'Kalmeküngaste isand', ogre: 'Hoidjate õgija', jotun: 'Kõndiv talv', queen: 'Pimeda pesakonna ema',
+  colossus: 'Mäe raev', king: 'Liivade valitseja', leviathan: 'Sügavuste türann', herald: 'Laternate varas',
 };
 const BAYER2 = [0, .5, .75, .25];
 
@@ -247,7 +247,7 @@ const BOSSCARD = {
   cur: null, DUR: 2.6,
   show(kind, name, title) {
     if (!MON[kind]) return;
-    this.cur = { kind, name: name || MON[kind].name, title: title || BOSS_TITLE[kind] || 'Herald of the Hollowing', t: 0 };
+    this.cur = { kind, name: name || MON[kind].name, title: title || BOSS_TITLE[kind] || 'Õõnsuse käskjalg', t: 0 };
   },
   on() { return !!this.cur; },
   // Drawn by UI.draw on the HUD canvas: s = the HUD scale, (x0, y0) the top-left corner below the top plates, Wr the
@@ -260,7 +260,7 @@ const BOSSCARD = {
     let ps = s, L, pw, tw, w, h, nameS;
     for (; ps >= 2; ps--) {
       nameS = ps + 1; pw = 34 * ps; L = PX.LINE * ps;
-      tw = Math.max(PX.measure('BOSS') * ps + 10 * ps, PX.measure(C.name) * nameS, PX.measure(C.title) * ps);
+      tw = Math.max(PX.measure('PEALIK') * ps + 10 * ps, PX.measure(C.name) * nameS, PX.measure(C.title) * ps);
       w = pw + tw + 14 * ps; h = pw + 6 * ps;
       if (w <= avail) break;
     }
@@ -292,7 +292,7 @@ const BOSSCARD = {
     if (t < .5) { c.globalAlpha = a * (1 - t / .5) * .6 * (FX.flashK || 1); c.fillStyle = '#ffd9a8'; c.fillRect(px, py, pw, pw); c.globalAlpha = a; }
     const tx = px + pw + 6 * ps;
     let ty = y + Math.round((h - (L + 2 * ps + PX.LINE * nameS + ps + L)) / 2);
-    PX.icon(c, 'skull', tx, ty, ps, 1); PX.text(c, 'BOSS', tx + 12 * ps, ty, ps, UI.COLR.ember);
+    PX.icon(c, 'skull', tx, ty, ps, 1); PX.text(c, 'PEALIK', tx + 12 * ps, ty, ps, UI.COLR.ember);
     ty += L + 2 * ps; PX.text(c, C.name, tx, ty, nameS, '#ffd9a8');
     ty += PX.LINE * nameS + ps; PX.text(c, C.title, tx, ty, ps, UI.COLR.dim);
     c.restore();

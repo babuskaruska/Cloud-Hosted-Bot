@@ -101,10 +101,10 @@ const CINE = {
     const c = UI.ctx, W = R.dw, H = R.dh, s = UI.s, bh = Math.round(Math.min(Math.max(H * .1, (R.hudTop || 0) + 4 * s), H * .2) * a);
     c.save(); c.fillStyle = '#05060a'; c.fillRect(0, 0, W, bh); c.fillRect(0, H - bh, W, bh);
     const C = this.cur, kind = C ? C.kind : this.tailKind, t = C ? C.t : this.DUR;
-    const cap = kind === 'victory' ? 'The light returns' : 'The dark takes the keep', ca = sat((t - (kind === 'victory' ? 1 : .8)) * 2) * a;
+    const cap = kind === 'victory' ? 'Valgus naaseb' : 'Pimedus võtab linnuse', ca = sat((t - (kind === 'victory' ? 1 : .8)) * 2) * a;
     let sc = s + 1; while (sc > 2 && PX.measure(cap) * sc > W * .9) sc--;
     if (ca > 0) { c.globalAlpha = ca; PX.text(c, cap, W / 2, H - bh + Math.round((bh - PX.LINE * sc) / 2), sc, kind === 'victory' ? '#ffd9a8' : '#b8a8d8', { align: 'c' }); }
-    if (C && t > .3) { c.globalAlpha = a * .7; const hs = Math.max(2, s - 1), hint = UI.touch ? 'Tap to skip' : 'Any key skips'; PX.text(c, hint, W - (R.safe ? R.safe[2] : 0) - 6 * hs, Math.round((bh - PX.LINE * hs) / 2), hs, '#a79e8a', { align: 'r' }); }
+    if (C && t > .3) { c.globalAlpha = a * .7; const hs = Math.max(2, s - 1), hint = UI.touch ? 'Puuduta, et vahele jätta' : 'Iga klahv jätab vahele'; PX.text(c, hint, W - (R.safe ? R.safe[2] : 0) - 6 * hs, Math.round((bh - PX.LINE * hs) / 2), hs, '#a79e8a', { align: 'r' }); }
     c.restore();
   },
 };

@@ -307,6 +307,6 @@ function boot() {
 }
 function start() {
   try { boot(); }
-  catch (e) { const ld = document.getElementById('load'); if (ld) ld.innerHTML = 'Lanternhold could not start.<br><small>It needs a browser with WebGL 2 turned on.</small>'; throw e; }
+  catch (e) { const ld = document.getElementById('load'); if (ld) ld.innerHTML = 'Laternalinnus ei käivitunud.<br><small>Mäng vajab brauserit, milles on WebGL 2 sees.</small>'; throw e; }
 }
 if (HASH.manual || HASH.ff) start(); else requestAnimationFrame(() => setTimeout(start, 0));

@@ -12,6 +12,7 @@ A self-playing 3D isometric tower defense in one HTML file (three.js r170, every
 - Deterministic run log: `node tools/record.js scan <seed> <seconds>`. Use the same seed before and after a balance change and compare.
 - Audio mix table: `node tools/audiomix.js [scene ...]` (loudness in LUFS, true peak and band shares per scene from `AU.meter`; about 25 s per scene, `SECS=10` for shorter).
 - Audio soak: `node tools/audiosoak.js [cycles] [desktop|phone]` (menu → run → pause → settings → hidden tab → defeat → results loop; fails on page errors, NaN audio params or live audio nodes that grow).
+- Low-end phone budget: `node tools/perfphone.js` (phone profile, CPU throttled 4×; `THROTTLE=6`, `TIER=low`): JS ms per frame for sim, 3D submit and UI, quiet and crowded.
 - `tools/chrome.js` picks the browser (set `CHROME` to override). On Linux it uses software GL, so frame-rate numbers here are pessimistic.
 - URL flags (`seed`, `biome`, `level`, `k`, `ff`, `fps`, ...) are listed in `README.md`.
 

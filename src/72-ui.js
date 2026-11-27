@@ -20,9 +20,30 @@ const UI = (() => {
       const o = JSON.parse(localStorage.getItem('lanternhold.settings') || '{}') || {};
       for (const k of ['music', 'sfx', 'amb']) if (o[k] !== undefined && isFinite(+o[k])) SET[k] = clamp(+o[k], 0, 1);
       if (o.q === 'auto' || o.q === 'sharp' || o.q === 'fast') SET.q = o.q;
+      if (typeof o.gfx === 'string' && /^[a-z]{2,8}$/.test(o.gfx)) SET.gfx = o.gfx;
+      if (o.fps === 0 || o.fps === 30 || o.fps === 60) SET.fps = o.fps;
+      if (o.style === 'chip' || o.style === 'classic') SET.style = o.style;
       const h = JSON.parse(localStorage.getItem('lanternhold.help') || '[]'); if (Array.isArray(h)) for (const k of h) U.helpSeen[k] = 1;
     } catch (e) {}
-    applyVolumes(); SET.q = GFX.mode === 'high' ? 'sharp' : GFX.mode === 'low' ? 'fast' : GFX.mode; // GFX.init already applied it
+    applyVolumes(); if (SET.q !== 'auto' && !hasGfx()) applyQuality();
+    applyGfx(); applyStyle();
+  }
+  // Graphics tier and frame-rate cap (Ash's GFX, round 12) and the music style (Echo's AU.setStyle), each only when the
+  // build has it; without GFX the old Auto / Sharp / Fast row stays. Saved with the volumes (SET.gfx, SET.fps, SET.style).
+  function hasGfx() { return typeof GFX !== 'undefined' && !!GFX && Array.isArray(GFX.tiers) && typeof GFX.set === 'function'; }
+  const TIER_ET = { auto: 'Automaatne', low: 'Madal', mid: 'Keskmine', high: 'Kõrge', ultra: 'Ultra' };
+  const TIER_NOTE = { auto: 'Automaatne valib seadme järgi.', low: 'Madal: kiire ja säästab akut.', mid: 'Keskmine: tasakaalus.', high: 'Kõrge: terav ja ilus.', ultra: 'Ultra: kõige selgem, uduta.' };
+  function applyGfx() { if (!hasGfx()) return; try { if (SET.gfx) GFX.set(SET.gfx); if (SET.fps !== undefined && typeof GFX.setFps === 'function') GFX.setFps(SET.fps); } catch (e) {} }
+  function applyStyle() { if (SET.style && typeof AU.setStyle === 'function') try { AU.setStyle(SET.style); } catch (e) {} }
+  function setChoices() {
+    const out = [];
+    if (hasGfx()) {
+      const cur = SET.gfx || 'auto';
+      out.push({ id: 'gfx', label: 'Graafika', cur, note: TIER_NOTE[cur] || '', opts: ['auto'].concat(GFX.tiers.filter(k => k !== 'auto')).map(k => [k, k === 'auto' ? TIER_ET.auto : (GFX.label && GFX.label[k]) || TIER_ET[k] || k]), pick: k => { SET.gfx = k; applyGfx(); saveSettings(); } });
+      if (typeof GFX.setFps === 'function') { const f = SET.fps !== undefined ? SET.fps : GFX.fpsCap; out.push({ id: 'fps', label: 'Kaadrisagedus', cur: f === 30 || f === 60 ? f : 0, opts: [[30, '30'], [60, '60'], [0, 'Piiramatu']], pick: k => { SET.fps = k; applyGfx(); saveSettings(); } }); }
+    } else out.push({ id: 'q', label: 'Graafika', cur: SET.q, note: SET.q === 'auto' ? 'Automaatne valib seadme järgi.' : SET.q === 'sharp' ? 'Terav: kõik detailid.' : 'Kiire: sujuvam, pehmem.', opts: [['auto', 'Automaatne'], ['sharp', 'Terav'], ['fast', 'Kiire']], pick: k => { SET.q = k; applyQuality(); saveSettings(); } });
+    if (typeof AU.setStyle === 'function') out.push({ id: 'mus', label: 'Muusikastiil', cur: AU.style || SET.style || 'chip', opts: [['chip', '8-bit'], ['classic', 'Klassikaline']], pick: k => { SET.style = k; applyStyle(); saveSettings(); } });
+    return out;
   }
   // One-time help lines for the player's first steps (remembered, so they show once per browser).
   function helpTip(key) {
@@ -174,25 +195,25 @@ const UI = (() => {
   U.sawEcho = () => { if (G.seen.echo) return; G.seen.echo = 1; metaSaw('echo'); U.tips.unshift('echo'); };
   U.sawElite = kind => { const key = 'elite:' + kind; if (G.seen[key]) return; G.seen[key] = 1; if (U.tips.length < 5) U.tips.push(key); };
   const HELP = {
-    cmd: () => ['You command', U.touch ? 'Tap a pad to build. Spells: tap one, then the road. The gear button has help and sound.' : 'Click a pad to build. Q E T cast spells on the road. O opens settings and help.'],
-    mend: () => ['The beacon is hurt', U.touch ? 'Tap Mend, under your gold, to buy back lives.' : 'Mend (R, or the button under your gold) buys back lives.'],
-    branch: () => ['Choose a branch', 'A tower at its top level can take one of two branches. Open its menu to pick one.'],
-    idle: () => ['Need a hand?', (U.touch ? 'Tap' : 'Click') + ' the commander plate, top right, and the AI plays again.'],
-    oc: () => ['Overcharge', 'A tower with a branch can be overcharged three times, for more damage each time.'],
-    place: () => ['Placing a tower', 'Free pads glow gold where you can afford it, and red while the gold is short. Click one to build.'],
+    cmd: () => ['Sina juhid', U.touch ? 'Puuduta platsi, et ehitada. Loitsud: puuduta loitsu ja siis teed. Hammasratta all on abi ja heli.' : 'Klõpsa platsi, et ehitada. Q E T heidavad loitse teele. O avab seaded ja abi.'],
+    mend: () => ['Majakas on haavatud', U.touch ? 'Puuduta „Paranda“ oma kulla all, et elusid tagasi osta.' : '„Paranda“ (R või nupp su kulla all) ostab elusid tagasi.'],
+    branch: () => ['Vali haru', 'Kõrgeimal tasemel torn saab valida ühe kahest harust. Ava torni menüü ja vali.'],
+    idle: () => ['Vajad abi?', (U.touch ? 'Puuduta' : 'Klõpsa') + ' üleval paremal väejuhi silti ja arvuti mängib jälle.'],
+    oc: () => ['Ülelaadimine', 'Haruga torni saab kolm korda üle laadida. Iga kord teeb see rohkem kahju.'],
+    place: () => ['Torni ehitamine', 'Vabad platsid helendavad kuldselt, kui kulda jätkub, ja punaselt, kui jääb puudu. Klõpsa ühte, et ehitada.'],
   };
-  const tipInfo = key => { if (key === 'echo') return { head: 'Echo ghosts', tip: 'Pale ghosts of the slain walk the road once more. Weaker, half the gold, but they still cost lives.', bd: ECHO_COL, dur: 6.5 }; if (key.startsWith('help:')) { const h = HELP[key.slice(5)](); return { head: h[0], tip: h[1], bd: COLR.bdHi, dur: 7.5 }; } if (key.startsWith('event:')) { const E = EVENTS[key.slice(6)]; return { head: E.name, tip: E.tip, bd: '#5a7a9a' }; } if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
+  const tipInfo = key => { if (key === 'echo') return { head: 'Kajakummitused', tip: 'Langenute kahvatud kummitused kõnnivad veel korra mööda teed. Nõrgemad ja pool kulda, aga elusid võtavad nad ikka.', bd: ECHO_COL, dur: 6.5 }; if (key.startsWith('help:')) { const h = HELP[key.slice(5)](); return { head: h[0], tip: h[1], bd: COLR.bdHi, dur: 7.5 }; } if (key.startsWith('event:')) { const E = EVENTS[key.slice(6)]; return { head: E.name, tip: E.tip, bd: '#5a7a9a' }; } if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Eliit: ' + E.name, tip: E.tip + ' Annab rohkem kulda.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Pealik: ' : 'Uus: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
   // One line of numbers for a branch, in the words the menu uses.
   function branchStat(kind, key) {
     const b = TOWER[kind].branches[key], f = v => (Math.round(v * 10) / 10).toString();
-    if (key === 'longbow') return 'Range ' + f(b.range) + ' · Damage ' + b.dmg;
-    if (key === 'volley') return 'Range ' + f(b.range) + ' · Damage ' + b.dmg + 'x' + b.multi;
-    if (key === 'mortar') return 'Range ' + f(b.range) + ' · Damage ' + b.dmg;
-    if (key === 'firebomb') return 'Damage ' + b.dmg + ' · Fire ' + b.fire[2] + '/s';
-    if (key === 'tempest') return 'Damage ' + b.dmg + ' · ' + b.jumps + ' jumps';
-    if (key === 'frost') return 'Slow ' + Math.round(b.slow * 100) + '% · Freeze ' + f(b.freeze) + 's';
-    if (key === 'knights') return b.n + ' knights · ' + b.hp + ' health';
-    return b.n + ' pikemen · ' + b.hp + ' health';
+    if (key === 'longbow') return 'Ulatus ' + f(b.range) + ' · Kahju ' + b.dmg;
+    if (key === 'volley') return 'Ulatus ' + f(b.range) + ' · Kahju ' + b.dmg + '×' + b.multi;
+    if (key === 'mortar') return 'Ulatus ' + f(b.range) + ' · Kahju ' + b.dmg;
+    if (key === 'firebomb') return 'Kahju ' + b.dmg + ' · Tuli ' + b.fire[2] + '/s';
+    if (key === 'tempest') return 'Kahju ' + b.dmg + ' · ' + b.jumps + ' hüpet';
+    if (key === 'frost') return 'Aeglustus ' + Math.round(b.slow * 100) + '% · Jää ' + f(b.freeze) + ' s';
+    if (key === 'knights') return b.n + ' rüütlit · ' + b.hp + ' elu';
+    return b.n + ' odameest · ' + b.hp + ' elu';
   }
   U.branchStat = branchStat;
   // For tests and tools (window.__cw.UI.game): the game actions the UI itself uses.
@@ -347,7 +368,7 @@ const UI = (() => {
     if (G.slain !== U.lastSlain) { U.lastSlain = G.slain; U.slainBump = 1; }
     { const dpr = R.dpr || 1, iw = n => PX.iconSize(n)[0], m3 = PX.measure('000'); let sc = Math.max(2, Math.round(clamp(Math.min(R.cssH / 430, R.cssW / 225), 1.6, 4) * dpr));
       let st = 4; for (const [ic, v] of [['flame', G.lives], ['coin', Math.floor(U.goldShown)], ['skull', G.slain]]) st += iw(ic) + 8 + Math.max(PX.measure('' + v), m3);
-      const cm = Math.max(iw('helm') + 3 + PX.measure('AI commander'), PX.measure(U.touch ? 'Tap a pad to play' : 'Click a pad to take over')) + 12, minS = Math.max(2, Math.ceil(1.3 * dpr));
+      const cm = Math.max(iw('helm') + 3 + PX.measure('Arvuti juhib'), PX.measure(U.touch ? 'Puuduta platsi ja mängi' : 'Klõpsa platsi ja võta üle')) + 12, minS = Math.max(2, Math.ceil(1.3 * dpr));
       while (sc > minS && (st + cm + 13) * sc + R.safe[0] + R.safe[2] > R.dw) sc--;
       U.s = sc; }
     U.panning = !!(U.gest && U.gest.mode === 'pan');
@@ -443,19 +464,19 @@ const UI = (() => {
       PX.icon(c, st[0], x, iy, s, st[0] === 'flame' ? .55 + .45 * (G.lives / G.maxLives) : 1);
       x += iw * s + 2 * s; text(st[1], x, y0 + Math.round((hS - LH) / 2) + s, st[2]); x += Math.max(tw(st[1]), tw('000')) + 6 * s;
     }
-    const NW = G.wavesPerLand, wn = 'Wave ' + Math.max(1, landWave()) + '/' + NW, callable = G.phase === 'play' && !G.spawning && !G.bossWave && G.nextIn > .4;
+    const NW = G.wavesPerLand, wn = 'Laine ' + Math.max(1, landWave()) + '/' + NW, callable = G.phase === 'play' && !G.spawning && !G.bossWave && G.nextIn > .4;
     let sub, frac = -1, subCol = null;
     if (G.phase === 'play') {
       if (!G.spawning && !G.bossWave && G.nextIn > 0) {
         const nk = G.k % NW + 1, nextHorde = isHordeK(nk, G.level), nextBoss = isBossK(nk);
         const warn = nextHorde || nextBoss, showCall = callable && (tch ? !(warn && G.t % 3 < 1.5) : over(U.waveRect ? U.waveRect.x : -1, U.waveRect ? U.waveRect.y : -1, U.waveRect ? U.waveRect.w : 0, U.waveRect ? U.waveRect.h : 0));
-        sub = showCall ? (G.restored ? (tch ? 'Tap to call now' : 'Call now') : (tch ? 'Tap to call · +' : 'Call now · +') + Math.round(G.nextIn * 3)) : (nextHorde ? 'Horde in ' : nextBoss ? 'Boss in ' : 'Next wave in ') + Math.ceil(G.nextIn);
+        sub = G.count > 0 ? 'Valmistu! ' + G.count : showCall ? (G.restored ? 'Kutsu kohe' : 'Kutsu kohe · +' + Math.round(G.nextIn * 3)) : (nextHorde ? 'Hordini ' : nextBoss ? 'Pealikuni ' : 'Järgmise laineni ') + Math.ceil(G.nextIn);
         if (warn && !showCall) subCol = COLR.ember; frac = 1 - G.nextIn / 6.5;
-      } else { const n = G.mons.length + G.queue.length; sub = (G.horde ? 'Horde · ' : '') + n + ' on the road'; if (G.horde) subCol = COLR.ember; }
+      } else { const n = G.mons.length + G.queue.length; sub = (G.horde ? 'Hord · ' : '') + n + ' teel'; if (G.horde) subCol = COLR.ember; }
     }
-    else sub = G.phase === 'defeat' ? 'The fire has died' : G.phase === 'clear' ? 'Boss defeated' : 'A new pass awaits';
-    const bw = PX.iconSize('banner')[0] * s, wW = Math.max(bw + 3 * s + tw(wn), tw(sub), tw('Next wave in 0'), tw('Tap to call · +00')) + pad * 2 + 4 * s, hW = LH * 2 + pad * 2 + s;
-    const you = U.playerActive(), ct = you ? 'You command' : 'AI commander', cs = tch ? (you ? 'Tap for the AI' : 'Tap a pad to play') : (you ? 'Click here for the AI' : 'Click a pad to take over');
+    else sub = G.phase === 'defeat' ? 'Tuli on kustunud' : G.phase === 'clear' ? 'Pealik on võidetud' : 'Uus maa ootab';
+    const bw = PX.iconSize('banner')[0] * s, wW = Math.max(bw + 3 * s + tw(wn), tw(sub), tw('Järgmise laineni 0'), tw('Kutsu kohe · +00')) + pad * 2 + 4 * s, hW = LH * 2 + pad * 2 + s;
+    const you = U.playerActive(), ct = you ? 'Sina juhid' : 'Arvuti juhib', cs = tch ? (you ? 'Puuduta: arvuti mängib' : 'Puuduta platsi ja mängi') : (you ? 'Klõpsa: arvuti mängib' : 'Klõpsa platsi ja võta üle');
     const ic = you ? 'hand' : 'helm', icw = PX.iconSize(ic)[0] * s, cW = Math.max(icw + 3 * s + tw(ct), tw(cs)) + pad * 2 + 2 * s, xc = Wr - cW - 5 * s, g3 = 3 * s;
     const xw = Math.round(W / 2 - wW / 2);
     let yc = y0, yw = y0;
@@ -475,7 +496,7 @@ const UI = (() => {
     U.mendRect = null;
     if (G.phase === 'play' && mendCount() > 0) {
       // Mend the beacon: a small button under the stats plate, shown while the beacon has lost lives.
-      const n = mendCount(), mc = mendCost(), can = G.gold >= mc, l1 = 'Mend +' + n, fw = PX.iconSize('flame')[0] * s, cw = PX.iconSize('coin')[0] * s;
+      const n = mendCount(), mc = mendCost(), can = G.gold >= mc, l1 = 'Paranda +' + n, fw = PX.iconSize('flame')[0] * s, cw = PX.iconSize('coin')[0] * s;
       const mw = pad * 2 + fw + 2 * s + tw(l1) + 5 * s + cw + 2 * s + tw('' + mc), mh = LH + pad * 2 - s;
       let mx = x0, my = y0 + hS + g3;
       const hit = (x, y, w, h) => mx < x + w && mx + mw > x && my < y + h && my + mh > y;
@@ -489,7 +510,7 @@ const UI = (() => {
       text(l1, xx, ty, can ? COLR.tx : COLR.dim); xx += tw(l1) + 5 * s;
       PX.icon(c, 'coin', xx, my + dy + Math.round((mh - PX.iconSize('coin')[1] * s) / 2), s, can ? 1 : .5); xx += cw + 2 * s;
       text('' + mc, xx, ty, can ? COLR.amber : COLR.red);
-      if (hotM && !tch) { const tip = 'Mend the beacon (R)', w2 = tw(tip) + pad * 2; plate(mx, my + mh + g3, w2, mh, { bd: COLR.bdHi }); text(tip, mx + pad, my + mh + g3 + pad - s, COLR.tx); }
+      if (hotM && !tch) { const tip = 'Paranda majakat (R)', w2 = tw(tip) + pad * 2; plate(mx, my + mh + g3, w2, mh, { bd: COLR.bdHi }); text(tip, mx + pad, my + mh + g3 + pad - s, COLR.tx); }
     }
     const dpr = R.dpr || 1, hB = LH + pad * 2 - s, zb = tch ? Math.max(22 * s, Math.round(40 * dpr)) : hB, yB = Hb - zb - 5 * s; let tipB = null;
     const sq = (id, x, w, fn, tip, icon, on) => {
@@ -502,17 +523,17 @@ const UI = (() => {
     const corners = (x, y) => { const u = Math.round(zb / 9), q = Math.round(zb / 5), f = isFull(); c.fillStyle = COLR.tx; for (const [ax, ay] of [[0, 0], [1, 0], [0, 1], [1, 1]]) { const cx = x + (ax ? zb - q - u : q), cy = y + (ay ? zb - q - u : q), ix = f ? (ax ? -1 : 1) : (ax ? 1 : -1), iy = f ? (ay ? -1 : 1) : (ay ? 1 : -1); c.fillRect(cx, cy, u, u); c.fillRect(cx - ix * u, cy, u, u); c.fillRect(cx, cy - iy * u, u, u); } };
     const play = G.phase === 'play' || G.phase === 'defeat', nR = (fullscreenOK() && tch ? 3 : 2), rightW = nR * zb + (nR - 1) * g3;
     let xl = 5 * s + iL;
-    sq('pause', xl, zb, togglePause, G.paused ? 'Resume (P)' : 'Pause (P)', bars, G.paused); xl += zb + g3;
-    sq('speed', xl, zb, cycleSpeed, 'Speed (Tab)', label(G.speed + 'x', G.speed > 1 ? COLR.amber : COLR.tx), G.speed > 1); xl += zb + g3;
-    { const on = AU.ready && !AU.muted, icn = on ? 'sound' : 'mute', k = Math.max(s, Math.floor(zb / 14)), [iw2, ih2] = PX.iconSize(icn), lbl = tch ? 'Tap for sound' : 'Click for sound', wl = iw2 * s + 3 * s + tw(lbl) + pad * 2;
+    sq('pause', xl, zb, togglePause, G.paused ? 'Jätka (P)' : 'Paus (P)', bars, G.paused); xl += zb + g3;
+    sq('speed', xl, zb, cycleSpeed, 'Kiirus (Tab)', label(G.speed + '×', G.speed > 1 ? COLR.amber : COLR.tx), G.speed > 1); xl += zb + g3;
+    { const on = AU.ready && !AU.muted, icn = on ? 'sound' : 'mute', k = Math.max(s, Math.floor(zb / 14)), [iw2, ih2] = PX.iconSize(icn), lbl = 'Lülita heli sisse', wl = iw2 * s + 3 * s + tw(lbl) + pad * 2;
       const wide = !AU.ready && xl + wl + g3 + zb + g3 + rightW + 5 * s + iR <= W;
-      U.soundRect = sq('sound', xl, wide ? wl : zb, soundTap, AU.ready ? (AU.muted ? 'Sound is off (M)' : 'Sound is on (M)') : 'Sound', (x, y) => { if (wide) { PX.icon(c, icn, x + pad, y + Math.round((zb - ih2 * s) / 2), s, .85); text(lbl, x + pad + iw2 * s + 3 * s, y + Math.round((zb - LH) / 2) + s, COLR.tx); } else PX.icon(c, icn, x + Math.round((zb - iw2 * k) / 2), y + Math.round((zb - ih2 * k) / 2), k, AU.ready ? 1 : .8); }, !AU.ready);
+      U.soundRect = sq('sound', xl, wide ? wl : zb, soundTap, AU.ready ? (AU.muted ? 'Heli on väljas (M)' : 'Heli on sees (M)') : 'Heli', (x, y) => { if (wide) { PX.icon(c, icn, x + pad, y + Math.round((zb - ih2 * s) / 2), s, .85); text(lbl, x + pad + iw2 * s + 3 * s, y + Math.round((zb - LH) / 2) + s, COLR.tx); } else PX.icon(c, icn, x + Math.round((zb - iw2 * k) / 2), y + Math.round((zb - ih2 * k) / 2), k, AU.ready ? 1 : .8); }, !AU.ready);
       xl += (wide ? wl : zb) + g3; }
-    sq('gear', xl, zb, () => inRun() ? MENU.open('pause') : openSettings(), inRun() ? 'Menu (Esc)' : 'Settings and help (O)', (x, y) => { const [gw, gh] = PX.iconSize('gear'), k = Math.max(s, Math.floor(zb * .5 / gw)); PX.icon(c, 'gear', x + Math.round((zb - gw * k) / 2), y + Math.round((zb - gh * k) / 2), k, 1); }, !!U.sets); xl += zb + g3;
+    sq('gear', xl, zb, () => inRun() ? MENU.open('pause') : openSettings(), inRun() ? 'Menüü (Esc)' : 'Seaded ja abi (O)', (x, y) => { const [gw, gh] = PX.iconSize('gear'), k = Math.max(s, Math.floor(zb * .5 / gw)); PX.icon(c, 'gear', x + Math.round((zb - gw * k) / 2), y + Math.round((zb - gh * k) / 2), k, 1); }, !!U.sets); xl += zb + g3;
     let xr = Wr - 5 * s - zb; const cur = camZoomNow();
-    if (nR === 3) { sq('full', xr, zb, toggleFull, 'Full screen', corners, false); xr -= zb + g3; }
-    sq('zin', xr, zb, () => camZoomBy(1.5), 'Zoom in (+)', glyph('+', cur < 2.99 ? COLR.tx : '#5a5448'), false); xr -= zb + g3;
-    sq('zout', xr, zb, () => camZoomBy(1 / 1.5), 'Zoom out (-)', glyph('-', cur > camZoomMin() + .01 ? COLR.tx : '#5a5448'), false);
+    if (nR === 3) { sq('full', xr, zb, toggleFull, 'Täisekraan', corners, false); xr -= zb + g3; }
+    sq('zin', xr, zb, () => camZoomBy(1.5), 'Suumi sisse (+)', glyph('+', cur < 2.99 ? COLR.tx : '#5a5448'), false); xr -= zb + g3;
+    sq('zout', xr, zb, () => camZoomBy(1 / 1.5), 'Suumi välja (-)', glyph('-', cur > camZoomMin() + .01 ? COLR.tx : '#5a5448'), false);
     let yUp = yB - g3, rightTop = yB, hudBot = yB; // hudBot: the top of the bottom HUD row (buttons, mana bar)
     if (G.phase === 'play') {
       // Spells: three buttons under a mana bar. Bottom centre when there is room, else left of the zoom buttons, else stacked above them.
@@ -525,7 +546,7 @@ const UI = (() => {
       c.fillStyle = 'rgba(239,228,205,0.55)'; for (const k of SPELL_KINDS) c.fillRect(xs + s + Math.round((gw - 2 * s) * spellMana(k) / G.manaMax), my, s, mh);
       SPELL_KINDS.forEach((k, i) => {
         const S = SPELL[k], x = xs + i * (zb + g3), id = 'sp' + k, ready = spellReady(k), armed = U.spell === k, hot = over(x, ys, zb, zb), down = U.press === id, dy = down ? s : 0, fl = U.spellFlash[k] || 0;
-        U.hud.push({ id, x, y: ys, w: zb, h: zb, fn: () => pickSpell(k), hud: true }); if (hot) { U.hudHot = true; tipB = { x: x + zb / 2, y: my - g3 - hB, tip: S.name + ' (' + S.key + ') · ' + spellMana(k) + ' mana' }; }
+        U.hud.push({ id, x, y: ys, w: zb, h: zb, fn: () => pickSpell(k), hud: true }); if (hot) { U.hudHot = true; tipB = { x: x + zb / 2, y: my - g3 - hB, tip: S.name + ' (' + S.key + ') · ' + spellMana(k) + ' manat' }; }
         plate(x, ys + dy, zb, zb, armed || hot || down ? { bd: COLR.bdHi, bg: COLR.bg2 } : fl > .5 && fl % .5 > .25 ? { bd: COLR.ember } : ready ? { bd: '#5f86b0' } : {});
         const [iw, ih] = PX.iconSize(S.icon), kk = Math.max(s, Math.floor(zb * .6 / Math.max(iw, ih)));
         PX.icon(c, S.icon, x + Math.round((zb - iw * kk) / 2), ys + dy + Math.round((zb - ih * kk) / 2), kk, ready || armed ? 1 : .35);
@@ -535,7 +556,7 @@ const UI = (() => {
       });
     }
     if (CAM.man && play) {
-      const lbl = 'Follow the fight', w = tw(lbl) + pad * 2, fits = xr - g3 - w >= xl, xf2 = fits ? xr - g3 - w : Wr - w - 5 * s, yf = fits ? yB + Math.round((zb - hB) / 2) : rightTop - g3 - hB, hotF = over(xf2, yf, w, hB);
+      const lbl = 'Jälgi lahingut', w = tw(lbl) + pad * 2, fits = xr - g3 - w >= xl, xf2 = fits ? xr - g3 - w : Wr - w - 5 * s, yf = fits ? yB + Math.round((zb - hB) / 2) : rightTop - g3 - hB, hotF = over(xf2, yf, w, hB);
       plate(xf2, yf, w, hB, hotF ? { bd: COLR.bdHi, bg: COLR.bg2 } : { bd: '#8a6a3a' }); text(lbl, xf2 + pad, yf + pad - s, COLR.tx);
       U.followRect = { id: 'follow', x: xf2, y: yf, w, h: hB, hot: hotF, fn: () => { camReset(); sfx('uiClick', CAM.x, CAM.z, .6); }, hud: true }; U.hud.push(U.followRect); if (hotF) U.hudHot = true; if (!fits) yUp = yf - g3; hudBot = Math.min(hudBot, yf);
     } else U.followRect = null;
@@ -544,8 +565,8 @@ const UI = (() => {
     const boxW = Wr - iL - 10 * s;
     if (U.spell && G.phase === 'play') {
       // The armed spell: what to do next, and a Cancel button.
-      const S = SPELL[U.spell], l1 = S.name + ': ' + (tch ? 'tap the ground' : 'click the ground'), cl = 'Cancel', cbw = tw(cl) + pad * 2, cbh = LH + pad * 2 - s;
-      let l2 = tch ? S.desc : S.desc + ' Esc cancels.'; if (Math.max(tw(l1), tw(l2)) + pad * 3 + cbw > boxW) l2 = tw(S.desc) + pad * 3 + cbw <= boxW ? S.desc : '';
+      const S = SPELL[U.spell], l1 = S.name + ': ' + (tch ? 'puuduta maad' : 'klõpsa maad'), cl = 'Tühista', cbw = tw(cl) + pad * 2, cbh = LH + pad * 2 - s;
+      let l2 = tch ? S.desc : S.desc + ' Esc tühistab.'; if (Math.max(tw(l1), tw(l2)) + pad * 3 + cbw > boxW) l2 = tw(S.desc) + pad * 3 + cbw <= boxW ? S.desc : '';
       const w = Math.max(tw(l1), tw(l2)) + pad * 3 + cbw, nl = l2 ? 2 : 1, h = Math.max(cbh + 2 * s, LH * nl + pad * 2 - s), x = Math.round((iL + Wr - w) / 2), y = yUp - h, ty0 = y + Math.round((h - LH * nl) / 2) + s;
       plate(x, y, w, h, { bd: COLR.bdHi }); text(l1, x + pad, ty0, COLR.amber); if (l2) text(l2, x + pad, ty0 + LH, COLR.dim);
       const cx = x + w - pad - cbw, cy = y + Math.round((h - cbh) / 2), hotX = over(cx, cy, cbw, cbh), downX = U.press === 'spcancel';
@@ -553,7 +574,7 @@ const UI = (() => {
       plate(cx, cy + (downX ? s : 0), cbw, cbh, hotX || downX ? { bd: COLR.bdHi, bg: COLR.bg2 } : { bd: COLR.ember }); text(cl, cx + pad, cy + pad - s + (downX ? s : 0), COLR.tx);
       yUp = y - g3;
     }
-    if (G.paused && !U.sets) { const k = s + 1, t1 = 'Paused', w = PX.measure(t1) * k + pad * 4, h = PX.LINE * k + pad * 2; plate(Math.round(W / 2 - w / 2), yUp - h, w, h, { bd: COLR.bdHi }); PX.text(c, t1, W / 2, yUp - h + pad, k, COLR.amber, { align: 'c' }); yUp -= h + g3; }
+    if (G.paused && !U.sets) { const k = s + 1, t1 = 'Paus', w = PX.measure(t1) * k + pad * 4, h = PX.LINE * k + pad * 2; plate(Math.round(W / 2 - w / 2), yUp - h, w, h, { bd: COLR.bdHi }); PX.text(c, t1, W / 2, yUp - h + pad, k, COLR.amber, { align: 'c' }); yUp -= h + g3; }
     if (U.tip && !U.menu && !STORY.on()) {
       const d = tipInfo(U.tip.type), a = sat(Math.min(U.tip.t * 4, (U.tip.dur - U.tip.t) * 2)), head = d.head, lines = wrap(d.tip, Math.min(boxW - pad * 2, 46 * 6 * s));
       let w = tw(head); for (const l of lines) w = Math.max(w, tw(l)); w += pad * 2; const h = LH * (lines.length + 1) + pad * 2 - s, x = Math.round((iL + Wr - w) / 2), y = yUp - h;
@@ -561,7 +582,7 @@ const UI = (() => {
     } else {
       const first = U.titleT < 16, a = tch ? sat(Math.min(U.titleT - 7.2, first ? 1 : 3 - U.moved, U.manual && !first ? 0 : 1, 62 - U.titleT)) : Math.max(sat(Math.min(U.titleT - 7.2, 3 - Math.min(U.moved, U.idle > 20 ? U.moved : 0) + (U.titleT < 18 ? 8 : 0))), sat(Math.min(U.titleT - 7.2, 15 - U.titleT)));
       if (a > .02 && !U.menu && !G.paused && !U.spell && G.phase === 'play' && !TUT.step) {
-        const parts = tch ? ['Tap a pad to build', 'Tap a spell, then the road', 'Drag to look, pinch to zoom', 'The gear has help'] : ['Click a pad to build', '1-4 pick a tower', 'Q E T cast spells', 'R mends the beacon', 'Space calls the next wave', 'O settings and help'];
+        const parts = tch ? ['Puuduta platsi ja ehita', 'Puuduta loitsu, siis teed', 'Lohista vaatamiseks, näpista suumiks', 'Hammasrattas on abi'] : ['Klõpsa platsi ja ehita', '1-4 valib torni', 'Q E T heidavad loitse', 'R parandab majakat', 'Tühik kutsub laine', 'O: seaded ja abi'];
         // As few lines as fit: two halves, else pairs, else one part per line.
         const pack = n => { const out = []; for (let i = 0; i < parts.length; i += n) out.push(parts.slice(i, i + n).join(' · ')); return out; }, fits = ls => ls.every(l => tw(l) + pad * 2 <= boxW);
         let lines = [parts.join(' · ')]; for (const n of [Math.ceil(parts.length / 2), 2, 1]) { if (fits(lines)) break; lines = pack(n); }
@@ -591,33 +612,33 @@ const UI = (() => {
         const bwid = 31 * s, bh = 35 * s, gapb = 3 * s, rowW = 4 * bwid + 3 * gapb;
         let lit = null; const fk = U.gp.active ? TOWER_KINDS[m.focus % 4] : null;
         const cheap = Math.min(...TOWER_KINDS.map(k => TOWER[k].cost[0])), broke = G.gold < cheap && !(G.freeTowers > 0);
-        const lines = k => k ? [TOWER[k].name].concat(TOWER[k].desc) : broke ? ['Not enough gold yet', 'Kills and each wave pay gold;', 'selling a tower gives some back.'] : tch ? ['Choose a tower', 'Tap one to see what it does,', 'then tap it again to build.'] : ['Choose a tower', 'Hover or press 1 to 4', 'to see what each does.'];
-        let textW = tw('Tap again to build'); for (const k of [null].concat(TOWER_KINDS)) for (const l of lines(k)) textW = Math.max(textW, tw(l));
+        const lines = k => k ? [TOWER[k].name].concat(TOWER[k].desc) : broke ? ['Kulda on veel vähe', 'Koletised ja lained annavad kulda,', 'müüdud tornist saad osa tagasi.'] : tch ? ['Vali torn', 'Puuduta, et näha, mida see teeb,', 'ja puuduta uuesti, et ehitada.'] : ['Vali torn', 'Vii hiir peale või vajuta 1–4,', 'et näha, mida see teeb.'];
+        let textW = tw('Puuduta uuesti, et ehitada'); for (const k of [null].concat(TOWER_KINDS)) for (const l of lines(k)) textW = Math.max(textW, tw(l));
         const wP = Math.max(rowW, textW) + mp * 2, hP = mp * 2 + LH + 3 * s + bh + 4 * s + LH * 3 + 2 * s + (tch ? LH + s : 0), [px, py] = place(wP, hP);
         U.menuRect = { x: px, y: py, w: wP, h: hP };
-        plate(px, py, wP, hP); text('Build here', px + mp, py + mp - s, COLR.amber);
+        plate(px, py, wP, hP); text('Ehita siia', px + mp, py + mp - s, COLR.amber);
         const bx0 = px + Math.round((wP - rowW) / 2), by = py + mp + LH + 3 * s;
         TOWER_KINDS.forEach((kind, i) => {
           const d = TOWER[kind], can = G.gold >= d.cost[0] || G.freeTowers > 0, bx = bx0 + i * (bwid + gapb);
           const r = button(bx, by, bwid, bh, 'b' + kind, can, () => { if (U.touch && m.sel !== kind) { m.sel = kind; sfx('uiHover', m.pad.x, m.pad.z, .8); } else doBuild(m.pad, kind); }, kind, m.sel === kind);
           const [iw, ih] = PX.iconSize(d.icon); PX.icon(c, d.icon, bx + Math.round((bwid - iw * s) / 2), by + 6 * s + r.dy, s, can ? 1 : .45);
           if (!tch) text('' + (i + 1), bx + 3 * s, by + 2 * s + r.dy, COLR.dim);
-          const cl = G.freeTowers > 0 ? 'Free' : '' + d.cost[0], cw2 = 8 * s + 2 * s + tw(cl), cx0 = bx + Math.round((bwid - cw2) / 2);
+          const cl = G.freeTowers > 0 ? 'Tasuta' : '' + d.cost[0], cw2 = 8 * s + 2 * s + tw(cl), cx0 = bx + Math.round((bwid - cw2) / 2);
           PX.icon(c, 'coin', cx0, by + bh - LH - 3 * s + r.dy, s, can ? 1 : .5); text(cl, cx0 + 10 * s, by + bh - LH - 3 * s + r.dy, G.freeTowers > 0 ? COLR.ok : can ? COLR.amber : COLR.red);
           if (r.lit) lit = kind;
         });
         const ls = lines(lit || fk), ty = by + bh + 4 * s;
         text(ls[0], px + mp, ty, lit || fk ? COLR.tx : broke ? COLR.ember : COLR.dim); text(ls[1], px + mp, ty + LH + s, COLR.dim); if (ls[2]) text(ls[2], px + mp, ty + LH * 2 + s, COLR.dim);
-        if (tch && m.sel) { const can = G.gold >= TOWER[m.sel].cost[0] || G.freeTowers > 0; text(can ? 'Tap again to build' : 'Not enough gold yet', px + mp, ty + LH * 3 + 2 * s, can ? COLR.amber : COLR.red); }
+        if (tch && m.sel) { const can = G.gold >= TOWER[m.sel].cost[0] || G.freeTowers > 0; text(can ? 'Puuduta uuesti, et ehitada' : 'Kulda on veel vähe', px + mp, ty + LH * 3 + 2 * s, can ? COLR.amber : COLR.red); }
       } else if (m.tower.lvl === 2 && !m.tower.branch) {
         // Branch choice: two cards with what each does and costs. Touch: tap to see, tap again to buy. Keys 1 and 2.
         const t = m.tower, d = t.def, keys = BRANCH_KEYS[t.kind], active = t.state === 'active', refund = Math.round(t.spent * .6), cp = 4 * s;
         const card = k => { const b = d.branches[k]; return { k, b, cost: branchCost(t, k), lines: b.desc, stat: branchStat(t.kind, k) }; }, cards = keys.map(card);
         let cw = 0; for (const q of cards) cw = Math.max(cw, tw((tch ? '' : '1 ') + q.b.name) + 14 * s + tw('' + q.cost), tw(q.stat), ...q.lines.map(tw));
         cw += cp * 2 + 2 * s; const ch = LH * 4 + cp * 2 - s, gapC = 4 * s, sideBySide = cw * 2 + gapC + mp * 2 <= Wr - iL - 8 * s;
-        const head = active ? 'Choose a branch' : 'Building...', hint = tch ? (m.sel ? (G.gold >= branchCost(t, m.sel) ? 'Tap it again to buy' : 'Not enough gold yet') : 'Tap a branch to see it') : 'Click to buy · keys 1 and 2';
-        const sl = m.sellArm ? 'Confirm +' + refund : 'Sell +' + refund, bh = (tch ? 22 : 14) * s;
-        const rowW = sideBySide ? cw * 2 + gapC : cw, wP = Math.max(rowW, tw(d.name) + 26 * s, tw(head), tw(hint), tw('Confirm +' + refund) + 20 * s) + mp * 2;
+        const head = active ? 'Vali haru' : 'Ehitan...', hint = tch ? (m.sel ? (G.gold >= branchCost(t, m.sel) ? 'Puuduta uuesti, et osta' : 'Kulda on veel vähe') : 'Puuduta haru, et seda näha') : 'Klõpsa, et osta · klahvid 1 ja 2';
+        const sl = m.sellArm ? 'Kinnita +' + refund : 'Müü +' + refund, bh = (tch ? 22 : 14) * s;
+        const rowW = sideBySide ? cw * 2 + gapC : cw, wP = Math.max(rowW, tw(d.name) + 26 * s, tw(head), tw(hint), tw('Kinnita +' + refund) + 20 * s) + mp * 2;
         const hP = mp * 2 + LH * 2 + 3 * s + (sideBySide ? ch : ch * 2 + gapC) + 4 * s + bh + 3 * s + LH, [px, py] = place(wP, hP);
         U.menuRect = { x: px, y: py, w: wP, h: hP };
         plate(px, py, wP, hP, { bd: COLR.bdHi }); text(d.name, px + mp, py + mp - s, COLR.amber);
@@ -633,16 +654,16 @@ const UI = (() => {
           const cwid = tw('' + q.cost); text('' + q.cost, cx + cw - cp - cwid, ty, can ? COLR.amber : COLR.red); PX.icon(c, 'coin', cx + cw - cp - cwid - 10 * s, ty, s, can ? 1 : .5);
           text(q.lines[0], tx, ty + LH, COLR.tx); text(q.lines[1], tx, ty + LH * 2, COLR.tx); text(q.stat, tx, ty + LH * 3, COLR.ok);
         });
-        const by = y0c + (sideBySide ? ch : ch * 2 + gapC) + 4 * s, bws = Math.min(wP - mp * 2, tw('Confirm +' + refund) + 20 * s), bxs = px + mp;
+        const by = y0c + (sideBySide ? ch : ch * 2 + gapC) + 4 * s, bws = Math.min(wP - mp * 2, tw('Kinnita +' + refund) + 20 * s), bxs = px + mp;
         text(hint, px + mp, by + bh + 3 * s, tch && m.sel ? (G.gold >= branchCost(t, m.sel) ? COLR.amber : COLR.red) : COLR.dim);
         const r = button(bxs, by, bws, bh, 'sell', true, () => { if (!m.sellArm) { m.sellArm = true; sfx('uiHover', t.x, t.z, .8); } else { buzz(16); doSell(t); } }, null, m.sellArm);
         PX.icon(c, 'sell', bxs + 4 * s, by + Math.round((bh - LH) / 2) + r.dy, s); text(sl, bxs + 4 * s + 12 * s, by + Math.round((bh - LH) / 2) + r.dy, m.sellArm ? COLR.ember : COLR.tx);
       } else {
         const t = m.tower, d = t.def, oc = t.oc || 0, maxed = t.lvl >= 3, occ = overchargeCost(t), full = maxed && !occ, upc = maxed ? occ : t.lvl < 2 ? d.cost[t.lvl + 1] : 0, can = !full && upc > 0 && G.gold >= upc && t.state === 'active', refund = Math.round(t.spent * .6), L1 = t.lvl + 1;
-        const building = t.state !== 'active', ul = building ? 'Building...' : full ? 'Fully charged' : maxed ? 'Overcharge ' + upc : 'Upgrade ' + upc, sl = m.sellArm ? 'Confirm +' + refund : 'Sell +' + refund, iw9 = 9 * s, bw3 = Math.max(tw(ul), tw(sl), tw('Confirm +' + refund)) + iw9 + 11 * s, bh = (tch ? 24 : 15) * s, by0 = Math.round((bh - LH) / 2);
+        const building = t.state !== 'active', ul = building ? 'Ehitan...' : full ? 'Täis laetud' : maxed ? 'Lae üle ' + upc : 'Täiusta ' + upc, sl = m.sellArm ? 'Kinnita +' + refund : 'Müü +' + refund, iw9 = 9 * s, bw3 = Math.max(tw(ul), tw(sl), tw('Kinnita +' + refund)) + iw9 + 11 * s, bh = (tch ? 24 : 15) * s, by0 = Math.round((bh - LH) / 2);
         const name = t.branch ? d.bdef.title : d.name;
-        const st = (t.branch ? branchStat(t.kind, t.branch) : t.kind === 'guard' ? d.n[t.lvl] + ' footmen · ' + d.hp[t.lvl] + ' health' : 'Range ' + d.range[t.lvl].toFixed(1) + ' · Damage ' + Math.round(d.dmg[t.lvl] * (1 + OC_DMG * oc))) + (oc ? ' · +' + Math.round(OC_DMG * oc * 100) + '%' : '');
-        const nx = full ? t.kills + ' kills · fully charged' : maxed ? 'Overcharge: damage +' + Math.round(OC_DMG * (oc + 1) * 100) + '%' : t.lvl === 1 ? (t.kind === 'guard' ? 'Next: ' + d.n[L1] + ' footmen · ' + d.hp[L1] + ' health' : 'Next: range ' + d.range[L1].toFixed(1) + ' · damage ' + d.dmg[L1]) + ', then a branch' : (t.kind === 'guard' ? 'Next: ' + d.n[L1] + ' footmen · ' + d.hp[L1] + ' health' : 'Next: range ' + d.range[L1].toFixed(1) + ' · damage ' + d.dmg[L1]);
+        const st = (t.branch ? branchStat(t.kind, t.branch) : t.kind === 'guard' ? d.n[t.lvl] + ' sõdurit · ' + d.hp[t.lvl] + ' elu' : 'Ulatus ' + d.range[t.lvl].toFixed(1) + ' · Kahju ' + Math.round(d.dmg[t.lvl] * (1 + OC_DMG * oc))) + (oc ? ' · +' + Math.round(OC_DMG * oc * 100) + '%' : '');
+        const nx = full ? t.kills + ' võitu · täis laetud' : maxed ? 'Ülelaadimine: kahju +' + Math.round(OC_DMG * (oc + 1) * 100) + '%' : t.lvl === 1 ? (t.kind === 'guard' ? 'Järgmine: ' + d.n[L1] + ' sõdurit · ' + d.hp[L1] + ' elu' : 'Järgmine: ulatus ' + d.range[L1].toFixed(1) + ' · kahju ' + d.dmg[L1]) + ', siis haru' : (t.kind === 'guard' ? 'Järgmine: ' + d.n[L1] + ' sõdurit · ' + d.hp[L1] + ' elu' : 'Järgmine: ulatus ' + d.range[L1].toFixed(1) + ' · kahju ' + d.dmg[L1]);
         const fiw = PX.iconSize('flame')[0] * s, wP = Math.max(bw3 * 2 + 3 * s, tw(name) + 26 * s + oc * (fiw + s), tw(st), tw(nx)) + mp * 2, hP = mp * 2 + LH * 3 + 6 * s + bh, [px, py] = place(wP, hP);
         U.menuRect = { x: px, y: py, w: wP, h: hP };
         plate(px, py, wP, hP, oc ? { bd: COLR.ember } : t.branch ? { bd: COLR.bdHi } : {}); text(name, px + mp, py + mp - s, COLR.amber);
@@ -659,11 +680,11 @@ const UI = (() => {
     }
     if (hot !== U.hotBtn && hot) sfx('uiHover', CAM.x, CAM.z, .5);
     U.hotBtn = hot;
-    if (U.armed && mouse && G.phase === 'play') { const ok = G.gold >= TOWER[U.armed].cost[0] || G.freeTowers > 0, l = TOWER[U.armed].name + (ok ? ': click a pad' : ': not enough gold'), w = tw(l) + pad * 2; const xx = clamp(U.mx + 10 * s, 2 * s, W - w - 2 * s), yy = clamp(U.my + 10 * s, 2 * s, H - LH - pad * 2); plate(xx, yy, w, LH + pad * 2 - s, { bd: ok ? COLR.bdHi : COLR.red }); text(l, xx + pad, yy + pad - s, ok ? COLR.tx : COLR.red); }
+    if (U.armed && mouse && G.phase === 'play') { const ok = G.gold >= TOWER[U.armed].cost[0] || G.freeTowers > 0, l = TOWER[U.armed].name + (ok ? ': klõpsa platsi' : ': kulda on vähe'), w = tw(l) + pad * 2; const xx = clamp(U.mx + 10 * s, 2 * s, W - w - 2 * s), yy = clamp(U.my + 10 * s, 2 * s, H - LH - pad * 2); plate(xx, yy, w, LH + pad * 2 - s, { bd: ok ? COLR.bdHi : COLR.red }); text(l, xx + pad, yy + pad - s, ok ? COLR.tx : COLR.red); }
     if (U.titleT < 7 && !U.menu && !U.sets && !U.offer && G.mode === 'demo') {
       const a = sat(Math.min((U.titleT - .4) * 1.5, (6.6 - U.titleT) * 1.2));
       if (a > 0) {
-        const sc = s * 2, t1 = 'Lanternhold', full = G.B.bio.name + ' · The commander plays until you take over.', t2 = tw(full) + pad * 4 > Wr - iL - 6 * s ? [G.B.bio.name, 'The commander plays', 'until you take over.'] : [full]; if (G.best > G.wavesPerLand) t2.push('Best run: wave ' + G.best);
+        const sc = s * 2, t1 = 'Laternalinnus', full = G.B.bio.name + ' · Väejuht mängib, kuni sa üle võtad.', t2 = tw(full) + pad * 4 > Wr - iL - 6 * s ? [G.B.bio.name, 'Väejuht mängib,', 'kuni sa üle võtad.'] : [full]; if (G.best > G.wavesPerLand) t2.push('Parim mäng: laine ' + G.best);
         let w = PX.measure(t1) * sc; for (const l of t2) w = Math.max(w, tw(l)); w += pad * 4; const h = PX.LINE * sc + LH * t2.length + pad * 2 + 2 * s, yy = Math.min(Hb - h - 12 * s - zb, yUp - h);
         c.globalAlpha = a; plate(Math.round(W / 2 - w / 2), yy, w, h); PX.text(c, t1, W / 2, yy + pad, sc, '#ffd9a8', { align: 'c' }); t2.forEach((l, k) => text(l, W / 2, yy + pad + PX.LINE * sc + s + k * LH, k === 0 && t2.length > 1 ? COLR.tx : COLR.dim, { align: 'c' })); c.globalAlpha = 1;
       }
@@ -676,30 +697,30 @@ const UI = (() => {
   // at the HUD's scale or smaller where the screen is short. Their controls go into U.btns so they win over the HUD below.
   // Runs (both lists): Heat, the Long Night's mutators and the daily.
   const HELP_RUN = [
-    'Heat makes a run harder and pays more embers. Beat the campaign, then reach land 10 at your top Heat, for the next tier.',
-    'Long Night lands carry mutators: curses such as Eclipse, Siege or Echoes, and now and then a boon. The arrival card lists them.',
-    'The Daily Long Night is the same road for everyone today, at Heat 0. Your best wave count for the day is kept.',
+    'Kuumus teeb mängu raskemaks ja annab rohkem sütt. Läbi seiklus ja jõua oma kõrgeimal Kuumusel maale 10, siis avaneb järgmine aste.',
+    'Pika Öö maadel on needused, näiteks Varjutus, Piiramine või Kajad, ja vahel ka õnnistus. Maa saabumiskaart näitab neid.',
+    'Päeva väljakutse on täna kõigile sama tee, Kuumusel 0. Sinu päeva parim lainete arv jääb meelde.',
   ];
   const HELP_KEYS = [
-    'Click a pad to build: keys 1 to 4 pick a tower.',
-    'Click a tower to upgrade it (U) or sell it (X).',
-    'At its top level a tower picks one of two branches (keys 1 and 2), then it can be overcharged.',
-    'Spells: Q meteor, E frost, T rally, then click the road. Kills fill the mana bar.',
-    'R mends the beacon: lives back for gold.',
-    'Space calls the next wave early, for a little gold.',
-    'P pause · Tab speed · C hands command to the AI · drag, arrows or the wheel move the view.',
-    'With a tower armed, free pads glow gold where you can afford it and red while the gold is short.',
+    'Klõpsa platsi, et ehitada: klahvid 1 kuni 4 valivad torni.',
+    'Klõpsa torni, et seda täiustada (U) või müüa (X).',
+    'Kõrgeimal tasemel valib torn ühe kahest harust (klahvid 1 ja 2), siis saab seda üle laadida.',
+    'Loitsud: Q meteoor, E jää, T abivägi, siis klõpsa teed. Iga võidetud koletis täidab manariba.',
+    'R parandab majakat: elud tagasi kulla eest.',
+    'Tühik kutsub järgmise laine varem, natukese kulla eest.',
+    'P paus · Tab kiirus · C annab juhtimise arvutile · lohista, nooled või hiirerull liigutavad vaadet.',
+    'Kui torn on valitud, helendavad vabad platsid kuldselt, kui kulda jätkub, ja punaselt, kui jääb puudu.',
   ].concat(HELP_RUN);
   const HELP_TOUCH = [
-    'Tap a pad, then a tower twice to build.',
-    'Tap a tower to upgrade or sell it.',
-    'At its top level a tower picks one of two branches, then it can be overcharged.',
-    'Spells: tap one, then the road. Kills fill the mana bar.',
-    'Mend, under your gold, buys back lives.',
-    'Tap the wave plate to call a wave early.',
-    'Tap the commander plate to let the AI play.',
-    'Drag to look around. Pinch to zoom.',
-    'Free pads glow bright when you can afford a tower and dim while the gold is short.',
+    'Puuduta platsi ja siis kaks korda torni, et ehitada.',
+    'Puuduta torni, et seda täiustada või müüa.',
+    'Kõrgeimal tasemel valib torn ühe kahest harust, siis saab seda üle laadida.',
+    'Loitsud: puuduta loitsu ja siis teed. Iga võidetud koletis täidab manariba.',
+    '„Paranda“ su kulla all ostab elusid tagasi.',
+    'Puuduta laine silti, et laine varem kutsuda.',
+    'Puuduta väejuhi silti, et arvuti mängiks.',
+    'Lohista, et ringi vaadata. Näpista, et suumida.',
+    'Vabad platsid helendavad eredalt, kui kulda jätkub, ja tuhmilt, kui jääb puudu.',
   ].concat(HELP_RUN);
   function wrapAt(str, maxW, ps) { const out = []; let cur = ''; for (const wd of str.split(' ')) { const t = cur ? cur + ' ' + wd : wd; if (cur && PX.measure(t) * ps > maxW) { out.push(cur); cur = wd; } else cur = t; } if (cur) out.push(cur); return out; }
   function drawPanels(c, s, W, H, iL, iT, Wr, Hb, tch, over, pad, g3, topY) {
@@ -713,12 +734,12 @@ const UI = (() => {
     };
     const sm = G.phase === 'defeat' && G.phaseT > SUMMARY_AT && G.runStats && G.runStats.sum;
     if (sm && !U.sets && G.mode === 'demo') {
-      const you = U.playerActive(), a = sat((G.phaseT - SUMMARY_AT) * 3), title = 'The beacon is out';
-      const rows = [['Waves survived', '' + sm.waves], ['Lands cleared', '' + sm.lands], ['Monsters slain', '' + sm.slain], ['Gold earned', '' + sm.earned],
-        ['Best branch', sm.branch ? sm.branch.name + ' · ' + sm.branch.kills + ' kills' : 'none this run'], ['Best tower', sm.tower ? sm.tower.name + ' · ' + sm.tower.kills + ' kills' : 'none this run']];
-      const best = sm.newBest ? 'New best: wave ' + sm.best + '!' : sm.best > G.wavesPerLand ? 'Best run: wave ' + sm.best : '';
-      const left = you ? '' : 'The commander tries again in ' + Math.max(1, Math.ceil(SUMMARY_AT + AUTO_RESTART - G.phaseT));
-      const bl = tch ? 'Play again' : 'Play again (Space)';
+      const you = U.playerActive(), a = sat((G.phaseT - SUMMARY_AT) * 3), title = 'Majakas kustus';
+      const rows = [['Läbitud laineid', '' + sm.waves], ['Kaitstud maid', '' + sm.lands], ['Võidetud koletisi', '' + sm.slain], ['Teenitud kulda', '' + sm.earned],
+        ['Parim haru', sm.branch ? sm.branch.name + ' · ' + sm.branch.kills + ' võitu' : 'seekord pole'], ['Parim torn', sm.tower ? sm.tower.name + ' · ' + sm.tower.kills + ' võitu' : 'seekord pole']];
+      const best = sm.newBest ? 'Uus rekord: laine ' + sm.best + '!' : sm.best > G.wavesPerLand ? 'Parim mäng: laine ' + sm.best : '';
+      const left = you ? '' : 'Väejuht proovib uuesti: ' + Math.max(1, Math.ceil(SUMMARY_AT + AUTO_RESTART - G.phaseT));
+      const bl = tch ? 'Mängi uuesti' : 'Mängi uuesti (tühik)';
       const lay = ps => {
         const p = 5 * ps, L = PX.LINE * ps, m = t => PX.measure(t) * ps, gap = 3 * ps, bh = Math.max(L + 2 * p - ps, tch ? Math.round(40 * dpr) : 0);
         let lw = 0, vw = 0; for (const r of rows) { lw = Math.max(lw, m(r[0])); vw = Math.max(vw, m(r[1])); }
@@ -742,9 +763,9 @@ const UI = (() => {
     if (U.offer) {
       // Continue or start anew: two big buttons, Space or Enter continues, N starts a new game.
       const O = U.offer.S, a = sat(U.offer.t * 4 + .2), bio = biomeAt(O.start + O.index, O.pseed);
-      const mins = Math.max(0, (Date.now() - O.t) / 6e4), ago = mins < 1 ? 'just now' : mins < 60 ? Math.round(mins) + ' min ago' : mins < 48 * 60 ? Math.round(mins / 60) + ' h ago' : Math.round(mins / 1440) + ' days ago';
-      const title = 'Welcome back', l1 = bio.name + ' · ' + (O.manual ? 'you command' : 'the AI commands'), l2 = 'Saved ' + ago;
-      const bc = 'Continue: Land ' + (O.level + 1) + ' · Wave ' + O.k, bn = 'New game', hint = tch ? '' : 'Space or Enter continues · N starts anew';
+      const mins = Math.max(0, (Date.now() - O.t) / 6e4), ago = mins < 1 ? 'just praegu' : mins < 60 ? Math.round(mins) + ' min tagasi' : mins < 48 * 60 ? Math.round(mins / 60) + ' h tagasi' : Math.round(mins / 1440) + ' päeva tagasi';
+      const title = 'Tere tulemast tagasi', l1 = bio.name + ' · ' + (O.manual ? 'sina juhid' : 'arvuti juhib'), l2 = 'Salvestatud ' + ago;
+      const bc = 'Jätka: maa ' + (O.level + 1) + ' · laine ' + O.k, bn = 'Uus mäng', hint = tch ? '' : 'Tühik või Enter jätkab · N alustab uuesti';
       const lay = ps => {
         const p = 5 * ps, L = PX.LINE * ps, m = t => PX.measure(t) * ps, gap = 3 * ps, bh = Math.max(L + 2 * p - ps, tch ? Math.round(44 * dpr) : 0);
         const wP = Math.max(PX.measure(title) * (ps + 1), m(l1), m(l2), m(bc) + 4 * p, m(hint) + 2 * p) + 2 * p;
@@ -764,24 +785,30 @@ const UI = (() => {
       return;
     }
     if (!U.sets) return;
-    const S0 = U.sets, help = S0.tab === 'help', paras = tch ? HELP_TOUCH : HELP_KEYS;
+    const S0 = U.sets, help = S0.tab === 'help', paras = tch ? HELP_TOUCH : HELP_KEYS, CH = setChoices();
     const lay = (ps, tight) => {
       const p = 5 * ps, L = PX.LINE * ps, m = t => PX.measure(t) * ps, gap = 3 * ps, rh = Math.max(L + 2 * p - ps, tch ? Math.round((tight ? 28 : 36) * dpr) : 0);
-      const labW = Math.max(m('Ambience'), m('Graphics'), m(tch ? 'Sound' : 'Sound (M)')), optW = Math.max(m('Sharp'), m('Auto'), m('Fast')) + 2 * p;
-      const tabW = m('How to play') + 2 * p, minW = Math.max(labW + gap * 2 + optW * 3 + gap * 2, m('Settings') + 2 * p + gap + tabW + gap + rh, m('Auto adapts to the device.')) + 2 * p;
+      const labW = Math.max(m('Muusika'), m('Efektid'), m(tch ? 'Heli' : 'Heli (M)'), ...CH.map(r => m(r.label))), onW = Math.max(m('Väljas'), m('Sees')) + 2 * p;
+      const tabW = m('Kuidas mängida') + 2 * p, minW = Math.max(labW + gap * 2 + onW * 2, m('Seaded') + 2 * p + gap + tabW + gap + rh) + 2 * p;
       const wP = Math.min(avW, Math.max(minW, 236 * ps)), inner = wP - 2 * p;
+      // Each choice row: its buttons beside the label when they fit there, else on lines of their own under the label.
+      const rows = CH.map(r => {
+        const oW = Math.max(...r.opts.map(o => m(o[1]))) + 2 * p, areaW = inner - labW - gap * 2, side = r.opts.length * oW + (r.opts.length - 1) * gap <= areaW;
+        const per = side ? r.opts.length : Math.max(1, Math.min(r.opts.length, Math.floor((inner + gap) / (oW + gap)))), lines = Math.ceil(r.opts.length / per);
+        return { side, per, lines, h: side ? rh + gap : L + gap + lines * (rh + gap) };
+      });
       const lines = help ? paras.map(t => wrapAt(t, inner - 2 * ps, ps)) : null;
-      const body = help ? lines.reduce((a, l) => a + l.length * L + gap, 0) : 6 * (rh + gap) + L;
-      return { ps, p, L, m, gap, rh, labW, optW, tabW, wP, minW, inner, lines, hP: p + rh + gap * 3 + body + p };
+      const body = help ? lines.reduce((a, l) => a + l.length * L + gap, 0) : 4 * (rh + gap) + rows.reduce((a, r) => a + r.h, 0) + (rh + gap) + L;
+      return { ps, p, L, m, gap, rh, labW, tabW, wP, minW, inner, lines, rows, hP: p + rh + gap * 3 + body + p };
     };
     let Ly = lay(s); if (Ly.hP > avH) Ly = lay(s, true); while (Ly.ps > 2 && (Ly.hP > avH || Ly.wP < Ly.minW)) Ly = lay(Ly.ps - 1, true);
-    const { ps, p, L, m, gap, rh, labW, optW, tabW, wP, inner, lines, hP } = Ly, px = Math.round(W / 2 - wP / 2), py = Math.round(clamp((H - hP) / 2, iT + 4 * s, Math.max(iT + 4 * s, Hb - hP)));
+    const { ps, p, L, m, gap, rh, labW, tabW, wP, inner, lines, rows, hP } = Ly, px = Math.round(W / 2 - wP / 2), py = Math.round(clamp((H - hP) / 2, iT + 4 * s, Math.max(iT + 4 * s, Hb - hP)));
     U.panelRect = { x: px, y: py, w: wP, h: hP };
     c.globalAlpha = sat(S0.t * 8 + .3);
     plate(px, py, wP, hP, { bd: COLR.bdHi });
     let y = py + p;
-    btn('tabset', px + p, y, m('Settings') + 2 * p, rh, 'Settings', ps, !help, () => { S0.tab = 'set'; sfx('uiHover', CAM.x, CAM.z, .6); });
-    btn('tabhelp', px + p + m('Settings') + 2 * p + gap, y, tabW, rh, 'How to play', ps, help, () => { S0.tab = 'help'; sfx('uiHover', CAM.x, CAM.z, .6); });
+    btn('tabset', px + p, y, m('Seaded') + 2 * p, rh, 'Seaded', ps, !help, () => { S0.tab = 'set'; sfx('uiHover', CAM.x, CAM.z, .6); });
+    btn('tabhelp', px + p + m('Seaded') + 2 * p + gap, y, tabW, rh, 'Kuidas mängida', ps, help, () => { S0.tab = 'help'; sfx('uiHover', CAM.x, CAM.z, .6); });
     btn('setclose', px + wP - p - rh, y, rh, rh, 'X', ps, false, () => openSettings(false));
     y += rh + gap * 3;
     const rowLabel = (t, yy) => PX.text(c, t, px + p, yy + Math.round((rh - L) / 2) + ps, ps, COLR.tx);
@@ -789,7 +816,7 @@ const UI = (() => {
       for (const ls of lines) { for (const l of ls) { PX.text(c, l, px + p, y, ps, COLR.tx); y += L; } y += gap; }
     } else {
       const xT = px + p + labW + gap * 2, valW = m('100'), xE = px + wP - p - valW - gap * 2;
-      for (const [key, name] of [['music', 'Music'], ['sfx', 'Effects'], ['amb', 'Ambience']]) {
+      for (const [key, name] of [['music', 'Muusika'], ['sfx', 'Efektid'], ['amb', 'Taust']]) {
         const v = SET[key], set = x => { SET[key] = Math.round(sat((x - xT) / (xE - xT)) * 20) / 20; applyVolumes(); saveSettings(); if (AU.muted && SET[key] > 0) setMute(false); };
         const b = { id: 'vol' + key, x: px + p, y, w: wP - 2 * p, h: rh, fn: x => set(x), drag: set, hud: true }; U.btns.push(b);
         const hot = over(b.x, b.y, b.w, b.h) || U.press === b.id; if (hot) U.hudHot = true;
@@ -801,16 +828,28 @@ const UI = (() => {
         PX.text(c, '' + Math.round(v * 100), px + wP - p, y + Math.round((rh - L) / 2) + ps, ps, AU.muted ? COLR.dim : COLR.tx, { align: 'r' });
         y += rh + gap;
       }
-      rowLabel(tch ? 'Sound' : 'Sound (M)', y);
-      const on = !AU.muted, sw = optW * 1.5;
-      btn('setmute', px + p + labW + gap * 2, y, sw, rh, on ? 'On' : 'Off', ps, on, () => setMute(!AU.muted), on ? COLR.amber : COLR.red);
+      rowLabel(tch ? 'Heli' : 'Heli (M)', y);
+      const on = !AU.muted, sw = Math.max(m('Väljas'), m('Sees')) + 4 * p;
+      btn('setmute', xT, y, sw, rh, on ? 'Sees' : 'Väljas', ps, on, () => setMute(!AU.muted), on ? COLR.amber : COLR.red);
       y += rh + gap;
-      rowLabel('Graphics', y);
-      ['auto', 'sharp', 'fast'].forEach((q, i) => btn('q' + q, px + p + labW + gap * 2 + i * (optW + gap), y, optW, rh, q[0].toUpperCase() + q.slice(1), ps, SET.q === q, () => { if (SET.q !== q) { SET.q = q; applyQuality(); saveSettings(); sfx('uiClick', CAM.x, CAM.z, .6); } }));
-      y += rh + gap;
-      const note = SET.q === 'auto' ? 'Auto adapts to the device.' : SET.q === 'sharp' ? 'Sharp: full detail.' : 'Fast: smoother, softer.';
-      PX.text(c, note, px + p, y + gap, ps, COLR.dim); y += rh + gap;
-      PX.text(c, tch ? 'Tap outside to close.' : 'O or Esc closes.', px + p, y, ps, COLR.dim);
+      // Graphics, frame rate and music style: one button per choice; the lit one is the current value.
+      CH.forEach((r, ri) => {
+        const R0 = rows[ri];
+        if (R0.side) {
+          rowLabel(r.label, y);
+          const ow = Math.floor((px + wP - p - xT - gap * (r.opts.length - 1)) / r.opts.length);
+          r.opts.forEach((o, i) => btn(r.id + o[0], xT + i * (ow + gap), y, ow, rh, o[1], ps, r.cur === o[0], () => { if (r.cur !== o[0]) { r.pick(o[0]); sfx('uiClick', CAM.x, CAM.z, .6); } }));
+          y += rh + gap;
+        } else {
+          PX.text(c, r.label, px + p, y, ps, COLR.tx); y += L + gap;
+          const ow = Math.floor((inner - gap * (R0.per - 1)) / R0.per);
+          r.opts.forEach((o, i) => { const col = i % R0.per, row = Math.floor(i / R0.per); btn(r.id + o[0], px + p + col * (ow + gap), y + row * (rh + gap), ow, rh, o[1], ps, r.cur === o[0], () => { if (r.cur !== o[0]) { r.pick(o[0]); sfx('uiClick', CAM.x, CAM.z, .6); } }); });
+          y += R0.lines * (rh + gap);
+        }
+      });
+      const note = CH.length && CH[0].note ? CH[0].note : '';
+      if (note) PX.text(c, note, px + p, y + gap, ps, COLR.dim); y += rh + gap;
+      PX.text(c, tch ? 'Sulgemiseks puuduta väljaspool.' : 'O või Esc sulgeb.', px + p, y, ps, COLR.dim);
     }
     c.globalAlpha = 1;
   }
