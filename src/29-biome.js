@@ -79,7 +79,8 @@ const BIOMES = [
     wat: [4, .9, 1.15, .45], watA: [.008, .02, .024], watB: [.5, .58, .62], fall: [0, 1.3, 1, 0], fallA: [.02, .04, .05], fallB: [.42, .52, .58], spray: 'water',
     relief: [1.6, .55, 1.25, 0], puddles: 16, ponds: 3, sway: 1.5, wind: 1.6, beacon: .4, lighthouse: 1, sea: [-4.3, 1], lightning: 10,
     wx: { n: [.62, .08], velA: [3.4, -15, 1.7], swayA: [.04, .6], sizeA: [.016, .026], colA: [.72, .8, .95, 1], alA: [.42, 0, 1.6], yA: [-2, 14], velB: [5.5, -1.4, 2.6], swayB: [.3, 1.4], sizeB: [.025, .045], colB: [.8, .88, .95, 1], alB: [.35, 0, .7], yB: [-1.5, 5], amb: [.3, .38, .48] },
-    mobs: { harpy: 2, wraith: 1.8, knight: 1.5, ghoul: 1.2, toad: 1, wisp: .9, necro: 1.2, scarab: 0, mummy: 0, spider: .5, hound: .4, ram: .8, shaman: .6 }, early: { harpy: 3, wraith: 3, knight: 3 }, boss: ['leviathan'], tints: { wisp: [.45, 1.25, 1.3], golem: [.7, .9, 1.0], wolf: [.75, .85, .9], toad: [.65, .95, .9], gargoyle: [.8, .95, 1.05], ghoul: [.8, 1.15, 1.2] }, wispHex: 0x60e0d0,
+    mobs: { drowned: 3, harpy: 2.4, wraith: 2, knight: 1.8, ram: 1.6, gargoyle: 1.2, rat: .15, scarab: 0, mummy: 0, toad: .6, spider: .5, slime: .6, hound: .4, wolf: .5, golem: .6, shaman: .5, necro: 1.2 },
+    early: { drowned: 1, harpy: 3, wraith: 4, knight: 3, ram: 5 }, boss: ['leviathan'], tints: { skel: [.62, .95, .88], wisp: [.5, 1.1, 1.3], gargoyle: [.75, .95, 1.05], golem: [.7, .95, .95], wolf: [.75, .85, .9], toad: [.65, .95, .9], ghoul: [.8, 1.15, 1.2] }, wispHex: 0x70e0d8,
     trees: [['windbent', 8, 2.2, 3.6]], stumps: 2, rocks: 86, tufts: 380, tuft: 'seagrass', webs: 0, noRuin: 1,
   },
 ];
