@@ -714,6 +714,7 @@ uniform vec4 uGrade;
 uniform vec3 uBloom;
 uniform vec3 uLift; uniform vec2 uDither; uniform vec2 uRes;
 uniform vec3 uShT; uniform vec3 uHiT; uniform float uCon;
+uniform vec4 uCine; uniform vec4 uCineK; uniform vec3 uCineC;
 ${GLSL_BAYER}
 vec3 filmic(vec3 x){ x = max(x, 0.0); return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 void main(){
@@ -723,6 +724,16 @@ void main(){
   vec2 q = (vUv - 0.5) * vec2(1.0, 0.92);
   float vig = smoothstep(0.9, 0.3, length(q) * 1.25);
   c *= mix(1.0 - uGrade.z, 1.0, vig);
+  // Cinematics (43-cine.js): a ring around the beacon (uCine.xy, radius uCine.z in screen heights). Outside it the
+  // land dims to black (uCineK.x); its edge glows (y); inside, warm light floods (z).
+  if (uCineK.w > 0.5) {
+    vec2 cd = (vUv - uCine.xy) * vec2(uRes.x / uRes.y, 1.0);
+    float cr = length(cd), cR = uCine.z, inside = 1.0 - smoothstep(cR * 0.75, cR + 0.04, cr), cl = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    c = mix(c, vec3(cl) * 0.7, (1.0 - inside) * uCineK.x * 0.6);
+    c *= 1.0 - (1.0 - inside) * uCineK.x;
+    c += uCineC * exp(-abs(cr - cR) * 26.0) * step(0.001, cR) * uCineK.y * 0.2;
+    c *= 1.0 + uCineK.z * inside * uCineC * 0.5;
+  }
   c = filmic(c);
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   // Split toning per land: the shadows lean one way, the lit parts another (LOOK grade).
@@ -739,6 +750,7 @@ void main(){
     uGrade: { value: new THREE.Vector4(1.0, 0.92, 0.55, 1.0) }, uBloom: { value: new THREE.Vector3(0.35, 0.5, 28) },
     uLift: { value: new THREE.Vector3(0.010, 0.016, 0.030) }, uDither: { value: R.ditherOfs }, uRes: { value: new THREE.Vector2() },
     uShT: { value: new THREE.Vector3(1, 1, 1) }, uHiT: { value: new THREE.Vector3(1, 1, 1) }, uCon: { value: 0 },
+    uCine: { value: new THREE.Vector4() }, uCineK: { value: new THREE.Vector4() }, uCineC: { value: new THREE.Vector3(1, 1, 1) },
   });
 
   M.up = fsMat(`
@@ -821,7 +833,7 @@ function renderFrame() {
   u.tColor.value = T.bB.texture; u.uDir.value.set(1.6 / T.bB.width, 0); fsPass(M.blur, T.bB2);
   u.tColor.value = T.bB2.texture; u.uDir.value.set(0, 1.6 / T.bB.height); fsPass(M.blur, T.bB);
   u = M.comp.uniforms; u.tColor.value = T.dof.texture; u.tBloomA.value = T.bA.texture; u.tBloomB.value = T.bB.texture;
-  u.uGrade.value.x = R.exposure * (1 + FX.flash * .5); u.uGrade.value.w = R.fade; u.uGrade.value.z = .55 + .2 * mk; u.uRes.value.set(R.iw, R.ih);
+  u.uGrade.value.x = R.exposure * (1 + FX.flash * .5); u.uGrade.value.w = R.fade; u.uGrade.value.z = .55 + .2 * mk; u.uRes.value.set(R.iw, R.ih); CINE.post(u);
   fsPass(M.comp, T.final);
   u = M.up.uniforms; u.tColor.value = T.final.texture; u.uTex.value.set(R.iw, R.ih); u.uOut.value.set(R.dw, R.dh); u.uSeed.value = (SH.uTime.value * 60 % 1000) * 7.13;
   fsPass(M.up, null);
@@ -1947,19 +1959,22 @@ function scatterProps(B) {
   // A generated land (35-longnight.js) dresses as its base land (bio.dress), plus a few of its donor's props (bio.accent).
   const dress = BIOME_DRESS[bio.dress] ? bio.dress : BIOME_DRESS[bio.key] ? bio.key : 'ashen';
   if (BIOME_DRESS[dress + 'First']) BIOME_DRESS[dress + 'First'](X);
+  // A generated land: its two set pieces first, and two of the common props below left out (bio.sets, bio.skip).
+  const sk = bio.skip || {};
+  B.setSpots = []; if (bio.sets && typeof PROC_SETS !== 'undefined') for (const k of bio.sets) if (PROC_SETS[k]) { const n0 = placed.length; PROC_SETS[k](X); for (let j = n0; j < placed.length; j++) B.setSpots.push([k, placed[j][0], placed[j][1]]); }
   if (!bio.noRuin) drop(T => PROP.towerRuin(T, rng), 2.9, { far: 3.6 });
-  drop(T => PROP.well(T, rng), 1.3, { near: 5.5, far: 2.6 });
-  drop(T => PROP.statue(T, rng), 1.2, { near: 6, far: 2.4 });
-  drop(T => PROP.ribcage(T, rng), 2.4, { far: 2.8 });
-  for (let k = 0; k < 3; k++) { const len = rng.range(4, 7); drop(T => PROP.wallRun(T, rng, len, rng.range(1.8, 3.2)), len * .5, { far: 1.6 }); }
-  { const g = bio.noRuin ? null : find(3.2, { far: 3.4 }); if (g) {
+  if (!sk.well) drop(T => PROP.well(T, rng), 1.3, { near: 5.5, far: 2.6 });
+  if (!sk.statue) drop(T => PROP.statue(T, rng), 1.2, { near: 6, far: 2.4 });
+  if (!sk.ribcage) drop(T => PROP.ribcage(T, rng), 2.4, { far: 2.8 });
+  if (!sk.walls) for (let k = 0; k < 3; k++) { const len = rng.range(4, 7); drop(T => PROP.wallRun(T, rng, len, rng.range(1.8, 3.2)), len * .5, { far: 1.6 }); }
+  { const g = bio.noRuin || sk.graveyard ? null : find(3.2, { far: 3.4 }); if (g) {
       const ry = rng() * TAU, cs = Math.cos(ry), sn = Math.sin(ry);
       for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) { if (rng() < .2) continue; const lx = (c - 1.5) * 1.15 + rng.range(-.15, .15), lz = (r - 1) * 1.5 + rng.range(-.15, .15), T = new Soup(); PROP.grave(T, rng); B.put(T, g[0] + lx * cs + lz * sn, g[1] - lx * sn + lz * cs, { ry: ry + rng.range(-.2, .2) }); }
       for (const [lx, lz, a, len] of [[0, -2.5, 0, 4.6], [-2.8, -.2, HPI, 4.2], [2.8, .5, HPI, 3]]) { const T = new Soup(); PROP.fence(T, rng, len); B.put(T, g[0] + lx * cs + lz * sn, g[1] - lx * sn + lz * cs, { ry: ry + a }); }
       const T = new Soup(); PROP.tree(T, rng, 3.6); B.put(T, g[0] + 2.3 * cs - 2.0 * sn, g[1] - 2.3 * sn - 2.0 * cs, {});
       placed.push([g[0], g[1], 3.2]);
     } }
-  for (let k = 0; k < 2; k++) { const p = beside(10, B.L - 8, 1.25, 1.1); if (p) drop(T => PROP.cart(T, rng, k === 1), 1.1, { at: p, ry: -p[2] + rng.range(-.3, .3), r: k === 1 ? [0, -p[2] + .4, .22] : undefined }); }
+  if (!sk.carts) for (let k = 0; k < 2; k++) { const p = beside(10, B.L - 8, 1.25, 1.1); if (p) drop(T => PROP.cart(T, rng, k === 1), 1.1, { at: p, ry: -p[2] + rng.range(-.3, .3), r: k === 1 ? [0, -p[2] + .4, .22] : undefined }); }
   for (let k = 0; k < 4; k++) { const p = beside(8, B.L - 6, .75, .3); if (p) { const len = rng.range(2.6, 4.2); drop(T => PROP.palisade(T, rng, len), 1.0, { at: p, ry: -p[2] }); } }
   for (let k = 0; k < 4; k++) { const p = beside(8, B.L - 6, 1.0, .4); if (p) { const len = rng.range(2.5, 4.5); drop(T => PROP.fence(T, rng, len), 1.2, { at: p, ry: -p[2] + rng.range(-.15, .15) }); } }
   for (let k = 0; k < 4; k++) { const p = beside(8, B.L - 5, .8, .25); if (p) drop(T => PROP.banner(T, rng, k & 1 ? COL.clothR : COL.clothB), .3, { at: p, ry: -p[2] + HPI * p[3] }); }
@@ -2609,6 +2624,7 @@ function procBiome(seed, i) {
   if (water === 2) { bio.bankGlow = 1; bio.vein = 1; bio.cracks = 1; } else if (D.key === 'ember' && rng() < .5) bio.vein = 1;
   if (weather === 'rain') { bio.wet = [rng.range(.42, .62), rng.range(.1, .16)]; if (rng() < .6) bio.lightning = rng.range(11, 20); }
   if (sea) { bio.sea = sea; bio.seaCol = [.008, .02, .026, .4, .46, .5].map((v, k) => v * wTint[k % 3]); if (A.lighthouse) bio.lighthouse = 1; if (weather === 'rain') bio.lightning = rng.range(9, 16); if (water === 4) bio.wat[0] = 4; }
+  { const ps = procSets(seed, i); bio.sets = ps.sets; bio.skip = ps.skip; } // set pieces (own random stream)
   PROC.cache.set(id, bio);
   if (PROC.cache.size > 48) PROC.cache.delete(PROC.cache.keys().next().value);
   return bio;
@@ -2631,6 +2647,119 @@ const PROC_ACCENT = {
     for (const pad of B.pads) { if (rng() < .7) continue; const a = rng() * TAU, x = pad.x + Math.cos(a) * 2.3, z = pad.z + Math.sin(a) * 2.3; if (X.free(x, z, .5, .3)) X.at(x, z, T => PROP.jar(T, rng), .6); }
   },
   storm(X) { const { rng, drop } = X; for (let k = 0; k < 4; k++) drop(T => PROP.driftwood(T, rng), 1.0, { far: 1.0 }); for (let k = 0; k < 5; k++) { const r = rng.range(.3, .7); drop(T => PROP.barnRock(T, rng, r), r * .9, { steep: true, roadMin: .3 }); } },
+};
+
+// ---- Set pieces for generated lands (round 9): each generated land gets two of these on top of its dress, and
+// leaves out two of the common props (bio.skip), so consecutive lands of The Long Night look clearly different.
+// The sets go round a shuffled cycle of all of them (procSets), two per land, so neighbours never share one.
+const PROC_SET_KEYS = ['standing', 'battlefield', 'lanterns', 'fallenKing', 'titanBones', 'camp', 'obelisks'];
+const PROC_SKIP_KEYS = ['well', 'statue', 'ribcage', 'walls', 'graveyard', 'carts'];
+function procSets(seed, i) {
+  const r = makeRng(Math.imul(seed + 31, 0x5BD1E995) ^ 0x7F4A7C15), n = PROC_SET_KEYS.length, p = PROC_SET_KEYS.slice();
+  for (let j = n - 1; j > 0; j--) { const q = Math.floor(r() * (j + 1)), t = p[j]; p[j] = p[q]; p[q] = t; }
+  const k = Math.max(0, i - BIOMES.length) * 2, r2 = makeRng(Math.imul(seed + 13, 0x27D4EB2F) ^ Math.imul(i + 7, 0x165667B1)), sk = PROC_SKIP_KEYS.slice();
+  const skip = {}; for (let j = 0; j < 2; j++) skip[sk.splice(Math.floor(r2() * sk.length), 1)[0]] = 1;
+  return { sets: [p[k % n], p[(k + 1) % n]], skip };
+}
+const PROC_SETS = {
+  // A ring of standing stones (a few fallen) round a low altar with a dull red seam.
+  standing(X) {
+    const { rng, drop } = X;
+    for (let n = 0, nn = rng.int(1, 2); n < nn; n++) drop(T => {
+      const k = rng.int(6, 9), R = rng.range(1.6, 2.1);
+      for (let i = 0; i < k; i++) {
+        if (rng() < .12) continue;
+        const a = i / k * TAU + rng.range(-.1, .1), h = rng.range(1.1, 2.1), c = mixC(COL.stoneD, COL.stone, rng() * .6), x = Math.cos(a) * R, z = Math.sin(a) * R;
+        if (rng() < .2) T.box(.42, .3, h * .9, x * 1.15, .14, z * 1.15, c, { l: L_ROCK, r: [0, -a + rng.range(-.4, .4), 0] });
+        else T.box(.45, h, .3, x, h / 2 - .12, z, c, { l: L_ROCK, r: [rng.range(-.08, .08), -a + HPI, rng.range(-.08, .08)], grad: [-h / 2, h * .2, .7] });
+      }
+      T.box(1.1, .35, .7, 0, .17, 0, mulC(COL.stoneD, .9), { l: L_MASON }); T.box(.06, .02, .5, 0, .355, 0, [.7, .1, .05], { emis: .25, jit: 0 });
+    }, 2.6, { far: 2.2 });
+  },
+  // An old battlefield: spears and swords standing in the ground, dropped shields, skulls.
+  battlefield(X) {
+    const { rng, drop } = X;
+    for (let n = 0; n < 5; n++) drop(T => {
+      for (let i = 0, m = rng.int(3, 6); i < m; i++) {
+        const x = rng.range(-.7, .7), z = rng.range(-.7, .7), r = [rng.range(-.35, .35), rng() * TAU, rng.range(-.35, .35)];
+        if (rng() < .55) { const h = rng.range(1.3, 2); T.cyl(.025, h, x, h / 2 - .25, z, COL.woodD, { n: 4, l: L_WOOD, r }); }
+        else { const h = rng.range(.7, 1.1); T.box(.08, h, .016, x, h / 2 - .15, z, COL.steel, { l: L_METAL, rough: .4, r }); T.box(.26, .04, .04, x, h - .2, z, COL.iron, { l: L_METAL, r }); }
+      }
+      if (rng() < .75) T.cyl(.3, .045, rng.range(-.4, .4), .03, rng.range(-.4, .4), mulC(rng() < .5 ? COL.clothR : COL.clothB, .8), { n: 8, l: L_WOOD, r: [rng.range(-.2, .2), 0, rng.range(-.2, .2)] });
+      if (rng() < .6) PROP.skull(T, rng.range(-.5, .5), .08, rng.range(-.5, .5), .12, rng() * TAU);
+    }, .9, { far: 1.0 });
+  },
+  // The keepers' old lanterns along the road, cold now; one in three still holds an ember. Some have fallen.
+  lanterns(X) {
+    const { rng, drop, beside, B } = X;
+    for (let k = 0; k < 7; k++) {
+      const p = beside(6, B.L - 6, .95, .35); if (!p) continue;
+      const fallen = rng() < .28, lit = rng() < .35;
+      drop(T => {
+        T.box(.16, .22, .16, 0, .11, 0, COL.stoneD, { l: L_MASON }); T.cyl(.04, 2.1, 0, 1.15, 0, COL.iron, { n: 5, l: L_METAL });
+        T.box(.5, .04, .04, .2, 2.15, 0, COL.iron, { l: L_METAL }); T.box(.04, .12, .04, .42, 2.08, 0, COL.iron, { l: L_METAL });
+        T.box(.22, .3, .22, .42, 1.87, 0, mulC(COL.iron, .8), { l: L_METAL }); T.cone(.17, .14, .42, 2.08, 0, COL.iron, { n: 4, l: L_METAL, r: [0, PI / 4, 0] });
+        T.box(.15, .2, .15, .42, 1.87, 0, lit ? [1, .45, .12] : [.06, .05, .05], lit ? { emis: .5, jit: 0 } : { jit: 0 });
+      }, .45, fallen ? { at: p, r: [0, -p[2] + rng.range(-.6, .6), 1.45], dy: .12 } : { at: p, ry: -p[2] + (p[3] > 0 ? PI : 0) });
+    }
+  },
+  // A fallen king of stone: a great crowned head lying on its side, half sunk, and a broken hand.
+  fallenKing(X) {
+    const { rng, drop } = X, c = mixC(COL.stone, COL.stoneL, .25), cd = mulC(c, .7);
+    drop(T => {
+      T.sph(.95, 0, 1, 0, c, { l: L_ROCK, sc: [.92, 1.15, .95], smooth: false, w: 9, h: 7 });
+      T.box(.95, .16, .3, 0, 1.35, .72, c, { l: L_ROCK }); T.box(.16, .45, .22, 0, 1.0, .9, c, { l: L_ROCK });
+      for (const s of [-1, 1]) T.box(.22, .1, .1, s * .3, 1.2, .86, COL.black, { jit: 0 });
+      T.box(.5, .07, .1, 0, .62, .82, cd, { l: L_ROCK });
+      T.cyl(.82, .3, 0, 1.95, 0, mulC(COL.brass, .6), { n: 9, l: L_METAL, rough: .6 });
+      for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; T.cone(.13, .45, Math.cos(a) * .72, 2.3, Math.sin(a) * .72, mulC(COL.brass, .6), { n: 4, l: L_METAL, rough: .6 }); }
+      for (let i = 0; i < 5; i++) { const a = rng() * TAU; T.rock(rng.range(.2, .4), Math.cos(a) * 1.1, .1, Math.sin(a) * 1.1, mixC(COL.stoneD, c, rng())); }
+    }, 1.9, { far: 2.4, r: [0, rng() * TAU, 1.25], dy: -.35 });
+    drop(T => {
+      T.box(.9, .32, .7, 0, .16, 0, c, { l: L_ROCK });
+      for (let i = 0; i < 4; i++) { const h = rng.range(.5, .95); T.cyl(.11, h, -.33 + i * .22, .3 + h / 2, .2, c, { n: 6, l: L_ROCK, r: [rng.range(-.5, .1), 0, rng.range(-.15, .15)] }); }
+      T.cyl(.12, .55, .5, .3, -.1, c, { n: 6, l: L_ROCK, r: [0, 0, -1] });
+    }, 1.0, { far: 2.0 });
+  },
+  // The bones of something huge: a horned skull with its jaw in the dirt and a long curl of spine and ribs.
+  titanBones(X) {
+    const { rng, drop } = X, b = COL.bone, bd = COL.boneD;
+    drop(T => {
+      T.sph(.85, 0, .62, 0, b, { l: L_BONE, sc: [1.05, .8, 1.25], smooth: false, w: 8, h: 6 });
+      for (const s of [-1, 1]) { T.sph(.2, s * .36, .78, .82, COL.black, { jit: 0 }); T.cone(.18, 1.3, s * .85, 1.2, -.15, bd, { n: 5, l: L_BONE, r: [0, 0, -s * .85] }); }
+      T.box(1.1, .18, .75, 0, .1, .85, mulC(b, .85), { l: L_BONE, r: [.15, 0, 0] });
+      for (let i = 0; i < 6; i++) T.cone(.06, .2, -.45 + i * .18, .25, 1.15, b, { n: 4, r: [PI, 0, 0] });
+      let x = -1.1, z = 0, a = PI;
+      for (let i = 0; i < 9; i++) {
+        a += rng.range(-.25, .35); x += Math.cos(a) * .42; z += Math.sin(a) * .42;
+        T.cyl(.17 - i * .008, .22, x, .14, z, mulC(b, .9), { n: 6, l: L_BONE, r: [0, -a, HPI] });
+        if (i % 2 === 0 && i < 8) for (const s of [-1, 1]) { const nx = -Math.sin(a) * s, nz = Math.cos(a) * s; T.seg([x, .2, z], [x + nx * .7, .75 - i * .03, z + nz * .7], .06, .7, b, { l: L_BONE }); T.seg([x + nx * .7, .75 - i * .03, z + nz * .7], [x + nx * 1.05, .02, z + nz * 1.05], .045, .6, bd, { l: L_BONE }); }
+      }
+    }, 3.0, { far: 2.6 });
+  },
+  // An abandoned camp: tents, a cold fire ring, crates and a barrel.
+  camp(X) {
+    const { rng, drop } = X;
+    drop(T => {
+      for (let i = 0, n = rng.int(2, 3); i < n; i++) {
+        const a = i * 2.2 + rng() * .5, x = Math.cos(a) * 1.35, z = Math.sin(a) * 1.35, cc = mulC(rng() < .3 ? COL.clothR : COL.clothT, .6 + .3 * rng()), tall = rng.range(1.0, 1.35);
+        T.cone(.8, tall, x, tall / 2, z, cc, { n: 4, l: L_CLOTH, r: [0, -a + PI / 4, rng() < .3 ? .12 : 0] }); T.cyl(.03, tall + .25, x, (tall + .25) / 2, z, COL.woodD, { n: 4, l: L_WOOD });
+      }
+      for (let i = 0; i < 7; i++) { const a = i / 7 * TAU; T.rock(.13, Math.cos(a) * .42, .05, Math.sin(a) * .42, mixC(COL.stoneD, COL.stone, rng())); }
+      T.cyl(.3, .03, 0, .02, 0, [.05, .04, .04], { n: 8, jit: 0 }); for (const r of [.5, -.7]) T.box(.6, .08, .08, 0, .07, 0, mulC(COL.bark, .5), { l: L_WOOD, r: [0, r, 0] });
+      PROP.crate(T, .2, 0, -1.05, .45, rng, rng()); PROP.barrel(T, -.35, 0, -1.0, .9, rng);
+    }, 2.4, { far: 2.0 });
+  },
+  // Black obelisks with runes that still glow faintly in the land's own colour.
+  obelisks(X) {
+    const { rng, drop, B } = X, rc = C(B.bio.wispHex || 0x70ffb0);
+    for (let k = 0, n = rng.int(3, 5); k < n; k++) drop(T => {
+      const h = rng.range(2.3, 3.6), c = mulC(COL.basaltL, .9 + .2 * rng());
+      T.box(.8, .3, .8, 0, .15, 0, COL.stoneD, { l: L_MASON });
+      T.cyl(.32, h, 0, .3 + h / 2, 0, c, { n: 4, rt: .6, l: L_ROCK, r: [0, PI / 4, 0] }); T.cone(.193, .42, 0, .3 + h + .21, 0, c, { n: 4, l: L_ROCK, r: [0, PI / 4, 0] });
+      for (let j = 0; j < 4; j++) { const y = .75 + j * (h - .7) / 4, u = (y - .3) / h, f = lerp(.226, .136, u) + .008; T.box(.09, .15, .015, 0, y, f, rc, { emis: .35, jit: 0 }); if (rng() < .5) T.box(.015, .15, .09, f, y + .1, 0, rc, { emis: .35, jit: 0 }); }
+    }, .65, { far: 1.4 });
+  },
 };
 
 
@@ -2714,7 +2843,7 @@ function updateLights(dt, t, focusX, focusZ) {
     const l = LT.towers[i], e = LT.emitters[i];
     if (e && e.alive) {
       e.fl = .86 + .1 * n1(t * 7 + e.seed, e.seed) + .05 * n1(t * 19 + e.seed, e.seed + 1);
-      l.position.set(e.x, e.y, e.z); l.color.setRGB(e.r, e.g, e.b); l.distance = e.range;
+      l.position.set(e.x, e.y, e.z); l.color.setRGB(e.r, e.g, e.b); l.distance = e.range * (1 - .3 * (G.eclA || 0)); // Eclipse shrinks tower light
       l.intensity = e.I * e.on * e.fl * (1 - .68 * (e._spot || 0));
     } else l.intensity = 0;
   }
@@ -3284,7 +3413,7 @@ function drawFrozen(m, sc) {
 // cracks with heaved slabs, a dust ring rolls out, a light flare in the boss's colour, a short flash and shake,
 // and the camera is asked to frame the boss for a moment (CAM.ent, read by updateCamera; skipped while the
 // player holds the view). Visual only: effects random stream, no hit-stop, so the simulation is unchanged.
-const BOSS_GLOW = { giant: [1.2, .95, .6], ogre: [1.3, .8, .45], jotun: [.55, .9, 1.5], queen: [1.1, .45, 1.4], colossus: [1.8, .6, .18], king: [.45, 1.4, 1.15] };
+const BOSS_GLOW = { giant: [1.2, .95, .6], ogre: [1.3, .8, .45], jotun: [.55, .9, 1.5], queen: [1.1, .45, 1.4], colossus: [1.8, .6, .18], king: [.45, 1.4, 1.15], leviathan: [.4, 1.3, 1.25] };
 FX.bossIn = [];
 function bossEntrance(m) {
   if (!G.B || G.phase !== 'play') return;
@@ -3307,6 +3436,7 @@ function bossEntrance(m) {
   for (let i = 0; i < 10; i++) { _spM.compose(_spV.set(x + frr(-.8, .8), gy + .3, z + frr(-.8, .8)), _spQ.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _spS.setScalar(frr(.6, 1.2))); addDebris(KIT.rubble, _spM, [.5, .46, .42], frr(-3, 3), frr(3, 7), frr(-3, 3), frr(4, 10), frr(1.5, 2.6), { extra: 1 }); }
   FX.decals.add(FX.groundAt, x, z, 2.6, .02, .017, .015, .7, 40);
   if (!CAM.man) CAM.ent = { m, t: 0, dur: 1.6 };
+  if (UI.bossCard) UI.bossCard(m.type, m.affixName || m.def.name, BOSS_TITLE[m.type]);
 }
 function updateBossIn(dt) {
   const L = FX.bossIn, A = FX.add, SG = FX.segs;
@@ -3632,6 +3762,117 @@ function stormLook(k) {
   R.exposure *= 1 + .08 * k;
 }
 window.__cwStorm = STORM; // test hook
+
+// ---- Victory and defeat cinematics -------------------------------------------------------------------------------
+// CINE.play(kind, done): kind 'victory' (the beacon re-lights and warm light floods out over the land) or 'defeat'
+// (the dark closes in and swallows the keep). About 3.4 s; it drives the camera (an override blended over the follow
+// camera, put back after each frame is drawn), the beacon's flame and light, particles and a ring in the post pass
+// (uCine in the composite shader), and draws letterbox bars with a caption on the HUD. A tap, click or key skips it
+// (after the first 0.3 s). done() is called exactly once, when it ends or is skipped, or at once if a second play
+// replaces it. CINE.on() is true while one plays; the post ring and camera ease back over 0.6 s after it ends.
+// Visual only: real time (not game time), the effects random stream, no gameplay state touched.
+// prefers-reduced-motion (FX.flashK < 1): no flashes or shake, the light comes up without a strobe.
+// Test hook: window.__cw.CINE, and the URL flag cine=victory|defeat (plays it once the page is up).
+const CINE = {
+  cur: null, tail: 0, tailKind: null, w: 0, ring: 0, dark: 0, glow: 0, flood: 0, bars: 0, stash: null, listening: false, DUR: 3.4,
+  on() { return !!this.cur; },
+  play(kind, done) {
+    if (this.cur) this.finish();
+    kind = kind === 'defeat' ? 'defeat' : 'victory';
+    this.cur = { kind, done: typeof done === 'function' ? done : null, t: 0, lit: false, towers: new Set(), puff: 0, sound: false };
+    this.tailKind = kind; this.tail = 0; this.listen();
+    if (!G.B) this.finish();
+  },
+  skip() { if (this.cur && this.cur.t > .3) { this.finish(); try { sfx('uiClick', CAM.x, CAM.z, .5); } catch (e) {} } },
+  finish() {
+    const C = this.cur; if (!C) return; this.cur = null; this.tail = .6;
+    if (C.done) { try { C.done(); } catch (e) { console.error(e); } }
+  },
+  listen() {
+    if (this.listening) return; this.listening = true;
+    const grab = e => { if (!CINE.cur) return; e.stopImmediatePropagation(); if (e.cancelable) e.preventDefault(); if (e.type !== 'keyup') CINE.skip(); };
+    for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, grab, { capture: true, passive: false });
+  },
+  // Each frame, after the simulation steps and before the camera is applied (90-main frame()). rdt: real seconds.
+  update(rdt) {
+    const C = this.cur, B = G.B;
+    if (C) { C.t += rdt; if (C.t >= this.DUR) { this.finish(); } }
+    if (!this.cur && this.tail > 0) this.tail = Math.max(0, this.tail - rdt);
+    const kind = this.cur ? this.cur.kind : this.tailKind, t = this.cur ? this.cur.t : this.DUR, out = this.cur ? 1 : this.tail / .6;
+    if (!B || (!this.cur && this.tail <= 0)) { this.w = this.dark = this.glow = this.flood = this.bars = 0; return; }
+    const b = B.beacon, calm = FX.flashK < 1, e = u => { u = sat(u); return u * u * (3 - 2 * u); };
+    this.bars = e(t / .35) * out;
+    if (kind === 'victory') {
+      // 0-0.7 s: the camera settles on the keep, the land dims. 0.7 s: the beacon flares. Then the light rolls out.
+      const ig = .7, u = (t - ig) / 1.7;
+      this.w = e(t / .6) * out; this.ring = u <= 0 ? 0 : 1.9 * Math.pow(sat(u), .8);
+      this.dark = (.55 * e(t / .5)) * (1 - e((t - 2.6) / .7)) * out; this.glow = (u > 0 ? (calm ? .5 : 1) * (1 - sat(u) * .6) : 0) * out; this.flood = (u > 0 ? .55 * e(u * 2) : 0) * out;
+      if (this.cur && !C.lit && t >= ig) {
+        C.lit = true;
+        if (!calm) { lightFlash(b.x, b.y + 1.2, b.z, 0xffc070, 2400, 1.3, 60); FX.flash = Math.max(FX.flash, .35); shake(.45); }
+        else lightFlash(b.x, b.y + 1.2, b.z, 0xffc070, 1400, 2.2, 60);
+        fxEmbers(b.x, b.y, b.z, 90, .8, 1.1, .6, .2);
+        fxTimed(4, b.x, FX.groundAt(b.x, b.z) + .12, b.z, 6, 6, 2.4, 1.6, .7, .9, 1.8, { ground: true, grow: 6 });
+        fxTimed(5, b.x, b.y + .8, b.z, 7, 7, 2.6, 1.8, .9, .9, .9, { grow: 1.5 });
+        try { sfx('ignite', b.x, b.z, 1.3, 1); } catch (er) {}
+      }
+      // Each tower catches the light as the wave of it passes.
+      if (this.cur && u > 0) for (const tw of G.towers) {
+        if (!tw.alive || C.towers.has(tw)) continue;
+        if (Math.hypot(tw.x - b.x, tw.z - b.z) < 34 * sat(u)) { C.towers.add(tw); fxEmbers(tw.x, tw.y + 1.6, tw.z, 14, .45, 1.1, .7, .25); fxTimed(5, tw.x, tw.y + 1.8, tw.z, 3.2, 3.2, 2.4, 1.7, .8, .7, .7, {}); }
+      }
+      if (B.beaconFlame) { const f = B.beaconFlame, boost = 1 + 1.1 * e((t - ig) / .25) * (1 - .45 * e((t - ig - .6) / 1.2)); f.on = Math.max(f.on, e((t - ig + .1) / .2)); f.size = Math.max(f.size, 2.35 * boost * out); f.embers = Math.max(f.embers, 6 * out); }
+      if (t > ig) { LT.beaconOn = Math.max(LT.beaconOn, out); LT.beacon.intensity = Math.max(LT.beacon.intensity, LT.beaconBase * (1 + 1.8 * this.glow) * out); }
+    } else {
+      // The dark closes in on the keep from the edges; the beacon gutters and goes out; black.
+      this.w = e(t / .9) * out; this.ring = 1.7 * (1 - e((t - .2) / 2.8)); this.dark = e(t / .6) * (.6 + .4 * e((t - 2.4) / .8)) * out;
+      this.glow = .5 * e(t / .8) * (1 - e((t - 2.7) / .5)) * out; this.flood = 0;
+      const gut = e((t - 1.2) / 1.6);
+      if (B.beaconFlame) { const f = B.beaconFlame; f.size = Math.min(f.size, 2.35 * (1 - .8 * gut) + .01); f.on = Math.min(f.on, 1 - e((t - 2.4) / .6)); }
+      LT.beaconGutter = Math.max(LT.beaconGutter, .6 * gut * (1 - gut) * 4 * (calm ? .3 : 1)); LT.beacon.intensity *= 1 - gut * .9;
+      // Tendrils of the dark: smoke crawling inward from a ring that shrinks onto the keep.
+      if (this.cur) {
+        C.puff += rdt * 34; const rw = 3 + 17 * (1 - e((t - .2) / 2.8));
+        while (C.puff >= 1) {
+          C.puff -= 1; const a = frnd() * TAU, x = b.x + Math.cos(a) * rw, z = b.z + Math.sin(a) * rw, sp = frr(1.5, 3.2);
+          fxSmoke(x, FX.groundAt(x, z) + frr(.1, .9), z, -Math.cos(a) * sp, frr(-.1, .4), -Math.sin(a) * sp, frr(1.1, 1.8), frr(1.4, 2.4), 3, .03, .02, .05, .8, { drag: .6 });
+        }
+        if (!C.sound && t > 2.3) { C.sound = true; fxSmoke(b.x, b.y + .6, b.z, 0, 1.2, 0, 2.5, 1.2, 3, .05, .04, .06, .8, { drag: .5 }); }
+      }
+    }
+    // The camera: onto the keep, a slow turn and a push in (defeat pushes in further and looks down).
+    if (this.w > 0) {
+      const s = this.stash = { x: CAM.x, y: CAM.y, z: CAM.z, zoom: CAM.zoom, yaw: CAM.yaw, elev: CAM.elev }, w = this.w;
+      const zoom = kind === 'victory' ? 1.75 - .45 * e((t - .9) / 1.8) : 1.15 + 1.2 * e(t / 3.2);
+      const yaw = s.yaw + (kind === 'victory' ? .22 : -.16) * e(t / this.DUR), elev = s.elev + (kind === 'victory' ? -.04 : .1) * e(t / this.DUR);
+      CAM.x = lerp(s.x, b.x * .9, w); CAM.z = lerp(s.z, b.z * .9, w); CAM.y = lerp(s.y, b.y * .55, w);
+      CAM.zoom = lerp(s.zoom, zoom, w); CAM.yaw = lerp(s.yaw, yaw, w); CAM.elev = lerp(s.elev, elev, w);
+    } else this.stash = null;
+  },
+  // After the frame is drawn: the follow camera gets its own values back (it damps from them next step).
+  restore() { const s = this.stash; if (!s) return; this.stash = null; CAM.x = s.x; CAM.y = s.y; CAM.z = s.z; CAM.zoom = s.zoom; CAM.yaw = s.yaw; CAM.elev = s.elev; },
+  // The composite pass (20-post renderFrame): ring centre on the beacon, in uv.
+  post(u) {
+    const k = u.uCineK.value;
+    if (!G.B || (this.dark <= 0 && this.glow <= 0 && this.flood <= 0)) { k.set(0, 0, 0, 0); return; }
+    const b = G.B.beacon, p = new THREE.Vector3(b.x, b.y, b.z).project(R.cam), vic = (this.cur ? this.cur.kind : this.tailKind) === 'victory';
+    u.uCine.value.set(p.x * .5 + .5, p.y * .5 + .5, this.ring, vic ? 1 : 0);
+    k.set(this.dark, this.glow, this.flood, 1);
+    if (vic) u.uCineC.value.set(1.6, 1.05, .45); else u.uCineC.value.set(.32, .14, .5);
+  },
+  // On the HUD canvas, after UI.draw: letterbox bars, a caption and the skip hint.
+  drawHud() {
+    const a = this.bars; if (a <= 0) return;
+    const c = UI.ctx, W = R.dw, H = R.dh, s = UI.s, bh = Math.round(Math.min(Math.max(H * .1, (R.hudTop || 0) + 4 * s), H * .2) * a);
+    c.save(); c.fillStyle = '#05060a'; c.fillRect(0, 0, W, bh); c.fillRect(0, H - bh, W, bh);
+    const C = this.cur, kind = C ? C.kind : this.tailKind, t = C ? C.t : this.DUR;
+    const cap = kind === 'victory' ? 'The light returns' : 'The dark takes the keep', ca = sat((t - (kind === 'victory' ? 1 : .8)) * 2) * a;
+    let sc = s + 1; while (sc > 2 && PX.measure(cap) * sc > W * .9) sc--;
+    if (ca > 0) { c.globalAlpha = ca; PX.text(c, cap, W / 2, H - bh + Math.round((bh - PX.LINE * sc) / 2), sc, kind === 'victory' ? '#ffd9a8' : '#b8a8d8', { align: 'c' }); }
+    if (C && t > .3) { c.globalAlpha = a * .7; const hs = Math.max(2, s - 1), hint = UI.touch ? 'Tap to skip' : 'Any key skips'; PX.text(c, hint, W - (R.safe ? R.safe[2] : 0) - 6 * hs, Math.round((bh - PX.LINE * hs) / 2), hs, '#a79e8a', { align: 'r' }); }
+    c.restore();
+  },
+};
 
 
 let RIG_CAPTURE = null;
@@ -4760,6 +5001,277 @@ function leviathanSplash(m) {
   if (G.B.bio.lightning) FX.lightningAt(x + frr(-.5, .5), z + frr(-.5, .5), .8);
 }
 DEATH_FX.drown = (m, kind, ix, iz, up) => { shatter(e => rigMonster(e), m, [ix, 1.6 * up, iz], { spread: 1.5, life: .8, up }); leviathanSplash(m); };
+
+// ---- Boss portraits and the boss intro card -----------------------------------------------------------------------
+// bossPortrait(kind, size): a canvas (size x size) with a pixel-art bust of the boss MON[kind], painted in code on a
+// 32 x 32 grid and scaled up with hard pixels. Shaded shapes (lit from the upper left, 2x2 ordered dither between
+// the tones of a ramp), a dark outline, glowing eyes and a dim backdrop in the boss's colour. A kind without its
+// own painting gets a silhouette with its eyes (MON[kind].eye). Cached per kind and size.
+//
+// BOSSCARD (UI.bossCard(kind, name, title) in 72-ui.js shows it; bossEntrance in 40-fx.js calls that): a card that
+// slides in under the top plates for about 2.6 s: the portrait in a frame, "Boss", the name and a title. It sits at
+// the left edge (the boss is framed in the middle by the entrance camera) and gets out of the way quickly.
+const PORT_N = 32;
+const PORT_RAMP = {
+  bone: ['#3e3a30', '#7e7766', '#bdb49c', '#efe8d6'],
+  boneD: ['#24211c', '#4e4a40', '#7e7766', '#a8a08a'],
+  ogre: ['#26301c', '#4c5c36', '#76894e', '#a3b673'],
+  tusk: ['#6a604a', '#b4a888', '#e6dcc0', '#fffbe8'],
+  leather: ['#21160f', '#402c1e', '#634632', '#86664a'],
+  iron: ['#16181e', '#363a44', '#5e6572', '#959eac'],
+  ice: ['#16304e', '#356496', '#6fa8d8', '#c4e8ff'],
+  frost: ['#4e6c8a', '#98bcd8', '#d8ecfa', '#ffffff'],
+  chitin: ['#0e0a14', '#251a34', '#44315a', '#715890'],
+  chitinR: ['#1a0a10', '#3e1422', '#6a2236', '#9a3a50'],
+  rock: ['#120e0e', '#2a2220', '#463a34', '#67564d'],
+  lava: ['#6a1606', '#c8400c', '#ff9426', '#ffe28a'],
+  wrap: ['#40362a', '#7e7052', '#b6a57c', '#e2d4aa'],
+  gold: ['#4e340e', '#9a6a24', '#e0aa44', '#ffe2a0'],
+  sea: ['#0a2428', '#1a4c48', '#2c8076', '#6cd2c0'],
+  seaD: ['#061618', '#0e3234', '#1a4c48', '#2c6e66'],
+  coral: ['#4a1a22', '#8a3040', '#d0606a', '#ffa8a0'],
+  shade: ['#07080c', '#0f1118', '#191c26', '#252a38'],
+};
+const PORT_GLOW = { giant: '#ff5a2a', ogre: '#ffb040', jotun: '#8fd8ff', queen: '#ff3a5a', colossus: '#ff8a2a', king: '#5ff0d8', leviathan: '#5ff0e0' };
+// Titles under the name on the card (a fallback for any other boss).
+const BOSS_TITLE = {
+  giant: 'Lord of the Barrows', ogre: 'Eater of Keepers', jotun: 'The Winter That Walks', queen: 'Mother of the Dark Brood',
+  colossus: 'The Mountain\'s Fury', king: 'Sovereign of the Sands', leviathan: 'Tyrant of the Deep',
+};
+const BAYER2 = [0, .5, .75, .25];
+
+function portPainter() {
+  const N = PORT_N, col = new Array(N * N).fill(null), glow = new Array(N * N).fill(0);
+  const put = (x, y, c) => { x |= 0; y |= 0; if (x >= 0 && y >= 0 && x < N && y < N) col[y * N + x] = c; };
+  const tone = (ramp, sh, x, y) => { const v = clamp(sh, 0, .999) * ramp.length + BAYER2[(y & 1) * 2 + (x & 1)] - .5; return ramp[clamp(Math.floor(v), 0, ramp.length - 1)]; };
+  const P = {
+    col, glow, put,
+    // A shaded ellipse (a dome lit from the upper left). o.cut(x, y) -> true skips a pixel; o.k scales the light.
+    ell(cx, cy, rx, ry, ramp, o = {}) {
+      const k = o.k === undefined ? 1 : o.k, b = o.b || 0;
+      for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+        const nx = (x + .5 - cx) / rx, ny = (y + .5 - cy) / ry, r2 = nx * nx + ny * ny; if (r2 > 1 || (o.cut && o.cut(x, y))) continue;
+        const nz = Math.sqrt(1 - r2), d = -.45 * nx - .55 * ny + .7 * nz; put(x, y, tone(ramp, (.12 + .88 * Math.max(0, d)) * k + b, x, y));
+      }
+    },
+    // A filled polygon, lit top to bottom and a little from the left.
+    poly(pts, ramp, o = {}) {
+      let y0 = 99, y1 = -99, x0 = 99, x1 = -99; for (const p of pts) { y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); }
+      const k = o.k === undefined ? 1 : o.k, b = o.b || 0;
+      for (let y = Math.floor(y0); y <= Math.ceil(y1); y++) for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) {
+        const px = x + .5, py = y + .5; let ins = false;
+        for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const a = pts[i], c = pts[j]; if ((a[1] > py) !== (c[1] > py) && px < (c[0] - a[0]) * (py - a[1]) / (c[1] - a[1]) + a[0]) ins = !ins; }
+        if (!ins || (o.cut && o.cut(x, y))) continue;
+        const v = (py - y0) / Math.max(1, y1 - y0), u = (px - x0) / Math.max(1, x1 - x0); put(x, y, tone(ramp, (.85 - .55 * v - .25 * u) * k + b, x, y));
+      }
+    },
+    line(x0, y0, x1, y1, c) { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1); for (let i = 0; i <= n; i++) put(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), c); },
+    // A glowing pixel (gets a soft halo in the finished portrait).
+    eye(x, y, c, g = 1) { put(x, y, c); glow[(y | 0) * N + (x | 0)] = g; },
+    clear(x, y) { if (x >= 0 && y >= 0 && x < N && y < N) col[y * N + x] = null; },
+  };
+  return P;
+}
+
+// The paintings. Each gets the painter P and the ramps R.
+const PORT_ART = {
+  giant(P, R) {
+    // Shoulders of bare bone, a collar of ribs, a huge cracked skull with burning sockets.
+    P.poly([[2, 32], [5, 25], [12, 23], [20, 23], [27, 25], [30, 32]], R.boneD);
+    for (let i = 0; i < 4; i++) { P.line(7 + i * 5, 25, 6 + i * 5, 31, R.boneD[0]); }
+    P.ell(6, 26, 4, 3, R.bone); P.ell(26, 26, 4, 3, R.bone);
+    P.ell(16, 13, 10, 10.5, R.bone);
+    P.poly([[9, 18], [23, 18], [21, 25], [11, 25]], R.bone, { k: .9 });
+    // Sockets, nose and the crack.
+    P.ell(12, 13, 2.6, 2.4, R.shade); P.ell(20, 13, 2.6, 2.4, R.shade);
+    P.eye(12, 13, '#ffd27a'); P.eye(11, 13, '#ff5a2a', .7); P.eye(20, 13, '#ffd27a'); P.eye(21, 13, '#ff5a2a', .7);
+    P.put(16, 17, R.shade[0]); P.put(15, 18, R.shade[0]); P.put(17, 18, R.shade[0]);
+    P.line(17, 3, 18, 6, R.bone[0]); P.line(18, 6, 16, 9, R.bone[0]); P.line(16, 9, 17, 10, R.bone[0]);
+    // Teeth.
+    for (let x = 11; x <= 21; x++) { P.put(x, 21, x & 1 ? R.shade[1] : R.bone[3]); P.put(x, 22, x & 1 ? R.bone[2] : R.shade[1]); }
+    P.line(10, 20, 22, 20, R.shade[1]);
+  },
+  ogre(P, R) {
+    P.poly([[0, 32], [3, 24], [10, 21], [22, 21], [29, 24], [32, 32]], R.ogre, { k: .85 });
+    P.poly([[1, 32], [6, 26], [26, 26], [31, 32]], R.leather); P.line(6, 27, 26, 27, R.iron[2]);
+    P.ell(16, 15, 10, 10, R.ogre);
+    P.ell(5.5, 13, 2.2, 3.2, R.ogre, { k: .8 }); P.ell(26.5, 13, 2.2, 3.2, R.ogre, { k: .8 });
+    // A heavy brow, small mean eyes, a flat nose and a wide jaw with tusks.
+    P.poly([[7, 10], [25, 10], [24, 13], [8, 13]], R.ogre, { k: .75, b: .1 });
+    P.line(8, 13, 24, 13, R.ogre[0]);
+    P.put(11, 14, R.shade[0]); P.put(12, 14, R.shade[0]); P.put(20, 14, R.shade[0]); P.put(21, 14, R.shade[0]);
+    P.eye(12, 14, '#ffd040', .8); P.eye(20, 14, '#ffd040', .8);
+    P.ell(16, 17, 2.4, 1.8, R.ogre, { b: .1 }); P.put(15, 18, R.ogre[0]); P.put(17, 18, R.ogre[0]);
+    P.line(10, 21, 22, 21, R.ogre[0]);
+    P.poly([[10, 21], [11, 17], [12, 21]], R.tusk); P.poly([[20, 21], [21, 17], [22, 21]], R.tusk);
+    P.put(16, 22, R.iron[3]); P.put(15, 23, R.iron[2]); P.put(17, 23, R.iron[2]); P.put(16, 24, R.iron[2]);
+    P.line(11, 6, 13, 8, R.ogre[0]); P.line(22, 7, 20, 9, R.ogre[0]);
+  },
+  jotun(P, R) {
+    P.poly([[0, 32], [4, 24], [11, 21], [21, 21], [28, 24], [32, 32]], R.ice, { k: .85 });
+    // A crown of ice spikes.
+    for (const [x, h] of [[8, 7], [12, 10], [16, 12], [20, 10], [24, 7]]) P.poly([[x - 2, 9], [x, 9 - h * .7], [x + 2, 9]], R.frost);
+    P.ell(16, 13, 8.5, 8.5, R.ice);
+    P.poly([[7, 9], [25, 9], [24, 11], [8, 11]], R.frost, { k: .9 });
+    P.put(12, 13, R.shade[0]); P.put(13, 13, R.shade[0]); P.put(19, 13, R.shade[0]); P.put(20, 13, R.shade[0]);
+    P.eye(12, 13, '#e8f8ff'); P.eye(13, 13, '#8fd8ff', .8); P.eye(19, 13, '#8fd8ff', .8); P.eye(20, 13, '#e8f8ff');
+    P.line(15, 14, 15, 16, R.ice[0]);
+    // A long frost beard falling in points over the chest.
+    P.poly([[8, 16], [24, 16], [25, 22], [21, 30], [18, 26], [16, 31], [14, 26], [11, 30], [7, 22]], R.frost);
+    P.line(13, 18, 19, 18, R.ice[1]);
+    for (const x of [10, 13, 16, 19, 22]) P.line(x, 21, x, 25, R.frost[1]);
+  },
+  queen(P, R) {
+    // Legs reaching in from the sides, a glossy head with a cluster of eyes and dripping fangs.
+    for (const s of [-1, 1]) {
+      P.line(16 + s * 9, 16, 16 + s * 15, 6, R.chitin[2]); P.line(16 + s * 15, 6, 16 + s * 15, 1, R.chitin[1]);
+      P.line(16 + s * 10, 19, 16 + s * 16, 14, R.chitin[2]); P.line(16 + s * 9, 22, 16 + s * 15, 28, R.chitin[1]);
+    }
+    P.ell(16, 28, 13, 7, R.chitin, { k: .9 });
+    P.ell(16, 16, 9.5, 8.5, R.chitin);
+    for (const x of [10, 13, 16, 19, 22]) P.put(x, 26 + (x & 1), R.chitinR[2]);
+    // Eyes: two big, six small.
+    for (const [x, y, g] of [[13, 14, 1], [19, 14, 1], [11, 12, .6], [21, 12, .6], [14, 11, .6], [18, 11, .6], [10, 15, .5], [22, 15, .5]]) { P.eye(x, y, g > .9 ? '#ffd0d8' : '#ff3a5a', g); if (g > .9) { P.eye(x + 1, y, '#ff3a5a', .8); P.eye(x, y + 1, '#c01a3a', .6); P.eye(x + 1, y + 1, '#c01a3a', .6); } }
+    P.poly([[12, 20], [15, 20], [14, 26]], R.chitinR); P.poly([[17, 20], [20, 20], [18, 26]], R.chitinR);
+    P.put(14, 27, '#c8ff9a'); P.put(18, 27, '#c8ff9a');
+    P.line(10, 9, 22, 9, R.chitin[3]);
+  },
+  colossus(P, R) {
+    P.poly([[0, 32], [2, 22], [9, 19], [23, 19], [30, 22], [32, 32]], R.rock);
+    P.ell(16, 13, 10, 10, R.rock, { k: .95 });
+    P.poly([[6, 6], [11, 3], [16, 5], [21, 2], [26, 6], [24, 9], [8, 9]], R.rock, { b: .1 });
+    // Lava in the seams.
+    const seam = (pts) => { for (let i = 0; i < pts.length - 1; i++) P.line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], R.lava[2]); for (const p of pts) P.eye(p[0], p[1], R.lava[3], .5); };
+    seam([[16, 4], [15, 7], [17, 9]]); seam([[7, 16], [9, 19], [8, 22]]); seam([[25, 15], [24, 18], [26, 21]]);
+    seam([[4, 25], [8, 27], [12, 26]]); seam([[28, 24], [24, 27], [21, 30]]); seam([[14, 23], [16, 27], [15, 31]]);
+    // Molten eyes and a glowing maw.
+    P.ell(12, 13, 2.2, 1.8, R.lava, { k: 1.2 }); P.ell(20, 13, 2.2, 1.8, R.lava, { k: 1.2 });
+    P.eye(12, 13, '#fff4c0'); P.eye(20, 13, '#fff4c0'); P.eye(11, 13, '#ffb040', .7); P.eye(21, 13, '#ffb040', .7);
+    P.poly([[10, 11], [15, 12], [10, 12]], R.rock, { k: .5 }); P.poly([[22, 11], [17, 12], [22, 12]], R.rock, { k: .5 });
+    P.poly([[11, 18], [21, 18], [19, 21], [13, 21]], R.lava, { k: 1.1 });
+    for (let x = 12; x <= 20; x += 2) { P.put(x, 18, R.rock[1]); P.eye(x + 1, 19, R.lava[3], .7); }
+  },
+  king(P, R) {
+    // A wrapped head under a tall crown, a broad gold collar, teal eyes in the dark between the bands.
+    P.poly([[1, 32], [4, 24], [11, 21], [21, 21], [28, 24], [31, 32]], R.wrap, { k: .8 });
+    P.poly([[4, 26], [28, 26], [26, 32], [6, 32]], R.gold);
+    for (let x = 6; x <= 26; x += 3) P.eye(x, 28, x % 2 ? '#5ff0d8' : '#e04a32', .3);
+    P.line(5, 25, 27, 25, R.gold[3]);
+    P.ell(16, 15, 8, 9, R.wrap);
+    for (let y = 8; y <= 23; y += 3) for (let x = 8; x <= 24; x++) { const k = (x + y * 3) % 7; if (k < 2) P.put(x, y + (k ? 0 : 1), R.wrap[1]); }
+    P.clear(7, 9); P.clear(25, 9);
+    P.poly([[9, 13], [23, 13], [22, 16], [10, 16]], R.shade);
+    P.eye(12, 14, '#c8fff4'); P.eye(13, 14, '#5ff0d8', .8); P.eye(19, 14, '#5ff0d8', .8); P.eye(20, 14, '#c8fff4');
+    // Crown.
+    P.poly([[7, 9], [25, 9], [24, 4], [21, 7], [19, 1], [16, 6], [13, 1], [11, 7], [8, 4]], R.gold);
+    P.line(7, 9, 25, 9, R.gold[1]); P.eye(16, 7, '#5ff0d8', .8); P.eye(11, 8, '#e04a32', .5); P.eye(21, 8, '#e04a32', .5);
+    P.line(14, 20, 18, 20, R.wrap[0]);
+  },
+  leviathan(P, R) {
+    // A sea-green giant: fins for ears, a coral crown, a beard of tentacles.
+    P.poly([[0, 32], [3, 23], [10, 20], [22, 20], [29, 23], [32, 32]], R.seaD);
+    for (let i = 0; i < 6; i++) P.put(6 + i * 4, 24 + (i & 1), R.sea[3]);
+    P.poly([[3, 9], [8, 12], [8, 17], [2, 15]], R.sea, { k: .8 }); P.poly([[29, 9], [24, 12], [24, 17], [30, 15]], R.sea, { k: .8 });
+    P.ell(16, 13, 8.5, 9, R.sea);
+    P.poly([[7, 8], [25, 8], [24, 4], [22, 6], [20, 1], [18, 5], [16, 0], [14, 5], [12, 1], [10, 6], [8, 4]], R.coral);
+    P.line(7, 8, 25, 8, R.gold[2]); P.eye(16, 6, '#ffe2a0', .6);
+    P.put(11, 12, R.shade[0]); P.put(12, 12, R.shade[0]); P.put(20, 12, R.shade[0]); P.put(21, 12, R.shade[0]);
+    P.eye(11, 12, '#b0fff4'); P.eye(12, 12, '#5ff0e0', .9); P.eye(20, 12, '#5ff0e0', .9); P.eye(21, 12, '#b0fff4');
+    P.line(10, 10, 13, 11, R.seaD[1]); P.line(22, 10, 19, 11, R.seaD[1]);
+    P.put(15, 15, R.seaD[0]); P.put(17, 15, R.seaD[0]);
+    for (let i = 0; i < 6; i++) { const x = 10 + i * 2.4, len = 6 + (i % 3) * 3; for (let k = 0; k < len; k++) P.put(Math.round(x + Math.sin(k * .7 + i) * 1.2), 18 + k, k < 2 ? R.sea[1] : R.seaD[2 - (k & 1)]); }
+  },
+};
+// A shape for any boss without a painting: horns and a shadowed head, with its own eye colour.
+function portSilhouette(P, R, kind) {
+  const d = MON[kind] || {}, e = d.eye || [2, 1, .4], m = Math.max(e[0], e[1], e[2], 1e-3);
+  const ec = '#' + [0, 1, 2].map(k => Math.round(clamp(e[k] / m, 0, 1) * 255).toString(16).padStart(2, '0')).join('');
+  P.poly([[0, 32], [4, 23], [11, 20], [21, 20], [28, 23], [32, 32]], R.shade, { b: .2 });
+  P.poly([[6, 10], [3, 2], [10, 8]], R.shade, { b: .3 }); P.poly([[26, 10], [29, 2], [22, 8]], R.shade, { b: .3 });
+  P.ell(16, 13, 8.5, 9, R.shade, { b: .25 });
+  P.eye(12, 13, '#ffffff', .6); P.eye(13, 13, ec); P.eye(19, 13, ec); P.eye(20, 13, '#ffffff', .6);
+}
+
+const _bossPort = new Map();
+function bossPortrait(kind, size) {
+  size = Math.max(PORT_N, Math.round(size || 64));
+  const key = kind + ':' + size, hit = _bossPort.get(key); if (hit) return hit;
+  const N = PORT_N, P = portPainter();
+  if (PORT_ART[kind]) PORT_ART[kind](P, PORT_RAMP); else portSilhouette(P, PORT_RAMP, kind);
+  // The base: backdrop, outline, figure, eye halos.
+  const base = document.createElement('canvas'); base.width = base.height = N;
+  const c = base.getContext('2d'), gc = PORT_GLOW[kind] || '#e8b04a', g = _hx(parseInt(gc.slice(1), 16));
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const d = Math.hypot(x + .5 - N / 2, y + .5 - N * .42) / (N * .62), k = clamp(1 - d, 0, 1), v = k * k * .55 + BAYER2[(y & 1) * 2 + (x & 1)] * .12;
+    const q = Math.floor(v * 4.6) / 4;
+    c.fillStyle = 'rgb(' + Math.round(10 + g[0] * 90 * q) + ',' + Math.round(11 + g[1] * 70 * q) + ',' + Math.round(18 + g[2] * 80 * q) + ')'; c.fillRect(x, y, 1, 1);
+  }
+  const at = (x, y) => x >= 0 && y >= 0 && x < N && y < N ? P.col[y * N + x] : null;
+  c.fillStyle = '#05060a';
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (!at(x, y) && (at(x - 1, y) || at(x + 1, y) || at(x, y - 1) || at(x, y + 1))) c.fillRect(x, y, 1, 1);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const v = at(x, y); if (v) { c.fillStyle = v; c.fillRect(x, y, 1, 1); } }
+  // Rim light on the right edge of the figure, in the backdrop's colour.
+  c.fillStyle = gc; c.globalAlpha = .45;
+  for (let y = 0; y < N; y++) for (let x = 1; x < N; x++) if (at(x, y) && !at(x + 1, y) && x > N * .45) c.fillRect(x, y, 1, 1);
+  c.globalAlpha = 1;
+  const out = document.createElement('canvas'); out.width = out.height = size;
+  const o = out.getContext('2d'), k = size / N; o.imageSmoothingEnabled = false; o.drawImage(base, 0, 0, size, size);
+  // Eye halos at the output size (soft, additive), so the eyes burn.
+  o.globalCompositeOperation = 'lighter';
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const gl = P.glow[y * N + x]; if (!gl) continue;
+    const cx = (x + .5) * k, cy = (y + .5) * k, r = k * 2.6 * gl, gr = o.createRadialGradient(cx, cy, 0, cx, cy, r), cc = P.col[y * N + x] || '#ffffff';
+    gr.addColorStop(0, cc); gr.addColorStop(1, 'rgba(0,0,0,0)'); o.globalAlpha = .55 * gl; o.fillStyle = gr; o.fillRect(cx - r, cy - r, r * 2, r * 2);
+  }
+  o.globalAlpha = 1; o.globalCompositeOperation = 'source-over';
+  _bossPort.set(key, out);
+  if (_bossPort.size > 40) _bossPort.delete(_bossPort.keys().next().value);
+  return out;
+}
+
+const BOSSCARD = {
+  cur: null, DUR: 2.6,
+  show(kind, name, title) {
+    if (!MON[kind]) return;
+    this.cur = { kind, name: name || MON[kind].name, title: title || BOSS_TITLE[kind] || 'Herald of the Hollowing', t: 0 };
+  },
+  on() { return !!this.cur; },
+  // Drawn by UI.draw on the HUD canvas: s = the HUD scale, (x0, y0) the top-left corner below the top plates, Wr the
+  // right edge of the safe area.
+  draw(c, s, x0, y0, Wr, Hb) {
+    const C = this.cur; if (!C) return;
+    C.t += R.frameDt || .016; if (C.t >= this.DUR || G.phase !== 'play') { this.cur = null; return; }
+    const t = C.t, avail = Wr - x0 - 4 * s;
+    // Layout at the largest scale that fits: portrait, then the text column.
+    let ps = s, L, pw, tw, w, h, nameS;
+    for (; ps >= 2; ps--) {
+      nameS = ps + 1; pw = 34 * ps; L = PX.LINE * ps;
+      tw = Math.max(PX.measure('BOSS') * ps + 10 * ps, PX.measure(C.name) * nameS, PX.measure(C.title) * ps);
+      w = pw + tw + 14 * ps; h = pw + 6 * ps;
+      if (w <= avail) break;
+    }
+    if (ps < 2) { ps = 2; nameS = 2; }
+    const ein = sat(t / .28), eout = sat((this.DUR - t) / .4), slide = (1 - ein * ein * (3 - 2 * ein)) * (w + 8 * s) + (1 - eout) * 14 * s;
+    const x = Math.round(x0 + 2 * s - slide), y = Math.round(y0 + 4 * s), a = Math.min(1, ein * 1.4) * eout;
+    c.save(); c.globalAlpha = a;
+    // A dark strip with an ember edge, the portrait in a gold frame on its left.
+    UI.plate(x, y, w, h, { bd: UI.COLR.ember, bg: 'rgba(12,8,10,0.9)', hi: 'rgba(255,138,60,0.22)' });
+    const px = x + 3 * ps, py = y + 3 * ps;
+    c.fillStyle = '#e8b04a'; c.fillRect(px - ps, py - ps, pw + 2 * ps, pw + 2 * ps); c.fillStyle = '#5a3c14'; c.fillRect(px, py, pw, pw);
+    c.imageSmoothingEnabled = false;
+    // The portrait pushes in a touch while the card is up.
+    const zp = 1 + .06 * sat(t / this.DUR), img = bossPortrait(C.kind, 64), sw = 64 / zp, so = (64 - sw) / 2;
+    c.drawImage(img, so, so * .6, sw, sw, px, py, pw, pw);
+    // A flash across the portrait as it lands.
+    if (t < .5) { c.globalAlpha = a * (1 - t / .5) * .6 * (FX.flashK || 1); c.fillStyle = '#ffd9a8'; c.fillRect(px, py, pw, pw); c.globalAlpha = a; }
+    const tx = px + pw + 6 * ps;
+    let ty = y + Math.round((h - (L + 2 * ps + PX.LINE * nameS + ps + L)) / 2);
+    PX.icon(c, 'skull', tx, ty, ps, 1); PX.text(c, 'BOSS', tx + 12 * ps, ty, ps, UI.COLR.ember);
+    ty += L + 2 * ps; PX.text(c, C.name, tx, ty, nameS, '#ffd9a8');
+    ty += PX.LINE * nameS + ps; PX.text(c, C.title, tx, ty, ps, UI.COLR.dim);
+    c.restore();
+  },
+};
 
 
 const G = {
@@ -6750,7 +7262,8 @@ function updatePhase(dt) {
   LT.beaconLevel = damp(LT.beaconLevel, G.lives / G.maxLives, 3, dt);
   if (B.beaconFlame) { const f = B.beaconFlame, lv = LT.beaconLevel; f.on = LT.beaconOn; f.size = 2.35 * (.42 + .58 * lv) * (1 - .32 * LT.beaconGutter); f.embers = 1 + 2 * lv + 6 * LT.beaconGutter; }
   for (let i = 1; i < B.flames.length; i++) B.flames[i].on = LT.beaconOn;
-  if (G.phase === 'clear') { if (t > 2.6 && !G.holdClear) setPhase('crumble'); } // holdClear: the campaign's victory screens
+  // A victory cinematic (Ash's CINE) or the campaign's victory screens (G.holdClear) hold the land up until they end.
+  if (G.phase === 'clear') { if (t > 2.6 && !G.holdClear && !(typeof CINE !== 'undefined' && CINE.on())) setPhase('crumble'); }
   else if (G.phase === 'defeat') {
     for (const tw of G.towers) { tw.em.on = damp(tw.em.on, 0, 1.5 + tw.idx * .15, dt); if (tw.flame) tw.flame.on = tw.em.on; if (tw.flame2) tw.flame2.on = tw.em.on; }
     // A player who has walked away gets the commander back for the next run.
@@ -7027,6 +7540,13 @@ const WX_KEYS = ['sizeA', 'sizeB', 'colA', 'colB', 'alA', 'alB'], wxU = k => WX.
 function eventLook() {
   const ev = G.event, B = G.B; if (!B || !WX.u) return;
   drawEventFX(ev, B);
+  // Eclipse mutator (64-endless.js): the land fades darker and colder over a few seconds; tower lights shrink in 60-towers.
+  G.eclA = (G.eclA || 0) + ((G.eclipse && G.phase !== 'menu' ? 1 : 0) - (G.eclA || 0)) * Math.min(1, .016 * 1.5);
+  if (G.eclA > .002) {
+    const ea = G.eclA, lf = R.mats.comp.uniforms.uLift.value;
+    R.exposure *= lerp(1, .8, ea); LT.moon.intensity *= lerp(1, .4, ea); LT.hemi.intensity *= lerp(1, .72, ea);
+    lf.set(lf.x - .004 * ea, lf.y - .002 * ea, lf.z + .01 * ea);
+  }
   if (!ev || ev.amt <= 0) { if (_evLookOn) { _evLookOn = false; const w = B.bio.wx; WX.u.uN.value.fromArray(w.n); WX.u.uVelA.value.fromArray(w.velA); WX.u.uVelB.value.fromArray(w.velB); for (const k of WX_KEYS) wxU(k).fromArray(w[k]); } return; }
   _evLookOn = true;
   const E = ev.def, a = ev.amt, u = R.mats.atmo.uniforms, mi = u.uMist.value, ma = u.uMistAmb.value;
@@ -7137,6 +7657,9 @@ const MUTATORS = {
   famine: { name: 'Famine', tip: 'Monsters drop less gold.', icon: 'coin', curse: 1, m: { bounty: .72 } },
   plague: { name: 'Plague', tip: 'Monsters heal when they are left alone.', icon: 'skull', curse: 1, m: {} },
   titan: { name: 'Titan', tip: 'The boss is bigger, tougher and carries an extra power.', icon: 'crown', curse: 1, m: {} },
+  eclipse: { name: 'Eclipse', tip: 'The land goes dark: towers see less far and their lights shrink.', icon: 'moon', curse: 1, m: { range: .92 } },
+  siege: { name: 'Siege', tip: 'Siege rams join every wave.', icon: 'shield', curse: 1, m: {} },
+  echoes: { name: 'Echoes', tip: 'A slain elite rises once more as a ghost.', icon: 'skull', curse: 1, m: {} },
   gilded: { name: 'Gilded', tip: 'A boon: monsters drop more gold.', icon: 'coin', boon: 1, m: { bounty: 1.3 } },
   kindled: { name: 'Kindled', tip: 'A boon: monsters take more damage.', icon: 'flame', boon: 1, m: { dmgIn: 1.15 } },
 };
@@ -7151,6 +7674,7 @@ function modMul(stat) { const v = G.modM[stat]; return v === undefined ? 1 : v; 
 function modCount(level) { const deep = level < 6 ? 0 : Math.min(5, 1 + Math.floor((level - 6) / 3)); return deep + (G.heatMods | 0); }
 function setMods(keys) {
   G.mods = keys.slice(); G.modM = {};
+  G.eclipse = G.mods.indexOf('eclipse') >= 0;
   for (const k of G.mods) { const M = MUTATORS[k]; if (!M) continue; for (const s in M.m) G.modM[s] = (G.modM[s] === undefined ? 1 : G.modM[s]) * M.m[s]; }
 }
 // Rolls this land's mutators from the gameplay random stream (deterministic per run). Returns the keys.
@@ -7165,12 +7689,15 @@ function rollMods(level) {
 function bossAffixes(level) { return (level < 6 ? 0 : Math.min(3, 1 + Math.floor((level - 6) / 6))) + (modOn('titan') ? 1 : 0) + (G.heatAffix | 0); }
 
 function updateEndless(dt) {
-  if (G.phase !== 'play') return;
+  if (G.phase !== 'play') { if (G.echoQ) G.echoQ.length = 0; return; }
+  updateEchoes(dt);
   if (G.modLevel !== G.level) {
     G.modLevel = G.level;
     const keys = rollMods(G.level);
     if (keys.length) { G.bountyMul *= modMul('bounty'); if (UI.banner && !UI.mutCard) UI.banner(keys.map(k => MUTATORS[k].name).join(' · '), 3.2, false); }
   }
+  if (G.spawning && G.siegeK !== G.k) { G.siegeK = G.k; if (modOn('siege')) addSiege(); }
+  if (!G.spawning) G.siegeK = -1;
   const plague = modOn('plague');
   for (const m of G.mons) {
     if (m.dead || m.hp <= 0) continue;
@@ -7195,8 +7722,37 @@ function bossEmpower(m) {
 }
 // Called from killMonster: Volatile bursts (they reuse the sapper chain, so they can set each other off).
 function modOnKill(m) {
+  if (m.elite && modOn('echoes')) echoRise(m);
   if (!modOn('volatile') || m.def.boss || m.small || rnd() >= .22) return;
   G.chain.push({ t: rr(.25, .45), x: m.x, y: m.y, z: m.z, ex: { r: 1.3, dmg: 22 * (1 + .25 * G.level), men: 18 * (1 + .2 * G.level) } });
+}
+// Siege: 1-3 rams spread through the wave's queue, as tough as the wave around them.
+function addSiege() {
+  const q = G.queue; if (!q.length) return;
+  const n = 1 + Math.min(2, Math.floor(Math.max(0, G.level - 3) / 4)), end = q[q.length - 1].t;
+  let hp = 0; for (const e of q) hp += e.hpMul || 1; hp /= q.length;
+  for (let i = 0; i < n; i++) {
+    const t = end * (i + .5) / n, e = { t, type: 'ram', hpMul: hp, bm: .8 };
+    let j = 0; while (j < q.length && q[j].t <= t) j++;
+    q.splice(j, 0, e);
+  }
+}
+// Echoes: a slain ground elite rises once as a pale ghost where it fell (no elite power, half bounty).
+function echoRise(m) {
+  if (m.fly || m.echo || m.def.boss || G.mons.length >= MAX_ALIVE) return;
+  G.echoQ = G.echoQ || [];
+  G.echoQ.push({ t: .9, type: m.type, s: m.s, lat: m.lat, hp: m.maxHp * .6 / Math.max(1, m.def.hp) });
+}
+function updateEchoes(dt) {
+  if (!G.echoQ || !G.echoQ.length) return;
+  for (let i = G.echoQ.length - 1; i >= 0; i--) {
+    const e = G.echoQ[i]; e.t -= dt; if (e.t > 0) continue;
+    G.echoQ.splice(i, 1);
+    if (G.phase !== 'play' || G.mons.length >= MAX_ALIVE) continue;
+    const g = spawnMonster(e.type, { hpMul: e.hp, s: e.s, lat: e.lat });
+    g.echo = true; g.bmul = .5; g.tint = [.62, .78, 1]; g.pop = .5;
+    if (G.spdMul !== 1) g.spdMul *= G.spdMul;
+  }
 }
 window.__cwEndless = { MUTATORS, BOSS_AFFIX, rollMods, setMods, modOn, modMul };
 
@@ -8625,6 +9181,7 @@ const UI = (() => {
   U.banner = (text, dur, big) => { U.msg = { text, t: 0, dur, big }; };
   U.ping = (x, y, z, byPlayer) => { fxTimed(4, x, y + .12, z, 5, 5, byPlayer ? 1.0 : 1.5, byPlayer ? 1.4 : 1.1, byPlayer ? 1.8 : .5, .7, .55, { ground: true }); };
   U.COLR = COLR; U.plate = (...a) => plate(...a); U.openSettings = on => openSettings(on); U.setMute = b => setMute(b);
+  U.bossCard = (kind, name, title) => BOSSCARD.show(kind, name, title); // Ash: 52-portraits.js draws it
   U.closeMenu = () => { U.menu = null; U.armed = null; U.spell = null; };
   U.coinFrom = (x, y, z, value) => {
     if (U.coins.length > 70) { U.goldShown += value; return; }
@@ -8633,9 +9190,15 @@ const UI = (() => {
 
   function plate(x, y, w, h, o = {}) {
     const c = U.ctx, s = U.s; x = Math.round(x); y = Math.round(y); w = Math.round(w); h = Math.round(h);
+    // The frame (Ash): a soft drop shadow, the notched border, a bevel (lit under the top edge, shaded above the bottom)
+    // and, on bigger plates, bright rivets in the four corners. Same footprint as before.
+    const ga = c.globalAlpha;
+    c.fillStyle = 'rgba(0,0,0,0.4)'; c.fillRect(x + 2 * s, y + h, w - 3 * s, s); c.fillRect(x + w, y + 2 * s, s, h - 3 * s);
     c.fillStyle = o.bd || COLR.bd; c.fillRect(x + s, y, w - 2 * s, h); c.fillRect(x, y + s, w, h - 2 * s);
     c.fillStyle = o.bg || COLR.bg; c.fillRect(x + 2 * s, y + s, w - 4 * s, h - 2 * s); c.fillRect(x + s, y + 2 * s, w - 2 * s, h - 4 * s);
+    if (h >= 8 * s) { c.fillStyle = 'rgba(255,232,190,0.07)'; c.fillRect(x + 2 * s, y + s, w - 4 * s, s); c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(x + 2 * s, y + h - 2 * s, w - 4 * s, s); }
     if (o.hi) { c.fillStyle = o.hi; c.fillRect(x + 2 * s, y + s, w - 4 * s, s); }
+    if (w >= 28 * s && h >= 14 * s) { c.globalAlpha = ga * .75; c.fillStyle = '#ffe2a0'; for (const [cx, cy] of [[x + s, y + s], [x + w - 2 * s, y + s], [x + s, y + h - 2 * s], [x + w - 2 * s, y + h - 2 * s]]) c.fillRect(cx, cy, s, s); c.globalAlpha = ga; }
   }
   function text(str, x, y, col, o) { return PX.text(U.ctx, str, x, y, U.s, col || COLR.tx, o); }
   const tw = str => PX.measure(str) * U.s;
@@ -8858,6 +9421,15 @@ const UI = (() => {
     if (now - U.lastTap.t < 330 && Math.hypot(x - U.lastTap.x, y - U.lastTap.y) < 40 * (R.dpr || 1)) { U.lastTap.t = -9; if (CAM.man && CAM.mzoom > 1.3) camReset(); else camZoomTo(Math.max(1.9, (CAM.man ? CAM.mzoom : CAM.zoom) * 1.6), x, y); }
     else { U.lastTap.t = now; U.lastTap.x = x; U.lastTap.y = y; }
   }
+  // Placement feedback (Ash): an empty pad with a tower kind in mind (armed, hovered or picked in the build menu) tints
+  // its pad ring and range preview green-gold when that tower can be built there now, red when the gold is short.
+  function placeLook(kind) {
+    if (!kind || !TOWER[kind]) return;
+    const can = G.gold >= TOWER[kind].cost[0] || G.freeTowers > 0, pulse = .5 + .5 * Math.sin(G.t * (can ? 5 : 10));
+    if (can) { U.padMesh.material.color.setRGB(1.5, 2.3, .8); U.rangeMesh.material.color.setRGB(1.1, 1.7, .6); U.rangeMesh.material.opacity = .42 + .12 * pulse; }
+    else { U.padMesh.material.color.setRGB(2.6, .55, .35); U.rangeMesh.material.color.setRGB(1.8, .45, .3); U.rangeMesh.material.opacity = .26; }
+    U.padMesh.material.opacity = .55 + .35 * pulse;
+  }
   function setRing(mesh, cx, cz, radius, width) {
     const P = mesh.geometry.attributes.position, a = P.array, H = G.B.heightAt, n = mesh.seg;
     for (let i = 0; i <= n; i++) { const t = i / n * TAU, c = Math.cos(t), s = Math.sin(t); for (let k = 0; k < 2; k++) { const r = radius + (k ? width : 0), x = cx + c * r, z = cz + s * r, o = (i * 2 + k) * 3; a[o] = x; a[o + 1] = H(x, z) + .1; a[o + 2] = z; } }
@@ -8927,9 +9499,10 @@ const UI = (() => {
       const pad = tgt.pad, pulse = .5 + .5 * Math.sin(G.t * 5);
       U.rangeMesh.material.color.setRGB(1.5, 1.15, .6);
       setRing(U.padMesh, pad.x, pad.z, 1.5, .1); U.padMesh.material.opacity = .45 + .25 * pulse;
-      let range = 0; const bk = tgt.tower && U.menu && U.menu.tower === tgt.tower && canBranch(tgt.tower) ? (U.menu.sel || (U.hotBtn && U.hotBtn.branch)) : null;
-      if (bk) range = tgt.tower.def.branches[bk].range || tgt.tower.range; else if (tgt.tower) range = tgt.tower.range; else { const kind = (U.menu && (U.menu.sel || (U.hotBtn && U.hotBtn.kind))) || U.armed || (U.menu && U.btns[U.menu.focus] && U.gp.active && U.btns[U.menu.focus].kind) || 'archer'; range = TOWER[kind].range[0]; }
+      let range = 0, pk = null; const bk = tgt.tower && U.menu && U.menu.tower === tgt.tower && canBranch(tgt.tower) ? (U.menu.sel || (U.hotBtn && U.hotBtn.branch)) : null;
+      if (bk) range = tgt.tower.def.branches[bk].range || tgt.tower.range; else if (tgt.tower) range = tgt.tower.range; else { pk = (U.menu && (U.menu.sel || (U.hotBtn && U.hotBtn.kind))) || U.armed || (U.menu && U.btns[U.menu.focus] && U.gp.active && U.btns[U.menu.focus].kind) || null; range = TOWER[pk || 'archer'].range[0]; }
       setRing(U.rangeMesh, pad.x, pad.z, range, .07); U.rangeMesh.material.opacity = .34;
+      U.padMesh.material.color.setRGB(2.2, 1.7, .9); placeLook(pk);
     } else { U.padMesh.visible = false; U.rangeMesh.visible = false; }
     R.canvas.style.cursor = U.panning ? 'grabbing' : U.spell && !U.hotBtn && !U.hudHot ? 'crosshair' : (U.hotBtn || U.hover || U.hudHot) ? 'pointer' : 'default';
   }
@@ -9119,6 +9692,7 @@ const UI = (() => {
       const m = U.msg; m.t += R.frameDt; const a = sat(Math.min(m.t * 3, (m.dur - m.t) * 2));
       if (m.t >= m.dur || (G.phase === 'defeat' && G.phaseT > SUMMARY_AT)) U.msg = null; else { let sc = s + (m.big ? 2 : 1); while (sc > 2 && PX.measure(m.text) * sc + pad * 4 > Wr - iL - 6 * s) sc--; const w = PX.measure(m.text) * sc + pad * 4, h = PX.LINE * sc + pad * 2; c.globalAlpha = a; const yb = Math.max(Math.round(H * .2), y0 + topH + 4 * s); plate(Math.round(W / 2 - w / 2), yb, w, h, { bd: m.big ? COLR.ember : COLR.bdHi }); PX.text(c, m.text, W / 2, yb + pad, sc, m.big ? '#ffd9a8' : COLR.tx, { align: 'c' }); c.globalAlpha = 1; }
     }
+    BOSSCARD.draw(c, s, iL, y0 + topH, Wr, Hb); // the boss intro card (52-portraits.js)
     U.menuRect = null;
     if (U.menu && G.phase === 'play') {
       const m = U.menu, p = proj(m.pad.x, m.pad.y + (m.tower ? Math.min(3.6, m.tower.mounts.top) : 1.2), m.pad.z), a = sat(m.t * 8), mp = 6 * s;
@@ -9203,7 +9777,7 @@ const UI = (() => {
     }
     if (hot !== U.hotBtn && hot) sfx('uiHover', CAM.x, CAM.z, .5);
     U.hotBtn = hot;
-    if (U.armed && mouse && G.phase === 'play') { const l = TOWER[U.armed].name + ': click a pad', w = tw(l) + pad * 2; const xx = clamp(U.mx + 10 * s, 2 * s, W - w - 2 * s), yy = clamp(U.my + 10 * s, 2 * s, H - LH - pad * 2); plate(xx, yy, w, LH + pad * 2 - s, { bd: COLR.bdHi }); text(l, xx + pad, yy + pad - s, COLR.tx); }
+    if (U.armed && mouse && G.phase === 'play') { const ok = G.gold >= TOWER[U.armed].cost[0] || G.freeTowers > 0, l = TOWER[U.armed].name + (ok ? ': click a pad' : ': not enough gold'), w = tw(l) + pad * 2; const xx = clamp(U.mx + 10 * s, 2 * s, W - w - 2 * s), yy = clamp(U.my + 10 * s, 2 * s, H - LH - pad * 2); plate(xx, yy, w, LH + pad * 2 - s, { bd: ok ? COLR.bdHi : COLR.red }); text(l, xx + pad, yy + pad - s, ok ? COLR.tx : COLR.red); }
     if (U.titleT < 7 && !U.menu && !U.sets && !U.offer && G.mode === 'demo') {
       const a = sat(Math.min((U.titleT - .4) * 1.5, (6.6 - U.titleT) * 1.2));
       if (a > 0) {
@@ -12969,13 +13543,15 @@ function step(rdt) {
     for (const f of G.men) if (!f.dead) drawFootman(f);
     R.tDraw += performance.now() - td;
     if (G.phase === 'play') {
-      const k0 = (G.gold >= 70 ? 1 : .5) * (UI.manual ? 1.25 : 1);
+      // With a tower armed (keys 1-4) every free pad lights up: gold-green where it can be built, a dim red when the gold is short.
+      const ak = UI.armed && TOWER[UI.armed], aok = ak && (G.gold >= ak.cost[0] || G.freeTowers > 0), ac = !ak ? [2.4, 1.55, .62] : aok ? [1.6, 2.3, .7] : [2.2, .5, .3];
+      const k0 = ak ? (aok ? 1.9 : 1.1) : (G.gold >= 70 ? 1 : .5) * (UI.manual ? 1.25 : 1);
       for (let i = 0; i < B.pads.length; i++) {
         const p = B.pads[i]; if (p.tower) continue;
         _mm.compose(_mv.set(p.x, p.y, p.z), _mq.setFromAxisAngle(_upv, p.face + Math.sin(G.t * 1.3 + i * 2.1) * .3), _ms); KIT.marker.put(_mm, 0, null);
         // A soft gold ring on each free pad, and a faint ripple that keeps running outward from it ("build here").
         const w = .5 + .5 * Math.sin(G.t * 2.1 + i * 1.7), sz = 3.7 + .25 * w, a = (.27 + .2 * w) * k0, ph = (G.t * .42 + i * .37) % 1;
-        FX.add.push(p.x, p.y + .07, p.z, sz, sz, 0, 0, 2.4, 1.55, .62, a, 4, 0, .52, 1);
+        FX.add.push(p.x, p.y + .07, p.z, sz, sz, 0, 0, ac[0], ac[1], ac[2], a, 4, 0, .52, 1);
         FX.add.push(p.x, p.y + .07, p.z, sz * 1.08, sz * 1.08, 0, 0, 2.1, 1.5, .75, .2 * k0 * smooth(0, .15, ph), 4, 0, .18 + ph * .72, 1);
       }
     }
@@ -13038,7 +13614,8 @@ function frame(now) {
   const raw = (now - _last) / 1000, rdt = Math.min(.05, Math.max(.001, raw)); _last = now; R.frameDt = rdt;
   if (G.paused) { FX.shake = 0; updateShake(rdt); updateCamera(rdt); UI.update(rdt); AU.update(rdt); } else { for (let i = 0; i < G.speed; i++) { R.skipDraw = i < G.speed - 1; step(rdt); } R.skipDraw = false; }
   R.fade = Math.min(1, R.fade + rdt * 1.6);
-  applyCamera(); renderFrame(); UI.draw();
+  CINE.update(rdt);
+  applyCamera(); renderFrame(); UI.draw(); CINE.drawHud(); CINE.restore();
   if (document.hidden || raw > .25) { _acc = 0; _frames = 0; return; }
   _acc += raw; _frames++;
   if (_acc >= 2) {
@@ -13080,6 +13657,7 @@ function boot() {
   window.addEventListener('pagehide', saveOnHide);
   for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => setTimeout(resizeRenderer, 60));
   window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, render() { applyCamera(); renderFrame(); }, autoScale, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, save: { SAVE, snapshot, write: writeSave, read: continueOffer, valid: validSave, clear: clearSave, restore: restoreRun, onHide: saveOnHide }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
+  window.__cw.CINE = CINE; window.__cw.cineRun = (sec, dt = 1 / 30) => { for (let i = 0, n = Math.round(sec / dt); i < n; i++) { R.frameDt = dt; step(dt); CINE.update(dt); if (i === n - 1) { R.fade = 1; applyCamera(); renderFrame(); UI.draw(); CINE.drawHud(); } CINE.restore(); } return CINE.cur ? CINE.cur.t : -1; }; window.__cw.bossPortrait = bossPortrait; window.__cw.BOSSCARD = BOSSCARD;
   window.__cw.META = META; window.__cw.STORY = STORY; window.__cw.MENU = MENU; window.__cw.TUT = TUT;
   window.__cw.meta = { startRun, startDemo, abandonRun, bankRun, buyUpgrade, applyMeta, embersFor, heatRules, UPGRADES, HEAT, saveMeta, loadMeta, rerollMods, activeMods };
   // The main menu over the AI demo (Continue there replaces the old "Welcome back" offer), except in test sessions:
@@ -13091,6 +13669,7 @@ function boot() {
   if (HASH.phase) setPhase(HASH.phase);
   if (HASH.cam) { const c = HASH.cam.split(',').map(Number); window.__cw.lock = c; }
   const ld = document.getElementById('load'); if (ld) ld.remove();
+  if (HASH.cine) setTimeout(() => CINE.play(HASH.cine, () => { window.__cineDone = (window.__cineDone || 0) + 1; }), +(HASH.cinedelay || 300));
   if (HASH.manual) return;
   _last = performance.now();
   requestAnimationFrame(frame);

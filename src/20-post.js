@@ -192,6 +192,7 @@ uniform vec4 uGrade;
 uniform vec3 uBloom;
 uniform vec3 uLift; uniform vec2 uDither; uniform vec2 uRes;
 uniform vec3 uShT; uniform vec3 uHiT; uniform float uCon;
+uniform vec4 uCine; uniform vec4 uCineK; uniform vec3 uCineC;
 ${GLSL_BAYER}
 vec3 filmic(vec3 x){ x = max(x, 0.0); return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 void main(){
@@ -201,6 +202,16 @@ void main(){
   vec2 q = (vUv - 0.5) * vec2(1.0, 0.92);
   float vig = smoothstep(0.9, 0.3, length(q) * 1.25);
   c *= mix(1.0 - uGrade.z, 1.0, vig);
+  // Cinematics (43-cine.js): a ring around the beacon (uCine.xy, radius uCine.z in screen heights). Outside it the
+  // land dims to black (uCineK.x); its edge glows (y); inside, warm light floods (z).
+  if (uCineK.w > 0.5) {
+    vec2 cd = (vUv - uCine.xy) * vec2(uRes.x / uRes.y, 1.0);
+    float cr = length(cd), cR = uCine.z, inside = 1.0 - smoothstep(cR * 0.75, cR + 0.04, cr), cl = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    c = mix(c, vec3(cl) * 0.7, (1.0 - inside) * uCineK.x * 0.6);
+    c *= 1.0 - (1.0 - inside) * uCineK.x;
+    c += uCineC * exp(-abs(cr - cR) * 26.0) * step(0.001, cR) * uCineK.y * 0.2;
+    c *= 1.0 + uCineK.z * inside * uCineC * 0.5;
+  }
   c = filmic(c);
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   // Split toning per land: the shadows lean one way, the lit parts another (LOOK grade).
@@ -217,6 +228,7 @@ void main(){
     uGrade: { value: new THREE.Vector4(1.0, 0.92, 0.55, 1.0) }, uBloom: { value: new THREE.Vector3(0.35, 0.5, 28) },
     uLift: { value: new THREE.Vector3(0.010, 0.016, 0.030) }, uDither: { value: R.ditherOfs }, uRes: { value: new THREE.Vector2() },
     uShT: { value: new THREE.Vector3(1, 1, 1) }, uHiT: { value: new THREE.Vector3(1, 1, 1) }, uCon: { value: 0 },
+    uCine: { value: new THREE.Vector4() }, uCineK: { value: new THREE.Vector4() }, uCineC: { value: new THREE.Vector3(1, 1, 1) },
   });
 
   M.up = fsMat(`
@@ -299,7 +311,7 @@ function renderFrame() {
   u.tColor.value = T.bB.texture; u.uDir.value.set(1.6 / T.bB.width, 0); fsPass(M.blur, T.bB2);
   u.tColor.value = T.bB2.texture; u.uDir.value.set(0, 1.6 / T.bB.height); fsPass(M.blur, T.bB);
   u = M.comp.uniforms; u.tColor.value = T.dof.texture; u.tBloomA.value = T.bA.texture; u.tBloomB.value = T.bB.texture;
-  u.uGrade.value.x = R.exposure * (1 + FX.flash * .5); u.uGrade.value.w = R.fade; u.uGrade.value.z = .55 + .2 * mk; u.uRes.value.set(R.iw, R.ih);
+  u.uGrade.value.x = R.exposure * (1 + FX.flash * .5); u.uGrade.value.w = R.fade; u.uGrade.value.z = .55 + .2 * mk; u.uRes.value.set(R.iw, R.ih); CINE.post(u);
   fsPass(M.comp, T.final);
   u = M.up.uniforms; u.tColor.value = T.final.texture; u.uTex.value.set(R.iw, R.ih); u.uOut.value.set(R.dw, R.dh); u.uSeed.value = (SH.uTime.value * 60 % 1000) * 7.13;
   fsPass(M.up, null);

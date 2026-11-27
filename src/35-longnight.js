@@ -250,6 +250,7 @@ function procBiome(seed, i) {
   if (water === 2) { bio.bankGlow = 1; bio.vein = 1; bio.cracks = 1; } else if (D.key === 'ember' && rng() < .5) bio.vein = 1;
   if (weather === 'rain') { bio.wet = [rng.range(.42, .62), rng.range(.1, .16)]; if (rng() < .6) bio.lightning = rng.range(11, 20); }
   if (sea) { bio.sea = sea; bio.seaCol = [.008, .02, .026, .4, .46, .5].map((v, k) => v * wTint[k % 3]); if (A.lighthouse) bio.lighthouse = 1; if (weather === 'rain') bio.lightning = rng.range(9, 16); if (water === 4) bio.wat[0] = 4; }
+  { const ps = procSets(seed, i); bio.sets = ps.sets; bio.skip = ps.skip; } // set pieces (own random stream)
   PROC.cache.set(id, bio);
   if (PROC.cache.size > 48) PROC.cache.delete(PROC.cache.keys().next().value);
   return bio;
@@ -272,4 +273,117 @@ const PROC_ACCENT = {
     for (const pad of B.pads) { if (rng() < .7) continue; const a = rng() * TAU, x = pad.x + Math.cos(a) * 2.3, z = pad.z + Math.sin(a) * 2.3; if (X.free(x, z, .5, .3)) X.at(x, z, T => PROP.jar(T, rng), .6); }
   },
   storm(X) { const { rng, drop } = X; for (let k = 0; k < 4; k++) drop(T => PROP.driftwood(T, rng), 1.0, { far: 1.0 }); for (let k = 0; k < 5; k++) { const r = rng.range(.3, .7); drop(T => PROP.barnRock(T, rng, r), r * .9, { steep: true, roadMin: .3 }); } },
+};
+
+// ---- Set pieces for generated lands (round 9): each generated land gets two of these on top of its dress, and
+// leaves out two of the common props (bio.skip), so consecutive lands of The Long Night look clearly different.
+// The sets go round a shuffled cycle of all of them (procSets), two per land, so neighbours never share one.
+const PROC_SET_KEYS = ['standing', 'battlefield', 'lanterns', 'fallenKing', 'titanBones', 'camp', 'obelisks'];
+const PROC_SKIP_KEYS = ['well', 'statue', 'ribcage', 'walls', 'graveyard', 'carts'];
+function procSets(seed, i) {
+  const r = makeRng(Math.imul(seed + 31, 0x5BD1E995) ^ 0x7F4A7C15), n = PROC_SET_KEYS.length, p = PROC_SET_KEYS.slice();
+  for (let j = n - 1; j > 0; j--) { const q = Math.floor(r() * (j + 1)), t = p[j]; p[j] = p[q]; p[q] = t; }
+  const k = Math.max(0, i - BIOMES.length) * 2, r2 = makeRng(Math.imul(seed + 13, 0x27D4EB2F) ^ Math.imul(i + 7, 0x165667B1)), sk = PROC_SKIP_KEYS.slice();
+  const skip = {}; for (let j = 0; j < 2; j++) skip[sk.splice(Math.floor(r2() * sk.length), 1)[0]] = 1;
+  return { sets: [p[k % n], p[(k + 1) % n]], skip };
+}
+const PROC_SETS = {
+  // A ring of standing stones (a few fallen) round a low altar with a dull red seam.
+  standing(X) {
+    const { rng, drop } = X;
+    for (let n = 0, nn = rng.int(1, 2); n < nn; n++) drop(T => {
+      const k = rng.int(6, 9), R = rng.range(1.6, 2.1);
+      for (let i = 0; i < k; i++) {
+        if (rng() < .12) continue;
+        const a = i / k * TAU + rng.range(-.1, .1), h = rng.range(1.1, 2.1), c = mixC(COL.stoneD, COL.stone, rng() * .6), x = Math.cos(a) * R, z = Math.sin(a) * R;
+        if (rng() < .2) T.box(.42, .3, h * .9, x * 1.15, .14, z * 1.15, c, { l: L_ROCK, r: [0, -a + rng.range(-.4, .4), 0] });
+        else T.box(.45, h, .3, x, h / 2 - .12, z, c, { l: L_ROCK, r: [rng.range(-.08, .08), -a + HPI, rng.range(-.08, .08)], grad: [-h / 2, h * .2, .7] });
+      }
+      T.box(1.1, .35, .7, 0, .17, 0, mulC(COL.stoneD, .9), { l: L_MASON }); T.box(.06, .02, .5, 0, .355, 0, [.7, .1, .05], { emis: .25, jit: 0 });
+    }, 2.6, { far: 2.2 });
+  },
+  // An old battlefield: spears and swords standing in the ground, dropped shields, skulls.
+  battlefield(X) {
+    const { rng, drop } = X;
+    for (let n = 0; n < 5; n++) drop(T => {
+      for (let i = 0, m = rng.int(3, 6); i < m; i++) {
+        const x = rng.range(-.7, .7), z = rng.range(-.7, .7), r = [rng.range(-.35, .35), rng() * TAU, rng.range(-.35, .35)];
+        if (rng() < .55) { const h = rng.range(1.3, 2); T.cyl(.025, h, x, h / 2 - .25, z, COL.woodD, { n: 4, l: L_WOOD, r }); }
+        else { const h = rng.range(.7, 1.1); T.box(.08, h, .016, x, h / 2 - .15, z, COL.steel, { l: L_METAL, rough: .4, r }); T.box(.26, .04, .04, x, h - .2, z, COL.iron, { l: L_METAL, r }); }
+      }
+      if (rng() < .75) T.cyl(.3, .045, rng.range(-.4, .4), .03, rng.range(-.4, .4), mulC(rng() < .5 ? COL.clothR : COL.clothB, .8), { n: 8, l: L_WOOD, r: [rng.range(-.2, .2), 0, rng.range(-.2, .2)] });
+      if (rng() < .6) PROP.skull(T, rng.range(-.5, .5), .08, rng.range(-.5, .5), .12, rng() * TAU);
+    }, .9, { far: 1.0 });
+  },
+  // The keepers' old lanterns along the road, cold now; one in three still holds an ember. Some have fallen.
+  lanterns(X) {
+    const { rng, drop, beside, B } = X;
+    for (let k = 0; k < 7; k++) {
+      const p = beside(6, B.L - 6, .95, .35); if (!p) continue;
+      const fallen = rng() < .28, lit = rng() < .35;
+      drop(T => {
+        T.box(.16, .22, .16, 0, .11, 0, COL.stoneD, { l: L_MASON }); T.cyl(.04, 2.1, 0, 1.15, 0, COL.iron, { n: 5, l: L_METAL });
+        T.box(.5, .04, .04, .2, 2.15, 0, COL.iron, { l: L_METAL }); T.box(.04, .12, .04, .42, 2.08, 0, COL.iron, { l: L_METAL });
+        T.box(.22, .3, .22, .42, 1.87, 0, mulC(COL.iron, .8), { l: L_METAL }); T.cone(.17, .14, .42, 2.08, 0, COL.iron, { n: 4, l: L_METAL, r: [0, PI / 4, 0] });
+        T.box(.15, .2, .15, .42, 1.87, 0, lit ? [1, .45, .12] : [.06, .05, .05], lit ? { emis: .5, jit: 0 } : { jit: 0 });
+      }, .45, fallen ? { at: p, r: [0, -p[2] + rng.range(-.6, .6), 1.45], dy: .12 } : { at: p, ry: -p[2] + (p[3] > 0 ? PI : 0) });
+    }
+  },
+  // A fallen king of stone: a great crowned head lying on its side, half sunk, and a broken hand.
+  fallenKing(X) {
+    const { rng, drop } = X, c = mixC(COL.stone, COL.stoneL, .25), cd = mulC(c, .7);
+    drop(T => {
+      T.sph(.95, 0, 1, 0, c, { l: L_ROCK, sc: [.92, 1.15, .95], smooth: false, w: 9, h: 7 });
+      T.box(.95, .16, .3, 0, 1.35, .72, c, { l: L_ROCK }); T.box(.16, .45, .22, 0, 1.0, .9, c, { l: L_ROCK });
+      for (const s of [-1, 1]) T.box(.22, .1, .1, s * .3, 1.2, .86, COL.black, { jit: 0 });
+      T.box(.5, .07, .1, 0, .62, .82, cd, { l: L_ROCK });
+      T.cyl(.82, .3, 0, 1.95, 0, mulC(COL.brass, .6), { n: 9, l: L_METAL, rough: .6 });
+      for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; T.cone(.13, .45, Math.cos(a) * .72, 2.3, Math.sin(a) * .72, mulC(COL.brass, .6), { n: 4, l: L_METAL, rough: .6 }); }
+      for (let i = 0; i < 5; i++) { const a = rng() * TAU; T.rock(rng.range(.2, .4), Math.cos(a) * 1.1, .1, Math.sin(a) * 1.1, mixC(COL.stoneD, c, rng())); }
+    }, 1.9, { far: 2.4, r: [0, rng() * TAU, 1.25], dy: -.35 });
+    drop(T => {
+      T.box(.9, .32, .7, 0, .16, 0, c, { l: L_ROCK });
+      for (let i = 0; i < 4; i++) { const h = rng.range(.5, .95); T.cyl(.11, h, -.33 + i * .22, .3 + h / 2, .2, c, { n: 6, l: L_ROCK, r: [rng.range(-.5, .1), 0, rng.range(-.15, .15)] }); }
+      T.cyl(.12, .55, .5, .3, -.1, c, { n: 6, l: L_ROCK, r: [0, 0, -1] });
+    }, 1.0, { far: 2.0 });
+  },
+  // The bones of something huge: a horned skull with its jaw in the dirt and a long curl of spine and ribs.
+  titanBones(X) {
+    const { rng, drop } = X, b = COL.bone, bd = COL.boneD;
+    drop(T => {
+      T.sph(.85, 0, .62, 0, b, { l: L_BONE, sc: [1.05, .8, 1.25], smooth: false, w: 8, h: 6 });
+      for (const s of [-1, 1]) { T.sph(.2, s * .36, .78, .82, COL.black, { jit: 0 }); T.cone(.18, 1.3, s * .85, 1.2, -.15, bd, { n: 5, l: L_BONE, r: [0, 0, -s * .85] }); }
+      T.box(1.1, .18, .75, 0, .1, .85, mulC(b, .85), { l: L_BONE, r: [.15, 0, 0] });
+      for (let i = 0; i < 6; i++) T.cone(.06, .2, -.45 + i * .18, .25, 1.15, b, { n: 4, r: [PI, 0, 0] });
+      let x = -1.1, z = 0, a = PI;
+      for (let i = 0; i < 9; i++) {
+        a += rng.range(-.25, .35); x += Math.cos(a) * .42; z += Math.sin(a) * .42;
+        T.cyl(.17 - i * .008, .22, x, .14, z, mulC(b, .9), { n: 6, l: L_BONE, r: [0, -a, HPI] });
+        if (i % 2 === 0 && i < 8) for (const s of [-1, 1]) { const nx = -Math.sin(a) * s, nz = Math.cos(a) * s; T.seg([x, .2, z], [x + nx * .7, .75 - i * .03, z + nz * .7], .06, .7, b, { l: L_BONE }); T.seg([x + nx * .7, .75 - i * .03, z + nz * .7], [x + nx * 1.05, .02, z + nz * 1.05], .045, .6, bd, { l: L_BONE }); }
+      }
+    }, 3.0, { far: 2.6 });
+  },
+  // An abandoned camp: tents, a cold fire ring, crates and a barrel.
+  camp(X) {
+    const { rng, drop } = X;
+    drop(T => {
+      for (let i = 0, n = rng.int(2, 3); i < n; i++) {
+        const a = i * 2.2 + rng() * .5, x = Math.cos(a) * 1.35, z = Math.sin(a) * 1.35, cc = mulC(rng() < .3 ? COL.clothR : COL.clothT, .6 + .3 * rng()), tall = rng.range(1.0, 1.35);
+        T.cone(.8, tall, x, tall / 2, z, cc, { n: 4, l: L_CLOTH, r: [0, -a + PI / 4, rng() < .3 ? .12 : 0] }); T.cyl(.03, tall + .25, x, (tall + .25) / 2, z, COL.woodD, { n: 4, l: L_WOOD });
+      }
+      for (let i = 0; i < 7; i++) { const a = i / 7 * TAU; T.rock(.13, Math.cos(a) * .42, .05, Math.sin(a) * .42, mixC(COL.stoneD, COL.stone, rng())); }
+      T.cyl(.3, .03, 0, .02, 0, [.05, .04, .04], { n: 8, jit: 0 }); for (const r of [.5, -.7]) T.box(.6, .08, .08, 0, .07, 0, mulC(COL.bark, .5), { l: L_WOOD, r: [0, r, 0] });
+      PROP.crate(T, .2, 0, -1.05, .45, rng, rng()); PROP.barrel(T, -.35, 0, -1.0, .9, rng);
+    }, 2.4, { far: 2.0 });
+  },
+  // Black obelisks with runes that still glow faintly in the land's own colour.
+  obelisks(X) {
+    const { rng, drop, B } = X, rc = C(B.bio.wispHex || 0x70ffb0);
+    for (let k = 0, n = rng.int(3, 5); k < n; k++) drop(T => {
+      const h = rng.range(2.3, 3.6), c = mulC(COL.basaltL, .9 + .2 * rng());
+      T.box(.8, .3, .8, 0, .15, 0, COL.stoneD, { l: L_MASON });
+      T.cyl(.32, h, 0, .3 + h / 2, 0, c, { n: 4, rt: .6, l: L_ROCK, r: [0, PI / 4, 0] }); T.cone(.193, .42, 0, .3 + h + .21, 0, c, { n: 4, l: L_ROCK, r: [0, PI / 4, 0] });
+      for (let j = 0; j < 4; j++) { const y = .75 + j * (h - .7) / 4, u = (y - .3) / h, f = lerp(.226, .136, u) + .008; T.box(.09, .15, .015, 0, y, f, rc, { emis: .35, jit: 0 }); if (rng() < .5) T.box(.015, .15, .09, f, y + .1, 0, rc, { emis: .35, jit: 0 }); }
+    }, .65, { far: 1.4 });
+  },
 };

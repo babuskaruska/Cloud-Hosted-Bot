@@ -377,19 +377,22 @@ function scatterProps(B) {
   // A generated land (35-longnight.js) dresses as its base land (bio.dress), plus a few of its donor's props (bio.accent).
   const dress = BIOME_DRESS[bio.dress] ? bio.dress : BIOME_DRESS[bio.key] ? bio.key : 'ashen';
   if (BIOME_DRESS[dress + 'First']) BIOME_DRESS[dress + 'First'](X);
+  // A generated land: its two set pieces first, and two of the common props below left out (bio.sets, bio.skip).
+  const sk = bio.skip || {};
+  B.setSpots = []; if (bio.sets && typeof PROC_SETS !== 'undefined') for (const k of bio.sets) if (PROC_SETS[k]) { const n0 = placed.length; PROC_SETS[k](X); for (let j = n0; j < placed.length; j++) B.setSpots.push([k, placed[j][0], placed[j][1]]); }
   if (!bio.noRuin) drop(T => PROP.towerRuin(T, rng), 2.9, { far: 3.6 });
-  drop(T => PROP.well(T, rng), 1.3, { near: 5.5, far: 2.6 });
-  drop(T => PROP.statue(T, rng), 1.2, { near: 6, far: 2.4 });
-  drop(T => PROP.ribcage(T, rng), 2.4, { far: 2.8 });
-  for (let k = 0; k < 3; k++) { const len = rng.range(4, 7); drop(T => PROP.wallRun(T, rng, len, rng.range(1.8, 3.2)), len * .5, { far: 1.6 }); }
-  { const g = bio.noRuin ? null : find(3.2, { far: 3.4 }); if (g) {
+  if (!sk.well) drop(T => PROP.well(T, rng), 1.3, { near: 5.5, far: 2.6 });
+  if (!sk.statue) drop(T => PROP.statue(T, rng), 1.2, { near: 6, far: 2.4 });
+  if (!sk.ribcage) drop(T => PROP.ribcage(T, rng), 2.4, { far: 2.8 });
+  if (!sk.walls) for (let k = 0; k < 3; k++) { const len = rng.range(4, 7); drop(T => PROP.wallRun(T, rng, len, rng.range(1.8, 3.2)), len * .5, { far: 1.6 }); }
+  { const g = bio.noRuin || sk.graveyard ? null : find(3.2, { far: 3.4 }); if (g) {
       const ry = rng() * TAU, cs = Math.cos(ry), sn = Math.sin(ry);
       for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) { if (rng() < .2) continue; const lx = (c - 1.5) * 1.15 + rng.range(-.15, .15), lz = (r - 1) * 1.5 + rng.range(-.15, .15), T = new Soup(); PROP.grave(T, rng); B.put(T, g[0] + lx * cs + lz * sn, g[1] - lx * sn + lz * cs, { ry: ry + rng.range(-.2, .2) }); }
       for (const [lx, lz, a, len] of [[0, -2.5, 0, 4.6], [-2.8, -.2, HPI, 4.2], [2.8, .5, HPI, 3]]) { const T = new Soup(); PROP.fence(T, rng, len); B.put(T, g[0] + lx * cs + lz * sn, g[1] - lx * sn + lz * cs, { ry: ry + a }); }
       const T = new Soup(); PROP.tree(T, rng, 3.6); B.put(T, g[0] + 2.3 * cs - 2.0 * sn, g[1] - 2.3 * sn - 2.0 * cs, {});
       placed.push([g[0], g[1], 3.2]);
     } }
-  for (let k = 0; k < 2; k++) { const p = beside(10, B.L - 8, 1.25, 1.1); if (p) drop(T => PROP.cart(T, rng, k === 1), 1.1, { at: p, ry: -p[2] + rng.range(-.3, .3), r: k === 1 ? [0, -p[2] + .4, .22] : undefined }); }
+  if (!sk.carts) for (let k = 0; k < 2; k++) { const p = beside(10, B.L - 8, 1.25, 1.1); if (p) drop(T => PROP.cart(T, rng, k === 1), 1.1, { at: p, ry: -p[2] + rng.range(-.3, .3), r: k === 1 ? [0, -p[2] + .4, .22] : undefined }); }
   for (let k = 0; k < 4; k++) { const p = beside(8, B.L - 6, .75, .3); if (p) { const len = rng.range(2.6, 4.2); drop(T => PROP.palisade(T, rng, len), 1.0, { at: p, ry: -p[2] }); } }
   for (let k = 0; k < 4; k++) { const p = beside(8, B.L - 6, 1.0, .4); if (p) { const len = rng.range(2.5, 4.5); drop(T => PROP.fence(T, rng, len), 1.2, { at: p, ry: -p[2] + rng.range(-.15, .15) }); } }
   for (let k = 0; k < 4; k++) { const p = beside(8, B.L - 5, .8, .25); if (p) drop(T => PROP.banner(T, rng, k & 1 ? COL.clothR : COL.clothB), .3, { at: p, ry: -p[2] + HPI * p[3] }); }
