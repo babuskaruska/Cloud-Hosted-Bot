@@ -29,6 +29,17 @@ const ACH = [
   { id: 'daily', name: 'Koidik', tip: 'Lõpeta üks päeva väljakutse.', icon: 'hourglass' },
   { id: 'tree10', name: 'Juurdunud', tip: 'Õpi Hoidja puus 10 taset.', icon: 'ember' },
   { id: 'treemax', name: 'Täiskasvanud', tip: 'Õpi Hoidja puus kõik oskused lõpuni.', icon: 'star' },
+  // Round 13: stars, Act II, difficulty and gold.
+  { id: 'star3', name: 'Kolm tähte', tip: 'Saa ühel maal kolm tähte.', icon: 'star' },
+  { id: 'stars18', name: 'Tähistaevas', tip: 'Saa esimese vaatuse kõigil maadel kolm tähte.', icon: 'star' },
+  { id: 'act2', name: 'Öö algab', tip: 'Jõua teise vaatusse.', icon: 'moon' },
+  { id: 'act2win', name: 'Koit', tip: 'Läbi teine vaatus.', icon: 'lantern' },
+  { id: 'stars36', name: 'Kõik tähed', tip: 'Saa mõlema vaatuse kõigil maadel kolm tähte.', icon: 'crown' },
+  { id: 'brave', name: 'Vapper', tip: 'Kaitse maa raskusel Raske või Õudne.', icon: 'shield' },
+  { id: 'dread', name: 'Õudusteta', tip: 'Kaitse maa raskusel Õudne.', icon: 'skull' },
+  { id: 'combo50', name: 'Kuldne kombo', tip: 'Saa kombo 50.', icon: 'coin' },
+  { id: 'sacks', name: 'Kotipüüdja', tip: 'Püüa kinni 10 kullakotti.', icon: 'coin' },
+  { id: 'miner', name: 'Kullakaevur', tip: 'Teeni kaevandustega ühel maal 400 kulda.', icon: 'coin' },
 ];
 const ACH_BY = {}; for (const a of ACH) ACH_BY[a.id] = a;
 const ACHQ = []; // toasts waiting: { a, t }
@@ -52,6 +63,16 @@ function achLandClear() {
   if (G.heat >= 3) achUnlock('heat3'); if (G.heat >= 5) achUnlock('heat5'); if (G.heat >= 10) achUnlock('heat10');
   if (Array.isArray(G.mods) && typeof MUTATORS === 'object' && G.mods.filter(k => MUTATORS[k] && MUTATORS[k].curse).length >= 3) achUnlock('cursed');
   if (META.stats.bosses >= 10) achUnlock('giants');
+  if (G.diff === 'raske' || G.diff === 'oudne') achUnlock('brave'); if (G.diff === 'oudne') achUnlock('dread');
+  if (typeof ECON === 'object' && ECON.mined >= 400) achUnlock('miner');
+  if (G.mode === 'campaign' && G.level === CAMPAIGN_LANDS * 2 - 1) achUnlock('act2win');
+}
+// After a campaign land's stars are set (metaLandClear).
+function achStars() {
+  let a1 = true, a2 = true;
+  for (let i = 0; i < ACT_LANDS; i++) { if (landStars(i) < 3) a1 = false; if (landStars(i + CAMPAIGN_LANDS) < 3) a2 = false; }
+  if (Object.keys(META.stars).some(k => META.stars[k] >= 3)) achUnlock('star3');
+  if (a1) achUnlock('stars18'); if (a1 && a2) achUnlock('stars36');
 }
 function achTree() {
   let n = 0, all = true; for (const u of UPGRADES) { const l = META.up[u.key] || 0; n += l; if (l < u.max) all = false; }
@@ -64,6 +85,7 @@ function achTick(dt) {
   const S = META.stats, runSlain = G.runStats ? G.slain - G.runStats.slain0 : 0;
   if (S.slain + runSlain >= 1000) achUnlock('slay1k'); if (S.slain + runSlain >= 10000) achUnlock('slay10k');
   if (S.elites >= 100) achUnlock('elites');
+  if (act2Land()) achUnlock('act2');
   if (nightMode(G.mode)) { const d = nightDepth(); if (d >= 3) achUnlock('night3'); if (d >= 10) achUnlock('night10'); }
   let br = 0; for (const t of G.towers) { if (!t.alive) continue; if (t.branch) br++; if ((t.oc || 0) >= OC_MAX) achUnlock('oc'); }
   if (br >= 4) achUnlock('branches');

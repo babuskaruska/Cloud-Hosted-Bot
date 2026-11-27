@@ -9,6 +9,9 @@ const TOWER = {
   spire: { name: 'Tormitorn', short: 'Torm', icon: 'spire', cost: [110, 120, 180], range: [5.5, 6.0, 6.5], dmg: [17, 25, 35], jumps: [3, 4, 6], rate: [2.3, 2.1, 1.9], slow: [.36, .42, .48], slowT: [1.3, 1.5, 1.7], air: true, ground: true, light: [16, 20, 26], desc: ['Aeglustav ahelvälk.', 'Tabab ka lendajaid.'] },
   guard: { name: 'Valvepost', short: 'Valvurid', icon: 'guard', cost: [80, 90, 150], range: [3.4, 3.7, 4.0], n: [2, 3, 3], hp: [62, 90, 135], dmg: [7, 10, 15], rate: [7, 6, 5], air: false, ground: true, light: [55, 70, 90], desc: ['Sõdurid, kes tõkestavad', 'tee ja võitlevad.'] },
 };
+// Round 13: the gold mine. It never attacks (air and ground false, no targets): at the end of every wave it pays
+// gold[lvl] (scaled per land, mineGold in 69-economy.js). Three levels, no branch. Ash's blueprint('mine', lvl) draws it.
+TOWER.mine = { name: 'Kullakaevandus', short: 'Kaevandus', icon: 'coin', cost: [100, 120, 180], gold: [25, 50, 85], range: [1.4, 1.6, 1.8], rate: [1, 1, 1], air: false, ground: false, mine: true, light: [40, 55, 70], desc: ['Annab iga laine lõpus kulda.', 'Ei ründa. Kuni 3 maa kohta.'] };
 // Branches: a max-level tower (lvl 2) can specialise into one of two branches (lvl 3, t.branch).
 // Array stats in a branch become index 3 of the tower's own stat arrays (see branchDef); other keys are traits.
 // cost is the base price; branchCost() scales it per land. title names the tower once it has the branch.
@@ -38,6 +41,8 @@ function branchDef(kind, key) {
   return d;
 }
 const TOWER_KINDS = ['archer', 'bombard', 'spire', 'guard'];
+// What the build menu offers: the four fighting towers and the gold mine (keys 1-5).
+const BUILD_KINDS = TOWER_KINDS.concat(['mine']);
 // Most monsters alive at once. Phones get a smaller crowd.
 const MAX_ALIVE = (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 190 : 260;
 
@@ -587,9 +592,12 @@ class Tower {
     if (this.kind === 'archer') this.updArcher(dt, d, lvl);
     else if (this.kind === 'bombard') this.updBombard(dt, d, lvl);
     else if (this.kind === 'spire') this.updSpire(dt, d, lvl);
+    else if (this.kind === 'mine') this.updMine(dt);
     else this.updGuard(dt, d, lvl);
     TOWER_STUN = false;
   }
+  // The gold mine: nothing to aim; a glint of gold now and then (the effects stream only). It pays in econWaveEnd.
+  updMine(dt) { if (this.em.on > .5 && frnd() < dt * (1.2 + this.lvl)) fxPart(this.x + frr(-.6, .6), this.y + frr(.5, 1.6), this.z + frr(-.6, .6), 0, frr(.4, .9), 0, frr(.4, .8), frr(.04, .07), 2.4, 1.8, .5, { drag: 1 }); }
   updArcher(dt, d, lvl) {
     const tgt = d.heavy ? findHeavy(this.x, this.z, d.range[lvl]) : findTarget(this.x, this.z, d.range[lvl], true, true, 0, d.airFirst);
     for (const a of this.archers) {
