@@ -6,7 +6,7 @@ const R = {
   sub: new THREE.Vector2(), ditherOfs: new THREE.Vector2(),
   focusZ: 60, fade: 0, exposure: 1.0,
   rt: {}, mats: {}, fsScene: null, fsCam: null, fsMesh: null,
-  NL: 12, lightPos: [], lightCol: [], tDraw: 0,
+  NL: 12, lightPos: [], lightCol: [], tDraw: 0, skipDraw: false, hw: 0, hh: 0, cu0: 0, cv0: 0,
 };
 
 const FS_VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
@@ -29,6 +29,21 @@ function initRenderer() {
   r.toneMapping = THREE.NoToneMapping;
   r.setClearColor(new THREE.Color(0.0035, 0.005, 0.011), 1);
   r.info.autoReset = false;
+  // Shadow maps are drawn one light at a time, so each tower spotlight draws only the monster batches with parts
+  // standing in its light (PartBatch.mask, set by planDraw) and leaves out the rest; the moon and the beacon draw
+  // every batch with shadow-casting parts. The shadow pass itself only draws a batch's leading tiers (PartBatch.hook).
+  { const sm = r.shadowMap, draw = sm.render, one = [null];
+    sm.render = function (lights, scene, cam) {
+      if (!lights.length) return;
+      if (!R.opt) { draw.call(this, lights, scene, cam); return; }
+      for (const l of lights) {
+        if (!l.shadow.autoUpdate && !l.shadow.needsUpdate) continue;
+        const j = l.isSpotLight ? l.userData.spot : -1;
+        for (const b of PartBatch.all) b.mesh.castShadow = b.cast && (j < 0 ? b.n + b.nb > 0 : b.n > 0 && (b.mask >> j & 1) === 1);
+        one[0] = l; draw.call(this, one, scene, cam);
+      }
+    };
+  }
   R.scene = new THREE.Scene();
   R.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 220);
   R.scene.add(R.cam);

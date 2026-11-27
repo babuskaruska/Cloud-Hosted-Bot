@@ -12,6 +12,7 @@ function applyCamera() {
   R.sub.set((u - us) / R.px, (v - vs) / R.px);
   R.ditherOfs.set(((Math.round(us / R.px) % 8) + 8) % 8, ((Math.round(vs / R.px) % 8) + 8) % 8);
   _ct.addScaledVector(_cr, us - u).addScaledVector(_cu, vs - v);
+  R.cu0 = us; R.cv0 = vs; R.hw = vh * aspect / 2; R.hh = vh / 2;
   cam.left = -vh * aspect / 2; cam.right = vh * aspect / 2; cam.top = vh / 2; cam.bottom = -vh / 2; cam.near = 1; cam.far = 210;
   cam.position.copy(_ct).addScaledVector(_cd, CAM.dist); cam.up.set(0, 1, 0); cam.lookAt(_ct);
   cam.updateProjectionMatrix(); cam.updateMatrixWorld(true);
@@ -74,6 +75,42 @@ function sfx(name, x, z, gain = 1, p = 0) {
   AU.play(name, clamp(u / ((R.viewW || 40) * .5), -1, 1) * .75, gain * clamp(1.12 - Math.hypot(dx, dz) / 46, .4, 1) * (.72 + .28 * CAM.zoom), p);
 }
 
+// Draw plan for the monsters, made each step before they are drawn. Visual only: it never changes the simulation.
+// - Off screen (with a margin for shadows and tall models) or an earlier step of a 2x/3x frame: not drawn (_lod 2).
+// - Shadow tiers (see PartBatch): a monster only draws into the shadow maps of the tower spotlights whose pool of
+//   light it stands in (_smask), and one outside all of them skips the spotlight maps. In a
+//   crowd, tiny monsters cast no shadow and in a packed spot only the first two per 1.25-unit cell do; the rest
+//   stand in their neighbours' shadow anyway. Big monsters and bosses always cast.
+const DRAW_CROWD = 48, _cellN = new Map(), _spotP = [];
+function planDraw() {
+  const mons = G.mons, skip = R.skipDraw, cam = R.opt && R.hw > 0, u0 = R.cu0, v0 = R.cv0, hw = R.hw + 3, hh = R.hh + 3.5;
+  const crx = Math.cos(CAM.yaw), crz = -Math.sin(CAM.yaw), se = Math.sin(CAM.elev), cux = -se * Math.sin(CAM.yaw), cuy = Math.cos(CAM.elev), cuz = -se * Math.cos(CAM.yaw);
+  let on = 0;
+  for (const m of mons) {
+    let off = skip;
+    if (!off && cam) { const u = m.x * crx + m.z * crz - u0, v = m.x * cux + m.y * cuy + m.z * cuz - v0; off = u > hw || u < -hw || v > hh || v < -hh; }
+    m._lod = off ? 2 : 0; m._tier = 0; m._smask = 255;
+    if (!off && (m.vis || m.fly)) on++;
+  }
+  if (skip) return; // a hidden step keeps the last plan's crowd state
+  DRAW.onScreen = on; DRAW.crowd = R.opt && on > DRAW_CROWD;
+  FX.keep = R.opt ? (R.lite ? .65 : R.quality < .75 ? .85 : 1) * (1 - .35 * sat((on - 70) / 110)) : 1;
+  if (!R.opt) return;
+  // A spotlight lights a disc of ground under its tower: radius = height above the ground x tan(cone angle).
+  _spotP.length = 0; LT.spots.forEach((s, j) => { const l = s.l, p = l.position; if (l.intensity > 0) { const r = clamp((p.y - G.B.heightAt(p.x, p.z)) * Math.tan(l.angle) + 1.2, 2, 16); _spotP.push(p, j, r * r); } });
+  const crowd = DRAW.crowd; if (crowd) _cellN.clear();
+  for (const m of mons) {
+    if (m._lod) continue;
+    if (crowd && !m.def.boss && m.rad < .55) {
+      if (m.rad < .22) { m._tier = 2; continue; }
+      const k = (Math.floor(m.x * .8) + 512) * 1024 + Math.floor(m.z * .8) + 512, c = _cellN.get(k) || 0; _cellN.set(k, c + 1);
+      if (c >= 2) { m._tier = 2; continue; }
+    }
+    let mask = 0; for (let i = 0; i < _spotP.length; i += 3) { const p = _spotP[i]; if (dist2(m.x, m.z, p.x, p.z) < _spotP[i + 2]) mask |= 1 << _spotP[i + 1]; }
+    m._smask = mask; m._tier = mask ? 0 : 1;
+  }
+}
+
 const _mm = new THREE.Matrix4(), _mq = new THREE.Quaternion(), _mv = new THREE.Vector3(), _ms = new THREE.Vector3(1, 1, 1), _torch = [];
 function step(rdt) {
   G.slowmo = Math.max(0, G.slowmo - rdt);
@@ -91,7 +128,7 @@ function step(rdt) {
     updateUnits(dt);
     for (let i = G.mons.length - 1; i >= 0; i--) if (G.mons[i].dead) swapRemove(G.mons, i);
     updateProjectiles(dt); updateHazards(dt);
-    const td = performance.now();
+    const td = performance.now(); planDraw();
     for (const m of G.mons) drawMonster(m, G.t);
     for (const f of G.men) if (!f.dead) drawFootman(f);
     R.tDraw += performance.now() - td;
@@ -133,12 +170,35 @@ function step(rdt) {
   if (AU.ready) { let lit = 0; for (const t of G.towers) if (t.alive && t.em.on > .5 && t.kind !== 'spire') lit++; AU.setAmbience(sat((.3 + lit * .06) * LT.beaconOn + .05), sat((G.phase === 'play' ? .5 : .85) * B.bio.wind), G.bossAlive && G.phase === 'play' ? 1 : 0); AU.update(rdt); }
 }
 
-let _last = 0, _acc = 0, _frames = 0, _slow = 0, _fast = 0, _hold = 0, _back = 12;
+let _last = 0, _acc = 0, _frames = 0, _slow = 0, _fast = 0, _hold = 0, _back = 12, _check = null, _noGain = 0, _noBack = 30;
+// Automatic resolution scaling (graphics Auto; HASH.noscale turns it off). Every 2 s: two slow windows (> 22.5 ms a
+// frame) drop the internal resolution a step (down to .55, then "lite": a smaller moon shadow map and no depth of
+// field); three fast ones (< 18.6 ms) raise it again after a hold that doubles each time it drops. Each drop is
+// checked over the next window: if the frame time did not improve by 8 % the drop bought nothing (the frame rate is
+// capped, as in iPhone Low Power Mode, or the work is on the CPU), so it is undone and drops pause for a while.
+function setLite(on) {
+  if (!!R.lite === on) return; R.lite = on ? 1 : 0;
+  const s = on ? 1024 : LT.moonMap; LT.moon.shadow.mapSize.set(s, s); if (LT.moon.shadow.map) { LT.moon.shadow.map.dispose(); LT.moon.shadow.map = null; }
+}
+function autoScale(ms) {
+  if (ms > 22.5) { _slow++; _fast = 0; } else { _slow = 0; _fast = ms < 18.6 ? _fast + 1 : 0; }
+  _hold -= 2; _noGain -= 2;
+  if (_check) {
+    const c = _check; _check = null;
+    if (ms > c.ms * .92) { if (c.lite) setLite(false); else { R.quality = c.q; resizeRenderer(); } _noGain = _noBack; _noBack = Math.min(600, _noBack * 2); _slow = 0; return; }
+  }
+  if (_slow >= 3 && R.quality <= .55 && !R.lite && _noGain <= 0) { setLite(true); _slow = 0; _check = { ms, lite: true }; }
+  else if (_slow >= 2 && R.quality > .55 && _noGain <= 0) { _check = { ms, q: R.quality }; R.quality = Math.max(.55, R.quality - .15); resizeRenderer(); _slow = 0; _hold = _back; _back = Math.min(480, _back * 2); }
+  else if (_fast >= 3 && _hold <= 0) {
+    if (R.lite) { setLite(false); _fast = 0; }
+    else if (R.quality < 1) { R.quality = Math.min(1, R.quality + .15); resizeRenderer(); _fast = 0; }
+  }
+}
 function frame(now) {
   requestAnimationFrame(frame);
   if (now - _last < 10.5) return;
   const raw = (now - _last) / 1000, rdt = Math.min(.05, Math.max(.001, raw)); _last = now; R.frameDt = rdt;
-  if (G.paused) { FX.shake = 0; updateShake(rdt); updateCamera(rdt); UI.update(rdt); AU.update(rdt); } else for (let i = 0; i < G.speed; i++) step(rdt);
+  if (G.paused) { FX.shake = 0; updateShake(rdt); updateCamera(rdt); UI.update(rdt); AU.update(rdt); } else { for (let i = 0; i < G.speed; i++) { R.skipDraw = i < G.speed - 1; step(rdt); } R.skipDraw = false; }
   R.fade = Math.min(1, R.fade + rdt * 1.6);
   applyCamera(); renderFrame(); UI.draw();
   if (document.hidden || raw > .25) { _acc = 0; _frames = 0; return; }
@@ -146,13 +206,7 @@ function frame(now) {
   if (_acc >= 2) {
     const ms = _acc / _frames * 1000;
     R.fpsText = (1000 / ms).toFixed(0) + ' fps  ' + R.iw + 'x' + R.ih + '  calls ' + R.renderer.info.render.calls + '  mons ' + G.mons.length;
-    if (ms > 22.5) { _slow++; _fast = 0; } else { _slow = 0; _fast = ms < 18.6 ? _fast + 1 : 0; }
-    _hold -= _acc;
-    if (!HASH.noscale) {
-      if (_slow >= 3 && R.quality <= .55 && !R.lite) { R.lite = 1; _slow = 0; LT.moon.shadow.mapSize.set(1024, 1024); if (LT.moon.shadow.map) { LT.moon.shadow.map.dispose(); LT.moon.shadow.map = null; } }
-      if (_slow >= 2 && R.quality > .55) { R.quality = Math.max(.55, R.quality - .15); resizeRenderer(); _slow = 0; _hold = _back; _back = Math.min(480, _back * 2); }
-      else if (_fast >= 3 && R.quality < 1 && _hold <= 0) { R.quality = Math.min(1, R.quality + .15); resizeRenderer(); _fast = 0; }
-    }
+    if (!HASH.noscale) autoScale(ms); else if (R.lite) setLite(false);
     _acc = 0; _frames = 0;
   }
 }
@@ -181,7 +235,7 @@ function boot() {
   document.addEventListener('visibilitychange', () => { AU.setPaused(document.hidden); UI.dropTouches(); if (!document.hidden) { _last = performance.now(); UI.keepAwake(); } });
   window.addEventListener('blur', () => UI.dropTouches());
   for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => setTimeout(resizeRenderer, 60));
-  window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, render() { applyCamera(); renderFrame(); }, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
+  window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, render() { applyCamera(); renderFrame(); }, autoScale, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
   if (HASH.k) G.k = +HASH.k;
   if (HASH.ff) { const n = Math.round(+HASH.ff * 30); for (let i = 0; i < n; i++) step(1 / 30); CAM.sx = CAM.fx; CAM.sz = CAM.fz; R.fade = 1; }
   if (HASH.phase) setPhase(HASH.phase);

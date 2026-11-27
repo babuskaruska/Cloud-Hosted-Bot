@@ -501,7 +501,7 @@ const R = {
   sub: new THREE.Vector2(), ditherOfs: new THREE.Vector2(),
   focusZ: 60, fade: 0, exposure: 1.0,
   rt: {}, mats: {}, fsScene: null, fsCam: null, fsMesh: null,
-  NL: 12, lightPos: [], lightCol: [], tDraw: 0,
+  NL: 12, lightPos: [], lightCol: [], tDraw: 0, skipDraw: false, hw: 0, hh: 0, cu0: 0, cv0: 0,
 };
 
 const FS_VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
@@ -524,6 +524,21 @@ function initRenderer() {
   r.toneMapping = THREE.NoToneMapping;
   r.setClearColor(new THREE.Color(0.0035, 0.005, 0.011), 1);
   r.info.autoReset = false;
+  // Shadow maps are drawn one light at a time, so each tower spotlight draws only the monster batches with parts
+  // standing in its light (PartBatch.mask, set by planDraw) and leaves out the rest; the moon and the beacon draw
+  // every batch with shadow-casting parts. The shadow pass itself only draws a batch's leading tiers (PartBatch.hook).
+  { const sm = r.shadowMap, draw = sm.render, one = [null];
+    sm.render = function (lights, scene, cam) {
+      if (!lights.length) return;
+      if (!R.opt) { draw.call(this, lights, scene, cam); return; }
+      for (const l of lights) {
+        if (!l.shadow.autoUpdate && !l.shadow.needsUpdate) continue;
+        const j = l.isSpotLight ? l.userData.spot : -1;
+        for (const b of PartBatch.all) b.mesh.castShadow = b.cast && (j < 0 ? b.n + b.nb > 0 : b.n > 0 && (b.mask >> j & 1) === 1);
+        one[0] = l; draw.call(this, one, scene, cam);
+      }
+    };
+  }
   R.scene = new THREE.Scene();
   R.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 220);
   R.scene.add(R.cam);
@@ -2058,28 +2073,32 @@ function initLights() {
   const S = R.scene;
   LT.hemi = new THREE.HemisphereLight(0x6d83bd, 0x1c1f2a, 1.15); S.add(LT.hemi);
   const sm = window.matchMedia && matchMedia('(pointer: coarse)').matches ? .75 : 1;
-  const moon = LT.moon = new THREE.DirectionalLight(0xa9c0f6, 1.55); moon.castShadow = true; moon.shadow.mapSize.set(2048 * sm, 2048 * sm);
+  const moon = LT.moon = new THREE.DirectionalLight(0xa9c0f6, 1.55); moon.castShadow = true; moon.shadow.mapSize.set(2048 * sm, 2048 * sm); LT.moonMap = 2048 * sm;
   const sc = moon.shadow.camera; sc.left = -31; sc.right = 31; sc.top = 31; sc.bottom = -31; sc.near = 5; sc.far = 130; moon.shadow.bias = -0.0005; moon.shadow.normalBias = 0.06;
   S.add(moon); S.add(moon.target);
   LT.fill = new THREE.DirectionalLight(0x4a5f96, 0.3); LT.fill.position.set(30, 14, 34); S.add(LT.fill);
   const b = LT.beacon = new THREE.PointLight(0xff8a3a, 0, 80, 2); b.castShadow = true; b.shadow.mapSize.set(1024 * sm, 1024 * sm);
-  b.shadow.camera.near = .5; b.shadow.camera.far = 80; b.shadow.bias = -0.004; b.shadow.normalBias = 0.05; S.add(b);
+  b.shadow.camera.near = .5; b.shadow.camera.far = 80; b.shadow.bias = -0.004; b.shadow.normalBias = 0.05; S.add(b); PartBatch.wideCam = b.shadow.camera;
   for (let i = 0; i < 3; i++) {
     const s = new THREE.SpotLight(0xff9646, 0, 17, 1.12, .85, 2); s.castShadow = true; s.shadow.mapSize.set(1024 * sm, 1024 * sm);
     s.shadow.camera.near = .4; s.shadow.camera.far = 18; s.shadow.bias = -0.0025; s.shadow.normalBias = 0.04;
-    s.position.set(0, 4, 0); S.add(s); S.add(s.target); LT.spots.push({ l: s, owner: null, fade: 0, want: null });
+    s.position.set(0, 4, 0); s.userData.spot = i; S.add(s); S.add(s.target); LT.spots.push({ l: s, owner: null, fade: 0, want: null });
   }
   for (let i = 0; i < 12; i++) { const l = new THREE.PointLight(0xff9646, 0, 11, 2); S.add(l); LT.towers.push(l); }
   for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0xffc070, 0, 22, 2); S.add(l); LT.flashes.push({ l, t: 1, dur: 1, i0: 0 }); }
   for (let i = 0; i < 5; i++) { const l = new THREE.PointLight(0xff9a50, 0, 7, 2); S.add(l); LT.torches.push({ l, owner: null, cur: 0 }); }
   for (let i = 0; i < 3; i++) { const l = new THREE.PointLight(0xff5a1e, 0, 9, 2); S.add(l); LT.env.push(l); }
 }
+// Each shadow map is redrawn every third frame, staggered. In a crowd the beacon's cube map (six passes, the
+// costliest by far) is redrawn every sixth frame; its light moves with its shadow so the two always agree.
 function scheduleShadows(busy) {
   const f = LT.tick = (LT.tick + 1) % 3, all = LT.shadowsAt < 0 || !R.opt; LT.shadowsAt = 0;
+  if (f === 0) LT.cyc = (LT.cyc || 0) + 1;
   const set = (l, on) => { l.shadow.autoUpdate = false; l.shadow.needsUpdate = (on || all) && l.intensity > 0; };
   set(LT.moon, busy || f === 0);
-  if (f === 1 || all) LT.beacon.position.copy(LT.bp);
-  set(LT.beacon, f === 1);
+  const bf = f === 1 && (!DRAW.crowd || (LT.cyc & 1) === 0);
+  if (bf || all) LT.beacon.position.copy(LT.bp);
+  set(LT.beacon, bf);
   set(LT.spots[0].l, f === 0); set(LT.spots[1].l, f === 2); set(LT.spots[2].l, f === 2);
 }
 function lightFlash(x, y, z, color, intensity, dur, range = 24) {
@@ -2355,18 +2374,20 @@ const DECAL_MIN_LIFE = 150;
 
 const FX = {
   add: null, alpha: null, segs: null, decals: null,
-  parts: [], smokes: [], flames: [], timed: [], bolts: [], fires: [], scorch: [], meteors: [], novas: [], lit: [], shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, shakeT: 0, flash: 0, flashK: 1, dt: 0, calm: false, groundAt: () => 0,
+  parts: [], smokes: [], flames: [], timed: [], bolts: [], fires: [], scorch: [], meteors: [], novas: [], lit: [], keep: 1, shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, shakeT: 0, flash: 0, flashK: 1, dt: 0, calm: false, groundAt: () => 0,
 };
 function initFX() {
   FX.add = new SpriteBatch(4000, false); FX.alpha = new SpriteBatch(800, true); FX.segs = new SegBatch(900); FX.decals = new DecalBatch(200);
   R.scene.add(FX.add.mesh, FX.alpha.mesh, FX.segs.mesh, FX.decals.mesh);
 }
+// FX.keep (0.55-1, set by planDraw): in a big crowd on screen, or at a lowered resolution, only that share of new
+// particles and smoke puffs is made, and the caps shrink with it. Effects keep their shape, just thinner.
 function fxPart(x, y, z, vx, vy, vz, life, size, r, g, b, o) {
-  if (FX.parts.length > 1700) return;
+  if (FX.parts.length > 1700 * FX.keep || (FX.keep < 1 && frnd() > FX.keep)) return;
   FX.parts.push({ x, y, z, vx, vy, vz, life, max: life, size, r, g, b, grav: o && o.grav || 0, drag: o && o.drag || 0, streak: o && o.streak || 0, rise: o && o.rise || 0, bounce: o && o.bounce || 0, seed: frnd() * 100, wob: o && o.wob || 0 });
 }
 function fxSmoke(x, y, z, vx, vy, vz, life, size, grow, r, g, b, a, o) {
-  if (FX.smokes.length > 640) return;
+  if (FX.smokes.length > 640 * FX.keep || (FX.keep < 1 && frnd() > FX.keep)) return;
   FX.smokes.push({ x, y, z, vx, vy, vz, life, max: life, size, grow, r, g, b, a, drag: o && o.drag !== undefined ? o.drag : 1.2, seed: frnd() * 100, rise: o && o.rise || 0 });
 }
 function fxSparks(x, y, z, n, speed, r, g, b, o = {}) {
@@ -2782,54 +2803,99 @@ function setWeather(w, instant) {
 
 
 let RIG_CAPTURE = null;
+// Per-step draw plan (planDraw in 90-main.js): crowd = many monsters on screen, so shadow and detail cuts apply.
+const DRAW = { crowd: false, onScreen: 0, thin: 0 };
 class PartBatch {
   constructor(build, cap, o = {}) {
     const S = new Soup(); build(S); const geo = S.build();
-    this.cap = cap; this.n = 0;
+    this.cap = cap; this.n = 0; this.nb = 0; this.nc = 0; this.mid = null; this.cast = o.shadow !== false; this.mask = 0;
+    this.small = geo.boundingSphere.radius < .17; // small parts (heads, hands, swords...) drop their shadow first in a crowd
     const m = this.mesh = new THREE.InstancedMesh(geo, MAT.inst, cap);
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
     this.flash = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1); this.flash.setUsage(THREE.DynamicDrawUsage); geo.setAttribute('aFlash', this.flash);
-    m.frustumCulled = false; m.castShadow = o.shadow !== false; m.receiveShadow = true; m.count = 0;
+    m.frustumCulled = false; m.castShadow = this.cast; m.receiveShadow = true; m.count = 0;
     this.rad = o.rad || .1; this.maxCap = Math.max(64, cap * 4);
-    R.scene.add(m); PartBatch.all.push(this);
+    this.hook(m); R.scene.add(m); PartBatch.all.push(this);
+  }
+  // Shadow tiers (PartBatch.tier while a part is put; ignored by batches that cast no shadow). end() packs the
+  // instances as [tier 0 | tier 1 | tier 2]: tier 0 casts into every shadow map, tier 1 only into the moon's and
+  // the beacon's (it is too far from any tower spotlight for its shadow to land in the light), tier 2 into none.
+  // The shadow pass draws just the leading run of instances, so the culled ones cost nothing there. this.mask
+  // collects PartBatch.mask (the spotlights its tier 0 parts stand near): a spotlight's shadow map skips a batch
+  // with none of its parts in that light (see the shadow-map wrapper in 20-post.js).
+  hook(m) {
+    const b = this;
+    m.onBeforeShadow = function (r, o, cam, sc) { this.count = sc.isOrthographicCamera || sc === PartBatch.wideCam ? b.n + b.nb : b.n; };
+    m.onAfterShadow = function () { this.count = b.n + b.nb + b.nc; };
   }
   // Doubles the instance capacity (up to 4x the starting cap) so big crowds are not silently clipped.
   grow() {
     if (this.cap >= this.maxCap) return false;
-    const old = this.mesh, cap = Math.min(this.maxCap, this.cap * 2), geo = old.geometry;
+    const old = this.mesh, cap0 = this.cap, cap = Math.min(this.maxCap, this.cap * 2), geo = old.geometry, nc = this.nc;
     const m = new THREE.InstancedMesh(geo, old.material, cap);
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.instanceMatrix.array.set(old.instanceMatrix.array);
     m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3); m.instanceColor.setUsage(THREE.DynamicDrawUsage); m.instanceColor.array.set(old.instanceColor.array);
     const fl = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1); fl.setUsage(THREE.DynamicDrawUsage); fl.array.set(this.flash.array); this.flash = fl; geo.setAttribute('aFlash', fl);
+    if (nc) for (const [a, k] of [[m.instanceMatrix.array, 16], [m.instanceColor.array, 3], [fl.array, 1]]) a.copyWithin((cap - nc) * k, (cap0 - nc) * k, cap0 * k);
     m.frustumCulled = false; m.castShadow = old.castShadow; m.receiveShadow = old.receiveShadow; m.count = 0; m.renderOrder = old.renderOrder;
     if (old.parent) { old.parent.add(m); old.parent.remove(old); }
-    old.dispose(); this.mesh = m; this.cap = cap; return true;
+    old.dispose(); this.mesh = m; this.cap = cap; this.hook(m);
+    if (this.mid) { const o = this.mid; this.mid = { m: new Float32Array(cap * 16), c: new Float32Array(cap * 3), f: new Float32Array(cap) }; this.mid.m.set(o.m); this.mid.c.set(o.c); this.mid.f.set(o.f); }
+    return true;
   }
   put(mat, flash = 0, tint = null) {
     if (RIG_CAPTURE) { RIG_CAPTURE(this, mat, tint); return; }
-    if (this.n >= this.cap && !this.grow()) return; const i = this.n++;
-    mat.toArray(this.mesh.instanceMatrix.array, i * 16);
-    const c = this.mesh.instanceColor.array;
+    if (this.n + this.nb + this.nc >= this.cap && !this.grow()) return;
+    const tier = !this.cast ? 0 : this.small && PartBatch.smallOff ? 2 : PartBatch.tier;
+    let i, M, c, f;
+    if (tier === 1) {
+      if (!this.mid) this.mid = { m: new Float32Array(this.cap * 16), c: new Float32Array(this.cap * 3), f: new Float32Array(this.cap) };
+      i = this.nb++; M = this.mid.m; c = this.mid.c; f = this.mid.f;
+    } else {
+      if (tier === 0) { i = this.n++; this.mask |= PartBatch.mask; } else i = this.cap - 1 - this.nc++;
+      M = this.mesh.instanceMatrix.array; c = this.mesh.instanceColor.array; f = this.flash.array;
+    }
+    mat.toArray(M, i * 16);
     if (tint) { c[i * 3] = tint[0]; c[i * 3 + 1] = tint[1]; c[i * 3 + 2] = tint[2]; } else { c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = 1; }
-    this.flash.array[i] = flash;
+    f[i] = flash;
   }
   end() {
-    const m = this.mesh; m.count = this.n; m.visible = this.n > 0;
-    if (this.n) {
-      for (const a of [m.instanceMatrix, m.instanceColor, this.flash]) { a.clearUpdateRanges(); a.addUpdateRange(0, this.n * a.itemSize); a.needsUpdate = true; }
+    const m = this.mesh, n = this.n, nb = this.nb, nc = this.nc, tot = n + nb + nc;
+    if (nb) { const o = this.mid; m.instanceMatrix.array.set(o.m.subarray(0, nb * 16), n * 16); m.instanceColor.array.set(o.c.subarray(0, nb * 3), n * 3); this.flash.array.set(o.f.subarray(0, nb), n); }
+    if (nc) { const cap = this.cap; for (const [a, k] of [[m.instanceMatrix.array, 16], [m.instanceColor.array, 3], [this.flash.array, 1]]) a.copyWithin((n + nb) * k, (cap - nc) * k, cap * k); }
+    m.count = tot; m.visible = tot > 0; m.castShadow = this.cast && n + nb > 0;
+    if (tot) {
+      for (const a of [m.instanceMatrix, m.instanceColor, this.flash]) { a.clearUpdateRanges(); a.addUpdateRange(0, tot * a.itemSize); a.needsUpdate = true; }
     }
   }
 }
-PartBatch.all = [];
-function beginParts() { for (const b of PartBatch.all) b.n = 0; }
+PartBatch.all = []; PartBatch.tier = 0; PartBatch.mask = 255; PartBatch.smallOff = false; PartBatch.wideCam = null;
+function beginParts() { for (const b of PartBatch.all) b.n = b.nb = b.nc = b.mask = 0; PartBatch.tier = 0; PartBatch.mask = 255; }
 function endParts() { for (const b of PartBatch.all) b.end(); }
 
 const _rq = new THREE.Quaternion(), _re = new THREE.Euler(), _rv = new THREE.Vector3(), _rs = new THREE.Vector3(), _rm = new THREE.Matrix4();
 const _M = []; for (let i = 0; i < 28; i++) _M.push(new THREE.Matrix4());
+// out = parent * T(p) * R(XYZ euler) * S. Written out by hand (the rotation straight from the angles, and an affine
+// product): the same matrix as compose() + multiplyMatrices(), at about a third of the cost. Every rig part goes
+// through here, so it is most of the per-monster draw cost in a big crowd.
 function xf(out, parent, px, py, pz, rx, ry, rz, sx = 1, sy = 1, sz = 1) {
-  _rq.setFromEuler(_re.set(rx, ry, rz, 'XYZ')); _rm.compose(_rv.set(px, py, pz), _rq, _rs.set(sx, sy, sz));
-  if (parent) out.multiplyMatrices(parent, _rm); else out.copy(_rm); return out;
+  const a = Math.cos(rx), b = Math.sin(rx), c = Math.cos(ry), d = Math.sin(ry), e = Math.cos(rz), f = Math.sin(rz);
+  const ae = a * e, af = a * f, be = b * e, bf = b * f;
+  const b0 = c * e * sx, b1 = (af + be * d) * sx, b2 = (bf - ae * d) * sx;
+  const b4 = -c * f * sy, b5 = (ae - bf * d) * sy, b6 = (be + af * d) * sy;
+  const b8 = d * sz, b9 = -b * c * sz, b10 = a * c * sz;
+  const o = out.elements;
+  if (!parent) {
+    o[0] = b0; o[1] = b1; o[2] = b2; o[3] = 0; o[4] = b4; o[5] = b5; o[6] = b6; o[7] = 0;
+    o[8] = b8; o[9] = b9; o[10] = b10; o[11] = 0; o[12] = px; o[13] = py; o[14] = pz; o[15] = 1; return out;
+  }
+  const A = parent.elements, a0 = A[0], a1 = A[1], a2 = A[2], a4 = A[4], a5 = A[5], a6 = A[6], a8 = A[8], a9 = A[9], a10 = A[10], a12 = A[12], a13 = A[13], a14 = A[14];
+  o[0] = a0 * b0 + a4 * b1 + a8 * b2; o[1] = a1 * b0 + a5 * b1 + a9 * b2; o[2] = a2 * b0 + a6 * b1 + a10 * b2; o[3] = 0;
+  o[4] = a0 * b4 + a4 * b5 + a8 * b6; o[5] = a1 * b4 + a5 * b5 + a9 * b6; o[6] = a2 * b4 + a6 * b5 + a10 * b6; o[7] = 0;
+  o[8] = a0 * b8 + a4 * b9 + a8 * b10; o[9] = a1 * b8 + a5 * b9 + a9 * b10; o[10] = a2 * b8 + a6 * b9 + a10 * b10; o[11] = 0;
+  o[12] = a0 * px + a4 * py + a8 * pz + a12; o[13] = a1 * px + a5 * py + a9 * pz + a13; o[14] = a2 * px + a6 * py + a10 * pz + a14; o[15] = 1;
+  return out;
 }
 
 const KIT = {};
@@ -3180,10 +3246,14 @@ function updateDebris(dt, groundAt, onCoin) {
     } else if (d.rest && groundAt(d.p.x, d.p.z) < d.p.y - 3) { d.rest = false; d.vy = 0; }
     else if (d.life < .9 && !d.coin) { d.p.y -= dt * .22; }
     if (d.coin && d.max - d.life > d.coin) { onCoin(d); swapRemove(DEB, i); continue; }
+    if (R.skipDraw) continue;
     let sc = 1; if (!d.coin && d.life < .5) sc = Math.max(.01, d.life / .5);
     _dm.compose(d.p, d.q, _ds.copy(d.s).multiplyScalar(sc));
+    // In a crowd, pieces at rest cast no shadow and flying ones skip the tower spotlights.
+    PartBatch.tier = DRAW.crowd ? (d.rest ? 2 : 1) : 0;
     d.batch.put(_dm, d.flash, d.tint);
   }
+  PartBatch.tier = 0;
 }
 function clearDebris() { DEB.length = 0; }
 
@@ -3529,7 +3599,8 @@ function initBestiary4() {
   // Harpy: a pale woman's torso and face, a wild black mane, broad brown wings, a feathered tail and bird legs
   // whose talons close in flight and open wide on the dive.
   {
-    const skin = [.7, .56, .5], skinD = [.46, .35, .33], fe = [.5, .36, .24], feD = [.26, .17, .12], feL = [.85, .68, .46], hair = [.07, .045, .07], leg = [.58, .47, .2], claw = [.05, .04, .04];
+    const skin = [.78, .6, .52], skinD = [.46, .35, .33], fe = [.5, .36, .24], feD = [.26, .17, .12], feL = [.85, .68, .46], hair = [.07, .045, .07], leg = [.58, .47, .2], claw = [.05, .04, .04];
+    const tawny = [.66, .44, .24], crest = [.62, .17, .1];
     KIT.harpy = {
       body: new PartBatch(S => {
         S.ico(.12, 0, .02, 0, skin, { sc: [1, 1.25, .8], d: 1 }); S.ico(.13, 0, -.14, -.01, feD, { sc: [1.05, 1.05, .95], d: 1 }); S.ico(.08, 0, .06, .07, skinD, { sc: [1.4, .6, .7], d: 1 });
@@ -3540,10 +3611,18 @@ function initBestiary4() {
         S.ico(.09, 0, .29, .0, hair, { sc: [1.05, .8, 1], d: 1 });
         for (let i = 0; i < 5; i++) { const s = i - 2, k = Math.abs(s); S.box(.05, .035, .2, s * .03, .28 - k * .03, -.1 - k * .015, hair, { jit: .1, r: [-.5 - k * .15, s * .2, 0] }); }
         for (const s of [-1, 1]) S.cone(.02, .07, s * .085, .27, .0, skin, { n: 4, r: [-.2, 0, -s * 1.1] });
+        // Seen from above (the usual view, pitched into flight) she is mostly back and hair: a long mane streaming
+        // down the back, a crest of rust-red plumes and a pale feathered mantle give her a silhouette and a colour.
+        for (let i = 0; i < 4; i++) { const s = i - 1.5; S.box(.045, .03, .3, s * .035, .2 - Math.abs(s) * .02, -.2, i & 1 ? hair : [.16, .07, .09], { jit: .08, r: [-.95 - Math.abs(s) * .08, s * .16, 0] }); }
+        for (let i = 0; i < 3; i++) { const s = i - 1; S.box(.03, .012, .2, s * .035, .36, -.04, crest, { jit: .06, r: [-.55, s * .3, 0] }); S.box(.034, .014, .06, s * .055, .375, -.135, feL, { jit: .04, r: [-.55, s * .3, 0] }); }
+        S.ico(.11, 0, .1, -.08, feL, { sc: [1.25, .5, .9], d: 1 });
       }, 24, { rad: .2 }),
       wing: new PartBatch(S => {
-        const pts = [[0, 0, .06, feL], [.18, .04, .12, feL], [.36, .05, .1, feL], [.58, .03, .04, feL], [.86, 0, -.04, fe], [.82, 0, -.14, feD], [.7, 0, -.12, feD], [.66, 0, -.24, feD], [.54, 0, -.2, fe], [.48, 0, -.3, feD], [.36, 0, -.24, fe], [.28, 0, -.32, feD], [.16, 0, -.25, fe], [.06, 0, -.28, feD], [0, 0, -.14, fe]];
-        const c0 = [.06, .01, -.04, fe];
+        // Dark at the root, tawny across the span, the trailing feathers alternating light and dark so the edge reads
+        // as separate feathers, and the outer feathers drooping a little so the wing is not one flat sheet.
+        const pts = [[0, 0, .06, feD], [.18, .04, .12, fe], [.36, .05, .1, tawny], [.58, .03, .04, tawny], [.86, -.02, -.04, feL], [.82, -.035, -.14, feD], [.7, -.03, -.12, feL], [.66, -.045, -.24, feD], [.54, -.035, -.2, feL], [.48, -.045, -.3, feD], [.36, -.035, -.24, feL], [.28, -.04, -.32, feD], [.16, -.025, -.25, tawny], [.06, -.02, -.28, feD], [0, 0, -.14, feD]];
+        const c0 = [.06, .01, -.04, feD];
+        for (let i = 0; i < 5; i++) S.box(.1, .012, .055, .08 + i * .1, .05 - i * .006, .07 - i * .016, i & 1 ? feL : [.92, .8, .6], { jit: .05, r: [0, .12, 0] });
         for (let i = 0; i < pts.length - 1; i++) { S.tri(c0, pts[i + 1], pts[i], fe, L_PLAIN, .95); S.tri(c0, pts[i], pts[i + 1], fe, L_PLAIN, .95); }
         S.seg([0, 0, .06], [.36, .05, .1], .03, .02, skinD, { n: 4 }); S.seg([.36, .05, .1], [.58, .03, .04], .02, .012, skinD, { n: 4 });
         for (let i = 0; i < 4; i++) S.box(.22, .01, .045, .7 + i * .035, .005, .0 - i * .045, i & 1 ? feD : fe, { jit: .06, r: [0, .35 + i * .22, 0] });
@@ -3624,8 +3703,11 @@ function rigShaman(e) { e.weapon = KIT.item.boneStaff; e.staffOut = true; e.wSca
 // Harpy: flaps on e.ph like the bat. e.swoop (0 cruise, 1 dive, 2 carrying; eased here into e.swD / e.swC)
 // pitches it into a dive with the wings swept back and the talons thrown forward and open, or, while carrying a
 // footman (e.carry), hauls upright with the legs straight down, talons shut and the wings beating hard.
+// The model is drawn 12 % over its size (looks only; hits use def.rad) so she reads against the ground.
 function rigHarpy(e) {
-  const K = KIT.harpy, s = e.scale || 1, fl = e.flash || 0, tint = e.tint || null, fz = e.flinch || 0, dt = FX.dt || 0, w = e.swoop || 0;
+  const K = KIT.harpy, s = (e.scale || 1) * 1.12, fl = e.flash || 0, tint = e.tint || null, fz = e.flinch || 0, w = e.swoop || 0;
+  // Eased on game time since its last drawing, so the ease keeps its pace when steps go undrawn (off screen, 2x/3x).
+  const dt = clamp(G.t - (e._rigT === undefined ? G.t - (FX.dt || 0) : e._rigT), 0, .25); e._rigT = G.t;
   e.swD = damp(e.swD || 0, w === 1 ? 1 : 0, 7, dt); e.swC = damp(e.swC || 0, w >= 2 || e.carry ? 1 : 0, 6, dt);
   const sw = e.swD, cr = e.swC, f = Math.sin(e.ph), calm = 1 - Math.max(sw, cr);
   const pitch = lerp(lerp(.5, 1.25, sw), .12, cr) - fz * .5, bob = Math.sin(e.ph - .6) * (.07 + .05 * cr) * (1 - sw);
@@ -4640,9 +4722,13 @@ const EYES = {
   spider: BUG_EYE, scarab: BUG_EYE, brood: [.05, .055, .19, .022], queen: [.05, .055, .19, .016], wolf: [.05, .27, .63, .04], wraith: [.045, 1.04, .17, .055], toad: [.125, .345, .285, .035], gargoyle: [.045, .15, .28, .045], wisp: null,
   ram: null, shaman: [.045, .11, .14, .042], harpy: [.03, .265, .1, .03], hound: [.05, .275, .63, .045],
 };
+// m._lod and m._tier are set each step by planDraw (90-main.js): _lod 2 = not drawn this step (off screen, or an
+// earlier step of a 2x/3x frame whose picture is never shown); _tier = the shadow tier of its parts (PartBatch).
 function drawMonster(m, t) {
+  if (m._lod === 2) { drawMonsterQuiet(m); return; }
   const ec = m.elite ? ELITE_CODE[m.elite] || 0 : 0, f0 = m.flash; if (ec) m.flash = Math.min(1, f0) + ec * 4;
-  const M = rigMonster(m); m.flash = f0; if (ec) drawElite(m, t);
+  PartBatch.tier = m._tier || 0; PartBatch.mask = m._smask === undefined ? 255 : m._smask; PartBatch.smallOff = DRAW.crowd;
+  const M = rigMonster(m); PartBatch.tier = 0; PartBatch.mask = 255; PartBatch.smallOff = false; m.flash = f0; if (ec) drawElite(m, t);
   if (m.def.boss && m.vis && !m.entered && !m.dying && !m.fly && m.s > G.B.cave.s + 3) { m.entered = true; bossEntrance(m); }
   const rk = m.def.rig || m.type, ey = EYES[rk] !== undefined ? EYES[rk] : EYES[EYE_STANDIN[rk]] || null, c = m.def.eye, sc = m.scale, tw = .8 + .2 * Math.sin(t * 9 + m.lseed * 7), ty = rk;
   if (ey) {
@@ -4663,6 +4749,18 @@ function drawMonster(m, t) {
   if ((m.vis || m.fly) && (m.hp < m.maxHp * .995 || m.def.boss || m.elite || m.ward > 0)) G.hbars.push({ x: m.x, y: m.y + m.def.top * sc / m.def.scale + .22, z: m.z, f: sat(m.hp / m.maxHp), boss: !!m.def.boss, man: false, name: m.def.boss ? m.def.name : m.elite ? eliteName(m) : null, elite: m.elite || null, sh: m.ward > 0 ? sat(m.ward / m.maxHp) : 0 });
 }
 
+// A monster that is not drawn this step still makes the same calls into the gameplay random stream as
+// drawMonster (they only pick effects, but they share the stream), so the simulation never depends on the view.
+function drawMonsterQuiet(m) {
+  if (m.def.boss && m.vis && !m.entered && !m.dying && !m.fly && m.s > G.B.cave.s + 3) { m.entered = true; bossEntrance(m); }
+  const ty = m.def.rig || m.type;
+  if (ty === 'wisp') { m.lx = m.x; m.ly = m.y; m.lz = m.z; rnd(); }
+  else if (ty === 'wraith') { if (m.eth) rnd(); }
+  else if (ty === 'colossus') rnd();
+  if (m.ward > 0 && m.elite !== 'shielded' && (m.vis || m.fly)) m.wardFx = Math.max(0, (m.wardFx || 0) - (FX.dt || 0) * 2);
+  if (m.slowT > 0) rnd();
+  if (m.frozen > 0) rnd();
+}
 function spawnFootman(tower) {
   const d = tower.def, lvl = tower.lvl, door = tower.w(tower.mounts.door, {});
   const used = tower.men.map(f => f.slot); let slot = 0; while (used.includes(slot)) slot++;
@@ -9166,6 +9264,7 @@ function applyCamera() {
   R.sub.set((u - us) / R.px, (v - vs) / R.px);
   R.ditherOfs.set(((Math.round(us / R.px) % 8) + 8) % 8, ((Math.round(vs / R.px) % 8) + 8) % 8);
   _ct.addScaledVector(_cr, us - u).addScaledVector(_cu, vs - v);
+  R.cu0 = us; R.cv0 = vs; R.hw = vh * aspect / 2; R.hh = vh / 2;
   cam.left = -vh * aspect / 2; cam.right = vh * aspect / 2; cam.top = vh / 2; cam.bottom = -vh / 2; cam.near = 1; cam.far = 210;
   cam.position.copy(_ct).addScaledVector(_cd, CAM.dist); cam.up.set(0, 1, 0); cam.lookAt(_ct);
   cam.updateProjectionMatrix(); cam.updateMatrixWorld(true);
@@ -9228,6 +9327,42 @@ function sfx(name, x, z, gain = 1, p = 0) {
   AU.play(name, clamp(u / ((R.viewW || 40) * .5), -1, 1) * .75, gain * clamp(1.12 - Math.hypot(dx, dz) / 46, .4, 1) * (.72 + .28 * CAM.zoom), p);
 }
 
+// Draw plan for the monsters, made each step before they are drawn. Visual only: it never changes the simulation.
+// - Off screen (with a margin for shadows and tall models) or an earlier step of a 2x/3x frame: not drawn (_lod 2).
+// - Shadow tiers (see PartBatch): a monster only draws into the shadow maps of the tower spotlights whose pool of
+//   light it stands in (_smask), and one outside all of them skips the spotlight maps. In a
+//   crowd, tiny monsters cast no shadow and in a packed spot only the first two per 1.25-unit cell do; the rest
+//   stand in their neighbours' shadow anyway. Big monsters and bosses always cast.
+const DRAW_CROWD = 48, _cellN = new Map(), _spotP = [];
+function planDraw() {
+  const mons = G.mons, skip = R.skipDraw, cam = R.opt && R.hw > 0, u0 = R.cu0, v0 = R.cv0, hw = R.hw + 3, hh = R.hh + 3.5;
+  const crx = Math.cos(CAM.yaw), crz = -Math.sin(CAM.yaw), se = Math.sin(CAM.elev), cux = -se * Math.sin(CAM.yaw), cuy = Math.cos(CAM.elev), cuz = -se * Math.cos(CAM.yaw);
+  let on = 0;
+  for (const m of mons) {
+    let off = skip;
+    if (!off && cam) { const u = m.x * crx + m.z * crz - u0, v = m.x * cux + m.y * cuy + m.z * cuz - v0; off = u > hw || u < -hw || v > hh || v < -hh; }
+    m._lod = off ? 2 : 0; m._tier = 0; m._smask = 255;
+    if (!off && (m.vis || m.fly)) on++;
+  }
+  if (skip) return; // a hidden step keeps the last plan's crowd state
+  DRAW.onScreen = on; DRAW.crowd = R.opt && on > DRAW_CROWD;
+  FX.keep = R.opt ? (R.lite ? .65 : R.quality < .75 ? .85 : 1) * (1 - .35 * sat((on - 70) / 110)) : 1;
+  if (!R.opt) return;
+  // A spotlight lights a disc of ground under its tower: radius = height above the ground x tan(cone angle).
+  _spotP.length = 0; LT.spots.forEach((s, j) => { const l = s.l, p = l.position; if (l.intensity > 0) { const r = clamp((p.y - G.B.heightAt(p.x, p.z)) * Math.tan(l.angle) + 1.2, 2, 16); _spotP.push(p, j, r * r); } });
+  const crowd = DRAW.crowd; if (crowd) _cellN.clear();
+  for (const m of mons) {
+    if (m._lod) continue;
+    if (crowd && !m.def.boss && m.rad < .55) {
+      if (m.rad < .22) { m._tier = 2; continue; }
+      const k = (Math.floor(m.x * .8) + 512) * 1024 + Math.floor(m.z * .8) + 512, c = _cellN.get(k) || 0; _cellN.set(k, c + 1);
+      if (c >= 2) { m._tier = 2; continue; }
+    }
+    let mask = 0; for (let i = 0; i < _spotP.length; i += 3) { const p = _spotP[i]; if (dist2(m.x, m.z, p.x, p.z) < _spotP[i + 2]) mask |= 1 << _spotP[i + 1]; }
+    m._smask = mask; m._tier = mask ? 0 : 1;
+  }
+}
+
 const _mm = new THREE.Matrix4(), _mq = new THREE.Quaternion(), _mv = new THREE.Vector3(), _ms = new THREE.Vector3(1, 1, 1), _torch = [];
 function step(rdt) {
   G.slowmo = Math.max(0, G.slowmo - rdt);
@@ -9245,7 +9380,7 @@ function step(rdt) {
     updateUnits(dt);
     for (let i = G.mons.length - 1; i >= 0; i--) if (G.mons[i].dead) swapRemove(G.mons, i);
     updateProjectiles(dt); updateHazards(dt);
-    const td = performance.now();
+    const td = performance.now(); planDraw();
     for (const m of G.mons) drawMonster(m, G.t);
     for (const f of G.men) if (!f.dead) drawFootman(f);
     R.tDraw += performance.now() - td;
@@ -9287,12 +9422,35 @@ function step(rdt) {
   if (AU.ready) { let lit = 0; for (const t of G.towers) if (t.alive && t.em.on > .5 && t.kind !== 'spire') lit++; AU.setAmbience(sat((.3 + lit * .06) * LT.beaconOn + .05), sat((G.phase === 'play' ? .5 : .85) * B.bio.wind), G.bossAlive && G.phase === 'play' ? 1 : 0); AU.update(rdt); }
 }
 
-let _last = 0, _acc = 0, _frames = 0, _slow = 0, _fast = 0, _hold = 0, _back = 12;
+let _last = 0, _acc = 0, _frames = 0, _slow = 0, _fast = 0, _hold = 0, _back = 12, _check = null, _noGain = 0, _noBack = 30;
+// Automatic resolution scaling (graphics Auto; HASH.noscale turns it off). Every 2 s: two slow windows (> 22.5 ms a
+// frame) drop the internal resolution a step (down to .55, then "lite": a smaller moon shadow map and no depth of
+// field); three fast ones (< 18.6 ms) raise it again after a hold that doubles each time it drops. Each drop is
+// checked over the next window: if the frame time did not improve by 8 % the drop bought nothing (the frame rate is
+// capped, as in iPhone Low Power Mode, or the work is on the CPU), so it is undone and drops pause for a while.
+function setLite(on) {
+  if (!!R.lite === on) return; R.lite = on ? 1 : 0;
+  const s = on ? 1024 : LT.moonMap; LT.moon.shadow.mapSize.set(s, s); if (LT.moon.shadow.map) { LT.moon.shadow.map.dispose(); LT.moon.shadow.map = null; }
+}
+function autoScale(ms) {
+  if (ms > 22.5) { _slow++; _fast = 0; } else { _slow = 0; _fast = ms < 18.6 ? _fast + 1 : 0; }
+  _hold -= 2; _noGain -= 2;
+  if (_check) {
+    const c = _check; _check = null;
+    if (ms > c.ms * .92) { if (c.lite) setLite(false); else { R.quality = c.q; resizeRenderer(); } _noGain = _noBack; _noBack = Math.min(600, _noBack * 2); _slow = 0; return; }
+  }
+  if (_slow >= 3 && R.quality <= .55 && !R.lite && _noGain <= 0) { setLite(true); _slow = 0; _check = { ms, lite: true }; }
+  else if (_slow >= 2 && R.quality > .55 && _noGain <= 0) { _check = { ms, q: R.quality }; R.quality = Math.max(.55, R.quality - .15); resizeRenderer(); _slow = 0; _hold = _back; _back = Math.min(480, _back * 2); }
+  else if (_fast >= 3 && _hold <= 0) {
+    if (R.lite) { setLite(false); _fast = 0; }
+    else if (R.quality < 1) { R.quality = Math.min(1, R.quality + .15); resizeRenderer(); _fast = 0; }
+  }
+}
 function frame(now) {
   requestAnimationFrame(frame);
   if (now - _last < 10.5) return;
   const raw = (now - _last) / 1000, rdt = Math.min(.05, Math.max(.001, raw)); _last = now; R.frameDt = rdt;
-  if (G.paused) { FX.shake = 0; updateShake(rdt); updateCamera(rdt); UI.update(rdt); AU.update(rdt); } else for (let i = 0; i < G.speed; i++) step(rdt);
+  if (G.paused) { FX.shake = 0; updateShake(rdt); updateCamera(rdt); UI.update(rdt); AU.update(rdt); } else { for (let i = 0; i < G.speed; i++) { R.skipDraw = i < G.speed - 1; step(rdt); } R.skipDraw = false; }
   R.fade = Math.min(1, R.fade + rdt * 1.6);
   applyCamera(); renderFrame(); UI.draw();
   if (document.hidden || raw > .25) { _acc = 0; _frames = 0; return; }
@@ -9300,13 +9458,7 @@ function frame(now) {
   if (_acc >= 2) {
     const ms = _acc / _frames * 1000;
     R.fpsText = (1000 / ms).toFixed(0) + ' fps  ' + R.iw + 'x' + R.ih + '  calls ' + R.renderer.info.render.calls + '  mons ' + G.mons.length;
-    if (ms > 22.5) { _slow++; _fast = 0; } else { _slow = 0; _fast = ms < 18.6 ? _fast + 1 : 0; }
-    _hold -= _acc;
-    if (!HASH.noscale) {
-      if (_slow >= 3 && R.quality <= .55 && !R.lite) { R.lite = 1; _slow = 0; LT.moon.shadow.mapSize.set(1024, 1024); if (LT.moon.shadow.map) { LT.moon.shadow.map.dispose(); LT.moon.shadow.map = null; } }
-      if (_slow >= 2 && R.quality > .55) { R.quality = Math.max(.55, R.quality - .15); resizeRenderer(); _slow = 0; _hold = _back; _back = Math.min(480, _back * 2); }
-      else if (_fast >= 3 && R.quality < 1 && _hold <= 0) { R.quality = Math.min(1, R.quality + .15); resizeRenderer(); _fast = 0; }
-    }
+    if (!HASH.noscale) autoScale(ms); else if (R.lite) setLite(false);
     _acc = 0; _frames = 0;
   }
 }
@@ -9335,7 +9487,7 @@ function boot() {
   document.addEventListener('visibilitychange', () => { AU.setPaused(document.hidden); UI.dropTouches(); if (!document.hidden) { _last = performance.now(); UI.keepAwake(); } });
   window.addEventListener('blur', () => UI.dropTouches());
   for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => setTimeout(resizeRenderer, 60));
-  window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, render() { applyCamera(); renderFrame(); }, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
+  window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, render() { applyCamera(); renderFrame(); }, autoScale, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
   if (HASH.k) G.k = +HASH.k;
   if (HASH.ff) { const n = Math.round(+HASH.ff * 30); for (let i = 0; i < n; i++) step(1 / 30); CAM.sx = CAM.fx; CAM.sz = CAM.fz; R.fade = 1; }
   if (HASH.phase) setPhase(HASH.phase);

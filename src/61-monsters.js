@@ -178,9 +178,13 @@ const EYES = {
   spider: BUG_EYE, scarab: BUG_EYE, brood: [.05, .055, .19, .022], queen: [.05, .055, .19, .016], wolf: [.05, .27, .63, .04], wraith: [.045, 1.04, .17, .055], toad: [.125, .345, .285, .035], gargoyle: [.045, .15, .28, .045], wisp: null,
   ram: null, shaman: [.045, .11, .14, .042], harpy: [.03, .265, .1, .03], hound: [.05, .275, .63, .045],
 };
+// m._lod and m._tier are set each step by planDraw (90-main.js): _lod 2 = not drawn this step (off screen, or an
+// earlier step of a 2x/3x frame whose picture is never shown); _tier = the shadow tier of its parts (PartBatch).
 function drawMonster(m, t) {
+  if (m._lod === 2) { drawMonsterQuiet(m); return; }
   const ec = m.elite ? ELITE_CODE[m.elite] || 0 : 0, f0 = m.flash; if (ec) m.flash = Math.min(1, f0) + ec * 4;
-  const M = rigMonster(m); m.flash = f0; if (ec) drawElite(m, t);
+  PartBatch.tier = m._tier || 0; PartBatch.mask = m._smask === undefined ? 255 : m._smask; PartBatch.smallOff = DRAW.crowd;
+  const M = rigMonster(m); PartBatch.tier = 0; PartBatch.mask = 255; PartBatch.smallOff = false; m.flash = f0; if (ec) drawElite(m, t);
   if (m.def.boss && m.vis && !m.entered && !m.dying && !m.fly && m.s > G.B.cave.s + 3) { m.entered = true; bossEntrance(m); }
   const rk = m.def.rig || m.type, ey = EYES[rk] !== undefined ? EYES[rk] : EYES[EYE_STANDIN[rk]] || null, c = m.def.eye, sc = m.scale, tw = .8 + .2 * Math.sin(t * 9 + m.lseed * 7), ty = rk;
   if (ey) {
@@ -201,6 +205,18 @@ function drawMonster(m, t) {
   if ((m.vis || m.fly) && (m.hp < m.maxHp * .995 || m.def.boss || m.elite || m.ward > 0)) G.hbars.push({ x: m.x, y: m.y + m.def.top * sc / m.def.scale + .22, z: m.z, f: sat(m.hp / m.maxHp), boss: !!m.def.boss, man: false, name: m.def.boss ? m.def.name : m.elite ? eliteName(m) : null, elite: m.elite || null, sh: m.ward > 0 ? sat(m.ward / m.maxHp) : 0 });
 }
 
+// A monster that is not drawn this step still makes the same calls into the gameplay random stream as
+// drawMonster (they only pick effects, but they share the stream), so the simulation never depends on the view.
+function drawMonsterQuiet(m) {
+  if (m.def.boss && m.vis && !m.entered && !m.dying && !m.fly && m.s > G.B.cave.s + 3) { m.entered = true; bossEntrance(m); }
+  const ty = m.def.rig || m.type;
+  if (ty === 'wisp') { m.lx = m.x; m.ly = m.y; m.lz = m.z; rnd(); }
+  else if (ty === 'wraith') { if (m.eth) rnd(); }
+  else if (ty === 'colossus') rnd();
+  if (m.ward > 0 && m.elite !== 'shielded' && (m.vis || m.fly)) m.wardFx = Math.max(0, (m.wardFx || 0) - (FX.dt || 0) * 2);
+  if (m.slowT > 0) rnd();
+  if (m.frozen > 0) rnd();
+}
 function spawnFootman(tower) {
   const d = tower.def, lvl = tower.lvl, door = tower.w(tower.mounts.door, {});
   const used = tower.men.map(f => f.slot); let slot = 0; while (used.includes(slot)) slot++;
