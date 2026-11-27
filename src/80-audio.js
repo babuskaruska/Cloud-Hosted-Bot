@@ -1476,7 +1476,7 @@ const AU = (function () {
           const v = P * (0.22 + 0.3 * I) * hv();
           if (kit === 'frame') kitHit(frameD, t, v * 1.1, rr(-0.1, 0.1), 0.25);
           else if (kit === 'glass') drum(t, v * 0.6, 62);
-          else if (kit === 'heavy') { drum(t, v, 50); kitHit(frameD, t, v * 0.8, 0, 0.3); kitHit(heavyD, t, v, rr(-0.1, 0.1), 0.3); }
+          else if (kit === 'heavy') { drum(t, v * 0.85, 50); kitHit(frameD, t, v * 0.7, 0, 0.3); kitHit(heavyD, t, v, rr(-0.1, 0.1), 0.3); }
           else drum(t, v, 55);
         }
       }
