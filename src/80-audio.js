@@ -2479,7 +2479,7 @@ const AU = (function () {
   // The mood comes from setScene('results', { win }) or 'win' / 'defeat', else META.last.how, else G.phase. The music
   // waits for the defeat lament or the victory fanfare to finish before it starts. ----
   const RS = { bus: null, mg: null, on: false, mood: 'rest', dawn: false, opt: null, next: 0, sec: 0, bar: 0, loops: 0, pi: 0, plan: [0, 1, 2], stopAt: 0 };
-  const RS_LVL = 2.2, RS_MOOD = { win: 1, rest: 2.2, defeat: 3 }; // the defeat music is sparse: it sits higher so all three land a little under the title // sparse and slow, so it sits higher on the bus than the title to land a little under it in loudness
+  const RS_LVL = 2.2, RS_MOOD = { win: 0.8, rest: 1, defeat: 0.9 }; // each mood trimmed to sit a little under the title in loudness
   const RCH = { Dm9: [38, 50, 53, 57, 64], Bbmaj7: [34, 46, 50, 53, 57], Gm7: [43, 50, 53, 58, 62], Asus: [33, 50, 52, 57, 62], Fmaj7: [41, 48, 52, 57, 60],
     D: [38, 50, 54, 57, 62], Dmaj9: [38, 50, 54, 57, 64], G: [43, 50, 55, 59, 62], Gmaj7: [43, 50, 54, 59, 62], Bm7: [35, 50, 54, 57, 62], A: [33, 49, 52, 57, 61],
     DF: [42, 50, 54, 57, 62], Em7: [40, 50, 55, 59, 62], C: [36, 48, 52, 55, 60] };
@@ -2932,6 +2932,16 @@ const AU = (function () {
   function setP(key, param, v, now) { if (Math.abs(v - app[key]) > 0.004) { app[key] = v; param.setTargetAtTime(v, now, 0.12); } }
   const appM = { pad: -1, drone: -1, crowd: -1, P: -2, mur: -1, rust: -1, dm: -1, dc: -1 };
   function setM(key, param, v, now, tc) { if (Math.abs(v - appM[key]) > 0.005) { appM[key] = v; param.setTargetAtTime(v, now, tc); } }
+  // The music and crowd ducks. Also runs while the game is paused: a stinger's hold (the defeat lament) used to stay
+  // stuck on the music when a screen paused the game during it, so the results music played 14 dB down.
+  function duckTick(now, adt) {
+    duckE *= Math.exp(-adt / 0.35);
+    for (let i = lateDuck.length - 1; i >= 0; i--) if (now >= lateDuck[i][0]) { duckE = Math.max(duckE, lateDuck[i][1]); lateDuck.splice(i, 1); }
+    let hold = 0; for (let i = holds.length - 1; i >= 0; i--) { if (now >= holds[i][0]) { holds[i] = holds[holds.length - 1]; holds.pop(); } else if (holds[i][1] > hold) hold = holds[i][1]; }
+    const dk = SC.cur === 'menu' ? 0.3 : 1; // the demo's explosions only nudge the title theme
+    setM('dm', nMusDuck.gain, Math.min(1 - 0.45 * duckE * dk, 1 - hold * dk), now, hold ? 0.25 : 0.04);
+    setM('dc', nCrowdDuck.gain, 1 - 0.35 * duckE, now, 0.04);
+  }
   function reactive(now) {
     const adt = cl(now - SEQ.lastNow, 0, 0.25); SEQ.lastNow = now;
     if (now >= SEQ.scanAt) { SEQ.scanAt = now + 0.125; scan(); }
@@ -2947,12 +2957,7 @@ const AU = (function () {
     const dr = Math.max(cur.tension, SEQ.I * 0.75);
     if (Math.abs(dr - appM.drone) > 0.01) { appM.drone = dr; bed.droneG.gain.setTargetAtTime(dr * 0.1, now, 0.4); bed.droneLP.frequency.setTargetAtTime(280 + 220 * dr, now, 0.4); }
     setM('pad', nPad.gain, PAD_LVL * (1 - 0.3 * SEQ.I), now, 0.6);
-    duckE *= Math.exp(-adt / 0.35);
-    for (let i = lateDuck.length - 1; i >= 0; i--) if (now >= lateDuck[i][0]) { duckE = Math.max(duckE, lateDuck[i][1]); lateDuck.splice(i, 1); }
-    let hold = 0; for (let i = holds.length - 1; i >= 0; i--) { if (now >= holds[i][0]) { holds[i] = holds[holds.length - 1]; holds.pop(); } else if (holds[i][1] > hold) hold = holds[i][1]; }
-    const dk = SC.cur === 'menu' ? 0.3 : 1; // the demo's explosions only nudge the title theme
-    setM('dm', nMusDuck.gain, Math.min(1 - 0.45 * duckE * dk, 1 - hold * dk), now, hold ? 0.25 : 0.04);
-    setM('dc', nCrowdDuck.gain, 1 - 0.35 * duckE, now, 0.04);
+    duckTick(now, adt);
     if (nCrowd) {
       CR.lvl += (CR.tl - CR.lvl) * (1 - Math.exp(-adt / 0.8));
       if (CR.tl > 0.01) { CR.idle = 0; crowdSrc(true, now); } else if (CR.src && CR.lvl < 0.004 && (CR.idle += adt) > 2) crowdSrc(false, now);
@@ -2967,16 +2972,17 @@ const AU = (function () {
   }
   // Round 9: Ash's cinematics (src/43-cine.js, when present). A cinematic starting brings its cue: CINE.kind (or cur /
   // type) names it, else the phase does (a defeat, or the beacon re-lit). Nothing here if CINE is not in the build.
-  const CN = { on: false };
+  const CN = { on: false, cur: null };
   function cineWatch(now) {
-    let on = false, kind = '';
+    let on = false, kind = '', fresh = false;
     try {
       if (typeof CINE !== 'undefined' && CINE && typeof CINE.on === 'function') {
-        on = !!CINE.on();
-        if (on && !CN.on) { const k = CINE.kind || CINE.cur || CINE.type; kind = typeof k === 'string' ? k : k && typeof k.kind === 'string' ? k.kind : ''; }
+        on = !!CINE.on(); const cur = on && CINE.cur && typeof CINE.cur === 'object' ? CINE.cur : null;
+        fresh = on && (!CN.on || (cur !== null && cur !== CN.cur)); CN.cur = cur; // a new one replacing the last counts too
+        if (fresh) { const k = CINE.kind || CINE.cur || CINE.type; kind = typeof k === 'string' ? k : k && typeof k.kind === 'string' ? k.kind : ''; }
       }
     } catch (e) { on = false; }
-    if (on && !CN.on) {
+    if (fresh) {
       if (!/victory|defeat/.test(kind)) kind = typeof G !== 'undefined' && G && G.phase === 'defeat' ? 'defeat' : 'victory';
       const ago = (n) => now - (lastAt[n] === undefined ? -99 : lastAt[n]);
       if (/defeat/.test(kind)) play('cineDefeat', 0, 1, ago('lament') < 6 ? 1 : 0); else play('cineVictory', 0, 1, ago('fanfare') < 4 ? 1 : 0);
@@ -3019,7 +3025,7 @@ const AU = (function () {
     // The reactive parts never take the game down: any fault is recorded in stats().err.
     for (let i = LM.old.length - 1; i >= 0; i--) if (now >= LM.old[i][1]) { try { LM.old[i][0].disconnect(); } catch (e) {} LM.old.splice(i, 1); }
     for (let i = LM.kill.length - 1; i >= 0; i--) if (now >= LM.kill[i][1]) { try { LM.kill[i][0].disconnect(); } catch (e) {} LM.kill.splice(i, 1); }
-    try { scapes(now, paused); watch(now); cineWatch(now); if (!paused) reactive(now); else { SEQ.lastNow = now; SEQ.next = 0; } } catch (e) { if (!ST.err) ST.err = String(e && e.stack || e).slice(0, 300); }
+    try { scapes(now, paused); watch(now); cineWatch(now); if (!paused) reactive(now); else { duckTick(now, cl(now - SEQ.lastNow, 0, 0.25)); SEQ.lastNow = now; SEQ.next = 0; } } catch (e) { if (!ST.err) ST.err = String(e && e.stack || e).slice(0, 300); }
   }
 
   if (typeof window !== 'undefined') window.__cwAudio = api;
