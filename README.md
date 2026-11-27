@@ -116,6 +116,17 @@ The browser's own double-tap and pinch zoom are turned off on the page, so the v
 
 Touch was tested with Chrome's phone emulation, not on real phones. Gamepad input has not been tested on real hardware.
 
+## Install on iPhone (or Android)
+
+Lanternhold installs as a home-screen app that opens full-screen and plays offline. It needs the game served from a website, for example GitHub Pages (repo **Settings → Pages → Deploy from a branch → `main`, `/ (root)`**).
+
+- **iPhone / iPad:** open the game's page in **Safari**, tap **Share**, then **Add to Home Screen**. Launch it from the new lantern icon. After the first launch it works without internet.
+- **Android:** open it in Chrome and tap **Install app** (or menu → **Add to Home screen**).
+- **Updates:** a new build downloads in the background and shows the next time you open the app.
+- Saves and embers live on each device, so everyone you share the link with keeps their own progress.
+
+The extra files for this (`manifest.webmanifest`, `sw.js`, `icon-*.png`) sit next to `index.html`; `python3 tools/build.py` writes the icons. `index.html` alone still runs anywhere, offline, as a single file.
+
 ## Run it
 
 Open `index.html`. It works from `file://` with no server, no build step and no network.
