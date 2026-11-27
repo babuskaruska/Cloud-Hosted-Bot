@@ -862,7 +862,7 @@ function restoreRun(S) {
   } finally { AU.ready = ar; }
   SAVE.last = S.fresh ? null : S;
   sfx('ignite', G.B.beacon.x, G.B.beacon.z, 1, 1);
-  UI.banner(G.B.bio.name + ' · Land ' + (G.level + 1), 3, false);
+  UI.banner(G.B.bio.name + (G.level >= BIOMES.length ? ' · Night land ' + (G.level - BIOMES.length + 1) : ' · Land ' + (G.level + 1)), 3, false);
   return true;
 }
 // A saved tower, built at once: no scaffolding, at its level and branch, with its overcharge.
