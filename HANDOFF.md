@@ -199,6 +199,18 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
   - QA coverage for menu flows (Playwright clicks through title → campaign → results).
   - Merges.
 
+## Round 9 contracts
+
+- **Achievements (Mira):** `ACH` (about 20 entries `{ id, name, tip, icon }`) in `src/68-achieve.js`, saved inside `META` (`META.ach[id] = true`). `achUnlock(id)` is idempotent; it shows a toast and calls `sfx('achievement')`. The Codex gets an Achievements tab.
+- **Results screen (Mira):** `UI.scr === 'results'` after a defeat or a campaign win, with an ember count-up (call `sfx('emberTick')` per step, throttled) and `sfx('unlock')` for each newly affordable upgrade or new Heat tier. While it is open the menu calls `AU.setScene('results')`.
+- **Cinematics (Ash):** `CINE.play(kind, done)` with `kind` `'victory'` (the beacon re-lights) or `'defeat'` (the dark swallows the keep), in a new `src/43-cine.js`. It drives the camera and fx for 2.5–4 s and then calls `done()`. `CINE.on()` is true while one plays. Mira calls it (if `typeof CINE !== 'undefined'`) before opening results; it must be skippable by tap or key.
+- **Boss intro card (Ash draws, Mira triggers):** `bossPortrait(kind, size)` in `src/52-portraits.js` returns a canvas with pixel portrait art for each boss key in `MON` (fallback: a silhouette). Ash also owns `UI.bossCard(kind, name, title)`, which draws the card for about 2.5 s when a boss spawns (called from the existing boss entrance). Echo's existing boss sting plays as it is.
+- **Placement feedback (Ash):** pad highlight, range ring preview and a valid/invalid tint while a build is armed; in `72-ui.js` drawing code only, coordinated by small additions (Mira owns the rest of that file).
+- **Daily Long Night (Mira):** `G.mode === 'daily'`, seed from the UTC date (`dailySeed()`), local best kept in `META.daily = { date, best }`. Same rules as Long Night at Heat 0 with fixed mutators from the seed.
+- **New mutators (Forge):** `eclipse` (darker; tower light radius down; `G.eclipse` for Ash to read), `siege` (rams join every wave), `echoes` (a killed elite returns once as a ghost, `m.echo = true`).
+- **Echo:** generated-land changes detected by `bio.id`; a crossfade between consecutive generated lands; the sounds `'achievement'`, `'unlock'`, `'emberTick'`; results music for scene `'results'`; a softer, listening-safe title mix.
+- **Menu-flow QA (Forge):** `tools/menuqa.js` clicks title → campaign → play a little → defeat → results → title on desktop and on an iPhone 13 profile.
+
 ## Phase 2: Lanternhold (a full game). Round 8 contracts
 
 The owner's ask: a new name, story, procedural endless rounds that never end, carry-over points between runs, harder levels, more mayhem, a polished real-game feel, and better visuals even on phones.
