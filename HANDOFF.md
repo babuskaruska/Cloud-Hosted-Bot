@@ -203,6 +203,58 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
   - QA coverage for menu flows (Playwright clicks through title → campaign → results).
   - Merges.
 
+## Round 12 results (merged; build version 18, live on Pages)
+
+- **Mira:**
+  - The game is **Laternalinnus**, fully Estonian ("sina" forms). Main terms: boss "Pealik", embers "söed", Heat "Kuumus", Campaign "Seiklus", Long Night "Pikk Öö", daily "Päeva väljakutse", Codex "Raamat", the Hollowing "Õõnsus".
+  - The font has Õ Ä Ö Ü Š Ž é and quotes.
+  - Countdown: `G.count` 6→0 "Alusta!", real seconds, holds the first wave. Skip by tap or Space. Not in the demo, the tutorial or `TEST_SESSION`.
+  - Settings rows: Graafika, Kaadrisagedus, Muusikastiil (`SET.gfx`, `SET.fps`, `SET.style`).
+- **Ash:**
+  - `src/11-tiers.js` `GFX` (low, mid, high, ultra, auto; detection by GPU, memory and cores; adaptive step-down; URL `gfx=`, `cap=`).
+  - Frame cap and pacing; 20 fps when idle in menus or paused; nothing drawn when hidden.
+  - Monster objects have one shape (fewer deopts, about half the garbage).
+- **Echo:**
+  - Chiptune style is the default (`AU.setStyle`, `AU.style`, `lanternhold.music`). Every scene and boss has a theme, plus chip SFX and countdown sounds.
+  - `AU.setLite` is on with 4 or fewer cores. Chip music creates about 0 nodes per second.
+- **Forge:**
+  - `tools/perfphone.js`.
+  - Removed the tap debug and the credit line; the MIT notice is in `LICENSE` and a source comment.
+  - The Low tier render scale went from 0.66 to 0.9 CSS px (0.66 looked blocky).
+  - Low tier at 4× CPU throttle, 175 alive: about 11 ms of JS per frame.
+- **QA:** `qa.js` PASS (20/20/20, perf better than the baseline); `menuqa` PASS on desktop and iPhone.
+- **Known:**
+  - Low-tier bloom makes a square glow around the beacon.
+  - The countdown digits are thin.
+  - The first tutorial land has no countdown.
+  - The settings panel overlaps the phone menu sheet.
+  - Nobody has listened to the chip music.
+  - Poco detection is unverified on hardware.
+
+## Round 13 contracts (depth, economy, difficulty, effects)
+
+All text is in Estonian.
+- **Difficulty (Mira):** `G.diff` is one of `'kerge' | 'tavaline' | 'raske' | 'oudne'` (shown as Kerge, Tavaline, Raske, Õudne), chosen at run start. It sits alongside Heat. Kerge is for the youngest kids (forgiving: more lives, more gold), Õudne is brutal. Saved with the run; embers are scaled by difficulty.
+- **Stars and campaign depth (Mira):**
+  - Each campaign land is rated 1–3 stars (lives left, difficulty) in `META.stars[landKey]`.
+  - A campaign map / land select replays cleared lands for stars.
+  - The campaign grows to two acts: Act II replays the 6 lands as harder "night" versions with new waves, mutators and story.
+  - New achievements for stars.
+- **Economy (Mira):**
+  - Interest: a share of banked gold paid at wave end, capped.
+  - Early-call bonus (call the next wave early for gold).
+  - Treasure carriers: a goblin with a sack (`MON.kullakott`, rig key `'goblinSack'`) runs fast and drops a big gold burst when killed. Ash models it; until then it maps to an existing rig.
+  - Kill-streak combo gold.
+  - A new tower `TOWER.mine` (Kullakaevandus): makes gold each wave and can be upgraded.
+  - Teach all of it to `aiThink`.
+- **Effects (Ash):**
+  - Combo and crit popups, a gold burst `FX.goldBurst(x, z, n)`, chest-carrier sparkle.
+  - Bigger impact effects on high and ultra.
+  - The mine tower model (`blueprint('mine', lvl)`) and the goblin sack rig.
+  - Star-rating and land-select visuals as drawing helpers.
+  - Fix the low-tier square bloom; thicker, juicier countdown digits.
+- **Sound (Echo):** sounds `'combo'` (pitch rising with the streak; arg = streak), `'interest'`, `'goldBurst'`, `'star'` (arg = 1–3), `'mineTick'`, `'sackRun'` (loop while a carrier runs), and a proper `'heraldCall'`. Music for the land select. Re-measure after the round 12 trims.
+
 ## Owner wishes (after round 11, big push)
 
 The owner's kids play it; the youngest plays on a Poco M7 Pro (about 200 EUR Android), where it lags. Wishes:
