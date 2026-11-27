@@ -200,6 +200,37 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
   - QA coverage for menu flows (Playwright clicks through title → campaign → results).
   - Merges.
 
+## Round 11 results (merged; build version 14)
+
+- **Mira:**
+  - AI anti-air: `aiAir()` looks ahead at flyers and builds or upgrades spires and archers. It casts frost on flyer packs near the beacon and saves frost mana while gargoyles are out. QA seeds end at 20 lives again; seeds 5, 8, 19 and 42 also end at 20.
+  - `MON.herald` (Hollow Herald, Long Night only): every 11 s it snuffs towers within 4.2 (`tower.snuff`, 1.8 s dark and idle, `FX.snuff`, `sfx('snuff')`). Every 13 s it calls 2 echo ghosts (`heraldCall`, at most 8 calls). It has a story beat, a boss line and `heraldLand()`.
+  - A first-sighting tip for Echo ghosts. `G.dailyFresh` (true only on a fresh daily start).
+  - Fixes:
+    - Continuing a save rerolled that land's mutators; they are now saved.
+    - Continuing yesterday's daily overwrote today's best.
+    - Boss affix names now read "The Undying Drowned King".
+    - The Continue button says "Night land N".
+- **Ash:** `RIGS.herald` with death and portrait ("Thief of Lanterns"). The herald is in the generated boss pool (about 1 land in 3 from land 8, its own seeded stream). `FX.snuff(x, z, r, secs)`, `snuffMul(x, z)`. Brighter siege banner (`clothPanel` `emis`). The boss card slides from the right under Eclipse. Echo ghosts dither only on desktop when not Fast (`CW_DITHER`, URL `dither=0/1`).
+- **Echo:**
+  - `tools/audiomix.js` (per-scene LUFS, peak and bands) and `tools/audiosoak.js` (menu-to-results loop).
+  - Herald theme, entrance sting, `snuff`, and death (the lights return).
+  - Eclipse shimmer.
+  - The daily sting respects `G.dailyFresh`.
+  - The scenes measure from -25 LUFS (title and results) to -20.6 LUFS (horde), with true peak at or below -2.6 dBFS.
+- **Forge:** a `heraldCall` sound entry (reuses `echoRise`; Echo may voice it properly). No duplicate affix banner under the boss card. QA PASS with lives 20/20/20, so the baseline was re-saved (better). menuqa PASS on desktop and iPhone 13.
+- **Known:**
+  - From the high camera the herald's hood reads as a dark mass.
+  - The heraldDie scene is sub-heavy.
+  - One "wip" commit of Mira's lacks attribution lines (history is not rewritten).
+
+## Round 12 plan
+
+- **Mira:** weekly challenge or shareable seed code; Keeper's Tree late-game nodes (fun, not just numbers); a herald counterplay hint (spread towers); Codex lore pages for each boss.
+- **Ash:** herald readability (rim light on the hood, a lantern glow on the ground); title screen polish (logo animation); land-arrival title card art.
+- **Echo:** a proper `heraldCall` voice; trim heraldDie sub; menu UI sound pass (hover/tap consistency).
+- **Forge:** a leak-per-type report in `qa.js`; run `tools/audiosoak.js` in the round routine; merges and publish.
+
 ## Round 10 results (merged; build version 13)
 
 - **Mira:**
