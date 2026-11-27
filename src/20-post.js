@@ -351,7 +351,7 @@ function renderFrame() {
   u.uAO.value.y = 0.85 / R.px;
   u.uWind.value.set(SH.uTime.value * 0.05, SH.uTime.value * 0.021); u.uRes.value.set(R.iw, R.ih); u.uBack.value.x = (CAM.yaw - PI / 4) * 1.2;
   { const ea = G.eclA > .01 ? G.eclA : 0, asp = R.iw / R.ih, ph = asp < 1; u.uEcl.value.set(asp * (ph ? .3 : .15), ph ? .74 : .8, ph ? .036 : .055, ea);
-    u.uMoonP.value.set(asp * (ph ? .3 : .15) - u.uBack.value.x * .25, ph ? .76 : .8, (ph ? .036 : .055) * (R.moonSize || 1)); }
+    u.uMoonP.value.set(asp * (ph ? .3 : .15) - u.uBack.value.x * .25, ph ? .76 : .8, (ph ? .029 : .055) * (R.moonSize || 1)); }
   u.uHalo.value.x = !P.halo || R.lite || R.quality < .7 ? 0 : .016 * (R.haloK || 1); // lite mode and a lowered resolution skip the halos
   fsPass(M.atmo, T.atmo);
   const mk = CAM.menuK || 0;
