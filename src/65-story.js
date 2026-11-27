@@ -57,7 +57,7 @@ const BEATS = {
     ['herald', 'Hush, little flame. I carry a hundred beacons in this cage. Yours will make a hundred and one.'],
     ['ghost', 'That light in its lantern was ours once. Break the cage, Keeper.'],
   ] },
-  // The Long Night: the first land where the Herald walks (STORY.landStart, nightBoss in 62-game.js).
+  // The Long Night: the first land where the Herald walks (STORY.landStart, heraldLand in 62-game.js).
   herald: { title: 'The Herald', lines: [
     ['ghost', 'Something walks ahead of the dark tonight. A tall thing, carrying a lantern that does not burn.'],
     ['ghost', 'The Hollowing\'s herald. It steals light. Do not crowd your towers where it walks.'],
@@ -382,7 +382,7 @@ const STORY = {
     if (restoring || !inRun()) return;
     if (G.level < CAMPAIGN_LANDS) this.play('land:' + G.B.bio.key);
     else {
-      if (nightBoss(G.level) === 'herald') this.play('herald'); // once per keeper, the first land the Herald walks
+      if (heraldLand()) this.play('herald'); // once per keeper, the first land the Herald walks
       const d = nightDepth(), first = META.run && META.run.level0 === G.level;
       if (first && G.mode === 'daily') this.play('daily');
       else if (first && G.mode === 'night') this.play('night:enter');

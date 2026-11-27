@@ -39,15 +39,13 @@ function waveMenu(k, level) {
   }
   return menu;
 }
-// Long Night bosses of their own, which no hand-made land sends: NIGHT_BOSS[type] = { every, at } makes it the boss of
-// the generated lands at night index d = G.level - 6 where d >= at and (d - at) % every === 0 (the Herald: the third night
-// land, then every fourth). procBiome's own bio.boss list stays as Ash made it; this is the one hook.
-const NIGHT_BOSS = { herald: { every: 4, at: 2 } };
-function nightBoss(level) { if (level < BIOMES.length) return null; const d = level - BIOMES.length; for (const k in NIGHT_BOSS) { const nb = NIGHT_BOSS[k]; if (MON[k] && d >= nb.at && (d - nb.at) % nb.every === 0) return k; } return null; }
-function bossType() { const b = G.B.bio.boss; return (G.B.bio.key === 'proc' && nightBoss(G.level)) || b[Math.floor(G.level / BIOMES.length) % b.length]; }
+// The Hollow Herald is a Long Night boss only: Ash's procBiome puts 'herald' into a generated land's boss list (about one
+// land in three from land 8 on). heraldLand(): this land's boss is the Herald (the story and aiThink read it).
+function heraldLand() { return !!(G.B && G.B.bio.key === 'proc' && bossType() === 'herald'); }
+function bossType() { const b = G.B.bio.boss; return b[Math.floor(G.level / BIOMES.length) % b.length]; }
 // The Hollow Herald (MON.herald). Its cage-lantern drinks the light of the towers near it: they go dark and stop for a
 // moment (tower.snuff, seconds; Ash may read it, m.stolen counts the lights it holds for the lantern's glow). Enraged, it
-// does so more often. Sounds for Echo: 'heraldSnuff' (x, z of the Herald) and 'heraldCall'.
+// does so more often. The look is Ash's FX.snuff (dims the lights in the circle). Sounds for Echo: 'snuff' and 'heraldCall'.
 function heraldSnuff(m, dt) {
   const sp = m.def.snuff; m.snT -= dt * (m.rage ? 1.45 : 1); if (m.snT > 0) return;
   m.snT = sp.every; m.cast = 1; let n = 0; const hy = m.y + m.def.top * m.scale / m.def.scale * .8;
@@ -58,8 +56,8 @@ function heraldSnuff(m, dt) {
     fxTimed(5, tw.x, tw.y + 2, tw.z, 2.6, 2.6, .9, .75, .45, .7, .35);
   }
   m.stolen = Math.min(8, (m.stolen || 0) + n);
-  fxTimed(4, m.x, m.y + .08, m.z, sp.r * 2, sp.r * 2, .5, .42, .7, .55, .8, { ground: true });
-  sfx('heraldSnuff', m.x, m.z, 1.1);
+  if (typeof FX.snuff === 'function') FX.snuff(m.x, m.z, sp.r, sp.t + 1); else fxTimed(4, m.x, m.y + .08, m.z, sp.r * 2, sp.r * 2, .5, .42, .7, .55, .8, { ground: true });
+  sfx('snuff', m.x, m.z, 1.1);
 }
 // It calls echo ghosts (pale, half bounty, as the Echoes mutator's) of the road's common dead behind it.
 function heraldCall(m, dt) {
@@ -541,7 +539,7 @@ function aiThink(dt) {
   // against the board's air power. Gargoyles shrug off arrows, so a shortfall against them asks for spires first.
   const AA = aiAir(towers);
   // A Herald land: its ghosts want crowd-killers, and its lantern snuffs towers in a circle, so spread the board out.
-  const herald = G.B.bio.key === 'proc' && nightBoss(G.level) === 'herald', snR2 = herald ? MON.herald.snuff.r * MON.herald.snuff.r : 0; if (herald) swarm += 1.5;
+  const herald = heraldLand(), snR2 = herald ? MON.herald.snuff.r * MON.herald.snuff.r : 0; if (herald) swarm += 1.5;
   const gatePress = sat(G.leaks / 8);
   const opts = [];
   for (const kind of TOWER_KINDS) {
