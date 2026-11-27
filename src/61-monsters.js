@@ -28,12 +28,17 @@ const MON = {
   shaman: { name: 'Goblin shaman', tip: 'Wards the monsters around it. Kill it first.', hp: 50, spd: 1.05, rad: .25, mass: .8, bounty: 12, lives: 1, hitH: .6, top: 1.2, dmg: 5, atkT: 1.1, eye: [2.2, 3.4, .5], scale: .85, back: 3.5, prio: .6, wardCast: { every: 6, r: 3.3, frac: .35, n: 6 }, death: 'flesh', rig: 'shaman' },
   harpy: { name: 'Harpy', tip: 'Swoops down to snatch a footman. Hit it hard while it is low.', hp: 46, spd: 1.9, rad: .26, mass: .5, bounty: 10, lives: 1, hitH: 0, top: .55, dmg: 8, atkT: 1, eye: [3.4, 2.2, .3], scale: 1.1, fly: true, alt: [2.6, 3.3], flap: 11, swoop: { every: [5, 8], carry: 1.3, drop: .75, low: 1.6 }, death: 'bat', cat: 'air', rig: 'harpy' },
   hound: { name: 'Hell hound', tip: 'Runs in packs and leaves fire that burns your footmen.', hp: 42, spd: 2.55, rad: .29, mass: .9, bounty: 7, lives: 1, hitH: .4, top: .85, dmg: 10, atkT: .7, eye: [3.6, 1.2, .2], scale: 1, trail: { every: .45, r: .42, life: 1.5, dps: 6 }, death: 'fur', cat: 'swarm', rig: 'hound' },
+  // Round 6 (Stormreach). drowned: a sea-soaked skeleton off the wrecks (the skeleton model, tinted sea-green), a little
+  // tougher and slower than a plain one. leviathan: the land's boss; it raises the drowned (summon), sweeps a tidal wave
+  // down the road ahead of it (tide: footmen there are shoved back and hurt, monsters ride it faster) and enrages when low.
+  drowned: { name: 'Drowned dead', tip: 'Sea-soaked skeletons off the wrecks. Tougher than plain bones.', hp: 46, spd: 1.15, rad: .28, mass: 1.2, bounty: 7, lives: 1, hitH: .75, top: 1.45, dmg: 7, atkT: 1.0, eye: [.5, 3.2, 2.4], scale: 1.04, death: 'bones', blade: true, tint: [.55, 1.0, .9], rig: 'skel' },
   giant: { name: 'Bone Giant', tip: 'Slow and enormous. Hit it with everything.', hp: 1250, spd: .88, rad: .92, mass: 40, bounty: 200, lives: 5, hitH: 2.2, top: 4.0, dmg: 46, atkT: 1.7, eye: [5, .9, .2], scale: 2.7, boss: true, death: 'bones', blade: true, cat: 'armor' },
   ogre: { name: 'Ogre', tip: 'Smashes footmen aside.', hp: 1400, spd: .8, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 1.9, top: 3.4, dmg: 52, atkT: 1.8, eye: [4.5, 2.2, .3], scale: 2.6, boss: true, death: 'flesh', blade: true, cat: 'armor' },
   jotun: { name: 'Frost Jotun', tip: 'Its stomp freezes nearby towers.', hp: 1150, spd: .8, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 1.9, top: 3.6, dmg: 52, atkT: 1.8, eye: [.8, 2.4, 4], scale: 2.75, boss: true, stomp: { every: 10, r: 5.2, stun: 1.8 }, death: 'flesh', blade: true, cat: 'armor', tint: [.55, .85, 2.5] },
   queen: { name: 'Brood Queen', tip: 'Keeps hatching spiders.', hp: 1150, spd: .85, rad: 1.1, mass: 40, bounty: 200, lives: 5, hitH: 1.0, top: 2.0, dmg: 40, atkT: 1.5, eye: [3.8, .3, .9], scale: 4.2, boss: true, summon: { type: 'spider', n: 2, every: 8, max: 99, hp: 1 }, death: 'bug', cat: 'armor', tint: [.85, .55, 1.0] },
   colossus: { name: 'Magma Colossus', tip: 'Speeds up when it is nearly dead.', hp: 1250, spd: .7, rad: 1.05, mass: 60, bounty: 200, lives: 5, hitH: 2.2, top: 4.3, dmg: 60, atkT: 2.0, eye: [4, 1.6, .3], scale: 3.0, boss: true, armor: .85, slowRes: .3, enrage: [.3, 1.25], death: 'rock', cat: 'armor', tint: [1.5, .5, .26] },
   king: { name: 'The Buried King', tip: 'Summons mummies to walk with him.', hp: 1250, spd: .86, rad: .92, mass: 40, bounty: 200, lives: 5, hitH: 2.2, top: 4.2, dmg: 46, atkT: 1.7, eye: [.6, 3.0, 2.6], scale: 2.7, boss: true, summon: { type: 'mummy', n: 1, every: 9, max: 99, hp: .7 }, death: 'bones', blade: true, cat: 'armor', tint: [1.2, 1.0, .55] },
+  leviathan: { name: 'The Drowned King', tip: 'Raises the drowned and sweeps a tidal wave down the road. Freeze the wave to break it.', hp: 1250, spd: .8, rad: 1.0, mass: 50, bounty: 200, lives: 5, hitH: 2.1, top: 4.1, dmg: 50, atkT: 1.8, eye: [.4, 3.0, 2.6], scale: 2.75, boss: true, summon: { type: 'drowned', n: 2, every: 8.5, max: 99, hp: .55 }, tide: { every: 12, len: 7.5, dur: 1.5, push: 7, dmg: 16, haste: .4, hasteT: 3.5 }, enrage: [.3, 1.2], death: 'flesh', blade: true, cat: 'armor', rig: 'leviathan' },
 };
 
 function spawnMonster(type, o = {}) {
@@ -43,7 +48,7 @@ function spawnMonster(type, o = {}) {
     x: 0, y: 0, z: 0, yaw: 0, ph: rnd() * 6, mv: 1, vf: def.spd, spdNow: def.spd, spdMul: rr(.93, 1.07) * (o.spdMul || 1), slowT: 0, slowF: 0,
     flash: 0, flinch: 0, atk: -1, cd: rr(.1, .5), foe: null, prog: 0, vis: false, dead: false, dying: 0, ks: 0, kl: 0, hop: rnd(), rad: def.rad * (o.radMul || 1), mass: def.mass,
     hitH: def.hitH, scale: def.scale * rr(.95, 1.05), fly: !!def.fly, torch: false, flame: null, tint: (bt && bt[type]) || def.tint || null, men: 0, struck: false, step: 0, alive: true, lI: 0, lx: 0, ly: 0, lz: 0, lseed: rnd() * 9, vx: 0, vz: 0, pop: o.pop || 0,
-    haste: 0, hitAt: -9, beat: rnd() * 6, eth: false, gT: rnd() * 4, cast: 0, sumN: 0, sumT: def.summon ? def.summon.every * rr(.45, .7) : 0, stT: def.stomp ? def.stomp.every * .6 : 0, rage: false,
+    haste: 0, hitAt: -9, beat: rnd() * 6, eth: false, gT: rnd() * 4, cast: 0, sumN: 0, sumT: def.summon ? def.summon.every * rr(.45, .7) : 0, stT: def.stomp ? def.stomp.every * .6 : 0, rage: false, tdT: def.tide ? def.tide.every * .5 : 0, tideT: 0, tideH: 0,
     // Round 4 state (Ash's rigs may read these): shove 0-1 after a ram hit; swoop 0 cruise / 1 dive / 2 carrying, carry = the footman held,
     // low = near the ground; wardT = time to the next ward cast; trailT = time to the next fire patch.
     shove: 0, swoop: 0, swT: def.swoop ? rr(2, 4) : 0, carry: null, prey: null, low: false, wardT: def.wardCast ? def.wardCast.every * rr(.3, .55) : 0, trailT: def.trail ? rr(.1, .4) : 0,
@@ -51,7 +56,7 @@ function spawnMonster(type, o = {}) {
   m.home = m.lane = m.lat;
   if (type === 'skel' && rnd() < .26) { m.torch = true; m.flame = addFlame({ x: 0, y: -50, z: 0, size: .36, embers: .45, glow: .8 }); m.lI = 30; }
   if (type === 'bomber') { m.torch = true; m.flame = addFlame({ x: 0, y: -50, z: 0, size: .3, embers: .7, glow: .7 }); m.lI = 26; }
-  if (type === 'skel') m.tint = rnd() < .3 ? [.9, .86, .74] : null;
+  if (type === 'skel') m.tint = rnd() < .3 ? [.9, .86, .74] : (bt && bt.skel) || null;
   if (def.glow) { m.glowL = true; m.lI = def.glow; m.lCol = B.bio.wispHex || 0xb0a0ff; }
   if (m.fly) {
     const c = B.cave; m.x = c.x + rr(-.5, .5); m.z = c.z + rr(-1, 1); m.y = c.y + 2.2; m.s = c.s + rr(0, .6);
@@ -170,8 +175,10 @@ const RIG_STANDIN = {
   shaman: m => standIn(m, [.75, 1.25, .55], e => { e.weapon = KIT.item.staff; e.staff = true; e.hood = true; return rigHuman(KIT.ogre, SPEC.ogre, e); }),
   harpy: m => standIn(m, [1.3, .95, .7], e => rigBat(e, KIT.garg, .1, .06)),
   hound: m => standIn(m, [1.25, .42, .3], rigWolf),
+  // Round 6 stand-in until RIGS.leviathan lands: a sea-green ogre with a pike for a trident.
+  leviathan: m => standIn(m, [.34, .66, .7], e => { e.weapon = KIT.item.pike; e.wScale = 1.5; e.heavy = true; e.crown = true; return rigHuman(KIT.ogre, SPEC.ogre, e); }),
 };
-const EYE_STANDIN = { ram: 'golem', shaman: 'ghoul', harpy: 'gargoyle', hound: 'wolf' };
+const EYE_STANDIN = { ram: 'golem', shaman: 'ghoul', harpy: 'gargoyle', hound: 'wolf', leviathan: 'ogre' };
 const EYES = {
   skel: SKEL_EYE, knight: SKEL_EYE, giant: [.058, .185, .152, .075], ogre: OGRE_EYE, rat: [.05, .03, .42, .05], bat: [.04, .03, .16, .05], slime: [.13, .2, .44, .08], slimelet: [.13, .2, .44, .08],
   ghoul: OGRE_EYE, brute: OGRE_EYE, jotun: OGRE_EYE, golem: [.04, .1, .17, .05], colossus: [.04, .1, .17, .05], necro: SKEL_EYE, drummer: SKEL_EYE, bomber: SKEL_EYE, mummy: SKEL_EYE, king: [.058, .185, .152, .075],
@@ -193,7 +200,7 @@ function drawMonster(m, t) {
   }
   if (ty === 'wisp') { const k = m.tint || [1, 1, 1]; FX.add.push(m.x, m.y, m.z, .26, .26, 0, 0, k[0] * 2.2, k[1] * 2.2, k[2] * 2.2, tw, 0, 0, 0, 0); FX.add.push(m.x, m.y, m.z, 1.5, 1.5, 0, 0, k[0] * .5, k[1] * .5, k[2] * .5, .5 * tw, 2, 0, 0, 0); m.lx = m.x; m.ly = m.y; m.lz = m.z; if (rnd() < .3) fxPart(m.x + rr(-.05, .05), m.y + rr(-.05, .05), m.z + rr(-.05, .05), -m.vx * .2, rr(-.2, .2), -m.vz * .2, rr(.3, .6), .05, k[0] * 1.6, k[1] * 1.6, k[2] * 1.6, { drag: 1 }); }
   else if (ty === 'wraith') { const a = m.eth ? .5 + .2 * Math.sin(t * 23) : .16; FX.add.push(m.x, m.y + .75 * sc, m.z, 2.3 * sc, 2.6 * sc, 0, 0, .25, .55, 1.2, a, 2, 0, 0, 0); if (m.eth && rnd() < .3) fxPart(m.x + rr(-.25, .25), m.y + rr(.1, 1.3), m.z + rr(-.25, .25), 0, rr(.3, .9), 0, rr(.3, .6), .05, .5, 1.0, 2.0, { drag: .5 }); }
-  else if (ty === 'necro' || ty === 'queen' || ty === 'king') { if (m.cast > 0) { const g = ty === 'necro' ? [.4, 1.6, .6] : ty === 'queen' ? [1.2, .5, 1.6] : [.4, 1.5, 1.3]; FX.add.push(m.x, m.y + m.hitH * 1.6, m.z, 3.2 * m.cast * sc, 3.2 * m.cast * sc, 0, 0, g[0], g[1], g[2], .28 * m.cast, 2, 0, 0, 0); } }
+  else if (ty === 'necro' || ty === 'queen' || ty === 'king' || ty === 'leviathan') { if (m.cast > 0) { const g = ty === 'necro' ? [.4, 1.6, .6] : ty === 'queen' ? [1.2, .5, 1.6] : ty === 'leviathan' ? [.3, 1.3, 1.5] : [.4, 1.5, 1.3]; FX.add.push(m.x, m.y + m.hitH * 1.6, m.z, 3.2 * m.cast * sc, 3.2 * m.cast * sc, 0, 0, g[0], g[1], g[2], .28 * m.cast, 2, 0, 0, 0); } }
   else if (ty === 'ram' || ty === 'shaman' || ty === 'harpy' || ty === 'hound') drawMonster4(m, t, ty, M, tw, sc);
   else if (ty === 'colossus' && rnd() < (m.rage ? .5 : .12)) fxPart(m.x + rr(-.7, .7), m.y + rr(.6, 3), m.z + rr(-.7, .7), rr(-.3, .3), rr(.6, 1.8), rr(-.3, .3), rr(.6, 1.2), rr(.05, .08), 2.6, .9, .15, { drag: .3, wob: 1, rise: .3 });
   // A shaman's ward (not the shielded elite's, which has its own aura): a soft green-blue shell that pulses when cast.
@@ -263,6 +270,7 @@ function footmanThink(f, dt) {
     fxDust(f.x, f.y + .05, f.z, 6, .8, { speed: 2 }); sfx('hammer', f.x, f.z, .5, .8); f.hp -= dmg; f.flash = 1; f.flinch = 1;
     if (f.hp <= 0) { killFootman(f, 0, 0); return; }
   }
+  if (f.stagger > 0) { f.stagger -= dt; speed = .35; }
   if (f.kbx || f.kbz) { f.x += f.kbx * dt; f.z += f.kbz * dt; const k = Math.exp(-6 * dt); f.kbx *= k; f.kbz *= k; if (Math.abs(f.kbx) + Math.abs(f.kbz) < .05) f.kbx = f.kbz = 0; }
   let m = f.target;
   if (m && (m.dead || m.hp <= 0 || Math.abs(m.s - rs) > 3.0 || m.dying)) { if (m.foe === f) m.foe = null; m.men = Math.max(0, m.men - 1); m = f.target = null; }
@@ -287,7 +295,7 @@ function footmanThink(f, dt) {
     f.atk += dt / .58;
     if (f.atk >= .5 && !f.struck) { f.struck = true; if (m && !m.dead && Math.hypot(m.x - f.x, m.z - f.z) < m.rad + f.rad + .75 + f.reach) { strike(f, m, f.dmg * (f.first ? 2 : 1) * (f.bigMul > 1 && (m.def.boss || m.mass >= 4) ? f.bigMul : 1), true); f.first = false; } }
     if (f.atk >= 1) { f.atk = -1; f.cd = rr(.3, .5); }
-  } else if (fighting && f.cd <= 0) { f.atk = 0; f.struck = false; }
+  } else if (fighting && f.cd <= 0 && !(f.stagger > 0)) { f.atk = 0; f.struck = false; }
   f.flash = Math.max(0, f.flash - dt * 7); f.flinch = Math.max(0, f.flinch - dt * 4.5);
   const q = pathNear(B, f.x, f.z, f.s, 20); f.s = q.s; f.lat = q.lat; f.onRoad = Math.abs(q.lat) < ROAD_HALF + .3;
   f.y = f.onRoad ? B.py[q.i] + .03 : B.heightAt(f.x, f.z);
@@ -346,6 +354,7 @@ function updateUnits(dt) {
     m.flash = Math.max(0, m.flash - dt * 7); m.flinch = Math.max(0, m.flinch - dt * 4.2);
     if (m.slowT > 0) { m.slowT -= dt; if (m.slowT <= 0) m.slowF = 0; }
     if (m.frozen > 0) m.frozen -= dt;
+    if (m.tideT > 0) m.tideT -= dt;
     if (m.fly) { updateBat(m, dt); continue; }
     const def = m.def, maxLat = Math.max(0, maxLatBase - m.rad * .7);
     if (m.dying > 0) {
@@ -374,9 +383,11 @@ function updateUnits(dt) {
         for (const tw of G.towers) if (tw.alive && tw.state === 'active' && dist2(tw.x, tw.z, m.x, m.z) < sp.r * sp.r) { tw.stun = sp.stun; fxTimed(5, tw.x, tw.y + 2, tw.z, 3, 3, .6, 1.2, 2.4, .9, .3); }
       }
     }
+    // The Drowned King's tidal wave (startTide / updateTides in 62-game.js), more often once it is enraged.
+    if (def.tide && m.vis && m.s > B.cave.s + 3) { m.tdT -= dt; if (m.tdT <= 0) { m.tdT = def.tide.every * (m.rage ? .65 : 1); startTide(m); } }
     if (def.wardCast && m.vis && !m.dying) shamanWard(m, dt);
     if (m.shove > 0) m.shove = Math.max(0, m.shove - dt * 2.5);
-    let want = def.spd * m.spdMul * (1 - m.slowF) * (1 + m.haste) * (m.evMul || 1), hopMul = 1;
+    let want = def.spd * m.spdMul * (1 - m.slowF) * (1 + m.haste) * (m.evMul || 1) * (m.tideT > 0 ? 1 + m.tideH : 1), hopMul = 1;
     if (def.back) {
       // Hangs back: with no ally a few steps ahead it slows down and lets the column lead.
       let lo = 0, hi = nu, ahead = false; while (lo < hi) { const md = (lo + hi) >> 1; if (U[md].s <= m.s) lo = md + 1; else hi = md; }

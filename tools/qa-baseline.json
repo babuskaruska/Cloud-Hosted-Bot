@@ -30,6 +30,12 @@
    "towers": 4,
    "phase": "play"
   },
+  "storm": {
+   "lives": 20,
+   "mons": 17,
+   "towers": 4,
+   "phase": "play"
+  },
   "boss": {
    "phase": "play",
    "k": 8,
@@ -240,8 +246,8 @@
   }
  },
  "perf": {
-  "msPerFrame": 369.82,
-  "calls": 157,
+  "msPerFrame": 331.84,
+  "calls": 156,
   "mons": 19
  }
 }

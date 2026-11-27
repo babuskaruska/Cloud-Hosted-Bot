@@ -2,7 +2,7 @@
 
 A self-playing 3D isometric tower defense in a single HTML file.
 
-A handful of firelit towers hold the great beacon of a ruined keep against endless columns of monsters, across five lands from a dark mountain pass to a snowfield, a bog, a lava scar and a desert at dusk. An AI commander plays from the moment the page loads, and you can take over at any time.
+A handful of firelit towers hold the great beacon of a ruined keep against endless columns of monsters, across six lands from a dark mountain pass to a snowfield, a bog, a lava scar, a desert at dusk and a storm-lashed sea cliff. An AI commander plays from the moment the page loads, and you can take over at any time.
 
 **[Play it in your browser](https://kevintngo.github.io/cinderwatch/)** · [Watch 20 seconds of gameplay](https://kevintngo.github.io/cinderwatch/media/gameplay-20s.mp4)
 
@@ -19,7 +19,7 @@ The play link above is the original game. The build in this repository adds the 
   - Repair the beacon (`R`) when it runs low.
 - **Tower branches:** at max level each tower picks one of two paths: Longbow or Volley, Mortar or Firebomb, Tempest or Frost, Knights or Pikes. Each branch has its own model, and overcharge stacks go on top.
 - **Spells, fuelled by mana from kills:** Meteor (`Q`), Frost (`E`) and Rally (`T`).
-- **Land events:** a rockslide, blizzard, bog fog, lava surge or sandstorm strikes once per battlefield.
+- **Land events:** a rockslide, blizzard, bog fog, lava surge, sandstorm or thunderstorm strikes once per battlefield.
 - **Four new monsters:** the siege ram, the goblin shaman that wards its allies, the harpy that snatches footmen, and hell hounds that leave fire.
 - **Feel:** camera shake, hit-stop, gore, ground fire, boss entrances, chain explosions, knights, pikemen and militia footmen.
 - **Sound:** music that follows the danger, with its own mode and drum kit for each land; boss themes and stings; land ambience; and fanfares for clearing a land or losing.
@@ -38,9 +38,9 @@ The play link above is the original game. The build in this repository adds the 
   - war drummers that speed up everything near them, and necromancers that raise more skeletons
   - bog toads, mummies that burst into scarabs, and brood mothers that burst into spiders
   - trolls that heal, stone golems that shrug off arrows, and gargoyles and glowing wisps in the air
-- **A boss on every fifth wave, one per land**: the Bone Giant, the Frost Jotun that freezes towers, the Brood Queen, the Magma Colossus and the Buried King, with the Ogre waiting on a second visit to Ashen Pass. Each land also favors its own monsters, and tints some of them to match.
+- **A boss on every fifth wave, one per land**: the Bone Giant, the Frost Jotun that freezes towers, the Brood Queen, the Magma Colossus, the Buried King and the Drowned King, whose tidal wave throws your footmen back down the road, with the Ogre waiting on a second visit to Ashen Pass. Each land also favors its own monsters, and tints some of them to match.
 - **Battlefields that rebuild themselves.** After each boss the slab crumbles away and a new one, with a different road, assembles out of the dark.
-- **Five lands.** Each new battlefield is in the next one: Ashen Pass, Frostfall (snow, a frozen stream and falling snow), Mirefen (bog pools, willows, glowing mushrooms and fireflies), Emberscar (a lava river, charred trees and ash) and Duskmesa (dunes, palms and an oasis). A page opened without a seed starts in a random one.
+- **Six lands.** Each new battlefield is in the next one: Ashen Pass, Frostfall (snow, a frozen stream and falling snow), Mirefen (bog pools, willows, glowing mushrooms and fireflies), Emberscar (a lava river, charred trees and ash), Duskmesa (dunes, palms and an oasis) and Stormreach (a sea cliff in driving rain). A page opened without a seed starts in a random one.
 - **Light as the main character.** A flickering beacon, a brazier on every tower, flaming arrows, cannon flashes and chain lightning, with moving shadows.
 - **A miniature look.** The scene is drawn at about half resolution, then given an ordered dither, a depth-aware tilt-shift blur, a vignette and film grain.
 - **No asset files.** Every model, texture and sound is generated in code.
@@ -127,7 +127,7 @@ This joins `src/*.js` into `index.html` and inlines three.js from `vendor/`.
 | `src/00-util.js` | Math, random numbers, noise |
 | `src/10-gfx.js` | Procedural textures, the lit material, the geometry builder |
 | `src/20-post.js` | Renderer and post-processing |
-| `src/29-biome.js` | The five lands: palettes, light, weather and water settings |
+| `src/29-biome.js` | The six lands: palettes, light, weather and water settings |
 | `src/30-layout.js`, `31-terrain.js`, `32-props.js`, `33-flora.js` | Road, stream and pad layout, terrain, scenery, plants and props of each land |
 | `src/40-fx.js`, `41-weather.js` | Lights, particles, lightning, decals, snow, ash, dust and fireflies |
 | `src/50-rig.js`, `51-bestiary.js` | Characters built from instanced parts, debris, the models of the later monsters |
@@ -163,7 +163,7 @@ URL flags, for example `index.html#seed=4&fps=1`:
 | Flag | Effect |
 | --- | --- |
 | `seed=N` | Fix the battlefield and the run (starts in Ashen Pass) |
-| `biome=NAME` | Start in `ashen`, `frost`, `fen`, `ember` or `dunes` |
+| `biome=NAME` | Start in `ashen`, `frost`, `fen`, `ember`, `dunes` or `storm` |
 | `level=N`, `k=N` | Start at a later battlefield or wave |
 | `ff=S` | Fast-forward S seconds before the first frame |
 | `fps=1` | Show frame rate and draw calls |

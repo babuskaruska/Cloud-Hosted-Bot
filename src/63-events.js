@@ -7,6 +7,7 @@ const EVENTS = {
   bogfog: { land: 'fen', name: 'Bog fog', tip: 'Thick fog shortens tower range. Wisps drift in with it.', dur: 17, range: .74, spd: 1, mist: 2.4, wx: 1.4, tint: [.07, .16, .1] },
   lavaSurge: { land: 'ember', name: 'Lava surge', tip: 'The lava bursts out, burning monsters and stunning towers near it.', dur: 14, range: 1, spd: 1, mist: .5, wx: 2, tint: [.22, .07, .03] },
   sandstorm: { land: 'dunes', name: 'Sandstorm', tip: 'Sand cuts tower range, speeds the column and carries scarabs.', dur: 16, range: .76, spd: 1.14, mist: 1.8, wx: 3.2, tint: [.24, .16, .08] },
+  thunderstorm: { land: 'storm', name: 'Thunderstorm', tip: 'Lightning strikes the road and burns monsters, but now and then it stuns a tower.', dur: 16, range: .92, spd: 1, mist: .8, wx: 2.6, tint: [.05, .08, .13] },
 };
 G.event = null; G.rangeMul = 1; G.evLevel = -1; G.evWave = 0; G.evDone = false;
 const _evp = { x: 0, y: 0, z: 0, tx: 0, tz: 0 };
@@ -51,6 +52,31 @@ function eruption(ev) {
   for (const tw of G.towers) if (tw.alive && tw.state === 'active' && dist2(tw.x, tw.z, x, z) < 3.4 * 3.4) tw.stun = Math.max(tw.stun || 0, 1.6);
 }
 
+// Thunderstorm: a bolt hits a random spot on the road (gameplay stream). Monsters near it, flyers too, take a jolt;
+// sometimes it also stuns the nearest tower. The look is Ash's FX.lightningAt when present, else a stand-in.
+const STRIKE = { r: 1.9, dmg: 85, stun: .16, stunT: 1.5, stunR: 6 };
+function lightningStrike(ev) {
+  const B = G.B, s = rr(B.cave.s + 2, B.L - 1.5), lat = rr(-.85, .85) * ROAD_HALF, p = pathAt(B, s, _evp);
+  const x = p.x - p.tz * lat, z = p.z + p.tx * lat, y = p.y, dmg = STRIKE.dmg * (1 + .3 * G.level), r = STRIKE.r;
+  for (const m of G.mons) {
+    if (m.dead || m.hp <= 0 || m.dying || !(m.vis || m.fly)) continue; const d = Math.hypot(m.x - x, m.z - z); if (d > r + m.rad) continue;
+    hitMonster(m, dmg * (1 - .5 * sat(d / r)) * (m.def.boss ? .5 : 1), 'bolt', (m.x - x) / (d || 1), (m.z - z) / (d || 1), null);
+  }
+  let tw = null;
+  if (rnd() < STRIKE.stun) { let bd = STRIKE.stunR * STRIKE.stunR; for (const t of G.towers) { if (!t.alive || t.state !== 'active') continue; const d = dist2(t.x, t.z, x, z); if (d < bd) { bd = d; tw = t; } } }
+  if (tw) { tw.stun = Math.max(tw.stun || 0, STRIKE.stunT); ev.stuns = (ev.stuns || 0) + 1; }
+  ev.flash = 1;
+  if (typeof FX.lightningAt === 'function') FX.lightningAt(x, z);
+  else {
+    const top = [x + frr(-1.5, 1.5), y + 16, z + frr(-1.5, 1.5)], mid = [x + frr(-.8, .8), y + 7, z + frr(-.8, .8)];
+    fxBolt(top, mid, .28, [1.4, 1.7, 2.4], .16); fxBolt(mid, [x, y + .1, z], .28, [1.4, 1.7, 2.4], .14);
+    fxExplosion(x, y, z, .6); lightFlash(x, y + 5, z, 0xbcd4ff, 1800, .3, 46); shake(.25);
+    FX.decals.add(B.heightAt, x, z, 1.1, .02, .02, .025, .8, 25);
+  }
+  if (tw) { fxBolt([x, y + .3, z], [tw.x, tw.y + (tw.mounts ? tw.mounts.top : 2.5), tw.z], .35, [1.2, 1.5, 2.4], .07); fxSparks(tw.x, tw.y + 2.2, tw.z, 14, 4, 1.4, 1.7, 2.4, { size: .06 }); }
+  sfx('thunder', x, z, 1.1);
+}
+
 function updateEvents(dt) {
   const B = G.B;
   if (G.phase !== 'play') { if (G.event) endEvent(); return; }
@@ -77,6 +103,7 @@ function updateEvents(dt) {
   if (ev.kind === 'rockslide' && ev.t < 3.2 && ev.next <= 0) { ev.next = .14; rockAt(ev); }
   if (ev.kind === 'lavaSurge' && ev.n < 6 && ev.next <= 0 && ev.t > .6) { ev.next = rr(1.2, 2.2); ev.n++; eruption(ev); }
   if (ev.kind === 'bogfog' && ev.n < 6 && ev.next <= 0 && ev.t > 1.5 && G.mons.length < MAX_ALIVE) { ev.next = rr(1.5, 2.5); ev.n++; spawnMonster('wisp', { hpMul: 1 + .3 * G.level }); }
+  if (ev.kind === 'thunderstorm') { ev.flash = Math.max(0, (ev.flash || 0) - dt * 5); if (ev.next <= 0 && ev.t > .8 && ev.t < ev.dur - 1.2) { ev.next = rr(.8, 1.6); ev.n++; lightningStrike(ev); } }
   if (ev.kind === 'sandstorm' && ev.n < 14 && ev.next <= 0 && ev.t > 1.5 && G.mons.length < MAX_ALIVE) { ev.next = rr(.5, .9); ev.n++; spawnMonster('scarab', { hpMul: 1 + .3 * G.level }); }
   for (let i = ev.rocks.length - 1; i >= 0; i--) { const r = ev.rocks[i]; r.t -= dt; if (r.t <= 0) { swapRemove(ev.rocks, i); rockLands(r); } }
   if (ev.kind === 'rockslide' && ev.t > 1 && ev.t < ev.dur - 2 && rnd() < dt * 3) { const p = pathAt(B, ev.s0 + rr(-ev.span, ev.span), _evp); fxDust(p.x, p.y + .1, p.z, 1, .6, { a: .3 }); }
@@ -94,6 +121,8 @@ const LOOK_EV = {
   blizzard: { expo: 1.04, moon: .6, hemi: 1.15, sat: .72, lift: [.02, .03, .05], hemiCol: [.75, .85, 1.1], wx: { sizeB: [.03, .07], alB: [.75, 0, .9] }, wind: 5 },
   bogfog: { expo: .86, moon: .6, hemi: .95, sat: .85, lift: [.004, .016, .008], hemiCol: [.7, 1, .8] },
   lavaSurge: { expo: 1, moon: .75, hemi: .9, sat: 1.05, lift: [.05, .012, 0], hemiCol: [1.3, .7, .5], pulse: 1 },
+  // Thunderstorm: dark and blue, rain driven slanting across the view, and each strike lights the whole board (ev.flash).
+  thunderstorm: { expo: .8, moon: .5, hemi: .85, sat: .78, lift: [.004, .01, .022], hemiCol: [.8, .9, 1.2], wx: { sizeA: [.02, .05], colA: [.75, .85, 1, 1], alA: [.7, 0, 1] }, wind: 3.5, flash: 1 },
   sandstorm: { expo: .74, moon: .4, hemi: .8, sat: .78, lift: [.05, .028, .006], hemiCol: [1.35, .95, .6], moonCol: [1.3, .85, .5], wx: { sizeA: [.04, .08], sizeB: [.035, .07], colA: [1, .78, .5, .55], colB: [.95, .72, .45, .55], alA: [.55, 0, .35], alB: [.65, 0, .7] }, wind: 8 },
 };
 const WX_KEYS = ['sizeA', 'sizeB', 'colA', 'colB', 'alA', 'alB'], wxU = k => WX.u['u' + k[0].toUpperCase() + k.slice(1)].value;
@@ -115,7 +144,7 @@ function eventLook() {
   if (L.wind) { const rx = Math.cos(CAM.yaw), rz = -Math.sin(CAM.yaw), va = WX.u.uVelA.value, vb = WX.u.uVelB.value, s = L.wind * a; va.set(lerp(va.x, rx * s * .7, a), va.y, lerp(va.z, rz * s * .7, a)); vb.set(lerp(vb.x, rx * s, a), lerp(vb.y, -.15, a), lerp(vb.z, rz * s, a)); }
   // Light: darker and tinted, with a slow red pulse for the lava. The lift tints the shadows (added in the comp pass).
   const pul = L.pulse ? .75 + .25 * Math.sin(G.t * 5.3) * Math.sin(G.t * 2.1 + 1) : 1, c = R.mats.comp.uniforms, lf = c.uLift.value;
-  R.exposure *= lerp(1, L.expo, a); c.uGrade.value.y *= lerp(1, L.sat, a);
+  R.exposure *= lerp(1, L.expo, a) * (L.flash ? 1 + .9 * (ev.flash || 0) : 1); c.uGrade.value.y *= lerp(1, L.sat, a);
   lf.set(lf.x + L.lift[0] * a * pul, lf.y + L.lift[1] * a * pul, lf.z + L.lift[2] * a * pul);
   LT.moon.intensity *= lerp(1, L.moon, a); LT.hemi.intensity *= lerp(1, L.hemi, a);
   if (L.hemiCol) { const h = LT.hemi.color, hc = L.hemiCol; h.setRGB(h.r * lerp(1, hc[0], a), h.g * lerp(1, hc[1], a), h.b * lerp(1, hc[2], a)); }

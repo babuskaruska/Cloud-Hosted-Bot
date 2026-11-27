@@ -65,6 +65,22 @@ const BIOMES = [
     mobs: { mummy: 3, scarab: 2.4, spider: .6, bomber: 1.3, ghoul: 1.3, toad: 0, slime: .4, ram: 2.2, harpy: 2, shaman: .6 }, early: { mummy: 4, scarab: 2, ram: 5, harpy: 3 }, boss: ['king'], tints: { golem: [1.5, 1.1, .72], wolf: [1.5, 1.2, .8], wisp: [1.4, 1.0, .4], gargoyle: [1.5, 1.2, .9], toad: [1.3, 1.1, .7] }, wispHex: 0xffc060,
     trees: [['palm', 9, 3.0, 4.6], ['tree', 2, 2.4, 3.4]], stumps: 2, rocks: 44, tufts: 150, webs: 0,
   },
+  // MIRA STAND-IN for Stormreach (round 6): Ashen Pass's look with the storm key, so the gameplay can be tested.
+  // On merge keep Ash's 'storm' entry for everything visual, and take only `mobs`, `early`, `boss` and the `skel`
+  // tint below into it (Mira's gameplay preferences).
+  {
+    key: 'storm', name: 'Stormreach', col: {},
+    strata: [0x8f8474, 0x3c3f4c, 0x66564a, 0x767a86, 0x70503f, 0x4c4f5c, 0x9a8e7c, 0x55483e],
+    hemi: [0x5d7aa0, 0x161c26, 1.1], moon: [0xa0c4e8, 1.4], fill: [0x3a6a86, .3], moonPos: [14, 44, -34],
+    clear: [.003, .005, .009], mistAmb: [.04, .07, .1], mist: [-.3, .5, .85, .12], sky: [.01, .02, .035], lift: [.008, .016, .026], sat: .88, expo: .95, sprAmb: [.045, .065, .09],
+    cover: [0, .55, .3, .5], coverCol: [1, 1, 1], coverP: [.7, .6, 0, 0],
+    wat: [0, 1, 1, 0], watA: [.012, .02, .03], watB: [.3, .4, .5], fall: [0, 1, 1, 0], fallA: [.022, .034, .054], fallB: [.2, .27, .38], spray: 'water',
+    relief: [1.7, .5, 1, 0], puddles: 14, ponds: 1, sway: 1.2, wind: 1.3,
+    wx: { n: [.4, 0], velA: [.9, -6, .4], swayA: [.1, .2], sizeA: [.02, .04], colA: [.7, .8, .95, 1], alA: [.5, 0, .9], yA: [-2, 12], velB: [0, 0, 0], swayB: [0, 0], sizeB: [.05, .05], colB: [1, 1, 1, 1], alB: [0, 0, 0], yB: [0, 1], amb: [.12, .16, .24] },
+    mobs: { drowned: 3, harpy: 2.4, wraith: 2, knight: 1.8, ram: 1.6, gargoyle: 1.2, rat: .15, scarab: 0, mummy: 0, toad: .6, spider: .5, slime: .6, hound: .4, wolf: .5, golem: .6, shaman: .5, necro: 1.2 },
+    early: { drowned: 1, harpy: 3, wraith: 4, knight: 3, ram: 5 }, boss: ['leviathan'], tints: { skel: [.62, .95, .88], wisp: [.5, 1.1, 1.3], gargoyle: [.75, .95, 1.05], golem: [.7, .95, .95] }, wispHex: 0x80e0e0,
+    trees: [['tree', 9, 2.6, 4.6]], stumps: 8, rocks: 80, tufts: 200, webs: 0,
+  },
 ];
 const BIOME = { start: 0 };
 function biomeFor(index) { return BIOMES[((BIOME.start + index) % BIOMES.length + BIOMES.length) % BIOMES.length]; }

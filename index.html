@@ -827,6 +827,22 @@ const BIOMES = [
     mobs: { mummy: 3, scarab: 2.4, spider: .6, bomber: 1.3, ghoul: 1.3, toad: 0, slime: .4, ram: 2.2, harpy: 2, shaman: .6 }, early: { mummy: 4, scarab: 2, ram: 5, harpy: 3 }, boss: ['king'], tints: { golem: [1.5, 1.1, .72], wolf: [1.5, 1.2, .8], wisp: [1.4, 1.0, .4], gargoyle: [1.5, 1.2, .9], toad: [1.3, 1.1, .7] }, wispHex: 0xffc060,
     trees: [['palm', 9, 3.0, 4.6], ['tree', 2, 2.4, 3.4]], stumps: 2, rocks: 44, tufts: 150, webs: 0,
   },
+  // MIRA STAND-IN for Stormreach (round 6): Ashen Pass's look with the storm key, so the gameplay can be tested.
+  // On merge keep Ash's 'storm' entry for everything visual, and take only `mobs`, `early`, `boss` and the `skel`
+  // tint below into it (Mira's gameplay preferences).
+  {
+    key: 'storm', name: 'Stormreach', col: {},
+    strata: [0x8f8474, 0x3c3f4c, 0x66564a, 0x767a86, 0x70503f, 0x4c4f5c, 0x9a8e7c, 0x55483e],
+    hemi: [0x5d7aa0, 0x161c26, 1.1], moon: [0xa0c4e8, 1.4], fill: [0x3a6a86, .3], moonPos: [14, 44, -34],
+    clear: [.003, .005, .009], mistAmb: [.04, .07, .1], mist: [-.3, .5, .85, .12], sky: [.01, .02, .035], lift: [.008, .016, .026], sat: .88, expo: .95, sprAmb: [.045, .065, .09],
+    cover: [0, .55, .3, .5], coverCol: [1, 1, 1], coverP: [.7, .6, 0, 0],
+    wat: [0, 1, 1, 0], watA: [.012, .02, .03], watB: [.3, .4, .5], fall: [0, 1, 1, 0], fallA: [.022, .034, .054], fallB: [.2, .27, .38], spray: 'water',
+    relief: [1.7, .5, 1, 0], puddles: 14, ponds: 1, sway: 1.2, wind: 1.3,
+    wx: { n: [.4, 0], velA: [.9, -6, .4], swayA: [.1, .2], sizeA: [.02, .04], colA: [.7, .8, .95, 1], alA: [.5, 0, .9], yA: [-2, 12], velB: [0, 0, 0], swayB: [0, 0], sizeB: [.05, .05], colB: [1, 1, 1, 1], alB: [0, 0, 0], yB: [0, 1], amb: [.12, .16, .24] },
+    mobs: { drowned: 3, harpy: 2.4, wraith: 2, knight: 1.8, ram: 1.6, gargoyle: 1.2, rat: .15, scarab: 0, mummy: 0, toad: .6, spider: .5, slime: .6, hound: .4, wolf: .5, golem: .6, shaman: .5, necro: 1.2 },
+    early: { drowned: 1, harpy: 3, wraith: 4, knight: 3, ram: 5 }, boss: ['leviathan'], tints: { skel: [.62, .95, .88], wisp: [.5, 1.1, 1.3], gargoyle: [.75, .95, 1.05], golem: [.7, .95, .95] }, wispHex: 0x80e0e0,
+    trees: [['tree', 9, 2.6, 4.6]], stumps: 8, rocks: 80, tufts: 200, webs: 0,
+  },
 ];
 const BIOME = { start: 0 };
 function biomeFor(index) { return BIOMES[((BIOME.start + index) % BIOMES.length + BIOMES.length) % BIOMES.length]; }
@@ -4572,12 +4588,17 @@ const MON = {
   shaman: { name: 'Goblin shaman', tip: 'Wards the monsters around it. Kill it first.', hp: 50, spd: 1.05, rad: .25, mass: .8, bounty: 12, lives: 1, hitH: .6, top: 1.2, dmg: 5, atkT: 1.1, eye: [2.2, 3.4, .5], scale: .85, back: 3.5, prio: .6, wardCast: { every: 6, r: 3.3, frac: .35, n: 6 }, death: 'flesh', rig: 'shaman' },
   harpy: { name: 'Harpy', tip: 'Swoops down to snatch a footman. Hit it hard while it is low.', hp: 46, spd: 1.9, rad: .26, mass: .5, bounty: 10, lives: 1, hitH: 0, top: .55, dmg: 8, atkT: 1, eye: [3.4, 2.2, .3], scale: 1.1, fly: true, alt: [2.6, 3.3], flap: 11, swoop: { every: [5, 8], carry: 1.3, drop: .75, low: 1.6 }, death: 'bat', cat: 'air', rig: 'harpy' },
   hound: { name: 'Hell hound', tip: 'Runs in packs and leaves fire that burns your footmen.', hp: 42, spd: 2.55, rad: .29, mass: .9, bounty: 7, lives: 1, hitH: .4, top: .85, dmg: 10, atkT: .7, eye: [3.6, 1.2, .2], scale: 1, trail: { every: .45, r: .42, life: 1.5, dps: 6 }, death: 'fur', cat: 'swarm', rig: 'hound' },
+  // Round 6 (Stormreach). drowned: a sea-soaked skeleton off the wrecks (the skeleton model, tinted sea-green), a little
+  // tougher and slower than a plain one. leviathan: the land's boss; it raises the drowned (summon), sweeps a tidal wave
+  // down the road ahead of it (tide: footmen there are shoved back and hurt, monsters ride it faster) and enrages when low.
+  drowned: { name: 'Drowned dead', tip: 'Sea-soaked skeletons off the wrecks. Tougher than plain bones.', hp: 46, spd: 1.15, rad: .28, mass: 1.2, bounty: 7, lives: 1, hitH: .75, top: 1.45, dmg: 7, atkT: 1.0, eye: [.5, 3.2, 2.4], scale: 1.04, death: 'bones', blade: true, tint: [.55, 1.0, .9], rig: 'skel' },
   giant: { name: 'Bone Giant', tip: 'Slow and enormous. Hit it with everything.', hp: 1250, spd: .88, rad: .92, mass: 40, bounty: 200, lives: 5, hitH: 2.2, top: 4.0, dmg: 46, atkT: 1.7, eye: [5, .9, .2], scale: 2.7, boss: true, death: 'bones', blade: true, cat: 'armor' },
   ogre: { name: 'Ogre', tip: 'Smashes footmen aside.', hp: 1400, spd: .8, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 1.9, top: 3.4, dmg: 52, atkT: 1.8, eye: [4.5, 2.2, .3], scale: 2.6, boss: true, death: 'flesh', blade: true, cat: 'armor' },
   jotun: { name: 'Frost Jotun', tip: 'Its stomp freezes nearby towers.', hp: 1150, spd: .8, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 1.9, top: 3.6, dmg: 52, atkT: 1.8, eye: [.8, 2.4, 4], scale: 2.75, boss: true, stomp: { every: 10, r: 5.2, stun: 1.8 }, death: 'flesh', blade: true, cat: 'armor', tint: [.55, .85, 2.5] },
   queen: { name: 'Brood Queen', tip: 'Keeps hatching spiders.', hp: 1150, spd: .85, rad: 1.1, mass: 40, bounty: 200, lives: 5, hitH: 1.0, top: 2.0, dmg: 40, atkT: 1.5, eye: [3.8, .3, .9], scale: 4.2, boss: true, summon: { type: 'spider', n: 2, every: 8, max: 99, hp: 1 }, death: 'bug', cat: 'armor', tint: [.85, .55, 1.0] },
   colossus: { name: 'Magma Colossus', tip: 'Speeds up when it is nearly dead.', hp: 1250, spd: .7, rad: 1.05, mass: 60, bounty: 200, lives: 5, hitH: 2.2, top: 4.3, dmg: 60, atkT: 2.0, eye: [4, 1.6, .3], scale: 3.0, boss: true, armor: .85, slowRes: .3, enrage: [.3, 1.25], death: 'rock', cat: 'armor', tint: [1.5, .5, .26] },
   king: { name: 'The Buried King', tip: 'Summons mummies to walk with him.', hp: 1250, spd: .86, rad: .92, mass: 40, bounty: 200, lives: 5, hitH: 2.2, top: 4.2, dmg: 46, atkT: 1.7, eye: [.6, 3.0, 2.6], scale: 2.7, boss: true, summon: { type: 'mummy', n: 1, every: 9, max: 99, hp: .7 }, death: 'bones', blade: true, cat: 'armor', tint: [1.2, 1.0, .55] },
+  leviathan: { name: 'The Drowned King', tip: 'Raises the drowned and sweeps a tidal wave down the road. Freeze the wave to break it.', hp: 1250, spd: .8, rad: 1.0, mass: 50, bounty: 200, lives: 5, hitH: 2.1, top: 4.1, dmg: 50, atkT: 1.8, eye: [.4, 3.0, 2.6], scale: 2.75, boss: true, summon: { type: 'drowned', n: 2, every: 8.5, max: 99, hp: .55 }, tide: { every: 12, len: 7.5, dur: 1.5, push: 7, dmg: 16, haste: .4, hasteT: 3.5 }, enrage: [.3, 1.2], death: 'flesh', blade: true, cat: 'armor', rig: 'leviathan' },
 };
 
 function spawnMonster(type, o = {}) {
@@ -4587,7 +4608,7 @@ function spawnMonster(type, o = {}) {
     x: 0, y: 0, z: 0, yaw: 0, ph: rnd() * 6, mv: 1, vf: def.spd, spdNow: def.spd, spdMul: rr(.93, 1.07) * (o.spdMul || 1), slowT: 0, slowF: 0,
     flash: 0, flinch: 0, atk: -1, cd: rr(.1, .5), foe: null, prog: 0, vis: false, dead: false, dying: 0, ks: 0, kl: 0, hop: rnd(), rad: def.rad * (o.radMul || 1), mass: def.mass,
     hitH: def.hitH, scale: def.scale * rr(.95, 1.05), fly: !!def.fly, torch: false, flame: null, tint: (bt && bt[type]) || def.tint || null, men: 0, struck: false, step: 0, alive: true, lI: 0, lx: 0, ly: 0, lz: 0, lseed: rnd() * 9, vx: 0, vz: 0, pop: o.pop || 0,
-    haste: 0, hitAt: -9, beat: rnd() * 6, eth: false, gT: rnd() * 4, cast: 0, sumN: 0, sumT: def.summon ? def.summon.every * rr(.45, .7) : 0, stT: def.stomp ? def.stomp.every * .6 : 0, rage: false,
+    haste: 0, hitAt: -9, beat: rnd() * 6, eth: false, gT: rnd() * 4, cast: 0, sumN: 0, sumT: def.summon ? def.summon.every * rr(.45, .7) : 0, stT: def.stomp ? def.stomp.every * .6 : 0, rage: false, tdT: def.tide ? def.tide.every * .5 : 0, tideT: 0, tideH: 0,
     // Round 4 state (Ash's rigs may read these): shove 0-1 after a ram hit; swoop 0 cruise / 1 dive / 2 carrying, carry = the footman held,
     // low = near the ground; wardT = time to the next ward cast; trailT = time to the next fire patch.
     shove: 0, swoop: 0, swT: def.swoop ? rr(2, 4) : 0, carry: null, prey: null, low: false, wardT: def.wardCast ? def.wardCast.every * rr(.3, .55) : 0, trailT: def.trail ? rr(.1, .4) : 0,
@@ -4595,7 +4616,7 @@ function spawnMonster(type, o = {}) {
   m.home = m.lane = m.lat;
   if (type === 'skel' && rnd() < .26) { m.torch = true; m.flame = addFlame({ x: 0, y: -50, z: 0, size: .36, embers: .45, glow: .8 }); m.lI = 30; }
   if (type === 'bomber') { m.torch = true; m.flame = addFlame({ x: 0, y: -50, z: 0, size: .3, embers: .7, glow: .7 }); m.lI = 26; }
-  if (type === 'skel') m.tint = rnd() < .3 ? [.9, .86, .74] : null;
+  if (type === 'skel') m.tint = rnd() < .3 ? [.9, .86, .74] : (bt && bt.skel) || null;
   if (def.glow) { m.glowL = true; m.lI = def.glow; m.lCol = B.bio.wispHex || 0xb0a0ff; }
   if (m.fly) {
     const c = B.cave; m.x = c.x + rr(-.5, .5); m.z = c.z + rr(-1, 1); m.y = c.y + 2.2; m.s = c.s + rr(0, .6);
@@ -4714,8 +4735,10 @@ const RIG_STANDIN = {
   shaman: m => standIn(m, [.75, 1.25, .55], e => { e.weapon = KIT.item.staff; e.staff = true; e.hood = true; return rigHuman(KIT.ogre, SPEC.ogre, e); }),
   harpy: m => standIn(m, [1.3, .95, .7], e => rigBat(e, KIT.garg, .1, .06)),
   hound: m => standIn(m, [1.25, .42, .3], rigWolf),
+  // Round 6 stand-in until RIGS.leviathan lands: a sea-green ogre with a pike for a trident.
+  leviathan: m => standIn(m, [.34, .66, .7], e => { e.weapon = KIT.item.pike; e.wScale = 1.5; e.heavy = true; e.crown = true; return rigHuman(KIT.ogre, SPEC.ogre, e); }),
 };
-const EYE_STANDIN = { ram: 'golem', shaman: 'ghoul', harpy: 'gargoyle', hound: 'wolf' };
+const EYE_STANDIN = { ram: 'golem', shaman: 'ghoul', harpy: 'gargoyle', hound: 'wolf', leviathan: 'ogre' };
 const EYES = {
   skel: SKEL_EYE, knight: SKEL_EYE, giant: [.058, .185, .152, .075], ogre: OGRE_EYE, rat: [.05, .03, .42, .05], bat: [.04, .03, .16, .05], slime: [.13, .2, .44, .08], slimelet: [.13, .2, .44, .08],
   ghoul: OGRE_EYE, brute: OGRE_EYE, jotun: OGRE_EYE, golem: [.04, .1, .17, .05], colossus: [.04, .1, .17, .05], necro: SKEL_EYE, drummer: SKEL_EYE, bomber: SKEL_EYE, mummy: SKEL_EYE, king: [.058, .185, .152, .075],
@@ -4737,7 +4760,7 @@ function drawMonster(m, t) {
   }
   if (ty === 'wisp') { const k = m.tint || [1, 1, 1]; FX.add.push(m.x, m.y, m.z, .26, .26, 0, 0, k[0] * 2.2, k[1] * 2.2, k[2] * 2.2, tw, 0, 0, 0, 0); FX.add.push(m.x, m.y, m.z, 1.5, 1.5, 0, 0, k[0] * .5, k[1] * .5, k[2] * .5, .5 * tw, 2, 0, 0, 0); m.lx = m.x; m.ly = m.y; m.lz = m.z; if (rnd() < .3) fxPart(m.x + rr(-.05, .05), m.y + rr(-.05, .05), m.z + rr(-.05, .05), -m.vx * .2, rr(-.2, .2), -m.vz * .2, rr(.3, .6), .05, k[0] * 1.6, k[1] * 1.6, k[2] * 1.6, { drag: 1 }); }
   else if (ty === 'wraith') { const a = m.eth ? .5 + .2 * Math.sin(t * 23) : .16; FX.add.push(m.x, m.y + .75 * sc, m.z, 2.3 * sc, 2.6 * sc, 0, 0, .25, .55, 1.2, a, 2, 0, 0, 0); if (m.eth && rnd() < .3) fxPart(m.x + rr(-.25, .25), m.y + rr(.1, 1.3), m.z + rr(-.25, .25), 0, rr(.3, .9), 0, rr(.3, .6), .05, .5, 1.0, 2.0, { drag: .5 }); }
-  else if (ty === 'necro' || ty === 'queen' || ty === 'king') { if (m.cast > 0) { const g = ty === 'necro' ? [.4, 1.6, .6] : ty === 'queen' ? [1.2, .5, 1.6] : [.4, 1.5, 1.3]; FX.add.push(m.x, m.y + m.hitH * 1.6, m.z, 3.2 * m.cast * sc, 3.2 * m.cast * sc, 0, 0, g[0], g[1], g[2], .28 * m.cast, 2, 0, 0, 0); } }
+  else if (ty === 'necro' || ty === 'queen' || ty === 'king' || ty === 'leviathan') { if (m.cast > 0) { const g = ty === 'necro' ? [.4, 1.6, .6] : ty === 'queen' ? [1.2, .5, 1.6] : ty === 'leviathan' ? [.3, 1.3, 1.5] : [.4, 1.5, 1.3]; FX.add.push(m.x, m.y + m.hitH * 1.6, m.z, 3.2 * m.cast * sc, 3.2 * m.cast * sc, 0, 0, g[0], g[1], g[2], .28 * m.cast, 2, 0, 0, 0); } }
   else if (ty === 'ram' || ty === 'shaman' || ty === 'harpy' || ty === 'hound') drawMonster4(m, t, ty, M, tw, sc);
   else if (ty === 'colossus' && rnd() < (m.rage ? .5 : .12)) fxPart(m.x + rr(-.7, .7), m.y + rr(.6, 3), m.z + rr(-.7, .7), rr(-.3, .3), rr(.6, 1.8), rr(-.3, .3), rr(.6, 1.2), rr(.05, .08), 2.6, .9, .15, { drag: .3, wob: 1, rise: .3 });
   // A shaman's ward (not the shielded elite's, which has its own aura): a soft green-blue shell that pulses when cast.
@@ -4807,6 +4830,7 @@ function footmanThink(f, dt) {
     fxDust(f.x, f.y + .05, f.z, 6, .8, { speed: 2 }); sfx('hammer', f.x, f.z, .5, .8); f.hp -= dmg; f.flash = 1; f.flinch = 1;
     if (f.hp <= 0) { killFootman(f, 0, 0); return; }
   }
+  if (f.stagger > 0) { f.stagger -= dt; speed = .35; }
   if (f.kbx || f.kbz) { f.x += f.kbx * dt; f.z += f.kbz * dt; const k = Math.exp(-6 * dt); f.kbx *= k; f.kbz *= k; if (Math.abs(f.kbx) + Math.abs(f.kbz) < .05) f.kbx = f.kbz = 0; }
   let m = f.target;
   if (m && (m.dead || m.hp <= 0 || Math.abs(m.s - rs) > 3.0 || m.dying)) { if (m.foe === f) m.foe = null; m.men = Math.max(0, m.men - 1); m = f.target = null; }
@@ -4831,7 +4855,7 @@ function footmanThink(f, dt) {
     f.atk += dt / .58;
     if (f.atk >= .5 && !f.struck) { f.struck = true; if (m && !m.dead && Math.hypot(m.x - f.x, m.z - f.z) < m.rad + f.rad + .75 + f.reach) { strike(f, m, f.dmg * (f.first ? 2 : 1) * (f.bigMul > 1 && (m.def.boss || m.mass >= 4) ? f.bigMul : 1), true); f.first = false; } }
     if (f.atk >= 1) { f.atk = -1; f.cd = rr(.3, .5); }
-  } else if (fighting && f.cd <= 0) { f.atk = 0; f.struck = false; }
+  } else if (fighting && f.cd <= 0 && !(f.stagger > 0)) { f.atk = 0; f.struck = false; }
   f.flash = Math.max(0, f.flash - dt * 7); f.flinch = Math.max(0, f.flinch - dt * 4.5);
   const q = pathNear(B, f.x, f.z, f.s, 20); f.s = q.s; f.lat = q.lat; f.onRoad = Math.abs(q.lat) < ROAD_HALF + .3;
   f.y = f.onRoad ? B.py[q.i] + .03 : B.heightAt(f.x, f.z);
@@ -4890,6 +4914,7 @@ function updateUnits(dt) {
     m.flash = Math.max(0, m.flash - dt * 7); m.flinch = Math.max(0, m.flinch - dt * 4.2);
     if (m.slowT > 0) { m.slowT -= dt; if (m.slowT <= 0) m.slowF = 0; }
     if (m.frozen > 0) m.frozen -= dt;
+    if (m.tideT > 0) m.tideT -= dt;
     if (m.fly) { updateBat(m, dt); continue; }
     const def = m.def, maxLat = Math.max(0, maxLatBase - m.rad * .7);
     if (m.dying > 0) {
@@ -4918,9 +4943,11 @@ function updateUnits(dt) {
         for (const tw of G.towers) if (tw.alive && tw.state === 'active' && dist2(tw.x, tw.z, m.x, m.z) < sp.r * sp.r) { tw.stun = sp.stun; fxTimed(5, tw.x, tw.y + 2, tw.z, 3, 3, .6, 1.2, 2.4, .9, .3); }
       }
     }
+    // The Drowned King's tidal wave (startTide / updateTides in 62-game.js), more often once it is enraged.
+    if (def.tide && m.vis && m.s > B.cave.s + 3) { m.tdT -= dt; if (m.tdT <= 0) { m.tdT = def.tide.every * (m.rage ? .65 : 1); startTide(m); } }
     if (def.wardCast && m.vis && !m.dying) shamanWard(m, dt);
     if (m.shove > 0) m.shove = Math.max(0, m.shove - dt * 2.5);
-    let want = def.spd * m.spdMul * (1 - m.slowF) * (1 + m.haste) * (m.evMul || 1), hopMul = 1;
+    let want = def.spd * m.spdMul * (1 - m.slowF) * (1 + m.haste) * (m.evMul || 1) * (m.tideT > 0 ? 1 + m.tideH : 1), hopMul = 1;
     if (def.back) {
       // Hangs back: with no ally a few steps ahead it slows down and lets the column lead.
       let lo = 0, hi = nu, ahead = false; while (lo < hi) { const md = (lo + hi) >> 1; if (U[md].s <= m.s) lo = md + 1; else hi = md; }
@@ -5112,6 +5139,9 @@ Object.assign(G, {
   wavesPerLand: 8, horde: false, fires: [],
 });
 
+// Stormreach stand-in scenery until Ash's lands (harmless once BIOME_DRESS.storm exists).
+if (!BIOME_DRESS.storm) BIOME_DRESS.storm = BIOME_DRESS.ashen;
+
 // Global wave count (all lands so far), used for the best-run record.
 function waveNumber() { return G.level * G.wavesPerLand + (G.phase === 'rise' ? 1 : Math.max(1, G.k)); }
 // The wave within the current land, 1..wavesPerLand.
@@ -5127,9 +5157,12 @@ const ROSTER = {
   necro: [18, 1, 1, 1.2, 7, .9], mummy: [15, 1, 2, .9, 7, .9], brute: [32, 1, 1, 2, 8, .7], golem: [40, 1, 1, 2, 8, .7], brood: [30, 1, 1, 2, 9, .6],
   // Round 4: from the second land (sooner where a land favours them, see bio.early in 29-biome.js).
   shaman: [12, 1, 1, 1, 7, .7], harpy: [9, 1, 2, .7, 7, .7], hound: [6, 3, 5, .3, 8, .8], ram: [30, 1, 1, 1.8, 8, .8],
+  // Round 6: weight 0, so only lands that ask for them (bio.mobs) send them.
+  drowned: [5, 2, 4, .45, 1, 0],
 };
-// Horde swarm: [budget cost, weight]. Biome weights from bio.mobs still apply (0 removes one).
-const HORDE = { rat: [1.7, 3], spider: [2.6, 2], scarab: [1.2, 2.2], slimelet: [2.8, 1.4] };
+// Horde swarm: [budget cost, weight]. Biome weights from bio.mobs still apply (0 removes one); weight 0 means only
+// in lands that list the kind in bio.mobs (the drowned of Stormreach).
+const HORDE = { rat: [1.7, 3], spider: [2.6, 2], scarab: [1.2, 2.2], slimelet: [2.8, 1.4], drowned: [3.2, 0] };
 // Roster unlocks keep the old pace of five steps per land, spread over the land's waves.
 function rosterStep(k, level) { return level * 5 + Math.max(1, Math.ceil(k * 5 / G.wavesPerLand)); }
 function waveMenu(k, level) {
@@ -5217,6 +5250,65 @@ function updateElites(dt) {
   }
 }
 
+// The Drowned King's tidal wave (MON.leviathan.tide). The boss rears up and a wall of water runs down the road ahead
+// of it, from just in front of it to `len` further on, over `dur` seconds. Footmen it reaches are shoved back towards
+// the beacon, hurt and staggered (they let go of their foe); monsters it reaches ride it, faster for a few seconds.
+// A Frost spell on the wave front breaks it (breakTide). G.tides holds the running waves.
+G.tides = [];
+const _tdp = { x: 0, y: 0, z: 0, tx: 0, tz: 0 };
+function startTide(m) {
+  const B = G.B, td = m.def.tide, s0 = m.s + m.rad + .3; if (s0 > B.L - 2) return null;
+  const len = Math.min(td.len, B.L - .6 - s0); let men = 0;
+  for (const f of G.men) if (!f.dead && f.onRoad && f.s > s0 - .4 && f.s < s0 + len) men++;
+  const w = { m, s0, len, front: s0, t: 0, dur: td.dur, push: td.push, dmg: td.dmg, haste: td.haste, hasteT: td.hasteT, hit: new Set(), men, broken: false, acc: 0 };
+  G.tides.push(w); m.cast = 1; G.stats.tides = (G.stats.tides || 0) + 1;
+  const p = pathAt(B, s0, _tdp); shake(.7); lightFlash(p.x, p.y + 2, p.z, 0x7fe0e0, 900, .6, 22);
+  fxDust(p.x, p.y + .1, p.z, 10, 1.4, { speed: 3.4, c: [.5, .62, .66] });
+  sfx('roar', m.x, m.z, .9, .5); sfx('tidalWave', p.x, p.z, 1.1);
+  if (typeof AI !== 'undefined') AI.think = Math.min(AI.think, .1); // the commander reacts to the roar
+  return w;
+}
+function breakTide(w) {
+  if (w.broken) return; w.broken = true; w.t = Math.max(w.t, w.dur);
+  const B = G.B, p = pathAt(B, w.front, _tdp);
+  for (let i = 0; i < 9; i++) { const lat = frr(-1, 1) * ROAD_HALF; fxSparks(p.x - p.tz * lat, p.y + frr(.3, 1.2), p.z + p.tx * lat, 3, 3, 1.2, 1.7, 2.2, { size: .06, grav: 6 }); }
+  fxTimed(4, p.x, p.y + .08, p.z, 5, 5, .7, 1.2, 1.8, .8, .9, { ground: true });
+}
+function tideHitMan(f, w) {
+  const p = pathAt(G.B, f.s, _tdp), side = f.lat >= 0 ? 1 : -1;
+  f.kbx = p.tx * w.push - p.tz * side * .8; f.kbz = p.tz * w.push + p.tx * side * .8; f.stagger = 1.1; f.flash = 1; f.flinch = 1;
+  if (f.target) { const m = f.target; m.men = Math.max(0, m.men - 1); if (m.foe === f) m.foe = null; f.target = null; }
+  for (const o of G.mons) if (o.foe === f) o.foe = null;
+  f.atk = -1; f.hp -= w.dmg * G.dmgMul * (f.armor || 1);
+  fxSmoke(f.x, f.y + .3, f.z, p.tx * 2, frr(.8, 1.6), p.tz * 2, frr(.5, .8), .5, 1.1, .55, .72, .78, .5, { drag: 2.2 });
+  if (f.hp <= 0) killFootman(f, p.tx, p.tz);
+}
+function updateTides(dt) {
+  const B = G.B, T = G.tides;
+  for (let i = T.length - 1; i >= 0; i--) {
+    const w = T[i]; w.t += dt;
+    const u = sat(w.t / w.dur), e = 1 - (1 - u) * (1 - u), front = w.front = w.s0 + w.len * e, back = w.s0 - .5;
+    if (!w.broken && u < 1) {
+      for (const f of G.men) { if (f.dead || f.gone || f.carry || f.fallV !== undefined || !f.onRoad || f.s < back || f.s > front || w.hit.has(f)) continue; w.hit.add(f); tideHitMan(f, w); }
+      for (const m of G.mons) { if (m.dead || m.fly || m.def.boss || m.dying || m.hp <= 0 || m.frozen > 0 || m.s < back || m.s > front || w.hit.has(m)) continue; w.hit.add(m); m.tideT = w.hasteT; m.tideH = w.haste; m.ks += 1.4; }
+    }
+    if (!w.broken && u < 1) tideFX(w, B, dt);
+    if (w.t >= w.dur + .3) swapRemove(T, i);
+  }
+}
+// The wave's look (effects stream only): a churning wall of spray across the road at the front with a pale foam crest,
+// spray and droplets thrown forward, shrinking as the wave runs out.
+function tideFX(w, B, dt) {
+  const p = pathAt(B, w.front, _tdp), k = 1 - .55 * sat(w.t / w.dur), tx = p.tx, tz = p.tz;
+  w.acc += dt * 120;
+  while (w.acc >= 1) {
+    w.acc -= 1; const lat = frr(-1.2, 1.2) * ROAD_HALF, x = p.x - tz * lat + tx * frr(-.3, .3), z = p.z + tx * lat + tz * frr(-.3, .3), v = frr(1.5, 3.5), h = frr(0, 1.4) * k;
+    fxSmoke(x, p.y + .15 + h, z, tx * v, frr(.4, 1.6) * k, tz * v, frr(.35, .7), frr(.3, .55) * k + .18, 1.7, .6, .84, .95, .75, { drag: 3 });
+    if (frnd() < .5) fxPart(x, p.y + .2 + h, z, tx * v * 1.6 + frr(-.7, .7), frr(2, 5) * k, tz * v * 1.6 + frr(-.7, .7), frr(.4, .8), frr(.035, .06), .9, 1.3, 1.45, { grav: 10, drag: .3, streak: 1 });
+  }
+  for (let j = -3; j <= 3; j++) { const lat = j / 3 * ROAD_HALF * 1.05; FX.add.push(p.x - tz * lat, p.y + .3 + .5 * k, p.z + tx * lat, 1.3, .9 * k, 0, 0, .45, .85, 1, .8 * k, 2, 0, 0, 0); }
+}
+
 function buildWave(k, level) {
   const q = [], boss = isBossK(k), horde = isHordeK(k, level), W = G.wavesPerLand;
   // Each land's step up in strength phases in over its waves: the first waves of a new land are gentler
@@ -5230,7 +5322,7 @@ function buildWave(k, level) {
   let t = .6;
   if (boss) q.push({ t: 2.2, type: bossType(), hpMul: (1 + .45 * level + .14 * level * level) * Math.pow(G.press, level >= 2 ? .55 : .4) });
   if (horde) {
-    const bio = G.B.bio, menu = []; for (const ty in HORDE) { const mul = bio.mobs[ty] === undefined ? 1 : bio.mobs[ty]; if (mul > 0) menu.push([ty, HORDE[ty][1] * Math.min(mul, 2)]); }
+    const bio = G.B.bio, menu = []; for (const ty in HORDE) { const mul = bio.mobs[ty] === undefined ? 1 : bio.mobs[ty], w0 = HORDE[ty][1] || (bio.mobs[ty] ? 1 : 0); if (mul > 0 && w0 > 0) menu.push([ty, w0 * Math.min(mul, 2)]); }
     // Later hordes run hotter: tougher bodies, more elites, and from the third land a few fast hunters mixed in.
     if (level >= 2) for (const ty of ['wolf', 'ghoul', 'hound']) { const mul = (bio.mobs[ty] === undefined ? 1 : bio.mobs[ty]) * (ty === 'hound' ? .5 : 1); if (mul > 0) menu.push([ty, .35 * Math.min(level - 1, 3) * mul]); }
     const tot = menu.reduce((a, b) => a + b[1], 0), hp = hpMul * (.72 + .04 * Math.min(level, 5)); let bodies = 0;
@@ -5280,7 +5372,7 @@ function endWave() {
 function updateWaves(dt) {
   if (G.phase !== 'play') return;
   const B = G.B;
-  updateElites(dt); updateSpells(dt); trackRun();
+  updateElites(dt); updateTides(dt); updateSpells(dt); trackRun();
   if (G.spawning) {
     G.waveT += dt;
     while (G.queue.length && G.queue[0].t <= G.waveT) {
@@ -5395,8 +5487,9 @@ function castSpell(kind, x, z, byPlayer) {
     const dmg = 18 * (1 + .3 * L);
     for (const m of G.mons) {
       if (m.dead || m.hp <= 0 || !m.vis || m.dying) continue; if (dist2(m.x, m.z, x, z) > (S.r + m.rad) * (S.r + m.rad)) continue;
-      freezeMonster(m, 2.6); hitMonster(m, dmg, 'bolt', 0, 0, null);
+      freezeMonster(m, 2.6); m.tideT = 0; hitMonster(m, dmg, 'bolt', 0, 0, null);
     }
+    for (const w of G.tides) if (!w.broken) { const p = pathAt(B, w.front, _tdp); if (dist2(p.x, p.z, x, z) < (S.r + 1.6) * (S.r + 1.6)) { breakTide(w); G.stats.tideBreaks = (G.stats.tideBreaks || 0) + 1; } }
     sfx('frostNova', x, z, 1.1);
   } else {
     const q = roadNear(x, z), s = clamp(q.s, B.cave.s + 2, B.L - 1.2), p = pathAt(B, s, {});
@@ -5456,13 +5549,23 @@ function aiSpells() {
     let best = null, bs = 0, n = 0;
     for (const m of M) {
       if (m.dead || m.fly || !m.vis || m.hp <= 0 || m.dying) continue; if (++n > 90 && (n & 1)) continue;
-      let sc = m.def.boss ? 6 + 8 * m.prog : 0;
+      // The Drowned King is worth a meteor sooner: its summons crowd round it and every wave it sweeps costs footmen.
+      let sc = m.def.boss ? 6 + 8 * m.prog + (m.def.tide ? 4 : 0) : 0;
       for (const o of M) if (!o.dead && !o.fly && o.vis && !o.def.boss && dist2(o.x, o.z, m.x, m.z) < 8) sc += (o.elite ? 1.8 : 1) * (.6 + Math.min(1.4, o.maxHp / 250)) * (.7 + .6 * o.prog) + (o.def.wardCast ? 2.5 : 0);
       if (sc > bs) { bs = sc; best = m; }
     }
     if (best && bs >= (G.horde ? 14 : 10)) { const q = aimPoint(best, METEOR_FALL, {}); if (castSpell('meteor', q.x, q.z)) return true; }
   }
   const save = G.spellCd.meteor < 6 && G.mana < SPELL.meteor.mana + 25;
+  // A tidal wave on its way to footmen (or carrying a pack): freeze its front to break it.
+  if (spellReady('frost') && G.tides.length) {
+    for (const w of G.tides) {
+      if (w.broken || w.t > w.dur * .75) continue;
+      let riders = 0; for (const m of M) if (m.tideT > 0 && !m.dead && !m.fly) riders++;
+      if (w.men < 1 && riders < 3) continue;
+      const p = pathAt(B, Math.min(B.L - .5, w.front + 1.4), {}); if (castSpell('frost', p.x, p.z)) return true;
+    }
+  }
   if (spellReady('frost') && fw > 0 && (front >= 5 || (boss && boss.prog > .72) || (front >= 2 && lead.prog > .9)) && (!save || lead.prog > .86)) {
     if (castSpell('frost', fx / fw, fz / fw)) return true;
   }
@@ -5597,7 +5700,7 @@ function startCrumble() {
   const B = G.B;
   for (const m of G.mons) if (!m.dead) { shatter(e => rigMonster(e), m, [0, 1, 0], { spread: 1.2, life: 1 }); removeMonster(m); }
   for (const f of G.men) if (!f.dead) { f.weapon = KIT.item.blade; shatter(e => rigHuman(KIT.foot, SPEC.foot, e), f, [0, 1, 0], { spread: 1, life: 1 }); f.dead = f.gone = true; f.alive = false; if (f.flame) removeFlame(f.flame); }
-  G.mons.length = 0; G.men.length = 0; G.arrows.length = 0; G.shells.length = 0; G.stuck.length = 0; G.fires.length = 0; G.horde = false; G.pending.length = 0; G.rallies.length = 0;
+  G.mons.length = 0; G.men.length = 0; G.arrows.length = 0; G.shells.length = 0; G.stuck.length = 0; G.fires.length = 0; G.horde = false; G.pending.length = 0; G.rallies.length = 0; G.tides.length = 0;
   for (const t of G.towers) {
     t.em.alive = false; LT.emitters[t.idx] = null; removeFlame(t.flame); removeFlame(t.flame2); t.flame = t.flame2 = null; t.archers.length = 0; t.alive = false; t.state = 'gone';
     let best = null, bd = 1e9; for (const p of B.pieces) if (p.kind === 'chunk') { const d = dist2(p.cx, p.cz, t.x, t.z); if (d < bd) { bd = d; best = p; } }
@@ -5713,7 +5816,12 @@ function validSave(S) {
   if (!S || typeof S !== 'object' || S.v !== SAVE_V) return false;
   const now = Date.now(); if (!_num(S.t, now - SAVE_DAYS * 864e5, now + 6e5)) return false;
   if (!_int(S.level, 0, 999) || !_int(S.k, 1, G.wavesPerLand) || !_int(S.seed, 0, 1e9) || !_int(S.index, 0, 1e6) || !_int(S.start, -1e6, 1e6)) return false;
-  const n = BIOMES.length; if (BIOMES[((S.start + S.index) % n + n) % n].key !== S.biome) return false;
+  const n = BIOMES.length;
+  if (BIOMES[((S.start + S.index) % n + n) % n].key !== S.biome) {
+    // Saved before the rotation grew (5 lands, now 6): keep the saved land by re-deriving the rotation start from its key.
+    const bi = BIOMES.findIndex(b => b.key === S.biome); if (bi < 0) return false;
+    S.start = ((bi - S.index) % n + n) % n;
+  }
   if (!_num(S.gold, 0, 1e7) || !_int(S.lives, 1, G.maxLives) || !_num(S.mana, 0, G.manaMax) || !_num(S.press, .1, 50) || !Array.isArray(S.towers) || S.towers.length > 40) return false;
   const pads = new Set();
   for (const t of S.towers) {
@@ -5739,7 +5847,7 @@ function restoreRun(S) {
     for (const m of G.mons) if (!m.dead) removeMonster(m);
     for (const f of G.men) if (!f.dead) { f.dead = f.gone = true; f.alive = false; if (f.flame) removeFlame(f.flame); }
     for (const t of G.towers) t.dispose();
-    G.mons.length = 0; G.men.length = 0; G.arrows.length = 0; G.shells.length = 0; G.stuck.length = 0; G.fires.length = 0; G.burns.length = 0; G.chain.length = 0; G.towers.length = 0;
+    G.mons.length = 0; G.men.length = 0; G.arrows.length = 0; G.shells.length = 0; G.stuck.length = 0; G.fires.length = 0; G.burns.length = 0; G.chain.length = 0; G.towers.length = 0; G.tides.length = 0;
     G.queue = []; G.bossAlive = false; G.slowmo = 0; G.hitstop = 0; CAM.ent = null; G.rangeMul = 1;
     if (B0) for (const f of B0.flames || []) removeFlame(f);
     clearDebris(); clearFX(); if (B0) disposeBoard(B0);
@@ -5791,6 +5899,7 @@ const EVENTS = {
   bogfog: { land: 'fen', name: 'Bog fog', tip: 'Thick fog shortens tower range. Wisps drift in with it.', dur: 17, range: .74, spd: 1, mist: 2.4, wx: 1.4, tint: [.07, .16, .1] },
   lavaSurge: { land: 'ember', name: 'Lava surge', tip: 'The lava bursts out, burning monsters and stunning towers near it.', dur: 14, range: 1, spd: 1, mist: .5, wx: 2, tint: [.22, .07, .03] },
   sandstorm: { land: 'dunes', name: 'Sandstorm', tip: 'Sand cuts tower range, speeds the column and carries scarabs.', dur: 16, range: .76, spd: 1.14, mist: 1.8, wx: 3.2, tint: [.24, .16, .08] },
+  thunderstorm: { land: 'storm', name: 'Thunderstorm', tip: 'Lightning strikes the road and burns monsters, but now and then it stuns a tower.', dur: 16, range: .92, spd: 1, mist: .8, wx: 2.6, tint: [.05, .08, .13] },
 };
 G.event = null; G.rangeMul = 1; G.evLevel = -1; G.evWave = 0; G.evDone = false;
 const _evp = { x: 0, y: 0, z: 0, tx: 0, tz: 0 };
@@ -5835,6 +5944,31 @@ function eruption(ev) {
   for (const tw of G.towers) if (tw.alive && tw.state === 'active' && dist2(tw.x, tw.z, x, z) < 3.4 * 3.4) tw.stun = Math.max(tw.stun || 0, 1.6);
 }
 
+// Thunderstorm: a bolt hits a random spot on the road (gameplay stream). Monsters near it, flyers too, take a jolt;
+// sometimes it also stuns the nearest tower. The look is Ash's FX.lightningAt when present, else a stand-in.
+const STRIKE = { r: 1.9, dmg: 85, stun: .16, stunT: 1.5, stunR: 6 };
+function lightningStrike(ev) {
+  const B = G.B, s = rr(B.cave.s + 2, B.L - 1.5), lat = rr(-.85, .85) * ROAD_HALF, p = pathAt(B, s, _evp);
+  const x = p.x - p.tz * lat, z = p.z + p.tx * lat, y = p.y, dmg = STRIKE.dmg * (1 + .3 * G.level), r = STRIKE.r;
+  for (const m of G.mons) {
+    if (m.dead || m.hp <= 0 || m.dying || !(m.vis || m.fly)) continue; const d = Math.hypot(m.x - x, m.z - z); if (d > r + m.rad) continue;
+    hitMonster(m, dmg * (1 - .5 * sat(d / r)) * (m.def.boss ? .5 : 1), 'bolt', (m.x - x) / (d || 1), (m.z - z) / (d || 1), null);
+  }
+  let tw = null;
+  if (rnd() < STRIKE.stun) { let bd = STRIKE.stunR * STRIKE.stunR; for (const t of G.towers) { if (!t.alive || t.state !== 'active') continue; const d = dist2(t.x, t.z, x, z); if (d < bd) { bd = d; tw = t; } } }
+  if (tw) { tw.stun = Math.max(tw.stun || 0, STRIKE.stunT); ev.stuns = (ev.stuns || 0) + 1; }
+  ev.flash = 1;
+  if (typeof FX.lightningAt === 'function') FX.lightningAt(x, z);
+  else {
+    const top = [x + frr(-1.5, 1.5), y + 16, z + frr(-1.5, 1.5)], mid = [x + frr(-.8, .8), y + 7, z + frr(-.8, .8)];
+    fxBolt(top, mid, .28, [1.4, 1.7, 2.4], .16); fxBolt(mid, [x, y + .1, z], .28, [1.4, 1.7, 2.4], .14);
+    fxExplosion(x, y, z, .6); lightFlash(x, y + 5, z, 0xbcd4ff, 1800, .3, 46); shake(.25);
+    FX.decals.add(B.heightAt, x, z, 1.1, .02, .02, .025, .8, 25);
+  }
+  if (tw) { fxBolt([x, y + .3, z], [tw.x, tw.y + (tw.mounts ? tw.mounts.top : 2.5), tw.z], .35, [1.2, 1.5, 2.4], .07); fxSparks(tw.x, tw.y + 2.2, tw.z, 14, 4, 1.4, 1.7, 2.4, { size: .06 }); }
+  sfx('thunder', x, z, 1.1);
+}
+
 function updateEvents(dt) {
   const B = G.B;
   if (G.phase !== 'play') { if (G.event) endEvent(); return; }
@@ -5861,6 +5995,7 @@ function updateEvents(dt) {
   if (ev.kind === 'rockslide' && ev.t < 3.2 && ev.next <= 0) { ev.next = .14; rockAt(ev); }
   if (ev.kind === 'lavaSurge' && ev.n < 6 && ev.next <= 0 && ev.t > .6) { ev.next = rr(1.2, 2.2); ev.n++; eruption(ev); }
   if (ev.kind === 'bogfog' && ev.n < 6 && ev.next <= 0 && ev.t > 1.5 && G.mons.length < MAX_ALIVE) { ev.next = rr(1.5, 2.5); ev.n++; spawnMonster('wisp', { hpMul: 1 + .3 * G.level }); }
+  if (ev.kind === 'thunderstorm') { ev.flash = Math.max(0, (ev.flash || 0) - dt * 5); if (ev.next <= 0 && ev.t > .8 && ev.t < ev.dur - 1.2) { ev.next = rr(.8, 1.6); ev.n++; lightningStrike(ev); } }
   if (ev.kind === 'sandstorm' && ev.n < 14 && ev.next <= 0 && ev.t > 1.5 && G.mons.length < MAX_ALIVE) { ev.next = rr(.5, .9); ev.n++; spawnMonster('scarab', { hpMul: 1 + .3 * G.level }); }
   for (let i = ev.rocks.length - 1; i >= 0; i--) { const r = ev.rocks[i]; r.t -= dt; if (r.t <= 0) { swapRemove(ev.rocks, i); rockLands(r); } }
   if (ev.kind === 'rockslide' && ev.t > 1 && ev.t < ev.dur - 2 && rnd() < dt * 3) { const p = pathAt(B, ev.s0 + rr(-ev.span, ev.span), _evp); fxDust(p.x, p.y + .1, p.z, 1, .6, { a: .3 }); }
@@ -5878,6 +6013,8 @@ const LOOK_EV = {
   blizzard: { expo: 1.04, moon: .6, hemi: 1.15, sat: .72, lift: [.02, .03, .05], hemiCol: [.75, .85, 1.1], wx: { sizeB: [.03, .07], alB: [.75, 0, .9] }, wind: 5 },
   bogfog: { expo: .86, moon: .6, hemi: .95, sat: .85, lift: [.004, .016, .008], hemiCol: [.7, 1, .8] },
   lavaSurge: { expo: 1, moon: .75, hemi: .9, sat: 1.05, lift: [.05, .012, 0], hemiCol: [1.3, .7, .5], pulse: 1 },
+  // Thunderstorm: dark and blue, rain driven slanting across the view, and each strike lights the whole board (ev.flash).
+  thunderstorm: { expo: .8, moon: .5, hemi: .85, sat: .78, lift: [.004, .01, .022], hemiCol: [.8, .9, 1.2], wx: { sizeA: [.02, .05], colA: [.75, .85, 1, 1], alA: [.7, 0, 1] }, wind: 3.5, flash: 1 },
   sandstorm: { expo: .74, moon: .4, hemi: .8, sat: .78, lift: [.05, .028, .006], hemiCol: [1.35, .95, .6], moonCol: [1.3, .85, .5], wx: { sizeA: [.04, .08], sizeB: [.035, .07], colA: [1, .78, .5, .55], colB: [.95, .72, .45, .55], alA: [.55, 0, .35], alB: [.65, 0, .7] }, wind: 8 },
 };
 const WX_KEYS = ['sizeA', 'sizeB', 'colA', 'colB', 'alA', 'alB'], wxU = k => WX.u['u' + k[0].toUpperCase() + k.slice(1)].value;
@@ -5899,7 +6036,7 @@ function eventLook() {
   if (L.wind) { const rx = Math.cos(CAM.yaw), rz = -Math.sin(CAM.yaw), va = WX.u.uVelA.value, vb = WX.u.uVelB.value, s = L.wind * a; va.set(lerp(va.x, rx * s * .7, a), va.y, lerp(va.z, rz * s * .7, a)); vb.set(lerp(vb.x, rx * s, a), lerp(vb.y, -.15, a), lerp(vb.z, rz * s, a)); }
   // Light: darker and tinted, with a slow red pulse for the lava. The lift tints the shadows (added in the comp pass).
   const pul = L.pulse ? .75 + .25 * Math.sin(G.t * 5.3) * Math.sin(G.t * 2.1 + 1) : 1, c = R.mats.comp.uniforms, lf = c.uLift.value;
-  R.exposure *= lerp(1, L.expo, a); c.uGrade.value.y *= lerp(1, L.sat, a);
+  R.exposure *= lerp(1, L.expo, a) * (L.flash ? 1 + .9 * (ev.flash || 0) : 1); c.uGrade.value.y *= lerp(1, L.sat, a);
   lf.set(lf.x + L.lift[0] * a * pul, lf.y + L.lift[1] * a * pul, lf.z + L.lift[2] * a * pul);
   LT.moon.intensity *= lerp(1, L.moon, a); LT.hemi.intensity *= lerp(1, L.hemi, a);
   if (L.hemiCol) { const h = LT.hemi.color, hc = L.hemiCol; h.setRGB(h.r * lerp(1, hc[0], a), h.g * lerp(1, hc[1], a), h.b * lerp(1, hc[2], a)); }
