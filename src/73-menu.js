@@ -93,7 +93,7 @@ const MENU = (() => {
     shown += Math.round(r.total * sat((rc.t - T.t0) / RC.total));
     if (shown !== rc.shown && rc.t - rc.tickT > .06 && rc.t < T.end + .1) { rc.tickT = rc.t; sfx('emberTick', CAM.x, CAM.z, .7, clamp((rc.t - RC.lead) / (T.end - RC.lead), 0, 1)); }
     rc.shown = shown;
-    while (rc.fanAt < rc.fan.length && rc.t > T.end + .3 + rc.fanAt * RC.fan) { sfx('unlock', CAM.x, CAM.z, 1, rc.fan[rc.fanAt].heat ? 1 : .5 * rc.fanAt / Math.max(1, rc.fan.length - 1)); // p = 1: a Heat tier rc.fanAt++; }
+    while (rc.fanAt < rc.fan.length && rc.t > T.end + .3 + rc.fanAt * RC.fan) { sfx('unlock', CAM.x, CAM.z, 1, rc.fan[rc.fanAt].heat ? 1 : .5 * rc.fanAt / Math.max(1, rc.fan.length - 1)); rc.fanAt++; } // p = 1: a Heat tier
   }
   // A tap, Enter or Space while the count runs: jump to the end of it.
   function skipCount() {
