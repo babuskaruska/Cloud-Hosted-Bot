@@ -356,7 +356,9 @@ const UI = (() => {
     let nOrd = 0; for (const b of G.hbars) if (!b.boss && !b.elite && !b.man) nOrd++;
     const crowd = sat((nOrd - 30) / 90), ordW = Math.round(9 - 3 * crowd), ordA = .95 - .3 * crowd;
     for (const b of G.hbars) {
-      const ord = !b.boss && !b.elite && !b.man, p = proj(b.x, b.y, b.z), w = (b.boss ? 34 : b.man ? 8 : b.elite ? 12 : ordW) * pix, h = (b.boss ? 2 : 1) * pix, x = Math.round(p.x - w / 2), y = Math.round(p.y);
+      const ord = !b.boss && !b.elite && !b.man, p = proj(b.x, b.y, b.z), w = (b.boss ? 34 : b.man ? 8 : b.elite ? 12 : ordW) * pix, h = (b.boss ? 2 : 1) * pix, x = Math.round(p.x - w / 2);
+      // A boss's bar and name never tuck under the top plates (wave, stats, commander): they stop just below them.
+      const y = b.boss ? Math.max(Math.round(p.y), Math.round((R.hudTop || 0) + LH + 4 * pix)) : Math.round(p.y);
       if (x < -w || x > W || y < 0 || y > H) continue;
       c.globalAlpha = b.f >= .999 && !b.elite ? .4 : ord ? ordA : .95;
       c.fillStyle = b.elite ? ELITE[b.elite].col : COLR.dark; c.fillRect(x - pix, y - pix, w + 2 * pix, h + 2 * pix);
@@ -378,11 +380,19 @@ const UI = (() => {
     const stats = [['flame', '' + G.lives, U.hurt > 0 ? COLR.red : COLR.tx], ['coin', '' + Math.floor(U.goldShown), U.deny > 0 ? COLR.red : (U.goldBump > 0 ? '#ffe2a0' : COLR.tx)], ['skull', '' + G.slain, U.slainBump > .5 ? '#ffffff' : COLR.tx]];
     let wS = pad; for (const st of stats) wS += PX.iconSize(st[0])[0] * s + 2 * s + Math.max(tw(st[1]), tw('000')) + 6 * s; wS += pad - 6 * s;
     const hS = 10 * s + pad * 2 - 2 * s, x0 = 5 * s + iL, y0 = 5 * s + iT + U.insetTop;
+    // Coins fly to the gold icon and are drawn before the plate, so they slip under the counters instead of covering them.
+    const goldPos = { x: x0 + pad + (PX.iconSize('flame')[0] + 2) * s + Math.max(tw(stats[0][1]), tw('000')) + 6 * s + PX.iconSize('coin')[0] * s / 2, y: y0 + hS / 2 };
+    for (let i = U.coins.length - 1; i >= 0; i--) {
+      const q = U.coins[i]; q.t += R.frameDt; const u = sat(q.t / q.T), e = u * u * (3 - 2 * u), a = 1 - e;
+      const px = a * a * q.sx + 2 * a * e * q.cx + e * e * goldPos.x, py = a * a * q.sy + 2 * a * e * q.cy + e * e * goldPos.y;
+      PX.icon(c, 'coin', Math.round(px - 4 * s * .75), Math.round(py - 4 * s * .75), Math.max(2, s - 1), 1);
+      if (u >= 1) { U.goldShown = Math.min(G.gold, U.goldShown + q.value); U.goldBump = 1; sfx('coin', CAM.x, CAM.z, .35, rnd()); U.coins.splice(i, 1); }
+    }
     plate(x0, y0, wS, hS, U.hurt > 0 ? { bd: COLR.red } : {});
-    let x = x0 + pad; const goldPos = { x: 0, y: 0 };
+    let x = x0 + pad;
     for (const st of stats) {
       const [iw, ih] = PX.iconSize(st[0]); const iy = y0 + Math.round((hS - ih * s) / 2);
-      PX.icon(c, st[0], x, iy, s, st[0] === 'flame' ? .55 + .45 * (G.lives / G.maxLives) : 1); if (st[0] === 'coin') { goldPos.x = x + iw * s / 2; goldPos.y = iy + ih * s / 2; }
+      PX.icon(c, st[0], x, iy, s, st[0] === 'flame' ? .55 + .45 * (G.lives / G.maxLives) : 1);
       x += iw * s + 2 * s; text(st[1], x, y0 + Math.round((hS - LH) / 2) + s, st[2]); x += Math.max(tw(st[1]), tw('000')) + 6 * s;
     }
     const NW = G.wavesPerLand, wn = 'Wave ' + Math.max(1, landWave()) + '/' + NW, callable = G.phase === 'play' && !G.spawning && !G.bossWave && G.nextIn > .4;
@@ -501,7 +511,7 @@ const UI = (() => {
       let w = tw(head); for (const l of lines) w = Math.max(w, tw(l)); w += pad * 2; const h = LH * (lines.length + 1) + pad * 2 - s, x = Math.round((iL + Wr - w) / 2), y = yUp - h;
       c.globalAlpha = a; plate(x, y, w, h, { bd: d.bd }); text(head, x + w / 2, y + pad - s, COLR.amber, { align: 'c' }); lines.forEach((l, k) => text(l, x + w / 2, y + pad - s + (k + 1) * LH, COLR.tx, { align: 'c' })); c.globalAlpha = 1; yUp = y - g3;
     } else {
-      const first = U.titleT < 16, a = tch ? sat(Math.min(U.titleT - 7.2, first ? 1 : 3 - U.moved, U.manual && !first ? 0 : 1, 62 - U.titleT)) : sat(Math.min(U.titleT - 7.2, 3 - Math.min(U.moved, U.idle > 20 ? U.moved : 0) + (U.titleT < 18 ? 8 : 0)));
+      const first = U.titleT < 16, a = tch ? sat(Math.min(U.titleT - 7.2, first ? 1 : 3 - U.moved, U.manual && !first ? 0 : 1, 62 - U.titleT)) : Math.max(sat(Math.min(U.titleT - 7.2, 3 - Math.min(U.moved, U.idle > 20 ? U.moved : 0) + (U.titleT < 18 ? 8 : 0))), sat(Math.min(U.titleT - 7.2, 15 - U.titleT)));
       if (a > .02 && !U.menu && !G.paused && !U.spell && G.phase === 'play') {
         const parts = tch ? ['Tap a pad to build', 'Tap a spell, then the road', 'Drag to look, pinch to zoom', 'The gear has help'] : ['Click a pad to build', '1-4 pick a tower', 'Q E T cast spells', 'R mends the beacon', 'Space calls the next wave', 'O settings and help'];
         // As few lines as fit: two halves, else pairs, else one part per line.
@@ -510,12 +520,6 @@ const UI = (() => {
         let w = 0; for (const l of lines) w = Math.max(w, tw(l)); w += pad * 2; const h = LH * lines.length + pad * 2 - s, hx = Math.round((iL + Wr - w) / 2), hy = yUp - h;
         if (w <= boxW) { c.globalAlpha = a; plate(hx, hy, w, h); lines.forEach((l, k) => text(l, hx + w / 2, hy + pad - s + k * LH, COLR.dim, { align: 'c' })); c.globalAlpha = 1; }
       }
-    }
-    for (let i = U.coins.length - 1; i >= 0; i--) {
-      const q = U.coins[i]; q.t += R.frameDt; const u = sat(q.t / q.T), e = u * u * (3 - 2 * u), a = 1 - e;
-      const px = a * a * q.sx + 2 * a * e * q.cx + e * e * goldPos.x, py = a * a * q.sy + 2 * a * e * q.cy + e * e * goldPos.y;
-      PX.icon(c, 'coin', Math.round(px - 4 * s * .75), Math.round(py - 4 * s * .75), Math.max(2, s - 1), 1);
-      if (u >= 1) { U.goldShown = Math.min(G.gold, U.goldShown + q.value); U.goldBump = 1; sfx('coin', CAM.x, CAM.z, .35, rnd()); U.coins.splice(i, 1); }
     }
     if (U.msg) {
       const m = U.msg; m.t += R.frameDt; const a = sat(Math.min(m.t * 3, (m.dur - m.t) * 2));

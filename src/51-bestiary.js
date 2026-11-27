@@ -350,6 +350,7 @@ function rigRam(e) {
   for (let i = 0; i < 4; i++) K.wheel.put(xf(_M[21 + i], M0, i & 1 ? -.5 : .5, .28, i < 2 ? .55 : -.55, wa + i, 0, 0), fl, tint);
   let sw = Math.sin(t * 1.9) * .06 * mv + Math.sin(e.ph * .9) * .035 * mv + fz * .08;
   const a = e.atk === undefined ? -1 : e.atk;
+  sw -= .6 * Math.sin(sat(e.shove || 0) * PI);
   if (a >= 0) sw += a < .4 ? .55 * easeInOut(a / .4) : a < .52 ? lerp(.55, -.5, easeIn((a - .4) / .12)) : -.5 * (1 - easeOut((a - .52) / .48));
   K.log.put(xf(_M[25], M0, 0, 1.6, 0, sw, 0, 0), fl, null);
   // Crew: computed from the frame each call (also under shatter), with skeleton gait and a push pose.
@@ -359,7 +360,7 @@ function rigRam(e) {
     const c = cr[i], P = RAM_CREW[i], lx = P[0] * s + jx, lz = P[1] * s;
     c.x = e.x + lx * cy + lz * sy; c.z = e.z - lx * sy + lz * cy; c.y = e.y; c.yaw = e.yaw;
     c.ph = e.ph * 1.05 + P[2]; c.mv = Math.max(.35, mv); c.scale = .88 * s; c.flash = fl; c.flinch = fz * .5; c.tint = e.crewTint || null;
-    c.push = a >= 0 && a > .38 && a < .7 ? 1.5 : 1;
+    c.push = (a > .38 && a < .7) || (e.shove || 0) > .3 ? 1.6 : 1;
     const H = rigHuman(KIT.skel, SPEC.skel, c);
     for (let k = 0; k < 2; k++) { _rv.set((k ? 1 : -1) * SKEL_EYE[0], SKEL_EYE[1], SKEL_EYE[2]).applyMatrix4(H); c.eyes[k * 3] = _rv.x; c.eyes[k * 3 + 1] = _rv.y; c.eyes[k * 3 + 2] = _rv.z; }
   }
@@ -371,32 +372,34 @@ function rigRam(e) {
 // overhead (rigHuman's cast pose); drawMonster adds the tip glow and the ward flare.
 function rigShaman(e) { e.weapon = KIT.item.boneStaff; e.staffOut = true; e.wScale = 1; return rigHuman(KIT.goblin, SPEC.goblin, e); }
 
-// Harpy: flaps on e.ph like the bat; e.swoop (0-1, optional) pitches it into a dive with the wings swept back
-// and the talons thrown forward and open. Returns the body matrix.
+// Harpy: flaps on e.ph like the bat. e.swoop (0 cruise, 1 dive, 2 carrying; eased here into e.swD / e.swC)
+// pitches it into a dive with the wings swept back and the talons thrown forward and open, or, while carrying a
+// footman (e.carry), hauls upright with the legs straight down, talons shut and the wings beating hard.
 function rigHarpy(e) {
-  const K = KIT.harpy, s = e.scale || 1, fl = e.flash || 0, tint = e.tint || null, sw = sat(e.swoop || 0), fz = e.flinch || 0, f = Math.sin(e.ph);
-  const pitch = lerp(.5, 1.25, sw) - fz * .5, bob = Math.sin(e.ph - .6) * .07 * (1 - sw);
-  const M0 = xf(_M[0], null, e.x, e.y + bob, e.z, pitch, e.yaw, Math.sin(e.ph * .25) * .12 * (1 - sw), s, s, s);
+  const K = KIT.harpy, s = e.scale || 1, fl = e.flash || 0, tint = e.tint || null, fz = e.flinch || 0, dt = FX.dt || 0, w = e.swoop || 0;
+  e.swD = damp(e.swD || 0, w === 1 ? 1 : 0, 7, dt); e.swC = damp(e.swC || 0, w >= 2 || e.carry ? 1 : 0, 6, dt);
+  const sw = e.swD, cr = e.swC, f = Math.sin(e.ph), calm = 1 - Math.max(sw, cr);
+  const pitch = lerp(lerp(.5, 1.25, sw), .12, cr) - fz * .5, bob = Math.sin(e.ph - .6) * (.07 + .05 * cr) * (1 - sw);
+  const M0 = xf(_M[0], null, e.x, e.y + bob, e.z, pitch, e.yaw, Math.sin(e.ph * .25) * .12 * calm, s, s, s);
   K.body.put(M0, fl, tint);
-  const flap = lerp(f * .95 + .1, .55 + f * .08, sw), sweep = -.95 * sw, wp = -pitch * .75;
+  const flap = lerp(lerp(f * .95 + .1, .55 + f * .08, sw), f * 1.15 + .2, cr), sweep = -.95 * sw, wp = -pitch * .75;
   K.wing.put(xf(_M[1], M0, .1, .12, -.02, wp, sweep, flap), fl, tint);
   K.wing.put(xf(_M[2], M0, -.1, .12, -.02, wp, -sweep, PI - flap), fl, tint);
-  const lw = lerp(1.3 + .08 * f, -.6, sw), open = lerp(1.1, -.35, sw);
+  const lw = lerp(lerp(1.3 + .08 * f, -.6, sw), -.08, cr), open = lerp(lerp(1.1, -.35, sw), .95, cr), ts = 1 + .25 * sw;
   for (const sd of [-1, 1]) {
-    const L = xf(_M[sd > 0 ? 3 : 4], M0, sd * .07, -.2, -.02, lw - pitch + sd * .04 * f, 0, sd * .08), FT = xf(_M[sd > 0 ? 5 : 6], L, 0, -.28, .02, open, 0, 0, 1 + .25 * sw, 1 + .25 * sw, 1 + .25 * sw);
+    const L = xf(_M[sd > 0 ? 3 : 4], M0, sd * .07, -.2, -.02, lw - pitch + sd * .04 * f * calm, 0, sd * (.08 + .1 * cr)), FT = xf(_M[sd > 0 ? 5 : 6], L, 0, -.28, .02, open, 0, 0, ts, ts, ts);
     K.leg.put(L, fl, tint); K.foot.put(FT, fl, tint);
   }
   return M0;
 }
 
-// Hell hound: the wolf rig and gait on the hound kit. The hound's ph runs at the walker rate (5.6 per unit, not
-// the fur rate 7.5), so the gait is sped up to keep the feet planted.
-function rigHound(e) { const p = e.ph; e.ph = p * 1.34; try { return rigWolf(e, KIT.hound); } finally { e.ph = p; } }
+// Hell hound: the wolf rig and gait on the hound kit. If its death kind is not 'fur', its ph runs at the walker
+// rate (5.6 per unit, not 7.5), so the gait is sped up to keep the feet planted.
+function rigHound(e) { const p = e.ph; if (!e.def || e.def.death !== 'fur') e.ph = p * 1.34; try { return rigWolf(e, KIT.hound); } finally { e.ph = p; } }
 
 // Per-frame extras for the round 4 monsters (called from drawMonster with the rig's returned matrix M).
 // Fields read: ram e.crew/e.crewN (set by rigRam), e.mv; shaman e.cast (0-1, set by the behaviour when it
-// wards; decays in updateUnits) and def.ward.r or def.wardR (ring radius, default 3); harpy e.swoop (0-1);
-// hound e.vx/e.vz are not needed (smoke drifts on its own).
+// wards; decays in updateUnits) and def.wardCast.r (ring radius, default 3); harpy e.swoop, e.vx/e.vz.
 const _d4 = new THREE.Vector3();
 function drawMonster4(m, t, ty, M, tw, sc) {
   if (!(m.vis || m.fly) || m.dead) return;
@@ -411,15 +414,13 @@ function drawMonster4(m, t, ty, M, tw, sc) {
     A.push(_d4.x, _d4.y, _d4.z, .9 + 1.4 * cs, .9 + 1.4 * cs, 0, 0, g[0] * .4, g[1] * .4, g[2] * .4, (.3 + .3 * cs) * tw, 2, 0, 0, 0);
     if (frnd() < dt * (1.5 + 14 * cs)) fxPart(_d4.x + frr(-.06, .06), _d4.y, _d4.z + frr(-.06, .06), frr(-.2, .2), frr(.3, .9) + cs, frr(-.2, .2), frr(.4, .8), frr(.03, .05), g[0] * 1.6, g[1] * 1.6, g[2] * 1.6, { drag: .8, wob: 1, rise: .2 });
     if (cs > .85 && !m._cfx) {
-      m._cfx = 1; const w = m.def.ward, R0 = (w && w.r) || m.def.wardR || 3;
+      m._cfx = 1; const w = m.def.wardCast || m.def.ward, R0 = (w && w.r) || m.def.wardR || 3;
       fxTimed(4, m.x, m.y + .08, m.z, R0 * 2, R0 * 2, g[0], g[1], g[2], .8, .7, { ground: true }); fxTimed(5, _d4.x, _d4.y, _d4.z, 1.8, 1.8, g[0] * 1.5, g[1] * 1.5, g[2] * 1.5, .9, .3);
       for (let i = 0; i < 10; i++) { const a = i / 10 * TAU; fxPart(m.x + Math.cos(a) * R0 * .5, m.y + .15, m.z + Math.sin(a) * R0 * .5, Math.cos(a) * 1.2, frr(.4, 1.2), Math.sin(a) * 1.2, frr(.5, .9), .05, g[0] * 1.4, g[1] * 1.4, g[2] * 1.4, { drag: 1.2, rise: .3 }); }
     } else if (cs < .3) m._cfx = 0;
     m.glowL = cs > .05; m.lI = 7 * cs; m.lCol = 0x70ff90; m.lx = _d4.x; m.ly = _d4.y; m.lz = _d4.z;
   } else if (ty === 'harpy') {
-    // Faint wind lines off the wing tips in a fast dive.
-    const sw = m.swoop || 0, sp = Math.hypot(m.vx, m.vz);
-    if (sw > .4 && sp > 1) for (let k = 1; k <= 2; k++) { _d4.set(.84, 0, -.04).applyMatrix4(_M[k]); FX.segs.push(_d4.x, _d4.y, _d4.z, .02, _d4.x - m.vx * .12, _d4.y - (m.vy || 0) * .12, _d4.z - m.vz * .12, .003, .6, .6, .7, .25 * sw); }
+    // (nothing extra: the dive reads from the pose)
   } else if (ty === 'hound') {
     const fl = .8 + .2 * Math.sin(t * 13 + m.lseed * 5);
     _d4.set(0, .2, .1).applyMatrix4(M); A.push(_d4.x, _d4.y, _d4.z, 1.5 * sc, 1.5 * sc, 0, 0, 1.0, .32, .06, .2 * fl, 2, 0, 0, 0);
@@ -429,14 +430,9 @@ function drawMonster4(m, t, ty, M, tw, sc) {
   }
 }
 
-// Warded allies (m.ward > 0 from a shaman, not a shielded elite, which has its own bubble): a faint green shimmer.
-function drawWard(m, t) {
-  if (!(m.vis || m.fly) || m.dead) return;
-  const sc = m.scale / (m.def.scale || 1), top = m.def.top * sc, d = Math.max(top * .95, m.rad * 2.6), hit = m.flash || 0, g = SHAMAN_GLOW;
-  FX.add.push(m.x, m.y + top * .5, m.z, d, d, 0, 0, g[0] * .7 + hit, g[1] * .7 + hit, g[2] * .7 + hit * .5, .32 + hit * .6, 8, (m.lseed || 0) * 7, 0, 0);
-}
-
-// Deaths for the round 4 monsters (killMonster calls these by def.death; fxGore adds the loose bits after).
+// Deaths for the round 4 models. killMonster looks up RIG_DEATH by def.rig first (so a MON entry keeps its own
+// def.death for gameplay, e.g. the gait rate), runs DEATH_FX[kind], and fxGore adds the loose bits after.
+const RIG_DEATH = { ram: 'wood', shaman: 'hex', harpy: 'feather', hound: 'ember' };
 const DEATH_FX = {
   // Siege ram: the frame, wheels, log and crew fly apart; dust and a heavy crack.
   wood(m, kind, ix, iz, up) {

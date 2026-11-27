@@ -18,6 +18,8 @@ const ROSTER = {
   slime: [9.5, 1, 3, .9, 3, 2], spider: [3, 3, 6, .25, 3, 2], scarab: [1.9, 5, 8, .18, 2, 0], knight: [12.5, 1, 3, .5, 4, 2], wolf: [5.5, 2, 4, .35, 4, 1.6], bomber: [6, 1, 2, .8, 4, 1.2],
   wraith: [9, 1, 3, .7, 5, 1.4], toad: [8, 1, 3, .7, 5, .7], wisp: [2.6, 4, 7, .22, 5, .8], drummer: [13, 1, 1, 1, 6, .9], gargoyle: [11, 1, 3, .6, 6, .9],
   necro: [18, 1, 1, 1.2, 7, .9], mummy: [15, 1, 2, .9, 7, .9], brute: [32, 1, 1, 2, 8, .7], golem: [40, 1, 1, 2, 8, .7], brood: [30, 1, 1, 2, 9, .6],
+  // Round 4: from the second land (sooner where a land favours them, see bio.early in 29-biome.js).
+  shaman: [12, 1, 1, 1, 7, .7], harpy: [9, 1, 2, .7, 7, .7], hound: [6, 3, 5, .3, 8, .8], ram: [30, 1, 1, 1.8, 8, .8],
 };
 // Horde swarm: [budget cost, weight]. Biome weights from bio.mobs still apply (0 removes one).
 const HORDE = { rat: [1.7, 3], spider: [2.6, 2], scarab: [1.2, 2.2], slimelet: [2.8, 1.4] };
@@ -69,9 +71,11 @@ function wardAbsorb(m, dmg) {
   else if (rnd() < .4) fxSparks(m.x, m.y + m.hitH, m.z, 3, 2.5, .8, 1.5, 2.6, { size: .05 });
   return dmg - a;
 }
-function addFire(x, z, r, life) {
-  G.fires.push({ x, z, r, t: life, max: life });
-  if (typeof FX.groundFire === 'function') FX.groundFire(x, z, r, life);
+// cheap: a light patch for short hound trails (sparks and a glow, not one of FX.groundFire's limited flames).
+function addFire(x, z, r, life, dps = 9, cheap = false) {
+  G.fires.push({ x, z, r, t: life, max: life, dps, cheap });
+  if (cheap) { const y = G.B.heightAt(x, z) + .08; fxTimed(2, x, y + .05, z, r * 3.2, r * 3.2, 1.3, .45, .08, .55, life, { ground: true }); for (let i = 0; i < 2; i++) fxTimed(1, x + frr(-.5, .5) * r, y, z + frr(-.5, .5) * r, r * frr(.8, 1.1), r * frr(1.0, 1.4), 2.0, 1.4, .9, .9, life * frr(.6, .9), { anchor: 1 }); }
+  else if (typeof FX.groundFire === 'function') FX.groundFire(x, z, r, life);
   else fxTimed(4, x, G.B.heightAt(x, z) + .08, z, r * 2.6, r * 2.6, 1.6, .6, .15, .55, life, { ground: true });
 }
 // Called from killMonster for an elite, before it is removed.
@@ -89,8 +93,9 @@ function updateElites(dt) {
   const F = G.fires;
   for (let i = F.length - 1; i >= 0; i--) {
     const f = F[i]; f.t -= dt; if (f.t <= 0) { swapRemove(F, i); continue; }
-    if (rnd() < dt * 6 * f.r) { const a = rnd() * TAU, d = rnd() * f.r; fxPart(f.x + Math.cos(a) * d, G.B.heightAt(f.x, f.z) + .1, f.z + Math.sin(a) * d, rr(-.2, .2), rr(.6, 1.6), rr(-.2, .2), rr(.4, .9), rr(.05, .09), 2.6, 1.0, .2, { drag: .4, rise: .3 }); }
-    const r2 = (f.r + .2) * (f.r + .2), dps = 9 * G.dmgMul * sat(f.t / .5 + .2);
+    if (f.cheap) { if (frnd() < dt * 16 * f.r * sat(f.t / .4)) fxPart(f.x + frr(-.6, .6) * f.r, G.B.heightAt(f.x, f.z) + .08, f.z + frr(-.6, .6) * f.r, frr(-.15, .15), frr(.8, 1.8), frr(-.15, .15), frr(.25, .55), frr(.06, .1), 2.8, 1.0, .2, { drag: .5, rise: .4 }); }
+    else if (rnd() < dt * 6 * f.r) { const a = rnd() * TAU, d = rnd() * f.r; fxPart(f.x + Math.cos(a) * d, G.B.heightAt(f.x, f.z) + .1, f.z + Math.sin(a) * d, rr(-.2, .2), rr(.6, 1.6), rr(-.2, .2), rr(.4, .9), rr(.05, .09), 2.6, 1.0, .2, { drag: .4, rise: .3 }); }
+    const r2 = (f.r + .2) * (f.r + .2), dps = f.dps * G.dmgMul * sat(f.t / .5 + .2);
     for (const fm of G.men) { if (fm.dead || dist2(fm.x, fm.z, f.x, f.z) > r2) continue; fm.hp -= dps * dt; fm.flash = Math.max(fm.flash, .4); if (fm.hp <= 0) killFootman(fm, 0, 0); }
   }
   for (const m of G.mons) {
@@ -120,7 +125,7 @@ function buildWave(k, level) {
   if (horde) {
     const bio = G.B.bio, menu = []; for (const ty in HORDE) { const mul = bio.mobs[ty] === undefined ? 1 : bio.mobs[ty]; if (mul > 0) menu.push([ty, HORDE[ty][1] * Math.min(mul, 2)]); }
     // Later hordes run hotter: tougher bodies, more elites, and from the third land a few fast hunters mixed in.
-    if (level >= 2) for (const ty of ['wolf', 'ghoul']) { const mul = bio.mobs[ty] === undefined ? 1 : bio.mobs[ty]; if (mul > 0) menu.push([ty, .35 * Math.min(level - 1, 3) * mul]); }
+    if (level >= 2) for (const ty of ['wolf', 'ghoul', 'hound']) { const mul = (bio.mobs[ty] === undefined ? 1 : bio.mobs[ty]) * (ty === 'hound' ? .5 : 1); if (mul > 0) menu.push([ty, .35 * Math.min(level - 1, 3) * mul]); }
     const tot = menu.reduce((a, b) => a + b[1], 0), hp = hpMul * (.72 + .04 * Math.min(level, 5)); let bodies = 0;
     budget *= 1.5 + .05 * level;
     while (budget > 0 && bodies < 260) {
@@ -174,6 +179,7 @@ function updateWaves(dt) {
       if (G.mons.length >= MAX_ALIVE) break;
       const e = G.queue.shift(), m = spawnMonster(e.type, { hpMul: e.hpMul }), c = MON[e.type].cat || (MON[e.type].hp >= 200 ? 'big' : '');
       if (c) G.mix[c] = (G.mix[c] || 0) + 1;
+      G.mix[e.type] = (G.mix[e.type] || 0) + 1;
       if (e.horde) m.bmul = .6;
       if (e.elite) makeElite(m, e.elite);
     }
@@ -342,7 +348,7 @@ function aiSpells() {
     for (const m of M) {
       if (m.dead || m.fly || !m.vis || m.hp <= 0 || m.dying) continue; if (++n > 90 && (n & 1)) continue;
       let sc = m.def.boss ? 6 + 8 * m.prog : 0;
-      for (const o of M) if (!o.dead && !o.fly && o.vis && !o.def.boss && dist2(o.x, o.z, m.x, m.z) < 8) sc += (o.elite ? 1.8 : 1) * (.6 + Math.min(1.4, o.maxHp / 250)) * (.7 + .6 * o.prog);
+      for (const o of M) if (!o.dead && !o.fly && o.vis && !o.def.boss && dist2(o.x, o.z, m.x, m.z) < 8) sc += (o.elite ? 1.8 : 1) * (.6 + Math.min(1.4, o.maxHp / 250)) * (.7 + .6 * o.prog) + (o.def.wardCast ? 2.5 : 0);
       if (sc > bs) { bs = sc; best = m; }
     }
     if (best && bs >= (G.horde ? 14 : 10)) { const q = aimPoint(best, METEOR_FALL, {}); if (castSpell('meteor', q.x, q.z)) return true; }
@@ -369,13 +375,15 @@ function aiThink(dt) {
   const B = G.B, towers = G.towers.filter(t => t.alive), empty = B.pads.filter(p => !p.tower), N = towers.length;
   const cnt = { archer: 0, bombard: 0, spire: 0, guard: 0 }; for (const t of towers) cnt[t.kind]++;
   const ideal = { archer: .36, bombard: .22, spire: .2, guard: .22 };
-  const lt = G.leakTypes; let air = 0, armor = 0, swarm = 0; for (const ty in lt) { const c = MON[ty].cat; if (c === 'air') air += lt[ty]; else if (c === 'armor') armor += lt[ty]; else if (c === 'swarm') swarm += lt[ty]; }
+  const lt = G.leakTypes; let air = 0, armor = 0, swarm = 0, siege = 0; for (const ty in lt) { const c = MON[ty].cat; if (c === 'air') air += lt[ty]; else if (c === 'armor') armor += lt[ty]; else if (c === 'swarm') swarm += lt[ty]; else if (c === 'siege') siege += lt[ty]; }
+  // Footmen snatched by harpies count as air leaks: more archers and spires. Rams want blasts and fire (bombards).
+  air += (G.snatched || 0) * .4; siege += (G.mix.ram || 0) * .15;
   const gatePress = sat(G.leaks / 8);
   const opts = [];
   for (const kind of TOWER_KINDS) {
     const def = TOWER[kind];
     let need = ideal[kind] * (N + 1.6) - cnt[kind] + .35;
-    if (kind === 'archer') need += air * .2 + (N === 0 ? 1 : 0); if (kind === 'spire') need += air * .12 + armor * .1; if (kind === 'bombard') need += armor * .08 + swarm * .06 + (N >= 2 && cnt.bombard === 0 ? .5 : 0); if (kind === 'guard') need += swarm * .04 + (N >= 1 && cnt.guard === 0 ? .9 : 0);
+    if (kind === 'archer') need += air * .2 + (N === 0 ? 1 : 0); if (kind === 'spire') need += air * .12 + armor * .1; if (kind === 'bombard') need += armor * .08 + swarm * .06 + siege * .12 + (N >= 2 && cnt.bombard === 0 ? .5 : 0); if (kind === 'guard') need += swarm * .04 + (N >= 1 && cnt.guard === 0 ? .9 : 0);
     if (need <= 0) continue;
     for (const pad of empty) {
       const cov = padCoverage(pad, def.range[0]) / (def.range[0] * 2);
@@ -394,7 +402,7 @@ function aiThink(dt) {
     if (t.state !== 'active' || t.lvl >= 2) continue;
     const c = t.def.cost[t.lvl + 1], use = sat(t.recent / 60);
     let sc = (.5 + use * .9 + (t.lvl === 0 ? .12 : 0)) * (N >= 4 ? 1.25 : .7) * (empty.length === 0 ? 1.6 : 1) * (110 / c);
-    if (t.kind === 'archer') sc *= 1 + air * .06; if (t.kind === 'spire') sc *= 1 + armor * .05;
+    if (t.kind === 'archer') sc *= 1 + air * .06; if (t.kind === 'spire') sc *= 1 + armor * .05; if (t.kind === 'bombard') sc *= 1 + siege * .05;
     opts.push({ sc, cost: c, act: 'up', t });
   }
   // Branch maxed towers (the choice follows what this land throws at us), then overcharge them; busy towers first.
@@ -428,17 +436,19 @@ function aiThink(dt) {
 // Which branch suits this tower: what leaked (counts most) and what this land has sent so far, plus a nudge
 // towards variety so the board does not end up all one kind.
 function aiBranch(t, towers, air, armor, swarm) {
-  const mx = G.mix, tot = Math.max(1, (mx.air || 0) + (mx.armor || 0) + (mx.swarm || 0) + (mx.big || 0) + 20);
-  const fA = ((mx.air || 0) / tot) * 3 + air * .5, fR = ((mx.armor || 0) / tot) * 4 + ((mx.big || 0) / tot) * 3 + armor * .5 + (G.bossWave || isBossK(G.k % G.wavesPerLand + 1) ? .4 : 0);
+  const mx = G.mix, tot = Math.max(1, (mx.air || 0) + (mx.armor || 0) + (mx.swarm || 0) + (mx.big || 0) + (mx.siege || 0) + 20);
+  // Harpies snatch footmen, so they weigh more than other flyers; rams (siege) are weak to blasts and fire and shrug off plain arrows.
+  const fA = ((mx.air || 0) / tot) * 3 + ((mx.harpy || 0) / tot) * 2 + air * .5, fR = ((mx.armor || 0) / tot) * 4 + ((mx.big || 0) / tot) * 3 + armor * .5 + (G.bossWave || isBossK(G.k % G.wavesPerLand + 1) ? .4 : 0);
+  const fG = ((mx.siege || 0) / tot) * 8 + (G.leakTypes.ram || 0) * .4;
   const fS = ((mx.swarm || 0) / tot) * 2.5 + swarm * .4 + (isHordeK(G.k % G.wavesPerLand + 1, G.level) ? .6 : 0), rel = t.pad.s / G.B.L;
   const [a, b] = BRANCH_KEYS[t.kind], have = k => towers.filter(o => o.branch === k).length, br = t.def.branches;
   // How much more road the branch's range would cover from this pad (long-range branches shine on central pads).
   const c0 = padCoverage(t.pad, t.def.range[2]) + 1, gain = k => br[k] && br[k].range ? (padCoverage(t.pad, br[k].range) - c0) / c0 : 0, lk = G.leaks > 3 ? .3 : 0;
   const sc = {
     longbow: .55 + fR * 1.2 + gain('longbow') * .6, volley: .5 + fA * 1.3 + fS * .5,
-    mortar: .5 + fR * .6 + fS * .4 + gain('mortar') * .6, firebomb: .5 + fS * 1.0 + rel * .2,
+    mortar: .5 + fR * .6 + fS * .4 + fG * .8 + gain('mortar') * .6, firebomb: .5 + fS * 1.0 + fG * 1.0 + rel * .2,
     tempest: .5 + fA * 1.5 + fR * .2, frost: .5 + rel * .5 + fS * .3 + lk,
-    knights: .5 + fS * .6 + lk, pikes: .55 + fR * 1.1 + (mx.big ? .2 : 0),
+    knights: .5 + fS * .6 + lk, pikes: .55 + fR * 1.1 + fG * .6 + (mx.big ? .2 : 0),
   };
   return sc[a] / (1 + .6 * have(a)) >= sc[b] / (1 + .6 * have(b)) ? a : b;
 }
@@ -510,7 +520,7 @@ function activateBoard(B, lit) {
 function beginBattle(first) {
   const B = G.B;
   G.mix = {}; G.mana = Math.max(G.mana * .5, 30); for (const k in G.spellCd) G.spellCd[k] = 0; G.pending.length = 0; G.rallies.length = 0;
-  G.lives = G.maxLives; G.gold = 300 + 100 * G.level + 12 * G.level * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; G.queue = []; AI.think = .15; AI.wait = 0;
+  G.lives = G.maxLives; G.gold = 300 + 100 * G.level + 12 * G.level * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.snatched = 0; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; G.queue = []; AI.think = .15; AI.wait = 0;
   const n = 4 + Math.min(3, G.level);
   for (let i = 0; i < n; i++) spawnMonster(i === n - 1 && G.level > 0 ? 'knight' : 'skel', { s: B.cave.s + 2.2 + i * 1.15, lat: rr(-.7, .7), hpMul: 1 + .22 * G.level });
   if (first || G.newRun || !G.runStats) { G.newRun = false; newRun(); }
