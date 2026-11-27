@@ -93,8 +93,10 @@ function applyBiomePalette(b) { Object.assign(COL, COL0); for (const k in b.col)
 const LOOK = { cur: null, to: null, bio: null };
 // A land's colour grade: shadow tint (rgb), highlight tint (rgb), contrast (an S-curve, 0..0.3). bio.grade, else neutral.
 const GRADE0 = [1, 1, 1, 1, 1, 1, 0];
+// The moon in the sky (Act II nights, 36-night.js): linear colour, size, strength; none by day.
+const MOON0 = [0, 0, 0, 1, 0];
 function lookOf(b) {
-  return { hs: C(b.hemi[0]), hg: C(b.hemi[1]), hi: [b.hemi[2]], mc: C(b.moon[0]), mi: [b.moon[1]], fc: C(b.fill[0]), fi: [b.fill[1]], clear: b.clear.slice(), mAmb: b.mistAmb.slice(), mist: b.mist.slice(), sky: b.sky.slice(), lift: b.lift.slice(), grade: [b.sat, b.expo], amb: b.sprAmb.slice(), wamb: b.wx.amb.slice(), tone: (b.grade || GRADE0).slice(), back: b.sky.map((v, i) => v * .45 + b.mistAmb[i] * .12).concat([b.stars === undefined ? .6 : b.stars, b.aurora || 0]), edge: b.mistAmb.map((v, i) => v * .55 + b.clear[i] * 1.5).concat([b.sea ? .15 : .62]) };
+  return { hs: C(b.hemi[0]), hg: C(b.hemi[1]), hi: [b.hemi[2]], mc: C(b.moon[0]), mi: [b.moon[1]], fc: C(b.fill[0]), fi: [b.fill[1]], clear: b.clear.slice(), mAmb: b.mistAmb.slice(), mist: b.mist.slice(), sky: b.sky.slice(), lift: b.lift.slice(), grade: [b.sat, b.expo], amb: b.sprAmb.slice(), wamb: b.wx.amb.slice(), tone: (b.grade || GRADE0).slice(), back: b.sky.map((v, i) => v * .45 + b.mistAmb[i] * .12).concat([b.stars === undefined ? .6 : b.stars, b.aurora || 0]), edge: b.mistAmb.map((v, i) => v * .55 + b.clear[i] * 1.5).concat([b.sea ? .15 : .62]), moonD: (b.moonDisc || MOON0).slice(), lan: [b.lantern || 1, b.halo || 1] };
 }
 const _lc = new THREE.Color();
 function applyLook(L) {
@@ -107,6 +109,7 @@ function applyLook(L) {
   FX.alpha.mesh.material.uniforms.uAmb.value.set(L.amb[0], L.amb[1], L.amb[2]); WX.u.uAmb.value.set(L.wamb[0], L.wamb[1], L.wamb[2]);
   const g = L.tone; c.uShT.value.set(g[0], g[1], g[2]); c.uHiT.value.set(g[3], g[4], g[5]); c.uCon.value = g[6];
   a.uEdge.value.set(L.edge[0], L.edge[1], L.edge[2], L.edge[3]); a.uBackTop.value.set(L.back[0], L.back[1], L.back[2]); a.uBack.value.z = L.back[3]; a.uBack.value.w = L.back[4];
+  a.uMoonC.value.set(L.moonD[0], L.moonD[1], L.moonD[2], L.moonD[4]); R.moonSize = L.moonD[3]; LT.lanternK = L.lan[0]; R.haloK = L.lan[1];
 }
 function setBiomeLook(B, instant) {
   const b = B.bio; LOOK.bio = b; LOOK.to = lookOf(b);

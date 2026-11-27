@@ -430,4 +430,5 @@ function scatterProps(B) {
     if (B.dStrAt(x, z) < 2.4) continue;
     const r = rng.range(.08, .17), T = new Soup(); T.rock(r, 0, r * .3, 0, mixC(COL.roadD, COL.stone, rng())); B.put(T, x, z, { ao: null });
   }
+  if (bio.nightProps) nightDress(X); // Act II nights (36-night.js): last, so the rest of the land stays as by day
 }

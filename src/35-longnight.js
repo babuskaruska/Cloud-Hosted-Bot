@@ -25,7 +25,7 @@ function procSeed() {
 // The land at absolute land index j (BIOME.start + board index): a hand-made one below 6, a generated one from 6 on.
 function biomeAt(j, seed) {
   const n = BIOMES.length; j = Math.floor(+j || 0);
-  if (j < n) return BIOMES[(j % n + n) % n];
+  if (j < n) { const b = BIOMES[(j % n + n) % n]; return nightOn() ? nightBiome(b) : b; } // Act II: the land by night (36-night.js)
   return procBiome(seed === undefined || seed === null || !Number.isFinite(+seed) ? procSeed() : +seed, j);
 }
 

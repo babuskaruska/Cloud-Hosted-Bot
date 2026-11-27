@@ -65,7 +65,7 @@ uniform vec3 uLightPos[${R.NL}]; uniform vec3 uLightCol[${R.NL}];
 uniform vec3 uMistAmb; uniform vec4 uMist;
 uniform vec3 uAO; uniform float uAOFloor;
 uniform vec2 uDither; uniform vec2 uWind;
-uniform vec4 uHalo; uniform vec4 uEdge; uniform vec3 uBackTop; uniform vec4 uBack; uniform vec2 uRes; uniform vec4 uEcl;
+uniform vec4 uHalo; uniform vec4 uEdge; uniform vec3 uBackTop; uniform vec4 uBack; uniform vec2 uRes; uniform vec4 uEcl; uniform vec4 uMoonC; uniform vec3 uMoonP;
 ${GLSL_BAYER}
 vec3 wpos(vec2 uv, float d){ vec4 p = uInvVP * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return p.xyz / p.w; }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -133,6 +133,19 @@ void main(){
       float rays = 0.45 + 0.55 * vn(vec2(x * 22.0 + t * 6.0, t * 4.0));
       col += mix(vec3(0.05, 0.42, 0.24), vec3(0.24, 0.07, 0.36), smoothstep(0.0, 0.2, dy)) * sheet * rays * uBack.w * (1.0 - 0.6 * uEcl.w);
     }
+    // The moon of an Act II night (36-night.js; uMoonC: linear colour, strength; uMoonP: centre in screen heights,
+    // radius): a disc with soft maria and a darker limb, a thin glow round it. It hides behind the eclipse's disc.
+    if (uMoonC.w > 0.001) {
+      vec2 e = (vec2(vUv.x * uRes.x / uRes.y, vUv.y) - uMoonP.xy) / uMoonP.z; float er = length(e);
+      if (er < 4.0) {
+        float disc = 1.0 - smoothstep(0.94, 1.0, er), limb = sqrt(max(0.0, 1.0 - er * er));
+        float mar = vn(e * 2.6 + 3.7) * 0.6 + vn(e * 6.0 + 9.1) * 0.4;
+        vec3 mc = uMoonC.rgb * (0.45 + 0.55 * limb) * (1.15 - 0.6 * smoothstep(0.4, 0.7, mar));
+        float k = uMoonC.w * (1.0 - uEcl.w);
+        col = mix(col, mc, disc * k);
+        col += uMoonC.rgb * (0.05 * exp(-max(er - 1.0, 0.0) * 2.2) + 0.03 * exp(-max(er - 1.0, 0.0) * 0.6)) * (1.0 - disc) * k * (1.0 - 0.6 * hz);
+      }
+    }
     // Eclipse (G.eclA): a black disc (uEcl.xy centre in screen heights, z radius) with a thin bright ring and a
     // streaked pale corona that slowly turns. Sky pixels only, so the slab hides it where it stands in front.
     if (uEcl.w > 0.0) {
@@ -162,7 +175,7 @@ void main(){
     uLightPos: { value: R.lightPos }, uLightCol: { value: R.lightCol }, uMistAmb: { value: new THREE.Vector3(0.05, 0.08, 0.14) }, uMist: { value: new THREE.Vector4(-0.3, 0.42, 0.75, 0.1) },
     uAO: { value: new THREE.Vector3(1.0, 18, 0.7) }, uAOFloor: { value: -1e9 }, uDither: { value: R.ditherOfs }, uWind: { value: new THREE.Vector2() },
     uHalo: { value: new THREE.Vector4(0.016, 0.9, 0.0, 0) }, uEdge: { value: new THREE.Vector4(0.03, 0.04, 0.07, 0.6) },
-    uBackTop: { value: new THREE.Vector3() }, uBack: { value: new THREE.Vector4() }, uRes: { value: new THREE.Vector2(1, 1) }, uEcl: { value: new THREE.Vector4() },
+    uBackTop: { value: new THREE.Vector3() }, uBack: { value: new THREE.Vector4() }, uRes: { value: new THREE.Vector2(1, 1) }, uEcl: { value: new THREE.Vector4() }, uMoonC: { value: new THREE.Vector4() }, uMoonP: { value: new THREE.Vector3(0, 0, 1) },
   }, { AO_N: 10, MIST: 2, EDGE: 1, HALO: 1 });
 
   M.dof = fsMat(`
@@ -337,8 +350,9 @@ function renderFrame() {
   cam.getWorldDirection(u.uCamDir.value);
   u.uAO.value.y = 0.85 / R.px;
   u.uWind.value.set(SH.uTime.value * 0.05, SH.uTime.value * 0.021); u.uRes.value.set(R.iw, R.ih); u.uBack.value.x = (CAM.yaw - PI / 4) * 1.2;
-  { const ea = G.eclA > .01 ? G.eclA : 0, asp = R.iw / R.ih, ph = asp < 1; u.uEcl.value.set(asp * (ph ? .3 : .15), ph ? .74 : .8, ph ? .036 : .055, ea); }
-  u.uHalo.value.x = !P.halo || R.lite || R.quality < .7 ? 0 : .016; // lite mode and a lowered resolution skip the halos
+  { const ea = G.eclA > .01 ? G.eclA : 0, asp = R.iw / R.ih, ph = asp < 1; u.uEcl.value.set(asp * (ph ? .3 : .15), ph ? .74 : .8, ph ? .036 : .055, ea);
+    u.uMoonP.value.set(asp * (ph ? .3 : .15) - u.uBack.value.x * .25, ph ? .76 : .8, (ph ? .036 : .055) * (R.moonSize || 1)); }
+  u.uHalo.value.x = !P.halo || R.lite || R.quality < .7 ? 0 : .016 * (R.haloK || 1); // lite mode and a lowered resolution skip the halos
   fsPass(M.atmo, T.atmo);
   const mk = CAM.menuK || 0;
   let img = T.atmo;

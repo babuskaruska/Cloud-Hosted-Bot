@@ -3,7 +3,7 @@
 const frnd = makeRng(0xF1A3E5), frr = (a, b) => a + (b - a) * frnd();
 const LT = {
   hemi: null, moon: null, fill: null, beacon: null, spots: [], towers: [], flashes: [], torches: [], env: [], envSrc: [], envK: 0,
-  beaconBase: 1500, beaconMul: 1, beaconLevel: 1, bp: new THREE.Vector3(), tick: 0, shadowsAt: -1, beaconGutter: 0, beaconOn: 1, cold: 0, emitters: [], spotTimer: 0,
+  beaconBase: 1500, beaconMul: 1, beaconLevel: 1, bp: new THREE.Vector3(), tick: 0, shadowsAt: -1, beaconGutter: 0, beaconOn: 1, lanternK: 1, cold: 0, emitters: [], spotTimer: 0,
   // Point lights in use per graphics tier (GFX.apply): towers, torches, flashes. With fewer tower lights than
   // towers, tPick holds the emitters that get one (the brightest near the camera, re-picked with the spotlights).
   nTower: 12, nTorch: 5, nFlash: 4, tPick: [],
@@ -72,12 +72,12 @@ function updateLights(dt, t, focusX, focusZ) {
     if (e) {
       e._spot = s.fade;
       s.l.position.set(e.x, e.y + .25, e.z); s.l.target.position.set(e.x + (e.dx || 0) * 1.2, e.y - 3, e.z + (e.dz || 0) * 1.2);
-      s.l.color.setRGB(e.r, e.g, e.b); s.l.intensity = e.I * e.on * (e.fl || 1) * (e.snf === undefined ? 1 : e.snf) * s.fade * 1.25;
+      s.l.color.setRGB(e.r, e.g, e.b); s.l.intensity = e.I * e.on * (e.fl || 1) * (e.snf === undefined ? 1 : e.snf) * s.fade * 1.25 * LT.lanternK;
     } else s.l.intensity = 0;
   }
   for (let i = 0; i < LT.env.length; i++) {
     const l = LT.env[i], e = LT.envSrc[i];
-    if (e && LT.envK > .01) { l.position.set(e.x, e.y, e.z); l.color.setHex(e.c); l.distance = e.d; l.intensity = e.I * LT.envK * (e.flick ? .82 + .18 * n1(t * 1.7 + i * 5, i + 11) : 1); } else l.intensity = 0;
+    if (e && LT.envK > .01) { l.position.set(e.x, e.y, e.z); l.color.setHex(e.c); l.distance = e.d; l.intensity = e.I * LT.envK * LT.lanternK * (e.flick ? .82 + .18 * n1(t * 1.7 + i * 5, i + 11) : 1); } else l.intensity = 0;
   }
   const few = LT.nTower < LT.towers.length;
   for (let i = 0; i < LT.towers.length; i++) {
@@ -86,7 +86,7 @@ function updateLights(dt, t, focusX, focusZ) {
       e.fl = .86 + .1 * n1(t * 7 + e.seed, e.seed) + .05 * n1(t * 19 + e.seed, e.seed + 1);
       l.position.set(e.x, e.y, e.z); l.color.setRGB(e.r, e.g, e.b); l.distance = e.range * (1 - .3 * (G.eclA || 0)); // Eclipse shrinks tower light
       e.snf = FX.snuffs.length ? snuffMul(e.x, e.z) : 1; // the Hollow Herald's snuff (FX.snuff) dims it
-      l.intensity = e.I * e.on * e.fl * e.snf * (1 - .68 * (e._spot || 0));
+      l.intensity = e.I * e.on * e.fl * e.snf * (1 - .68 * (e._spot || 0)) * LT.lanternK; // Act II nights: brighter lanterns
     } else l.intensity = 0;
   }
 }
