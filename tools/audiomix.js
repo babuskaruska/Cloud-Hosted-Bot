@@ -39,6 +39,13 @@ const SCENES = {
   daily: { hash: '', click: ['mdaily', 'cyes?'], pre: 50, check: 'G.mode+" sting:"+AU.stats().names.dailySting' },
   story: { hash: 'seed=4&biome=fen&ff=5', js: 'G.paused=true;AU.setScene("story");let n=0;setInterval(()=>{if(n++<6)AU.storyLine(n%3?"keeper":"ghost","Tere, Hoidja! Laternad kustuvad.")},3000)', pre: 2000, check: 'AU.stats().chip' },
   count: { hash: 'seed=4&biome=ashen&ff=3', js: 'G.paused=true;for(let i=0;i<7;i++)setTimeout(()=>AU.play(i<6?"countTick":"countGo",0,1,i<6?6-i:0),3000+i*1000)', pre: 1500, secs: 12, check: '"tick:"+AU.stats().names.countTick+" go:"+AU.stats().names.countGo' },
+  // Round 13: the campaign map, Act II by night, the economy sounds and a treasure carrier (a stand-in if Mira's is missing).
+  map: { hash: 'seed=4&biome=ashen&ff=5', js: 'G.paused=true;AU.setScene("map")', pre: 2000, check: 'AU.stats().scene' },
+  ashen2: { hash: 'seed=4&biome=ashen&ff=40', js: 'G.act=2', check: 'AU.stats().music' },
+  dunes2: { hash: 'seed=4&biome=dunes&ff=40', js: 'G.act=2', check: 'AU.stats().music' },
+  econ: { hash: 'seed=4&biome=ashen&ff=3', secs: 14, pre: 500, js: 'const P=(n,p,t)=>setTimeout(()=>AU.play(n,0,1,p),t);for(let i=1;i<=16;i++)P("combo",i,1000+i*260);P("interest",0,6000);P("goldBurst",0,7500);[1,2,3].forEach((s,i)=>P("star",s,9000+i*450));for(let i=0;i<3;i++)P("mineTick",0,11500+i*300);P("heraldCall",0,12800)',
+    check: '["combo","interest","goldBurst","star","mineTick","heraldCall"].map(k=>k+":"+(AU.stats().names[k]||0)).join(" ")' },
+  sack: { hash: 'seed=4&biome=ashen&ff=3', secs: 10, pre: 500, js: 'if(!window.__cw.MON.kullakott)window.__cw.MON.kullakott=Object.assign({},window.__cw.MON.rat,{name:"Kullakott",rig:"rat"});setTimeout(()=>{const m=window.__cw.spawnMonster("kullakott");m.hp=m.maxHp=1e6;window.__sackM=m;setTimeout(()=>{m.hp=0;m.dead=true},6000)},800)', check: '"sack:"+(AU.stats().names.sackRun||0)' },
   win: { hash: 'seed=4&biome=ashen&ff=5', js: 'G.paused=true;AU.setScene("results","win")', pre: 2000 },
   defeat: { hash: 'seed=4&biome=ashen&ff=5', js: 'G.paused=true;AU.setScene("results","defeat")', pre: 2000 },
 };
