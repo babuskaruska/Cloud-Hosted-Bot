@@ -5,6 +5,8 @@
 //   node tools/audiomix.js boss eclipse    only these scenes
 //   SECS=10 node tools/audiomix.js         shorter windows      PHONE=1  a phone-sized page (the phone low cut)
 //   --json                                 also print the table as JSON at the end
+//   STYLE=classic                          the classic soundtrack (default: the game's default, chip)   LITE=1 / LITE=0  force the lite mode
+// The notes column also gives the Web Audio nodes made per second (n/s), a CPU proxy for weak phones.
 // Fails (exit 1) on a page error or an audio fault recorded in AU.stats().err.
 // Scenes that need a monster Mira has not added yet (the Hollow Herald) put in a stand-in so the sound can be heard.
 const { chromium } = require('playwright');
@@ -35,6 +37,8 @@ const SCENES = {
   siege: { hash: 'seed=4&biome=ashen&level=3&ff=3', js: 'window.__cwEndless.setMods(["siege","echoes","bloodmoon"]);setInterval(()=>{if(G.phase==="play"&&!G.spawning&&G.nextIn>.4)G.nextIn=.05},2000)', check: '"k:"+G.k+" mods:"+G.mods+" horn:"+AU.stats().names.siegeHorn+" rise:"+AU.stats().names.echoRise' },
   ghost: { hash: 'seed=4&biome=ashen&ff=30', js: 'setTimeout(()=>G.mons.slice(0,6).forEach(m=>m.echo=true),3500)', check: '"rise:"+AU.stats().names.echoRise' },
   daily: { hash: '', click: ['mdaily', 'cyes?'], pre: 50, check: 'G.mode+" sting:"+AU.stats().names.dailySting' },
+  story: { hash: 'seed=4&biome=fen&ff=5', js: 'G.paused=true;AU.setScene("story");let n=0;setInterval(()=>{if(n++<6)AU.storyLine(n%3?"keeper":"ghost","Tere, Hoidja! Laternad kustuvad.")},3000)', pre: 2000, check: 'AU.stats().chip' },
+  count: { hash: 'seed=4&biome=ashen&ff=3', js: 'G.paused=true;for(let i=0;i<7;i++)setTimeout(()=>AU.play(i<6?"countTick":"countGo",0,1,i<6?6-i:0),3000+i*1000)', pre: 1500, secs: 12, check: '"tick:"+AU.stats().names.countTick+" go:"+AU.stats().names.countGo' },
   win: { hash: 'seed=4&biome=ashen&ff=5', js: 'G.paused=true;AU.setScene("results","win")', pre: 2000 },
   defeat: { hash: 'seed=4&biome=ashen&ff=5', js: 'G.paused=true;AU.setScene("results","defeat")', pre: 2000 },
 };
@@ -51,6 +55,8 @@ const f1 = v => v === undefined || v === null ? '   -' : (v >= 0 ? ' ' : '') + v
     await page.goto('file://' + ROOT + '/index.html' + (S.hash ? '#' + S.hash : ''));
     await sleep(1500);
     await page.evaluate(() => window.__cwAudio.unlock());
+    if (process.env.STYLE) await page.evaluate(s => window.__cwAudio.setStyle && window.__cwAudio.setStyle(s), process.env.STYLE);
+    if (process.env.LITE) await page.evaluate(l => window.__cwAudio.setLite && window.__cwAudio.setLite(l === '1'), process.env.LITE);
     for (let id of (S.click || [])) {
       await sleep(1500);
       const opt = id.endsWith('?'); id = id.replace('?', ''); // a trailing ? marks a button that may not show (a confirm)
@@ -62,13 +68,13 @@ const f1 = v => v === undefined || v === null ? '   -' : (v >= 0 ? ' ' : '') + v
     await page.evaluate(() => window.__cwAudio.meter(true));
     const n0 = await page.evaluate(() => Object.assign({}, window.__cwAudio.stats().names));
     await sleep((S.secs || SECS) * 1000);
-    const r = await page.evaluate(chk => { const G = window.__cw.G, AU = window.__cwAudio, s = AU.stats(); let c = null; try { c = chk ? eval(chk) : null; } catch (e) { c = 'check failed: ' + e.message; } return { m: s.meter, names: s.names, chk: c, err: s.err }; }, S.check || null);
+    const r = await page.evaluate(chk => { const G = window.__cw.G, AU = window.__cwAudio, s = AU.stats(); let c = null; try { c = chk ? eval(chk) : null; } catch (e) { c = 'check failed: ' + e.message; } return { m: s.meter, names: s.names, chk: c, err: s.err, nr: s.nodeRate, chip: s.chip }; }, S.check || null);
     const top = Object.keys(r.names).map(k => [k, r.names[k] - (n0[k] || 0)]).filter(a => a[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 5).map(a => a[0] + ':' + a[1]).join(' ');
     const m = r.m || {}, b = m.bands || {};
     out[name] = Object.assign({ chk: r.chk }, m);
     if (r.err || errs.length) bad.push(name);
     console.log(name.padEnd(9), f1(m.lufs), f1(m.mMax), f1(m.tp), ['sub', 'low', 'mid', 'pres', 'air'].map(k => String(b[k] === undefined ? '-' : b[k]).padStart(k.length > 3 ? 4 : 3)).join(' '), '|',
-      (r.chk !== null ? r.chk + ' | ' : '') + top + (r.err ? ' | AUDIO ERR ' + r.err : '') + (errs.length ? ' | PAGE ERR ' + errs.join('; ') : ''));
+      (r.chk !== null ? r.chk + ' | ' : '') + 'n/s:' + r.nr + (r.chip ? ' [' + r.chip + ']' : '') + ' | ' + top + (r.err ? ' | AUDIO ERR ' + r.err : '') + (errs.length ? ' | PAGE ERR ' + errs.join('; ') : ''));
     await ctx.close();
   }
   await browser.close();
