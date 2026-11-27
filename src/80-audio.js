@@ -1483,7 +1483,9 @@ const AU = (function () {
   function comboN() { return RAWP >= 1 ? Math.min(999, Math.round(RAWP)) : 1 + Math.round(cl(RAWP || 0, 0, 1) * 15); }
   function comboM(n) { const i = Math.min(n - 1, 12); return 64 + 12 * Math.floor(i / 5) + PENT[i % 5]; } // E4 up the pentatonic, G#6 at most
   function starN() { return RAWP >= 1 && RAWP <= 3 ? Math.round(RAWP) : RAWP > 0 && RAWP < 1 ? 1 + Math.round(RAWP * 2) : 1; }
-  const STAR_M = [76, 79, 84]; // E5 G5 C6: three stars climb a major chord
+  // sfx('star', 0, 0, 1, n) comes once with the stars won: each star rings in turn, climbing the land's major chord
+  // (root, third, fifth from its tonic around C5), and the third crowns them. STAR_Q apart.
+  const STAR_Q = 0.3, starB = () => 72 + ltp();
   S.combo = (d, t) => { // a music-box tine climbing with the streak, a fifth after it, and a sprinkle of sparkle from the 8th on
     const n = comboN(), m = comboM(n), lp = flt(d, 'lowpass', 5200);
     lanternTone(lp, t, m, 0.9); lanternTone(lp, t + 0.05, m + 7, 0.45);
@@ -1506,14 +1508,18 @@ const AU = (function () {
     grains(lp, t + 0.05, 14, 0.8, 0.05, 0.004, 0.015, 1800, 4200, 3, 1);
   };
   S.star = (d, t) => { // each star a rising tine with a bell; the third crowns them with a horn chord, a timpani and a soft cymbal
-    const n = starN(), m = STAR_M[n - 1], lp = flt(d, 'lowpass', 6500);
-    lanternTone(lp, t, m, 1.0); lanternTone(lp, t + 0.07, m + 7, 0.5);
-    belld(lp, t + 0.01, mtof(m), 0.04, 1.2);
-    grains(lp, t + 0.05, 5 + n * 2, 0.4, 0.035, 0.003, 0.012, 2400, 4600, 3, 1);
+    const n = starN(), b = starB(), lp = flt(d, 'lowpass', 6500);
+    for (let i = 0; i < n; i++) {
+      const m = b + [0, 4, 7][i], ti = t + i * STAR_Q;
+      lanternTone(lp, ti, m, 1.0); lanternTone(lp, ti + 0.07, m + 7, 0.5);
+      belld(lp, ti + 0.01, mtof(m), 0.04, 1.2);
+      grains(lp, ti + 0.05, 5 + i * 2, 0.35, 0.03, 0.003, 0.012, 2400, 4600, 3, 1);
+    }
     if (n === 3) {
-      [60, 64, 67, 72].forEach((x) => hornNote(lp, t + 0.12, mtof(x), 1.0, 0.05, 1.0));
-      timpHit(d, t + 0.12, 0.4, mtof(36)); cymbal(d, t + 0.12, 0.05, 1.2);
-      [72, 76, 79, 84].forEach((x, i) => lanternTone(lp, t + 0.2 + i * 0.07, x + 12, 0.45));
+      const tc = t + 2 * STAR_Q + 0.12;
+      [0, 4, 7, 12].forEach((x) => hornNote(lp, tc, mtof(b - 12 + x), 1.0, 0.05, 1.0));
+      timpHit(d, tc, 0.4, mtof(b - 36)); cymbal(d, tc, 0.05, 1.2);
+      [0, 4, 7, 12].forEach((x, i) => lanternTone(lp, tc + 0.08 + i * 0.07, b + x, 0.45));
     }
   };
   S.mineTick = (d, t) => { // a pick on rock, and a small coin
@@ -1644,7 +1650,7 @@ const AU = (function () {
     combo: [S.combo, 0.06, 0.25, 2, 0.6, 0.6, 2],
     interest: [S.interest, 1.0, 0.35, 2, 1.3, 0.65, 1],
     goldBurst: [S.goldBurst, 0.25, 0.4, 2, 1.4, 0.7, 2],
-    star: [S.star, 0.15, 0.45, 3, 1.9, 0.8, 3],
+    star: [S.star, 0.4, 0.45, 3, 2.3, 0.8, 1],
     mineTick: [S.mineTick, 0.08, 0.2, 0, 0.4, 0.5, 2],
     sackRun: [S.sackRun, 0.2, 0.15, 1, 0.35, 0.45, 1],
   });
@@ -3909,9 +3915,9 @@ const AU = (function () {
       cn(d, t + 0.12, 'tri', 48, 0.35, 0.25);
     },
     star: (d, t) => { // each star a rising note; the third a fanfare
-      const n = starN(), m = STAR_M[n - 1];
-      cn(d, t, 'p50', m, n === 3 ? 0.12 : 0.22, 0.09); cn(d, t + 0.04, 'p12', m + 7, 0.18, 0.03); cn(d, t, 'tri', m - 24, 0.25, 0.28);
-      if (n === 3) { cseq(d, t + 0.12, 'p50', [79, 84], 0.07, 0.09); cn(d, t + 0.26, 'p50', 88, 0.7, 0.1); ctrill(d, t + 0.26, 'p25', [76, 79, 84], 0.8, 0.055); cn(d, t + 0.26, 'tri', 48, 0.7, 0.32); ckick(d, t + 0.26, 0.6); cnz(d, t + 0.26, 0.6, 0.06, 0.7); }
+      const n = starN(), b = starB();
+      for (let i = 0; i < n; i++) { const m = b + [0, 4, 7][i], ti = t + i * STAR_Q; cn(d, ti, 'p50', m, 0.22, 0.09); cn(d, ti + 0.04, 'p12', m + 7, 0.18, 0.03); cn(d, ti, 'tri', m - 24, 0.25, 0.28); }
+      if (n === 3) { const tc = t + 2 * STAR_Q + 0.14; cseq(d, tc, 'p50', [b + 7, b + 12], 0.07, 0.09); cn(d, tc + 0.14, 'p50', b + 16, 0.7, 0.1); ctrill(d, tc + 0.14, 'p25', [b + 4, b + 7, b + 12], 0.8, 0.055); cn(d, tc + 0.14, 'tri', b - 24, 0.7, 0.32); ckick(d, tc + 0.14, 0.6); cnz(d, tc + 0.14, 0.6, 0.06, 0.7); }
     },
     mineTick: (d, t) => { cnz(d, t, 0.04, 0.07, 1.8, true); cn(d, t, 'tri', 60, 0.04, 0.2); cn(d, t + 0.07, 'p25', 86 + ((rnd() * 3) | 0) * 2, 0.06, 0.045); },
     sackRun: (d, t) => { const up = SK.flip ^= 1; cn(d, t, 'tri', up ? 55 : 52, 0.04, 0.16); cn(d, t + 0.02, 'p12', up ? 88 : 86, 0.035, 0.035); cn(d, t + 0.06, 'p12', up ? 91 : 89, 0.035, 0.03); cnz(d, t + 0.01, 0.05, 0.025, 2.2, true); },

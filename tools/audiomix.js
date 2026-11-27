@@ -43,7 +43,7 @@ const SCENES = {
   map: { hash: 'seed=4&biome=ashen&ff=5', js: 'G.paused=true;AU.setScene("map")', pre: 2000, check: 'AU.stats().scene' },
   ashen2: { hash: 'seed=4&biome=ashen&ff=40', js: 'G.act=2', check: 'AU.stats().music' },
   dunes2: { hash: 'seed=4&biome=dunes&ff=40', js: 'G.act=2', check: 'AU.stats().music' },
-  econ: { hash: 'seed=4&biome=ashen&ff=3', secs: 14, pre: 500, js: 'const P=(n,p,t)=>setTimeout(()=>AU.play(n,0,1,p),t);for(let i=1;i<=16;i++)P("combo",i,1000+i*260);P("interest",0,6000);P("goldBurst",0,7500);[1,2,3].forEach((s,i)=>P("star",s,9000+i*450));for(let i=0;i<3;i++)P("mineTick",0,11500+i*300);P("heraldCall",0,12800)',
+  econ: { hash: 'seed=4&biome=ashen&ff=3', secs: 14, pre: 500, js: 'const P=(n,p,t)=>setTimeout(()=>AU.play(n,0,1,p),t);for(let i=1;i<=16;i++)P("combo",i,1000+i*260);P("interest",0,6000);P("goldBurst",0,7500);P("star",3,9000);for(let i=0;i<3;i++)P("mineTick",0,11500+i*300);P("heraldCall",0,12800)',
     check: '["combo","interest","goldBurst","star","mineTick","heraldCall"].map(k=>k+":"+(AU.stats().names[k]||0)).join(" ")' },
   sack: { hash: 'seed=4&biome=ashen&ff=3', secs: 10, pre: 500, js: 'if(!window.__cw.MON.kullakott)window.__cw.MON.kullakott=Object.assign({},window.__cw.MON.rat,{name:"Kullakott",rig:"rat"});setTimeout(()=>{const m=window.__cw.spawnMonster("kullakott");m.hp=m.maxHp=1e6;window.__sackM=m;setTimeout(()=>{m.hp=0;m.dead=true},6000)},800)', check: '"sack:"+(AU.stats().names.sackRun||0)' },
   win: { hash: 'seed=4&biome=ashen&ff=5', js: 'G.paused=true;AU.setScene("results","win")', pre: 2000 },

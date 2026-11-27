@@ -31,8 +31,14 @@ const ROSTER = {
 const HORDE = { rat: [1.7, 3], spider: [2.6, 2], scarab: [1.2, 2.2], slimelet: [2.8, 1.4], drowned: [3.2, 0] };
 // Roster unlocks keep the old pace of five steps per land, spread over the land's waves.
 function rosterStep(k, level) { return level * 5 + Math.max(1, Math.ceil(k * 5 / G.wavesPerLand)); }
+// Act II (66-meta.js, ACT2): a land's night version leans on its own mix of monsters, and some come sooner.
+function landMobs(bio) {
+  const A = act2Land() && ACT2[bio.key]; if (!A) return bio;
+  if (!A._m) { A._m = Object.assign({}, bio.mobs, A.mobs); A._e = Object.assign({}, bio.early); for (const k in A.early) A._e[k] = Math.min(A._e[k] || 99, A.early[k]); }
+  return { mobs: A._m, early: A._e };
+}
 function waveMenu(k, level) {
-  const w = rosterStep(k, level), bio = G.B.bio, menu = [];
+  const w = rosterStep(k, level), bio = landMobs(G.B.bio), menu = [];
   for (const ty in ROSTER) {
     const r = ROSTER[ty], mul = bio.mobs[ty] === undefined ? 1 : bio.mobs[ty], un = Math.min(r[4], bio.early[ty] || 99), wt = r[5] ? r[5] * mul : (bio.mobs[ty] || 0);
     if (w >= un && wt > 0) menu.push([ty, wt * (w === un && w > 1 ? 2.2 : 1)]);
@@ -87,7 +93,7 @@ const ELITE_BOUNTY = 2.5;
 // From the third land on the cap rises (and elites get tougher, see makeElite).
 function eliteChance(k, level) { const w = level * G.wavesPerLand + k + G.eliteShift; return w < 6 ? 0 : Math.min(.3 + .03 * Math.max(0, level - 1), .045 + .016 * (w - 6)) * (k <= 2 ? .35 : k <= 4 ? .7 : 1); }
 function pickElite(type, k, level, mul = 1) {
-  const d = MON[type]; if (d.boss || type === 'scarab' || type === 'slimelet' || rnd() >= eliteChance(k, level) * mul * modMul('elite') * G.eliteMul) return undefined;
+  const d = MON[type]; if (d.boss || d.sack || type === 'scarab' || type === 'slimelet' || rnd() >= eliteChance(k, level) * mul * modMul('elite') * G.eliteMul) return undefined;
   const opts = d.fly ? ['shielded', 'hasted'] : ELITE_KINDS;
   return opts[Math.floor(rnd() * opts.length)];
 }
@@ -268,6 +274,8 @@ function buildWave(k, level) {
     t += rr(1.1, 2.3) * (boss ? 1.5 : 1) * gm;
   }
   if (boss && budget > 0) { const f = Math.min(2.5, budget0 / Math.max(1, budget0 - budget)); for (const e of q) if (!MON[e.type].boss) e.bm = f; }
+  // Round 13: a treasure carrier may run with the wave, somewhere in its middle (69-economy.js).
+  if (!boss && sackWave(k, level)) q.push({ t: t * rr(.25, .75), type: 'kullakott', hpMul });
   q.sort((a, b) => a.t - b.t);
   return q;
 }
@@ -275,7 +283,8 @@ function buildWave(k, level) {
 function pressHp() { const p = G.press; return .85 + .15 * Math.min(p, 2.2) + .3 * Math.max(0, p - 2.2); }
 // The ceiling for pressure rises with each land; the first land keeps the old, friendly cap. Heat lifts it further
 // (0.1 per tier), so a strong keeper at high Heat keeps meeting a real fight (G.heat is 0 outside a run).
-function pressCap() { return 2.2 + .3 * G.level + .1 * G.heat; }
+// The difficulty scales it too (G.pressCapMul, G.pressAdd: 1 and 0 at Tavaline): Kerge keeps waves small however well it goes.
+function pressCap() { return Math.max(.8, (2.2 + .3 * G.level + .1 * G.heat) * G.pressCapMul + G.pressAdd); }
 function startWave() {
   const W = G.wavesPerLand;
   G.k = G.k % W + 1; dailyReseed(G.level, G.k); G.queue = buildWave(G.k, G.level); if (waveNumber() > G.best && (inRun() || TEST_SESSION)) { G.best = waveNumber(); if (!TEST_SESSION) try { localStorage.setItem('lanternhold.best', '' + G.best); } catch (e) {} } G.waveT = 0; G.spawning = true; G.bossWave = isBossK(G.k); G.horde = isHordeK(G.k, G.level); G.waveKills = 0; G.waveLeaks = 0; G.bossDown = false; G.trickle = 6; G.trickleN = 0;
@@ -290,14 +299,16 @@ function endWave() {
   if (l === 0) G.press *= 1.12; else if (l >= 6) G.press *= .8; else if (l >= 3) G.press *= .9;
   if (G.lives <= 6) G.press *= .9;
   G.press = clamp(G.press, .6, pressCap());
-  G.gold += (22 + 7 * G.k + 8 * G.level) * G.goldMul + G.waveGold;
+  const wg = Math.round((22 + 7 * G.k + 8 * G.level) * G.goldMul + G.waveGold); G.gold += wg;
+  if (typeof UI.income === 'function') UI.income('Laine', wg);
+  econWaveEnd();
   if (G.horde && l === 0) achUnlock('horde');
   G.horde = false;
 }
 function updateWaves(dt) {
   if (G.phase !== 'play') return;
   const B = G.B;
-  updateElites(dt); updateTides(dt); updateSpells(dt); trackRun();
+  updateElites(dt); updateTides(dt); updateSpells(dt); econTick(dt); trackRun();
   if (G.spawning) {
     G.waveT += dt;
     while (G.queue.length && G.queue[0].t <= G.waveT) {
@@ -333,9 +344,10 @@ function updateWaves(dt) {
 // it (countSkip). Not in the demo, under the tutorial (which holds the wave itself) or in test sessions (QA stays as it was).
 // Sounds (Echo): sfx('countTick', 0, 0, 1) on 6 to 1, sfx('countGo') on 0. Drawn by MENU (73-menu.js, drawCount).
 const COUNT_FROM = 6;
-function countStart() {
+// force: the tutorial starts it itself once its first steps are done (67-tutorial.js).
+function countStart(force) {
   G.count = null; G.countT = -1;
-  if (inRun() && !TEST_SESSION && !(typeof TUT !== 'undefined' && TUT.active())) G.countT = 0;
+  if (inRun() && !TEST_SESSION && (force || !(typeof TUT !== 'undefined' && TUT.active()))) G.countT = 0;
 }
 function updateCount(dt) {
   if (!(G.countT >= 0)) { G.count = null; return; }
@@ -347,11 +359,13 @@ function updateCount(dt) {
 }
 function countSkip() {
   if (!(G.count > 0) && !(G.countT >= 0 && G.count === null)) return false;
+  const left = Math.max(0, COUNT_FROM - Math.max(0, G.countT)); if (left >= 1) { const g = earlyBonus(left * .7); ECON.early += g; econPay(g, 'Varajane kutse'); } // skipping the countdown pays a little too
   G.countT = COUNT_FROM; G.count = 0; sfx('countGo', CAM.x, CAM.z, 1); G.nextIn = Math.min(G.nextIn, .05);
   return true;
 }
 // After a restore the first wave pays no early-call gold (reloading must not become a gold tap).
-function callWaveEarly() { if (G.count > 0 || (G.countT >= 0 && G.count === null)) return countSkip(); if (G.phase === 'play' && !G.spawning && !G.bossWave && G.nextIn > .4) { if (!G.restored) G.gold += Math.round(G.nextIn * 3); G.nextIn = .05; return true; } return false; }
+// Round 13: the bonus grows with the land (earlyBonus, 69-economy.js) and shows in the income ticker.
+function callWaveEarly() { if (G.count > 0 || (G.countT >= 0 && G.count === null)) return countSkip(); if (G.phase === 'play' && !G.spawning && !G.bossWave && G.nextIn > .4) { const g = earlyBonus(G.nextIn); ECON.early += g; econPay(g, 'Varajane kutse'); G.nextIn = .05; return true; } return false; }
 
 // Every purchase goes through pay() and every refund through refund(), so the run summary can count the gold earned.
 function pay(c) { G.gold -= c; UI.goldShown = Math.min(UI.goldShown, G.gold); if (G.runStats) G.runStats.last -= c; }
@@ -363,7 +377,7 @@ function padCoverage(pad, range, air) {
 }
 function buildTower(pad, kind, byPlayer) {
   // Founding Stone (66-meta.js): the first towers of a land cost nothing (and sell for nothing).
-  const def = TOWER[kind], free = G.freeTowers > 0; if (pad.tower || (!free && G.gold < def.cost[0]) || G.phase !== 'play') return null;
+  const def = TOWER[kind], free = G.freeTowers > 0 && kind !== 'mine'; if (pad.tower || (!free && G.gold < def.cost[0]) || G.phase !== 'play' || (kind === 'mine' && mineCount() >= MINE_MAX)) return null;
   if (free) G.freeTowers--; else pay(def.cost[0]);
   const t = new Tower(pad, kind, G.B.pads.indexOf(pad)); if (free) t.spent = 0; G.towers.push(t); UI.ping(pad.x, pad.y, pad.z, byPlayer); return t;
 }
@@ -514,6 +528,11 @@ function aiSpells() {
     if (best && bs >= (G.horde ? 14 : 10)) { const q = aimPoint(best, METEOR_FALL, {}); if (castSpell('meteor', q.x, q.z)) return true; }
   }
   const save = G.spellCd.meteor < 6 && G.mana < spellMana('meteor') + 25;
+  // A treasure carrier about to get away with its gold: freeze it so the towers can burst the sack (69-economy.js).
+  if (spellReady('frost') && !airHold && G.mana >= spellMana('frost') + 12) {
+    let sk = null; for (const m of M) if (m.def.sack && !m.dead && m.hp > 0 && m.vis && !m.dying && m.prog > .68 && !(m.frozen > 0) && (!sk || m.prog > sk.prog)) sk = m;
+    if (sk) { const q = aimPoint(sk, .2, {}); if (castSpell('frost', q.x, q.z)) return true; }
+  }
   // A tidal wave on its way to footmen (or carrying a pack): freeze its front to break it.
   if (spellReady('frost') && G.tides.length) {
     for (const w of G.tides) {
@@ -549,8 +568,9 @@ function aiThink(dt) {
   if (G.phase !== 'play' || UI.playerActive()) return;
   AI.think -= dt; if (AI.think > 0) return; AI.think = .5;
   aiSpells(); aiReroll();
-  const B = G.B, towers = G.towers.filter(t => t.alive), empty = B.pads.filter(p => !p.tower), N = towers.length;
-  const cnt = { archer: 0, bombard: 0, spire: 0, guard: 0 }; for (const t of towers) cnt[t.kind]++;
+  aiEarly();
+  const B = G.B, towers = G.towers.filter(t => t.alive), empty = B.pads.filter(p => !p.tower), N = towers.filter(t => t.kind !== 'mine').length;
+  const cnt = { archer: 0, bombard: 0, spire: 0, guard: 0, mine: 0 }; for (const t of towers) cnt[t.kind]++;
   const ideal = { archer: .36, bombard: .22, spire: .2, guard: .22 };
   const lt = G.leakTypes; let air = 0, armor = 0, swarm = 0, siege = 0; for (const ty in lt) { const c = MON[ty].cat; if (c === 'air') air += lt[ty]; else if (c === 'armor') armor += lt[ty]; else if (c === 'swarm') swarm += lt[ty]; else if (c === 'siege') siege += lt[ty]; }
   // Footmen snatched by harpies count as air leaks: more archers and spires. Rams want blasts and fire (bombards).
@@ -585,7 +605,7 @@ function aiThink(dt) {
     }
   }
   for (const t of towers) {
-    if (t.state !== 'active' || t.lvl >= 2) continue;
+    if (t.state !== 'active' || t.lvl >= 2 || t.kind === 'mine') continue;
     const c = t.def.cost[t.lvl + 1], use = sat(t.recent / 60);
     let sc = (.5 + use * .9 + (t.lvl === 0 ? .12 : 0)) * (N >= 4 ? 1.25 : .7) * (empty.length === 0 ? 1.6 : 1) * (110 / c);
     if (t.kind === 'archer') sc *= 1 + air * .06 + AA.short * (1 - AA.hard) * .2; if (t.kind === 'spire') sc *= 1 + armor * .05 + AA.short * AA.hard * .3; if (t.kind === 'bombard') sc *= 1 + siege * .05;
@@ -601,6 +621,20 @@ function aiThink(dt) {
     const c = overchargeCost(t); if (!c || t.state !== 'active') continue;
     const use = sat(t.recent / 60);
     opts.push({ sc: (.35 + use * .9) * (empty.length === 0 ? 1.3 : .55) * (110 / c) / (1 + .25 * t.oc), cost: c, act: 'oc', t });
+  }
+  // Round 13, gold mines (69-economy.js): once the board can hold the road, a mine early in a land pays for itself over
+  // the waves still to come; later in the land it would not. Mines take the pads that cover the least road, and upgrade
+  // while enough waves are left for the extra gold to pay back.
+  const remW = G.wavesPerLand - G.k + (G.spawning ? 1 : 0), safe = G.leaks <= 2 && G.lives >= G.maxLives * .7 && !G.bossWave;
+  if (N >= 3 && safe && remW >= 5 && mineCount() < 2 && empty.length >= 2) {
+    let bp = null, bc = 1e9; for (const pad of empty) { const c = padCoverage(pad, TOWER.archer.range[0]); if (c < bc) { bc = c; bp = pad; } }
+    const g = mineGold({ lvl: 0 });
+    if (bp) opts.push({ sc: .55 * remW * g / TOWER.mine.cost[0] * (N >= 5 ? 1.2 : 1), cost: TOWER.mine.cost[0], act: 'build', kind: 'mine', pad: bp });
+  }
+  for (const t of towers) {
+    if (t.kind !== 'mine' || t.state !== 'active' || t.lvl >= 2 || !safe || remW < 4) continue;
+    const c = t.def.cost[t.lvl + 1], d = mineGold({ lvl: t.lvl + 1 }) - mineGold(t);
+    opts.push({ sc: .5 * remW * d / c * (N >= 5 ? 1 : .6), cost: c, act: 'up', t });
   }
   // Mend the beacon when it has taken real damage; more urgent the lower it burns.
   { const n = mendCount(), c = mendCost(); if (n >= 3 || (n > 0 && G.lives <= 8)) opts.push({ sc: (1 - G.lives / G.maxLives) * 3.2 * (110 / Math.max(40, c)) * (G.lives <= 8 ? 1.8 : 1), cost: c, act: 'mend' }); }
@@ -619,6 +653,15 @@ function aiThink(dt) {
   AI.think = N < 3 ? .12 : .8;
 }
 
+// Round 13: the commander calls a wave early for the bonus gold (69-economy.js) when nothing got
+// through the last wave, the beacon is whole, only a few stragglers are left far from the beacon and the next wave is an
+// ordinary one (no horde, no boss).
+function aiEarly() {
+  if (G.spawning || G.bossWave || G.count !== null && G.count !== undefined || !(G.nextIn > 1) || G.k < 1 || G.waveLeaks > 0 || G.lives < G.maxLives) return;
+  const nk = G.k % G.wavesPerLand + 1; if (isBossK(nk) || isHordeK(nk, G.level)) return;
+  let n = 0; for (const m of G.mons) if (!m.dead && (++n > 4 || m.prog > .55)) return; // only stragglers left, far from the beacon
+  callWaveEarly();
+}
 // The commander's air picture. want: how much air power this land calls for (flyers in the roster for the next
 // wave, flyers sent so far, flyers alive now, heavier for armoured gargoyles and deeper lands); have: the board's air
 // power (archers and spires by level, volley and tempest count extra, archers count half against armour);
@@ -736,11 +779,13 @@ function activateBoard(B, lit) {
 // S: a wave snapshot being restored (restoreRun): no warm-up monsters; restoreRun sets the saved numbers afterwards.
 function beginBattle(first, S) {
   const B = G.B; dailyReseed(G.level, 0);
+  if (!inRun() && TEST_SESSION && DIFF[HASH.diff] && G.diff !== HASH.diff) applyMeta(); // #diff= in a test session (sims)
   G.mix = {}; G.mana = Math.max(G.mana * .5, 30); for (const k in G.spellCd) G.spellCd[k] = 0; G.pending.length = 0; G.rallies.length = 0;
   G.lives = G.maxLives; G.gold = 300 + 100 * G.level + 12 * G.level * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.snatched = 0; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; if (!S) countStart(); G.queue = []; AI.think = .15; AI.wait = 0;
   const n = S || TUT.active() ? 0 : 4 + Math.min(3, G.level);
   for (let i = 0; i < n; i++) spawnMonster(i === n - 1 && G.level > 0 ? 'knight' : 'skel', { s: B.cave.s + 2.2 + i * 1.15, lat: rr(-.7, .7), hpMul: 1 + .22 * G.level });
   if (first || G.newRun || !G.runStats) { G.newRun = false; newRun(); }
+  econLandStart();
   metaLandStart(!!S);
   G.runStats.last = G.gold;
   G.phase = 'play'; G.phaseT = 0;
@@ -834,7 +879,7 @@ function validSave(S) {
   if (!_num(S.gold, 0, 1e7) || !_int(S.lives, 1, 99) || !_num(S.mana, 0, G.manaMax) || !_num(S.press, .1, 50) || !Array.isArray(S.towers) || S.towers.length > 40) return false;
   const pads = new Set();
   for (const t of S.towers) {
-    if (!t || !TOWER_KINDS.includes(t.kind) || !_int(t.p, 0, 99) || pads.has(t.p) || !_int(t.lvl, 0, 3) || !_int(t.oc || 0, 0, OC_MAX)) return false;
+    if (!t || !BUILD_KINDS.includes(t.kind) || !_int(t.p, 0, 99) || pads.has(t.p) || !_int(t.lvl, 0, 3) || !_int(t.oc || 0, 0, OC_MAX)) return false;
     if (t.lvl === 3 ? !(BRANCH_KEYS[t.kind] || []).includes(t.branch) : (t.branch || t.oc)) return false;
     pads.add(t.p);
   }
@@ -886,7 +931,7 @@ function restoreRun(S) {
   } finally { AU.ready = ar; }
   SAVE.last = S.fresh ? null : S;
   sfx('ignite', G.B.beacon.x, G.B.beacon.z, 1, 1);
-  UI.banner(G.B.bio.name + (G.level >= BIOMES.length ? ' · Öömaa ' + (G.level - BIOMES.length + 1) : ' · Maa ' + (G.level + 1)), 3, false);
+  UI.banner(G.B.bio.name + (act2Land() ? ' · II vaatus · Maa ' + (G.level - BIOMES.length + 1) : G.level >= BIOMES.length ? ' · Öömaa ' + (G.level - BIOMES.length + 1) : ' · Maa ' + (G.level + 1)), 3, false);
   return true;
 }
 // A saved tower, built at once: no scaffolding, at its level and branch, with its overcharge.

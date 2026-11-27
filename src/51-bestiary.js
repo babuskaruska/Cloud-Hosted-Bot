@@ -131,7 +131,7 @@ function initBestiary() {
     }, 40, { rad: .3 }),
     legR: toadLeg(1), legL: toadLeg(-1),
   };
-  initBestiary4(); initLeviathan(); initHerald();
+  initBestiary4(); initLeviathan(); initHerald(); initGoblinSack();
 }
 
 function rigSpider(e) {
@@ -754,3 +754,66 @@ function heraldEnd(m, lp) {
   FX.decals.add(G.B.heightAt, x, z, 2.6 * k, .006, .006, .01, .75, 40, 40);
 }
 DEATH_FX.hollow = (m, kind, ix, iz, up) => { shatter(e => rigMonster(e), m, [ix, 1.4 * up, iz], { spread: 1.3, life: .8, up }); heraldEnd(m, null); };
+
+// ---- Round 13: the treasure carrier (RIGS.goblinSack; MON.kullakott is Mira's) ---------------------------------
+// A small, quick goblin bent double under a huge sack of gold slung over its shoulders, both hands gripping the neck.
+// The sack bounces with each stride and glitters; coins spill from its mouth (sackTrail, 44-juice.js). On death the
+// goblin falls apart, the sack splits in a shower of gold (FX.goldBurst) and rags of sacking drift down.
+SPEC.goblinSack = Object.assign({}, SPEC.goblin, { stride: .72, lean: .2, stoop: .32 });
+function initGoblinSack() {
+  const sk = C(0x7a9a40), skD = C(0x4f6a2a), lea = mulC(COL.leather, 1.05), cap = C(0x8a2a22), sack = C(0xb8a072), sackD = C(0x7e6a48), o = () => ({ jit: .05 }), N = { rad: .1, shadow: false };
+  const g = KIT.goblin, k = KIT.goblinSack = { pelvis: g.pelvis, uArm: g.uArm, lArm: g.lArm, uLeg: g.uLeg, lLeg: g.lLeg };
+  k.torso = new PartBatch(S => {
+    S.ico(.12, 0, .13, .01, sk, { sc: [1.05, 1.15, .85], d: 1 }); S.ico(.09, 0, .03, .03, skD, { sc: [1.1, .8, 1], d: 1 });
+    // A leather vest, a strap across the chest and a coin pouch at the belt.
+    S.ico(.125, 0, .15, -.02, lea, { sc: [1.1, 1.05, .8], d: 1, l: L_CLOTH }); S.box(.05, .3, .02, .02, .14, .1, mulC(lea, .7), { r: [0, 0, .6] });
+    S.ico(.05, .09, .0, .08, mulC(lea, .8), { d: 0, l: L_CLOTH }); S.cyl(.022, .01, .09, .02, .125, COL.gold, { n: 6, r: [HPI, 0, 0], l: L_METAL, emis: .25, jit: 0 });
+  }, 16, { rad: .14 });
+  k.head = new PartBatch(S => {
+    S.ico(.105, 0, .09, .02, sk, { sc: [1.1, 1, 1.05], d: 1 }); S.box(.13, .05, .08, 0, .03, .07, skD, {});
+    for (const s of [-1, 1]) { S.cone(.04, .2, s * .14, .11, -.01, sk, { n: 4, r: [.15, 0, -s * 1.35] }); S.box(.035, .032, .02, s * .042, .11, .118, COL.black, { jit: 0 }); }
+    S.cone(.035, .13, 0, .07, .15, skD, { n: 4, r: [1.75, 0, 0] }); // a long nose
+    S.box(.11, .025, .02, 0, .02, .115, COL.black, { jit: 0 }); for (const x of [-.035, 0, .035]) S.box(.018, .022, .015, x, .028, .122, COL.bone, { jit: 0 }); // a toothy grin
+    S.add(gDome(8, 3), { s: [.11, .08, .115], p: [0, .15, .0], c: cap, l: L_CLOTH }); S.cone(.05, .14, 0, .25, -.06, cap, { n: 5, r: [-.9, 0, 0], l: L_CLOTH });
+    S.cyl(.02, .008, -.15, .07, -.01, COL.gold, { n: 6, l: L_METAL, emis: .3, jit: 0, r: [0, 0, HPI] }); // an earring
+  }, 16, { rad: .13 });
+  KIT.item.sack = new PartBatch(S => {
+    // The sack's own frame: centre at the origin, its mouth (+y, tied) towards the goblin's hands.
+    S.ico(.3, 0, 0, 0, sack, { sc: [1.05, 1.08, .95], d: 1, l: L_CLOTH, rough: 1 });
+    S.ico(.18, -.1, -.14, .14, sackD, { sc: [1.1, .8, .8], d: 1, l: L_CLOTH }); S.ico(.17, .14, -.12, -.1, mulC(sack, 1.08), { sc: [1, .8, 1.1], d: 1, l: L_CLOTH });
+    S.box(.13, .12, .02, .12, .04, .27, sackD, { l: L_CLOTH, r: [0, .35, .1] }); for (const s of [-1, 1]) S.box(.02, .12, .025, .12 + s * .045, .04, .28, COL.rope, { jit: 0, r: [0, .35, .1] }); // a patch
+    S.cyl(.11, .1, 0, .3, 0, sackD, { n: 7, rt: .7, l: L_CLOTH }); S.cyl(.085, .035, 0, .27, 0, COL.rope, { n: 7 }); // the neck and its tie
+    // Gold heaped in the open mouth, and coins caught in the weave.
+    for (let i = 0; i < 6; i++) { const a = i * 1.1; S.cyl(.04, .012, Math.cos(a) * .045, .37 + (i & 1) * .02, Math.sin(a) * .045, COL.gold, { n: 7, l: L_METAL, rough: .3, emis: .35, jit: .06, r: [.6 * Math.sin(a * 3), 0, .6 * Math.cos(a * 2)] }); }
+    for (const [x, y, z] of [[.22, .1, .18], [-.25, .05, .12], [.05, -.2, .27], [-.18, .18, -.2]]) S.cyl(.035, .01, x, y, z, COL.gold, { n: 7, l: L_METAL, rough: .3, emis: .3, jit: 0, r: [Math.atan2(z, y), 0, -Math.atan2(x, .3)] });
+  }, 16, { rad: .3 });
+  RIGS.goblinSack = rigGoblinSack; EYES.goblinSack = null; RIG_DEATH.goblinSack = 'sack';
+}
+const _gsT = new THREE.Vector3();
+function rigGoblinSack(e) {
+  RIG_HAUL = 1; let M;
+  try { M = rigHuman(KIT.goblinSack, SPEC.goblinSack, e); } finally { RIG_HAUL = 0; }
+  const s = e.scale || 1, fl = e.flash || 0, ph = e.ph || 0, mv = e.mv || 0, fz = e.flinch || 0;
+  // Slung over the back: hung from the torso, it bounces and lags a little behind each stride.
+  const bounce = Math.abs(Math.sin(ph)) * .05 * mv, sway = Math.sin(ph) * .1 * mv;
+  const S0 = xf(_M[20], _M[2], 0, SPEC.goblinSack.torsoH + .06 + bounce, -.3 - fz * .05, -.9 - bounce * 2 + fz * .3, sway * .5, sway, 1.05, 1.05, 1.05);
+  KIT.item.sack.put(S0, fl, e.tint || null);
+  if (!RIG_CAPTURE && e.vis !== false) {
+    const tw = .75 + .25 * Math.sin(G.t * 11 + (e.lseed || 0) * 5);
+    for (const sg of [-1, 1]) { _gsT.set(sg * .042, .11, .13).applyMatrix4(M); FX.add.push(_gsT.x, _gsT.y, _gsT.z, .05 * s, .05 * s, 0, 0, 2.4, 2, .5, tw, 0, 0, 0, 0); }
+    _gsT.set(0, .36, 0).applyMatrix4(S0); sackTrail(e, _gsT);
+  }
+  return M;
+}
+// Death: the goblin falls apart, the sack bursts (coins fountain out and fly to the gold counter), rags drift down.
+DEATH_FX.sack = (m, kind, ix, iz, up) => {
+  shatter(e => rigMonster(e), m, [ix, 1.7 * up, iz], { spread: 1.5, life: .7, up });
+  _gsT.set(0, .1, 0).applyMatrix4(_M[20]); FX.goldBurst(m.x, m.z, 18, { y: Math.max(m.y, _gsT.y - .4) });
+  const n = [3, 5, 7, 9][gfxRank()];
+  for (let i = 0; i < n; i++) {
+    _jm.compose(_jv.set(m.x + frr(-.2, .2), m.y + frr(.4, .8), m.z + frr(-.2, .2)), _jq.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _js.set(1.6, 1, 1.4));
+    addDebris(KIT.feather, _jm, [.62, .52, .36], frr(-2.2, 2.2) + ix * .3, frr(2, 4.2), frr(-2.2, 2.2) + iz * .3, frr(4, 10), frr(2.5, 4), { extra: 1, float: 1 });
+  }
+  _js.set(1, 1, 1);
+  fxDust(m.x, m.y + .3, m.z, 4, .6, { c: [.5, .44, .32], a: .4 });
+};

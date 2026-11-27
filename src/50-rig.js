@@ -1,5 +1,5 @@
 
-let RIG_CAPTURE = null;
+let RIG_CAPTURE = null, RIG_HAUL = 0;
 // Per-step draw plan (planDraw in 90-main.js): crowd = many monsters on screen, so shadow and detail cuts apply.
 const DRAW = { crowd: false, onScreen: 0, thin: 0 };
 class PartBatch {
@@ -318,6 +318,8 @@ function rigHuman(kit, sp, e) {
   if (e.claw) { shR = -1.25 + .45 * sw; elR = -.55; shL = -1.25 - .45 * sw; elL = -.55; }
   if (e.push) { const p = e.push; shR = -1.62 + .1 * sw; elR = -.5; shL = -1.62 - .1 * sw; elL = -.5; rzR = -.12; rzL = .12; lean += .22 * p; twist *= .4; }
   if (e.staff) { shR = -.75; elR = -.95; bladeA = .12; }
+  // Hauling a sack over the shoulders (the treasure carrier, round 13): both hands up and back, a deep forward lean.
+  if (RIG_HAUL) { shR = -2.75 + .12 * sw; elR = -1.25; shL = -2.75 - .12 * sw; elL = -1.25; rzR = -.35; rzL = .35; lean += .3; twist *= .5; }
   if (e.staffOut) { shR = -.42 + .12 * sw; elR = -.5; rzR = -.32; bladeA = .08; }
   if (e.cast > 0) { const u = easeInOut(Math.min(1, e.cast * 1.6)); shR = lerp(shR, -2.7, u); elR = lerp(elR, -.25, u); shL = lerp(shL, -2.3, u); elL = lerp(elL, -.4, u); }
   if (e.drum) { const b = Math.sin(e.beat || 0); shR = -.95 - .5 * Math.max(0, b); elR = -1.15; shL = -.95 - .5 * Math.max(0, -b); elL = -1.15; bladeA = .9; }

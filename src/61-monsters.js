@@ -31,6 +31,10 @@ const MON = {
   // Round 6 (Stormreach). drowned: a sea-soaked skeleton off the wrecks (the skeleton model, tinted sea-green), a little
   // tougher and slower than a plain one. leviathan: the land's boss; it raises the drowned (summon), sweeps a tidal wave
   // down the road ahead of it (tide: footmen there are shoved back and hurt, monsters ride it faster) and enrages when low.
+  // Round 13: the treasure carrier. A goblin with a sack of gold that runs fast for the far side of the board: killed,
+  // it bursts into gold (sackDie, 69-economy.js); if it gets away it takes no life but steals a little (sackEscape).
+  // Model: RIGS.goblinSack (Ash), else the stand-in below.
+  kullakott: { name: 'Kullakott', tip: 'Goblin kullakotiga! Ta jookseb kiiresti. Püüa ta kinni ja kott lõhkeb kullaks.', hp: 64, spd: 2.35, rad: .25, mass: .7, bounty: 4, lives: 0, hitH: .55, top: 1.2, dmg: 0, atkT: 1, eye: [3.4, 2.6, .4], scale: .85, slip: true, sack: true, death: 'flesh', cat: 'swarm', rig: 'goblinSack', tint: [1.1, 1.0, .75] },
   drowned: { name: 'Uppunu', tip: 'Merevees ligunenud luukered vrakkidelt. Tugevamad kui tavalised luud.', hp: 46, spd: 1.15, rad: .28, mass: 1.2, bounty: 7, lives: 1, hitH: .75, top: 1.45, dmg: 7, atkT: 1.0, eye: [.5, 3.2, 2.4], scale: 1.04, death: 'bones', blade: true, tint: [.55, 1.0, .9], rig: 'skel' },
   giant: { name: 'Luuhiid', tip: 'Aeglane ja tohutu. Löö teda kõigega, mis sul on.', hp: 1250, spd: .88, rad: .92, mass: 40, bounty: 200, lives: 5, hitH: 2.2, top: 4.0, dmg: 46, atkT: 1.7, eye: [5, .9, .2], scale: 2.7, boss: true, death: 'bones', blade: true, cat: 'armor' },
   ogre: { name: 'Inimsööja', tip: 'Virutab sõdurid eest minema.', hp: 1400, spd: .8, rad: 1.0, mass: 46, bounty: 200, lives: 5, hitH: 1.9, top: 3.4, dmg: 52, atkT: 1.8, eye: [4.5, 2.2, .3], scale: 2.6, boss: true, death: 'flesh', blade: true, cat: 'armor' },
@@ -116,7 +120,7 @@ function blastAround(m, ex) {
 function killMonster(m, kind, dx, dz, tower) {
   const B = G.B, def = m.def, t = m.type, dth = (def.rig && RIG_DEATH[def.rig]) || def.death; if (tower) tower.kills++;
   if (def.boss) { m.dying = 1.9; m.hp = 0; m.foe = null; G.slowmo = 1.4; hitStop(.07, .55); shake(.8); sfx('roar', m.x, m.z, 1, 1); return; }
-  G.slain++; G.waveKills++; manaFromKill(m);
+  G.slain++; G.waveKills++; manaFromKill(m); econKill(m);
   const ix = (dx || 0) * 2.2, iz = (dz || 0) * 2.2, up = kind === 'blast' ? 1.7 : 1, sc = m.scale;
   if (dth === 'bones') { shatter(e => rigMonster(e), m, [ix, 1.2 * up, iz], { spread: kind === 'blast' ? 2.6 : 1.5, up }); sfx('boneRattle', m.x, m.z, .8, rnd()); fxDust(m.x, m.y + .1, m.z, 3, .6, { a: .35 }); }
   else if (dth === 'fur') { shatter(e => rigMonster(e), m, [ix, 2.2 * up, iz], { spread: 1.2, life: .6 }); sfx('ratSqueal', m.x, m.z, .55, rnd()); fxDust(m.x, m.y + .1, m.z, 2, .4, { a: .3 }); }
@@ -195,9 +199,11 @@ const RIG_STANDIN = {
   // Round 6 stand-in until RIGS.leviathan lands: a sea-green ogre with a pike for a trident.
   // Round 11 stand-in until RIGS.herald lands: a tall hooded, robed figure on the giant's frame with a long staff.
   herald: m => standIn(m, [.5, .46, .72], e => { e.weapon = KIT.item.staff; e.wScale = 1.6; e.staff = true; e.hood = true; e.robe = true; return rigHuman(KIT.giant, SPEC.skel, e); }),
+  // Round 13 stand-in until RIGS.goblinSack lands: a gold-tinted goblin with a keg on its back for the sack.
+  goblinSack: m => standIn(m, [1.25, 1.1, .55], e => { e.keg = true; return KIT.goblin ? rigHuman(KIT.goblin, SPEC.goblin, e) : rigHuman(KIT.ogre, SPEC.ogre, e); }),
   leviathan: m => standIn(m, [.34, .66, .7], e => { e.weapon = KIT.item.pike; e.wScale = 1.5; e.heavy = true; e.crown = true; return rigHuman(KIT.ogre, SPEC.ogre, e); }),
 };
-const EYE_STANDIN = { ram: 'golem', shaman: 'ghoul', harpy: 'gargoyle', hound: 'wolf', leviathan: 'ogre', herald: 'giant' };
+const EYE_STANDIN = { ram: 'golem', shaman: 'ghoul', harpy: 'gargoyle', hound: 'wolf', leviathan: 'ogre', herald: 'giant', goblinSack: 'shaman' };
 const EYES = {
   skel: SKEL_EYE, knight: SKEL_EYE, giant: [.058, .185, .152, .075], ogre: OGRE_EYE, rat: [.05, .03, .42, .05], bat: [.04, .03, .16, .05], slime: [.13, .2, .44, .08], slimelet: [.13, .2, .44, .08],
   ghoul: OGRE_EYE, brute: OGRE_EYE, jotun: OGRE_EYE, golem: [.04, .1, .17, .05], colossus: [.04, .1, .17, .05], necro: SKEL_EYE, drummer: SKEL_EYE, bomber: SKEL_EYE, mummy: SKEL_EYE, king: [.058, .185, .152, .075],
@@ -587,6 +593,7 @@ function shamanWard(m, dt) {
   m.cast = 1; fxTimed(4, m.x, m.y + .08, m.z, wc.r * 2, wc.r * 2, .4, 1.4, .8, .45, .5, { ground: true });
 }
 function leak(m) {
+  if (m.def.sack) { sackEscape(m); return; } // a treasure carrier takes gold, not lives (69-economy.js)
   const B = G.B, n = m.def.lives + (m.elite ? 1 : 0);
   G.lives = Math.max(0, G.lives - n); G.leaks++; G.waveLeaks++; G.leakTypes[m.type] = (G.leakTypes[m.type] || 0) + n;
   LT.beaconGutter = 1; UI.hurt = 1;

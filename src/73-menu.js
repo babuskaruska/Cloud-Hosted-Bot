@@ -12,7 +12,7 @@
 // Input: touch and mouse (tap a button), keys (arrows or WASD move, Enter or Space picks, Esc goes back) and a gamepad
 // (stick or D-pad, A picks, B goes back, Start opens the in-game menu).
 const MENU = (() => {
-  const M = { sel: 0, items: [], t: 0, kb: false, save: null, heatPick: 0, heatMode: 'campaign', treeSel: 0, tab: 'beasts', page: 0, res: null, conf: null, from: null, wasPaused: false, arrivalLv: -99, sparks: [], hudTip: null };
+  const M = { sel: 0, items: [], t: 0, kb: false, save: null, heatPick: 0, heatMode: 'campaign', diffPick: null, startLevel: 0, mapAct: 1, starCard: null, treeSel: 0, tab: 'beasts', page: 0, res: null, conf: null, from: null, wasPaused: false, arrivalLv: -99, sparks: [], hudTip: null };
   const C = () => UI.COLR;
   M.modal = () => !!UI.scr || STORY.on();
   // A cinematic (Ash's CINE) hides the HUD, banners and toasts as well: only its letterbox and caption show.
@@ -31,7 +31,8 @@ const MENU = (() => {
   M.close = () => { UI.scr = null; G.paused = false; M.wasPaused = false; };
   M.back = () => {
     const s = UI.scr;
-    if (s === 'heat' || s === 'codex') M.open('title');
+    if (s === 'heat' && M.heatMode === 'campaign' && anyStars()) M.open('map', { sel: 0 });
+    else if (s === 'heat' || s === 'codex' || s === 'map') M.open('title');
     else if (s === 'tree') M.open(M.from === 'results' ? 'results' : 'title', { sel: 0 });
     else if (s === 'pause') M.close();
     else if (s === 'confirm') { const cf = M.conf; if (cf && cf.no) cf.no(); else M.open(cf && cf.back || 'title'); }
@@ -49,8 +50,16 @@ const MENU = (() => {
     if (S) { const r = embersForSave(S); return confirm('Alustad uut mängu?', ['Su salvestatud mäng lõpeb siin' + (r && r.total ? ' ja annab ' + r.total + ' sütt.' : '.')], 'Alusta uuesti', () => toHeat(mode), 'title'); }
     toHeat(mode);
   }
-  function toHeat(mode) { if (mode === 'daily') return begin('daily', 0); if (META.heatMax > 0) { M.heatPick = clamp(M.heatPick || META.heatMax, 0, META.heatMax); M.open('heat'); } else begin(mode, 0); }
-  function begin(mode, heat) { UI.scr = null; M.wasPaused = false; startRun(mode, heat); }
+  // Round 13: a campaign with a cleared land opens the land map first; every run but the daily then opens the setup
+  // screen ('heat': difficulty, Heat and where the run starts), whose Alusta (hgo) starts it.
+  function toHeat(mode) {
+    if (mode === 'daily') return begin('daily', 0);
+    M.startLevel = 0; M.diffPick = DIFF[M.diffPick] ? M.diffPick : diffKey(META.diff);
+    if (mode === 'campaign' && anyStars()) { M.mapAct = M.mapAct === 2 && act2Open() ? 2 : 1; return M.open('map'); }
+    toSetup();
+  }
+  function toSetup() { M.heatPick = clamp(M.heatPick || META.heatMax, 0, META.heatMax); M.open('heat'); }
+  function begin(mode, heat) { UI.scr = null; M.wasPaused = false; startRun(mode, heat, { diff: M.diffPick || META.diff, level: mode === 'campaign' ? M.startLevel : 0 }); }
   function confirm(title, lines, yes, fn, back, no) { M.conf = { title, lines, yes, fn, back, no }; M.open('confirm'); }
   function doContinue() {
     const S = continueOffer(); if (!S) { M.save = null; return; }
@@ -106,8 +115,8 @@ const MENU = (() => {
   // The campaign's victory: the run so far, not banked (the run goes on into the Long Night unless the keeper rests).
   function victoryResult() {
     const run = META.run || { level0: 0, notes: [], ach: [] }, sm = runSummary() || {};
-    const r = embersFor({ waves: sm.waves, bosses: sm.lands, level: G.level, level0: run.level0, heat: G.heat, ending: run.ending && !run.endingPaid });
-    return Object.assign(r, { how: 'victory', sum: sm, mode: 'campaign', land: landNo(), landName: G.B ? G.B.bio.name : '', notes: (run.notes || []).slice(), ach: (run.ach || []).slice(), before: META.embers, after: META.embers + r.total });
+    const r = embersFor({ waves: sm.waves, bosses: sm.lands, level: G.level, level0: run.level0, heat: G.heat, diff: G.diff, ending: run.ending && !run.endingPaid, ending2: run.ending2 && !run.ending2Paid });
+    return Object.assign(r, { how: 'victory', act: (M.victory && M.victory.act) || 1, sum: sm, mode: 'campaign', land: landNo(), landName: G.B ? G.B.bio.name : '', notes: (run.notes || []).slice(), ach: (run.ach || []).slice(), before: META.embers, after: META.embers + r.total });
   }
   function intoNight() { M.victory = null; G.holdClear = false; M.res = null; M.rc = null; M.close(); sfx('uiClick', CAM.x, CAM.z, 1); }
   function restRun() { M.victory = null; M.res = abandonRun('rest'); openResults(); }
@@ -133,13 +142,14 @@ const MENU = (() => {
     if (V && inRun() && G.phase === 'clear' && !UI.scr && !STORY.on()) {
       if (V.stage === 'pending' && G.phaseT > .5) { V.stage = 'cine'; V.t0 = M.t; if (cineOk()) playCine('victory', () => { if (V.stage === 'cine') V.stage = 'story'; }); else V.stage = 'story'; }
       if (V.stage === 'cine' && M.t - V.t0 > 12) V.stage = 'story';
-      if (V.stage === 'story') { V.stage = 'wait'; if (!STORY.ending(() => { V.stage = 'results'; })) V.stage = 'results'; }
+      if (V.stage === 'story') { V.stage = 'wait'; if (!STORY.ending(() => { V.stage = 'results'; }, V.act)) V.stage = 'results'; }
       if (V.stage === 'results') { V.stage = 'shown'; M.res = victoryResult(); openResults(); }
     } else if (V && (!inRun() || G.phase !== 'clear')) { M.victory = null; G.holdClear = false; }
     if (inRun() && G.phase === 'play' && M.arrivalLv !== G.level && G.modLevel === G.level && !STORY.on() && !STORY.queue.length && !UI.scr) {
       M.arrivalLv = G.level; if (activeMods().length) M.open('arrival');
     }
     if (M.hudTip) { M.hudTip.t += dt; if (M.hudTip.t > 5) M.hudTip = null; }
+    if (M.starCard) { if (!cineOn()) M.starCard.t += dt; if (M.starCard.t > 4.5 || !inRun()) M.starCard = null; }
     for (let i = M.sparks.length - 1; i >= 0; i--) { const p = M.sparks[i]; p.t += dt; p.y -= p.v * dt; p.x += Math.sin(p.t * 3 + p.ph) * dt * 8; if (p.t > p.life) M.sparks.splice(i, 1); }
   };
 
@@ -155,7 +165,7 @@ const MENU = (() => {
     M.kb = true;
     if (k === 'm' || k === 'M') return false;
     const d = NAV[e.code];
-    if (d && UI.scr === 'heat' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'KeyA' || e.code === 'KeyD')) { heatStep(d); return true; }
+    if (d && UI.scr === 'heat' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'KeyA' || e.code === 'KeyD')) { if (META.heatMax > 0 && !e.shiftKey) heatStep(d); else diffStep(d); return true; }
     if (d && UI.scr === 'tree' && M.sel < UPGRADES.length) {
       const cols = M.treeCols || 1, horiz = e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'KeyA' || e.code === 'KeyD';
       const n = clamp(M.sel + (horiz ? d : d * cols), 0, UPGRADES.length); M.sel = n; if (n < UPGRADES.length) M.treeSel = n; sfx('menuMove', CAM.x, CAM.z, .6); return true;
@@ -174,7 +184,7 @@ const MENU = (() => {
     const d = ay || ax;
     if (d && M.padT <= 0) {
       M.padT = .22;
-      if (UI.scr === 'heat' && ax) heatStep(ax);
+      if (UI.scr === 'heat' && ax) { if (META.heatMax > 0) heatStep(ax); else diffStep(ax); }
       else if (UI.scr === 'tree' && M.sel < UPGRADES.length) { const cols = M.treeCols || 1, n = clamp(M.sel + (ax ? ax : ay * cols), 0, UPGRADES.length); M.sel = n; if (n < UPGRADES.length) M.treeSel = n; }
       else if (UI.scr === 'codex' && ax) pageStep(ax);
       else { const n = M.items.length || 1; M.sel = ((M.sel + d) % n + n) % n; }
@@ -288,8 +298,8 @@ const MENU = (() => {
   function titleList() {
     const c = C(), S = M.save, list = [];
     if (S) { const mins = Math.max(0, (Date.now() - S.t) / 6e4), ago = mins < 1 ? 'just praegu' : mins < 60 ? Math.round(mins) + ' min tagasi' : mins < 2880 ? Math.round(mins / 60) + ' h tagasi' : Math.round(mins / 1440) + ' päeva tagasi';
-      list.push({ id: 'mcont', label: 'Jätka', sub: (S.mode === 'daily' ? 'Päev · Öömaa ' + (S.level - CAMPAIGN_LANDS + 1) : S.level >= CAMPAIGN_LANDS ? 'Öömaa ' + (S.level - CAMPAIGN_LANDS + 1) : 'Maa ' + (S.level + 1)) + ' · Laine ' + S.k + (S.heat ? ' · Kuumus ' + S.heat : '') + ' · ' + ago, fn: doContinue, col: c.amber }); }
-    list.push({ id: 'mcamp', label: 'Seiklus', sub: META.stats.campaigns ? 'Kuus maad · läbitud ' + META.stats.campaigns + '×' : 'Kuus maad. Süüta majakad!', fn: () => pickMode('campaign'), col: S ? null : c.amber });
+      list.push({ id: 'mcont', label: 'Jätka', sub: (S.mode === 'daily' ? 'Päev · Öömaa ' + (S.level - CAMPAIGN_LANDS + 1) : S.mode === 'campaign' && S.level >= CAMPAIGN_LANDS ? 'II vaatus · Maa ' + (S.level - CAMPAIGN_LANDS + 1) : S.level >= CAMPAIGN_LANDS ? 'Öömaa ' + (S.level - CAMPAIGN_LANDS + 1) : 'Maa ' + (S.level + 1)) + ' · Laine ' + S.k + (S.heat ? ' · Kuumus ' + S.heat : '') + (DIFF[S.diff] && S.diff !== 'tavaline' ? ' · ' + DIFF[S.diff].name : '') + ' · ' + ago, fn: doContinue, col: c.amber }); }
+    list.push({ id: 'mcamp', label: 'Seiklus', sub: anyStars() ? 'Tähti ' + (starTotal(1) + starTotal(2)) + '/' + (ACT_LANDS * 6) + (act2Open() ? ' · kaks vaatust' : '') : 'Kuus maad. Süüta majakad!', fn: () => pickMode('campaign'), col: S ? null : c.amber });
     list.push({ id: 'mnight', label: 'Pikk Öö', short: 'Pikk Öö', sub: META.stats.campaigns ? (META.stats.bestNight ? 'Sügavaim: öömaa ' + META.stats.bestNight : 'Lõputud maad') : 'Lõputud maad · pärast seiklust', fn: () => pickMode('night') });
     const db = dailyBest();
     list.push({ id: 'mdaily', label: 'Päeva väljakutse', short: 'Päevane', sub: db ? 'Tänane parim: ' + db + ' lainet' : 'Täna on kõigil sama tee', fn: () => pickMode('daily') });
@@ -388,17 +398,93 @@ const MENU = (() => {
     const tag = 'Õõnsus tõuseb. Hoia valgust!';
     tx(tag, cx, wy + PX.LINE * k + 5 * ps, ps, c.dim, { align: 'c' });
   }
+  // The run setup (screen 'heat'): difficulty (G.diff), Heat when a tier is open, and for the campaign the land it
+  // starts from (picked on the map). Alusta (hgo) starts the run.
   function drawHeat() {
     dim(.45);
-    const h = M.heatPick, c = C(), items = [{ t: 'title', text: M.heatMode === 'night' ? 'Pikk Öö' : 'Seiklus' }];
-    items.push({ t: 'btns', list: [{ id: 'hdn', label: '<', fn: () => heatStep(-1), off: h <= 0 }, { id: 'hcur', label: 'Kuumus ' + h, fn: () => {}, on: true, nav: false, col: h ? c.ember : c.amber }, { id: 'hup', label: '>', fn: () => heatStep(1), off: h >= META.heatMax }] });
-    items.push({ t: 'text', text: h ? HEAT[h].name + ': ' + HEAT[h].tip : HEAT[0].tip, col: '#ffd9a8' });
-    if (h > 1) { items.push({ t: 'sep' }); for (let i = 1; i < h; i++) items.push({ t: 'text', text: HEAT[i].name + ': ' + HEAT[i].tip, col: c.dim, c: false }); }
+    const h = M.heatPick, c = C(), dk = diffKey(M.diffPick), D = DIFF[dk], camp = M.heatMode === 'campaign', L = M.startLevel | 0;
+    const items = [{ t: 'title', text: M.heatMode === 'night' ? 'Pikk Öö' : L >= CAMPAIGN_LANDS ? 'Teine vaatus' : 'Seiklus' }];
+    if (camp) items.push({ t: 'text', text: BIOMES[L % ACT_LANDS].name + ' · Maa ' + (L % ACT_LANDS + 1) + '/' + ACT_LANDS + (landStars(L) ? ' · parim ' + landStars(L) + ' tähte' : ''), col: c.dim });
+    items.push({ t: 'sep' }, { t: 'text', text: 'Raskus', col: c.amber });
+    items.push({ t: 'btns', list: DIFF_KEYS.map(k => ({ id: 'd' + k, label: DIFF[k].name, fn: () => diffSet(k), on: k === dk, col: k === dk ? DIFF[k].col : null })) });
+    items.push({ t: 'text', text: D.tip + (camp ? ' Tähti kuni ' + D.stars + '.' : ''), col: '#ffd9a8' });
+    if (META.heatMax > 0) {
+      items.push({ t: 'sep' });
+      items.push({ t: 'btns', list: [{ id: 'hdn', label: '<', fn: () => heatStep(-1), off: h <= 0 }, { id: 'hcur', label: 'Kuumus ' + h, fn: () => {}, on: true, nav: false, col: h ? c.ember : c.amber }, { id: 'hup', label: '>', fn: () => heatStep(1), off: h >= META.heatMax }] });
+      items.push({ t: 'text', text: h ? HEAT[h].name + ': ' + HEAT[h].tip : HEAT[0].tip, col: '#ffd9a8' });
+      if (h > 1) for (let i = 1; i < h; i++) items.push({ t: 'text', text: HEAT[i].name + ': ' + HEAT[i].tip, col: c.dim, c: false });
+      if (META.heatMax < HEAT_MAX) items.push({ t: 'text', text: 'Jõua Kuumusel ' + META.heatMax + ' maale ' + HEAT_UNLOCK_LAND + ', et avada Kuumus ' + (META.heatMax + 1) + '.', col: c.dim });
+    }
     items.push({ t: 'gap' });
-    items.push({ t: 'row', l: 'Söed', r: '×' + heatMul(h).toFixed(2), rc: c.amber });
-    if (META.heatMax < HEAT_MAX) items.push({ t: 'text', text: 'Jõua Kuumusel ' + META.heatMax + ' maale ' + HEAT_UNLOCK_LAND + ', et avada Kuumus ' + (META.heatMax + 1) + '.', col: c.dim });
-    items.push({ t: 'btns', list: [{ id: 'hgo', label: 'Alusta', fn: () => begin(M.heatMode, h), col: c.amber }, { id: 'hback', label: 'Tagasi', fn: () => M.open('title') }] });
-    panel(items, { cap: 210 });
+    items.push({ t: 'row', l: 'Söed', r: '×' + (Math.round(heatMul(h) * D.embers * 100) / 100).toFixed(2), rc: c.amber });
+    items.push({ t: 'btns', list: [{ id: 'hgo', label: 'Alusta', fn: () => begin(M.heatMode, h), col: c.amber }, { id: 'hback', label: 'Tagasi', fn: () => M.back() }] });
+    panel(items, { cap: 220 });
+  }
+  function diffSet(k) { if (!DIFF[k] || M.diffPick === k) return; M.diffPick = k; sfx('heatSelect', CAM.x, CAM.z, .8, DIFF_KEYS.indexOf(k) / 3); }
+  function diffStep(d) { const i = clamp(DIFF_KEYS.indexOf(diffKey(M.diffPick)) + d, 0, DIFF_KEYS.length - 1); diffSet(DIFF_KEYS[i]); }
+  // The campaign map (screen 'map'): the six lands of an act as cards with their stars; Act II behind its tab once Act I
+  // is done. A land opens when the one before it has a star; picking one goes on to the setup.
+  function drawMap() {
+    dim(.5);
+    const c = C(), s = E.s, avW = E.Wr - E.iL - 8 * s, avH = E.Hb - E.iT - 8 * s, a2 = M.mapAct === 2 && act2Open(), base = a2 ? CAMPAIGN_LANDS : 0;
+    const [sw] = PX.iconSize('star');
+    const lay = ps => {
+      const p = 5 * ps, L = PX.LINE * ps, gap = 3 * ps, bh = touchH(ps), ch = Math.max(L * 2 + 3 * ps + 2 * p, E.tch ? Math.round(58 * E.dpr) : 0);
+      let cw = 0; for (let i = 0; i < ACT_LANDS; i++) cw = Math.max(cw, mw(BIOMES[i].name, ps) + 2 * p, 3 * (sw + 2) * ps + 2 * p);
+      cw = Math.max(cw, 76 * ps);
+      const cols = avW >= 3 * cw + 2 * gap + 2 * p && E.W > E.H ? 3 : 2, rows = Math.ceil(ACT_LANDS / cols);
+      const w = Math.min(avW, Math.max(cols * cw + (cols - 1) * gap, mw('II vaatus', ps) * 2 + 12 * p, mw('Seiklus', ps + 1)) + 2 * p);
+      const h = p + PX.LINE * (ps + 1) + gap * 2 + bh + gap * 2 + L + gap + rows * (ch + gap) + gap + bh + p;
+      return { ps, p, L, gap, bh, ch, cols, rows, w, h, cw: Math.floor((w - 2 * p - (cols - 1) * gap) / cols), ok: h <= avH && cols * cw + (cols - 1) * gap + 2 * p <= avW + 1 };
+    };
+    let Ly = lay(s); while (Ly.ps > 2 && !Ly.ok) Ly = lay(Ly.ps - 1);
+    const { ps, p, L, gap, bh, ch, cols, w, h, cw } = Ly, x = Math.round((E.iL + E.Wr) / 2 - w / 2), y = Math.round(clamp((E.H - h) / 2, E.iT + 4 * s, Math.max(E.iT + 4 * s, E.Hb - h)));
+    UI.panelRect = { x, y, w, h };
+    ctx.globalAlpha = sat(M.t * 6 + .25);
+    UI.plate(x, y, w, h, { bd: c.bdHi });
+    tx('Seiklus', x + w / 2, y + p, ps + 1, '#ffd9a8', { align: 'c' });
+    let yy = y + p + PX.LINE * (ps + 1) + gap * 2;
+    const tw2 = Math.floor((w - 2 * p - gap) / 2);
+    button('mact1', x + p, yy, tw2, bh, 'I vaatus', ps, () => { M.mapAct = 1; }, { on: !a2 });
+    button('mact2', x + p + tw2 + gap, yy, tw2, bh, 'II vaatus', ps, () => { if (act2Open()) M.mapAct = 2; }, { on: a2, off: !act2Open() });
+    yy += bh + gap * 2;
+    tx(act2Open() || !a2 ? 'Tähti: ' + starTotal(a2 ? 2 : 1) + '/' + ACT_LANDS * 3 + (a2 ? ' · öised maad' : '') : '', x + w / 2, yy, ps, c.dim, { align: 'c' });
+    if (!act2Open()) tx('II vaatus avaneb, kui esimene on läbi.', x + w / 2, yy, ps, c.dim, { align: 'c' });
+    yy += L + gap;
+    for (let i = 0; i < ACT_LANDS; i++) {
+      const Lv = base + i, open = landOpen(Lv), st = landStars(Lv), col = i % cols, row = Math.floor(i / cols), bx = x + p + col * (cw + gap), by = yy + row * (ch + gap);
+      const b = button('mland' + i, bx, by, cw, ch, open ? BIOMES[i].name : '???', ps, () => { if (!open) return; M.startLevel = Lv; toSetup(); }, { off: !open, sub: ' ', col: open ? (st ? '#ffd9a8' : c.amber) : null });
+      // The stars under the name: lit for the best result, dim for the rest ("Lukus" on a closed land).
+      const ty = by + (UI.press === b.id ? (E.s > 2 ? Math.round(ps / 2) || 1 : 1) : 0) + Math.round((ch - (L * 2 + ps)) / 2) + ps + L + ps, k = ps, sx = bx + Math.round(cw / 2 - (3 * (sw + 2) - 2) * k / 2);
+      if (open && typeof drawStars === 'function') drawStars(ctx, bx + cw / 2, ty - ps, st, Math.max(1, Math.round(ps * .8)), { align: 'c', t: M.t });
+      else if (open) for (let j = 0; j < 3; j++) PX.icon(ctx, j < st ? 'star' : 'starEmpty', sx + j * (sw + 2) * k, ty - ps, k, j < st ? 1 : .6);
+      else tx('Lukus', bx + cw / 2, ty, ps, '#5a5448', { align: 'c' });
+    }
+    const fy = y + h - p - bh;
+    button('mback', x + p, fy, w - 2 * p, bh, 'Tagasi', ps, () => M.back(), { icon: 'back' });
+    ctx.globalAlpha = 1;
+  }
+  // The stars a cleared campaign land gave (M.starCard from metaLandClear): big stars popping in one by one.
+  function drawStarCard() {
+    const q = M.starCard; if (!q || !inRun() || (G.phase !== 'clear' && G.phase !== 'crumble') || q.t > 4.2) return;
+    const c = C(), s = E.s, [sw, sh] = PX.iconSize('star'), k = Math.max(3, Math.round(s * 2.2)), gap = 3 * k, ps = Math.max(2, s);
+    const head = q.best && q.was ? 'Uus rekord!' : 'Tähed', sub = q.n < 3 ? (diffKey(G.diff) === 'kerge' && q.n >= 2 ? 'Kerge annab kuni 2 tähte' : 'Hoia rohkem elusid, et saada rohkem tähti') : 'Täiuslik!';
+    const w = Math.max(3 * sw * k + 2 * gap, mw(sub, ps)) + 10 * s, hh = PX.LINE * (ps + 1) + sh * k + PX.LINE * ps + 16 * s;
+    const x = Math.round((E.iL + E.Wr) / 2 - w / 2), y = Math.round(E.iT + (E.Hb - E.iT) * .26), a = sat(Math.min(q.t * 4, (4.2 - q.t) * 2));
+    ctx.globalAlpha = a; UI.plate(x, y, w, hh, { bd: c.amber, bg: 'rgba(30,22,12,0.94)' });
+    tx(head, x + w / 2, y + 4 * s, ps + 1, q.best && q.was ? '#fff0c8' : c.amber, { align: 'c' });
+    const y0 = y + 4 * s + PX.LINE * (ps + 1) + 3 * s, x0 = Math.round(x + w / 2 - (3 * sw * k + 2 * gap) / 2);
+    // Ash's pixel stars (44-juice.js) where the build has them: each pops in on its own beat.
+    if (typeof drawStars === 'function') drawStars(ctx, x + w / 2, y0, q.n, Math.max(2, Math.round(k * .75)), { align: 'c', t: M.t, pop: [0, 1, 2].map(j => { const ti = q.t - .35 - j * .35; return j >= q.n ? 1 : ti < 0 ? 0 : 1 + .5 * Math.max(0, 1 - ti * 5); }) });
+    else for (let j = 0; j < 3; j++) {
+      const on = j < q.n, ti = q.t - .35 - j * .35, sx = x0 + j * (sw * k + gap);
+      if (!on || ti < 0) { PX.icon(ctx, 'starEmpty', sx, y0, k, .5); continue; }
+      const kk = Math.max(1, Math.round(k * (1 + .5 * Math.max(0, 1 - ti * 5)))), cx = sx + sw * k / 2, cy = y0 + sh * k / 2;
+      ctx.save(); ctx.shadowColor = 'rgba(255,200,90,0.9)'; ctx.shadowBlur = 4 * k;
+      PX.icon(ctx, 'star', Math.round(cx - sw * kk / 2), Math.round(cy - sh * kk / 2), kk, 1); ctx.restore();
+    }
+    tx(sub, x + w / 2, y0 + sh * k + 4 * s, ps, c.tx, { align: 'c' });
+    ctx.globalAlpha = 1;
   }
   function drawConfirm() {
     dim(.45); const cf = M.conf || { title: '?', lines: [] }, c = C();
@@ -406,7 +492,8 @@ const MENU = (() => {
   }
   function drawPause() {
     dim(.4); const c = C(), mods = activeMods();
-    const items = [{ t: 'title', text: 'Paus' }, { t: 'text', text: G.B.bio.name + ' · Maa ' + landNo() + ' · Laine ' + Math.max(1, landWave()) + '/' + G.wavesPerLand, col: c.tx }];
+    const items = [{ t: 'title', text: 'Paus' }, { t: 'text', text: G.B.bio.name + ' · ' + (act2Land() ? 'II vaatus · Maa ' + (G.level - CAMPAIGN_LANDS + 1) : 'Maa ' + landNo()) + ' · Laine ' + Math.max(1, landWave()) + '/' + G.wavesPerLand, col: c.tx }];
+    items.push({ t: 'text', text: 'Raskus: ' + DIFF[diffKey(G.diff)].name, col: DIFF[diffKey(G.diff)].col });
     if (G.heat || mods.length) items.push({ t: 'text', text: (G.heat ? 'Kuumus ' + G.heat : '') + (G.heat && mods.length ? ' · ' : '') + mods.map(m => m.name).join(', '), col: c.dim });
     items.push({ t: 'gap' }, { t: 'btns', stack: true, list: [
       { id: 'presume', label: 'Jätka', fn: () => M.close(), col: c.amber },
@@ -415,13 +502,13 @@ const MENU = (() => {
     ] });
     panel(items, { cap: 200, minW: 150 });
   }
-  function runEmbersNow() { const run = META.run; if (!run) return 0; const sm = runSummary() || {}; return embersFor({ waves: sm.waves, bosses: sm.lands, level: G.level, level0: run.level0, heat: G.heat, ending: run.ending && !run.endingPaid }).total; }
+  function runEmbersNow() { const run = META.run; if (!run) return 0; const sm = runSummary() || {}; return embersFor({ waves: sm.waves, bosses: sm.lands, level: G.level, level0: run.level0, heat: G.heat, diff: G.diff, ending: run.ending && !run.endingPaid, ending2: run.ending2 && !run.ending2Paid }).total; }
   function drawResults() {
     dim(.35); const c = C(), r = M.res || META.last;
     if (!r) { panel([{ t: 'title', text: 'Majakas kustus' }, { t: 'btns', list: [{ id: 'rmenu', label: 'Peamenüü', fn: toMenu }] }]); return; }
     const rc = M.rc || { t: 99, fan: [], fanAt: 0 }, T = rcTimes(r), win = r.how === 'victory';
-    const sm = r.sum || {}, title = win ? 'Kuus tuld põleb' : r.how === 'abandon' ? 'Mängust loobutud' : r.how === 'rest' ? 'Hoidja puhkab' : 'Majakas kustus';
-    const where = r.mode === 'daily' ? 'Päeva väljakutse' + (r.daily ? ' · ' + r.daily.day : '') : (r.landName ? r.landName + ' · ' : '') + 'Maa ' + r.land + (r.heat ? ' · Kuumus ' + r.heat : '');
+    const sm = r.sum || {}, title = win ? (r.act === 2 ? 'Koit on käes' : 'Kuus tuld põleb') : r.how === 'abandon' ? 'Mängust loobutud' : r.how === 'rest' ? 'Hoidja puhkab' : 'Majakas kustus';
+    const where = r.mode === 'daily' ? 'Päeva väljakutse' + (r.daily ? ' · ' + r.daily.day : '') : (r.landName ? r.landName + ' · ' : '') + 'Maa ' + r.land + (r.heat ? ' · Kuumus ' + r.heat : '') + (r.diff && r.diff !== 'tavaline' ? ' · ' + DIFF[r.diff].name : '');
     const items = [{ t: 'title', text: title, col: win ? c.amber : '#ffd9a8' }, { t: 'text', text: where, col: c.dim }];
     items.push({ t: 'row', l: 'Läbitud laineid', r: '' + (sm.waves || 0) }, { t: 'row', l: 'Kaitstud maid', r: '' + (sm.lands || 0) }, { t: 'row', l: 'Võidetud koletisi', r: '' + (sm.slain || 0) });
     if (sm.tower) items.push({ t: 'row', l: 'Parim torn', r: sm.tower.name + ' · ' + sm.tower.kills });
@@ -429,17 +516,18 @@ const MENU = (() => {
     items.push({ t: 'sep' });
     // The ember sources count up one after another, then the total.
     emberRows(r).forEach(([l, v], i) => { const k = sat((rc.t - RC.lead - i * RC.row) / RC.row); items.push({ t: 'row', l, r: '' + Math.round(v * k), rc: k >= 1 ? c.tx : c.amber }); });
-    if (r.heat) items.push({ t: 'row', l: 'Kuumus ' + r.heat, r: '×' + r.mul.toFixed(2), rc: c.ember });
+    if (r.heat) items.push({ t: 'row', l: 'Kuumus ' + r.heat, r: '×' + (r.heatMul || r.mul).toFixed(2), rc: c.ember });
+    if (r.diffMul && r.diffMul !== 1) items.push({ t: 'row', l: DIFF[r.diff].name, r: '×' + r.diffMul.toFixed(2), rc: DIFF[r.diff].col });
     const kt = sat((rc.t - T.t0) / RC.total), tot = Math.round(r.total * (1 - Math.pow(1 - kt, 2)));
     items.push({ t: 'big', text: '+' + tot + ' sütt' + (win ? ' seni' : ''), col: kt >= 1 && (rc.t - T.end) < .25 ? '#fff0c8' : c.amber });
     items.push({ t: 'text', text: win ? 'Lähevad kirja, kui mäng lõpeb. Sul on ' + META.embers + '.' : 'Sul on ' + Math.round((r.before || 0) + (r.after - (r.before || 0)) * (1 - Math.pow(1 - kt, 2))) + ' sütt.', col: c.tx });
     const port = E.H > E.W * 1.1;
     const list = win ? [
-      { id: 'rnight', label: 'Pikka Öösse', fn: intoNight, col: c.amber },
+      r.act === 2 ? { id: 'rnight', label: 'Pikka Öösse', fn: intoNight, col: c.amber } : { id: 'ract2', label: 'Teise vaatusse', fn: intoNight, col: c.amber },
       { id: 'rtree', label: 'Hoidja puu', fn: () => M.open('tree', { from: 'results' }), icon: 'ember' },
       { id: 'rrest', label: 'Kogu söed ja puhka', fn: restRun },
     ] : [
-      { id: 'ragain', label: 'Mängi uuesti', fn: () => { const h = r.heat || 0, md = r.mode; UI.scr = null; M.wasPaused = false; startRun(md, h); }, col: c.amber },
+      { id: 'ragain', label: 'Mängi uuesti', fn: () => { const h = r.heat || 0, md = r.mode, lv = META.run && md === 'campaign' ? META.run.level0 : 0; UI.scr = null; M.wasPaused = false; startRun(md, h, { diff: r.diff, level: lv }); }, col: c.amber },
       { id: 'rtree', label: 'Hoidja puu', fn: () => M.open('tree', { from: 'results' }), icon: 'ember' },
       { id: 'rmenu', label: 'Peamenüü', fn: toMenu },
     ];
@@ -453,7 +541,7 @@ const MENU = (() => {
   }
   function drawArrival() {
     dim(.25); const c = C(), mods = activeMods();
-    const items = [{ t: 'title', text: G.B.bio.name }, { t: 'text', text: G.mode === 'daily' ? 'Päeva väljakutse · Maa ' + nightDepth() + ' · ' + ((META.run && META.run.day) || dailyDate()) : G.level >= CAMPAIGN_LANDS ? 'Pikk Öö · Maa ' + landNo() : 'Maa ' + landNo() + '/' + CAMPAIGN_LANDS, col: c.dim }];
+    const items = [{ t: 'title', text: G.B.bio.name }, { t: 'text', text: G.mode === 'daily' ? 'Päeva väljakutse · Maa ' + nightDepth() + ' · ' + ((META.run && META.run.day) || dailyDate()) : act2Land() ? 'Teine vaatus · Maa ' + (G.level - CAMPAIGN_LANDS + 1) + '/' + CAMPAIGN_LANDS : G.level >= CAMPAIGN_LANDS ? 'Pikk Öö · Maa ' + landNo() : 'Maa ' + landNo() + '/' + CAMPAIGN_LANDS, col: c.dim }];
     if (G.heat) items.push({ t: 'text', text: 'Kuumus ' + G.heat + ' · ' + HEAT[G.heat].name, col: c.ember });
     items.push({ t: 'sep' });
     for (const m of mods) items.push({ t: 'mod', icon: m.icon, name: m.name, tip: m.tip, col: MUTATORS[m.key] && MUTATORS[m.key].boon ? c.ok : c.amber });
@@ -557,7 +645,7 @@ const MENU = (() => {
       tx((M.page + 1) + '/' + M.pages, x + w - p, y0, ps, c.dim, { align: 'r' });
     } else {
       const S = META.stats, tm = Math.round(S.time / 60);
-      rows = [['Mänge', S.runs], ['Teenitud sütt', META.earned], ['Sütt praegu', META.embers], ['Parim laine', S.bestWave], ['Sügavaim maa', S.bestLand], ['Sügavaim öömaa', S.bestNight], ['Läbitud seiklusi', S.campaigns], ['Avatud Kuumus', META.heatMax], ['Võidetud koletisi', S.slain], ['Võidetud pealikke', S.bosses], ['Mänguaeg', (tm >= 60 ? Math.floor(tm / 60) + ' h ' : '') + (tm % 60) + ' min'], ['Pooleli jäetud', S.abandons], ['Võidetud eliite', S.elites], ['Saavutusi', achCount() + '/' + ACH.length], ['Päeva väljakutseid', S.dailies], ['Tänane parim', dailyBest() + ' lainet']];
+      rows = [['Mänge', S.runs], ['Teenitud sütt', META.earned], ['Sütt praegu', META.embers], ['Parim laine', S.bestWave], ['Sügavaim maa', S.bestLand], ['Sügavaim öömaa', S.bestNight], ['Läbitud seiklusi', S.campaigns], ['Avatud Kuumus', META.heatMax], ['Võidetud koletisi', S.slain], ['Võidetud pealikke', S.bosses], ['Mänguaeg', (tm >= 60 ? Math.floor(tm / 60) + ' h ' : '') + (tm % 60) + ' min'], ['Pooleli jäetud', S.abandons], ['Võidetud eliite', S.elites], ['Saavutusi', achCount() + '/' + ACH.length], ['Päeva väljakutseid', S.dailies], ['Tänane parim', dailyBest() + ' lainet'], ['Tähti: I vaatus', starTotal(1) + '/' + ACT_LANDS * 3], ['Tähti: II vaatus', starTotal(2) + '/' + ACT_LANDS * 3], ['Läbitud II vaatusi', S.act2 || 0], ['Püütud kullakotte', S.sacks || 0]];
       const rh = L + ps, per = Math.max(1, Math.floor(avail / rh)); M.pages = Math.ceil(rows.length / per); M.page = Math.min(M.page, M.pages - 1);
       rows.slice(M.page * per, M.page * per + per).forEach((r, i) => { const yy = y0 + i * rh; tx(r[0], x + p, yy, ps, c.dim); tx('' + r[1], x + w - p, yy, ps, c.tx, { align: 'r' }); });
     }
@@ -670,9 +758,13 @@ const MENU = (() => {
     while (k > 2 && PX.measure(txt) * k > (E.Wr - E.iL) * .9) k--;
     const a = n > 0 ? .65 + .35 * sat((1 - f) * 2) : sat((COUNT_FROM + .9 - G.countT) * 3);
     const w = PX.measure(txt) * k, h = PX.LINE * k, cx = Math.round((E.iL + E.Wr) / 2), cy = Math.round((E.iT + E.Hb) / 2 - h * .8);
-    ctx.save(); ctx.globalAlpha = a; ctx.shadowColor = n > 0 ? 'rgba(255,150,60,0.8)' : 'rgba(255,215,130,0.9)'; ctx.shadowBlur = k * 4;
-    PX.text(ctx, txt, cx, cy, k, n > 0 ? '#ffc870' : '#ffe2a0', { align: 'c', outline: '#2a0c04' });
-    ctx.restore();
+    // Ash (round 13): chunky bevelled digits with a glow, a pop and sparks each second, a burst on "Alusta!" (44-juice.js).
+    if (typeof drawCountBig === 'function') drawCountBig(ctx, n, f, cx, cy, k, a);
+    else {
+      ctx.save(); ctx.globalAlpha = a; ctx.shadowColor = n > 0 ? 'rgba(255,150,60,0.8)' : 'rgba(255,215,130,0.9)'; ctx.shadowBlur = k * 4;
+      PX.text(ctx, txt, cx, cy, k, n > 0 ? '#ffc870' : '#ffe2a0', { align: 'c', outline: '#2a0c04' });
+      ctx.restore();
+    }
     if (n > 0) {
       const hs = Math.max(2, s - 1), hint = E.tch ? 'Puuduta, et kohe alustada' : 'Tühik alustab kohe';
       ctx.globalAlpha = .85; tx(hint, cx, cy + h + 4 * s, hs, c.tx, { align: 'c', outline: c.dark }); ctx.globalAlpha = 1;
@@ -685,8 +777,12 @@ const MENU = (() => {
   M.draw = (c, env) => {
     E = env; ctx = c; M.items.length = 0;
     const s = UI.scr;
-    if (!s) { drawModHud(); if (TUT.step && !STORY.on()) drawTutorial(); if (!cineOn()) drawCount(); }
-    if (s === 'title') drawTitle(); else if (s === 'heat') drawHeat(); else if (s === 'tree') drawTree(); else if (s === 'codex') drawCodex();
+    if (!s) { drawModHud(); if (TUT.step && !STORY.on()) drawTutorial(); if (!cineOn()) { drawCount(); drawStarCard(); } }
+    // Settings open over a screen (the gear on the title, Seaded in the pause menu): the screen under it is not drawn,
+    // only a dark wash, so the settings panel never overlaps its buttons (on phones the title's bottom sheet) and taps
+    // cannot reach them.
+    if (s && UI.sets) dim(s === 'title' ? .5 : .55);
+    else if (s === 'title') drawTitle(); else if (s === 'heat') drawHeat(); else if (s === 'tree') drawTree(); else if (s === 'codex') drawCodex(); else if (s === 'map') drawMap();
     else if (s === 'pause') drawPause(); else if (s === 'confirm') drawConfirm(); else if (s === 'results') drawResults(); else if (s === 'arrival') drawArrival();
     // A story beat (a Codex replay too) sits over everything: the controls under it stop taking taps.
     if (STORY.on()) { M.items.length = 0; UI.btns.length = 0; drawStory(); }

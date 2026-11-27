@@ -65,8 +65,25 @@ const BEATS = {
   ] },
   ending: { title: 'Kuus tuld', lines: [
     ['ghost', 'Kuus tuld põlevad jälle. Ma võiksin nüüd puhata, hoidja... peaaegu.'],
-    ['ghost', 'Aga Õõnsusel pole põhja. Viimase majaka taga jätkub öö ja maad muudavad seal oma kuju.'],
-    ['keeper', 'Siis kannan ma laterna sinna. Nii kaugele, kui tee läheb.'],
+    ['hollow', 'Väike leek. Sa võitsid päeva. Aga öö on minu oma ja öösel tulen ma tagasi.'],
+    ['keeper', 'Siis kaitsen ma kõiki kuut tuld uuesti. Ka pimedas.'],
+  ] },
+  // Round 13: Act II (Teine vaatus), the six lands again at night.
+  'act2:intro': { title: 'Teine vaatus', lines: [
+    ['ghost', 'Kuu on kadunud, hoidja. Õõnsus tuleb tagasi teist teed pidi ja toob kaasa kõige hullemad surnud.'],
+    ['ghost', 'Iga maa on öösel teistsugune. Vaata hoolega, kes teel kõnnib.'],
+    ['keeper', 'Ma tean neid teid juba. Nüüd õpin neid ka pimedas.'],
+  ] },
+  'land2:ashen': { title: 'Tuhakuru öösel', lines: [['ghost', 'Öösel veavad surnud siia oma müürilõhkujad. Kuula, kuidas rattad kriuksuvad.'], ['keeper', 'Kahurid on valmis.']] },
+  'land2:frost': { title: 'Külmakosk öösel', lines: [['keeper', 'Tuul on kiirem kui päeval. Ja koletised samuti.'], ['ghost', 'Harpüiad lendavad öösel madalalt. Hoia vibukütid valvel.']] },
+  'land2:fen': { title: 'Udusoo öösel', lines: [['ghost', 'Siin on nii pime, et isegi tornid näevad halvasti. Ja haiged surnud paranevad.'], ['keeper', 'Siis löön ma neid kogu aeg. Ilma vaheajata.']] },
+  'land2:ember': { title: 'Tulearm öösel', lines: [['keeper', 'Kõik siin tahab plahvatada.'], ['ghost', 'Ära lase neil sinu sõdurite kõrval lõhkeda. Löö kaugelt.']] },
+  'land2:dunes': { title: 'Hämarkõrb öösel', lines: [['ghost', 'Verikuu tõuseb kõrbe kohal. Eliite tuleb nüüd kaks korda rohkem.'], ['keeper', 'Ja nende kulda samuti. Las tulevad.']] },
+  'land2:storm': { title: 'Tormineem öösel', lines: [['ghost', 'Viimane majakas, kõige pimedam öö. Merest tulijatel on raudnahk.'], ['keeper', 'Raud sulab tules. Süütame selle viimase korra.']] },
+  ending2: { title: 'Koit', lines: [
+    ['ghost', 'Vaata, hoidja! Silmapiiril helendab. See on koit. Ma ei uskunud, et näen seda veel kord.'],
+    ['hollow', 'Koit... kestab ainult ühe päeva. Mina olen öö taga, sügaval, kus maad muudavad oma kuju.'],
+    ['keeper', 'Siis lähen ma ka sinna. Latern käes, nii kaugele, kui tee läheb.'],
   ] },
   // The Long Night: an interlude every third land, from this pool (min: the first depth it can show at).
   'night:1': { title: 'Kaardita', min: 3, lines: [['ghost', 'Neid maid pole üheski kaardis, mida ma kunagi hoidsin. Õõnsus unistab need välja, kui sa kõnnid.'], ['keeper', 'Siis unistan ma igasse ühe tule.']] },
@@ -111,7 +128,7 @@ const BEATS = {
   ] },
 };
 const NIGHT_POOL = Object.keys(BEATS).filter(k => /^night:\d+$/.test(k));
-const BEAT_ORDER = ['intro', 'land:ashen', 'boss:giant', 'clear:first', 'land:frost', 'boss:jotun', 'land:fen', 'boss:queen', 'halfway', 'land:ember', 'boss:colossus', 'land:dunes', 'boss:king', 'land:storm', 'boss:leviathan', 'ending', 'herald', 'boss:herald', 'boss:ogre', 'return', 'heat', 'night:enter', 'daily'].concat(NIGHT_POOL);
+const BEAT_ORDER = ['intro', 'land:ashen', 'boss:giant', 'clear:first', 'land:frost', 'boss:jotun', 'land:fen', 'boss:queen', 'halfway', 'land:ember', 'boss:colossus', 'land:dunes', 'boss:king', 'land:storm', 'boss:leviathan', 'ending', 'act2:intro', 'land2:ashen', 'land2:frost', 'land2:fen', 'land2:ember', 'land2:dunes', 'land2:storm', 'ending2', 'herald', 'boss:herald', 'boss:ogre', 'return', 'heat', 'night:enter', 'daily'].concat(NIGHT_POOL);
 
 // Portraits, 16x16, drawn in code. One letter per pixel; '.' is clear.
 const PORTRAIT_PAL = {
@@ -381,6 +398,7 @@ const STORY = {
   landStart(restoring) {
     if (restoring || !inRun()) return;
     if (G.level < CAMPAIGN_LANDS) this.play('land:' + G.B.bio.key);
+    else if (G.mode === 'campaign') { this.play('act2:intro'); this.play('land2:' + G.B.bio.key); } // Act II
     else {
       if (heraldLand()) this.play('herald'); // once per keeper, the first land the Herald walks
       const d = nightDepth(), first = META.run && META.run.level0 === G.level;
@@ -394,7 +412,7 @@ const STORY = {
       }
     }
   },
-  ending(onDone) { return this.play('ending', { onDone }); },
+  ending(onDone, act) { return this.play(act === 2 ? 'ending2' : 'ending', { onDone }); },
   // A land cleared: the first beacon re-lit, and the halfway mark of the campaign.
   landClear() {
     if (G.mode !== 'campaign') return;
@@ -403,6 +421,7 @@ const STORY = {
   // A run's opening beat: the intro the first time, then a word on a return, or on the first run with Heat.
   runStart() {
     if (G.mode !== 'campaign') return;
+    if (G.level >= CAMPAIGN_LANDS) return; // Act II opens with its own beat (landStart)
     if (!META.story.intro) this.play('intro');
     else if (G.heat > 0 && !META.story.heat) this.play('heat');
     else if (META.stats.campaigns > 0) this.play('return');
