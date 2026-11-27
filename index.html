@@ -8644,19 +8644,22 @@ const AU = (function () {
     env.gain.setValueAtTime(0.0001, t); env.gain.linearRampToValueAtTime(vel, t + a); env.gain.setValueAtTime(vel, t + dur * 0.75); env.gain.setTargetAtTime(0.0001, t + dur * 0.75, dur * 0.15 + 0.1);
   }
   S.thunder = (d, t, p) => thunderV(d, t, 1 - 0.5 * p, 1); // a strike on the road: crack and roll, no delay
-  S.tidalWave = (d, t) => { // the drowned king sweeps the road: a roaring surge, the crash, the wash draining back
-    const D = 0.9, tc = t + D, sh = shape(d, 2);
-    const s = gn(d), sb = flt(s, 'bandpass', 400, 0.7); noi(t, D + 1.6, sb, bufPink); sw(sb.frequency, t, 220, 1500, D);
-    s.gain.setValueAtTime(0.0001, t); s.gain.exponentialRampToValueAtTime(0.6, tc - 0.04); s.gain.linearRampToValueAtTime(0.3, tc + 0.3); s.gain.exponentialRampToValueAtTime(0.0001, tc + 1.3);
-    const r = gn(d), rf = flt(r, 'lowpass', 120, 0.8); noi(t, D + 2.8, rf, bufBrown); sw(rf.frequency, t, 80, 320, D);
-    r.gain.setValueAtTime(0.0001, t); r.gain.exponentialRampToValueAtTime(0.9, tc); r.gain.exponentialRampToValueAtTime(0.0001, tc + 2.6);
-    const hi = gn(d), hf = flt(hi, 'highpass', 2500); noi(t + 0.2, D, hf); hi.gain.setValueAtTime(0.0001, t + 0.2); hi.gain.exponentialRampToValueAtTime(0.12, tc); hi.gain.linearRampToValueAtTime(0.0001, tc + 0.12);
+  // The drowned king sweeps the road (startTide in 62-game): the wall of water appears at full height at once and runs
+  // down the road for 1.5 s of game time, fastest at first. So: a short heave, the crash right away, the roar running
+  // for the wave's run (shorter at 2x and 3x), then the wash draining back.
+  S.tidalWave = (d, t) => {
+    const sp = typeof G !== 'undefined' && G && G.speed > 0 ? G.speed : 1, D = 0.12, tc = t + D, run = cl(1.5 / sp, 0.45, 1.5), te = tc + run, sh = shape(d, 2);
+    const s = gn(d), sb = flt(s, 'bandpass', 400, 0.7); noi(t, D + run + 1.2, sb, bufPink); sw(sb.frequency, t, 500, 1500, D); sb.frequency.exponentialRampToValueAtTime(600, te);
+    s.gain.setValueAtTime(0.0001, t); s.gain.exponentialRampToValueAtTime(0.6, tc); s.gain.linearRampToValueAtTime(0.35, te); s.gain.exponentialRampToValueAtTime(0.0001, te + 1.0);
+    const r = gn(d), rf = flt(r, 'lowpass', 120, 0.8); noi(t, D + run + 2.0, rf, bufBrown); sw(rf.frequency, t, 160, 320, D); rf.frequency.exponentialRampToValueAtTime(140, te + 0.6);
+    r.gain.setValueAtTime(0.0001, t); r.gain.exponentialRampToValueAtTime(0.9, tc); r.gain.linearRampToValueAtTime(0.6, te); r.gain.exponentialRampToValueAtTime(0.0001, te + 1.8);
+    const hi = gn(d), hf = flt(hi, 'highpass', 2500); noi(t, D + run, hf); hi.gain.setValueAtTime(0.0001, t); hi.gain.exponentialRampToValueAtTime(0.12, tc); hi.gain.linearRampToValueAtTime(0.0001, te); // the crest hissing as it runs
     const g = gn(sh), o = osc('sine', 80, tc, 0.9, g); sw(o.frequency, tc, 105, 34, 0.5); ad(g.gain, tc, 0.9, 0.005, 0.7);
     const b = gn(sh), bf = flt(b, 'lowpass', 3000, 0.6); noi(tc, 1.7, bf); sw(bf.frequency, tc, 5500, 400, 1.4); ad(b.gain, tc, 0.85, 0.01, 1.4);
     const m = gn(d), mf = flt(m, 'bandpass', 330, 0.9); noi(tc, 1.1, mf, bufPink); ad(m.gain, tc, 0.9, 0.005, 0.9); // the crash, for small speakers
-    const w = gn(d), wf = flt(w, 'bandpass', 3500, 0.6); noi(tc + 0.3, 2.0, wf); sw(wf.frequency, tc + 0.3, 4500, 1400, 1.8);
-    w.gain.setValueAtTime(0.0001, tc + 0.3); w.gain.linearRampToValueAtTime(0.18, tc + 0.7); w.gain.exponentialRampToValueAtTime(0.0001, tc + 2.2);
-    grains(d, tc + 0.5, 30, 1.5, 0.12, 0.003, 0.012, 1500, 5000, 3, 1); // foam and pebbles
+    const w = gn(d), wf = flt(w, 'bandpass', 3500, 0.6); noi(te - 0.2, 2.0, wf); sw(wf.frequency, te - 0.2, 4500, 1400, 1.8);
+    w.gain.setValueAtTime(0.0001, te - 0.2); w.gain.linearRampToValueAtTime(0.18, te + 0.2); w.gain.exponentialRampToValueAtTime(0.0001, te + 1.7);
+    grains(d, te, 30, 1.4, 0.12, 0.003, 0.012, 1500, 5000, 3, 1); // foam and pebbles as it drains
   };
   S.thunderstorm = (d, t) => { // the storm breaks: the rain thickens in a rush, a gust, and a strike overhead
     const D = 4.2, w = gn(d), wb = flt(w, 'bandpass', 2600, 0.5), wh = flt(gn(w, 0.6), 'highpass', 5500);
@@ -8665,7 +8668,7 @@ const AU = (function () {
     grains(d, t + 0.3, 60, D - 0.6, 0.12, 0.002, 0.006, 2500, 8000, 3, 0); // the first heavy drops
     const g = gn(d), gf = flt(g, 'bandpass', 500, 1.2); noi(t, D, gf, bufPink); sw(gf.frequency, t, 300, 1300, D * 0.6); gf.frequency.exponentialRampToValueAtTime(500, t + D);
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.4, t + D * 0.5); g.gain.exponentialRampToValueAtTime(0.0001, t + D);
-    thunderV(d, t + 0.3, 1, 0.9);
+    thunderV(d, t + 0.3, TH.hook ? 0.3 : 1, 0.9); // with Ash's flashes the strikes bring the cracks: here only a far roll
   };
 
   // Boss entrance stings: short and different for each boss, played the first time one is seen.
@@ -9267,6 +9270,8 @@ const AU = (function () {
   }
   function play(name, pan, gain, p) {
     if (!api.ready || api.muted || typeof name !== 'string' || !hasOwn(DEF, name)) return;
+    // endEvent() also runs when a defeat or a land clear cuts an event short: its soft chime would clash with the stinger.
+    if (name === 'eventEnd' && typeof G !== 'undefined' && G && G.phase !== 'play') return;
     // A hover tick waits for the next frame: if that frame's menu or spell change has its own sound, the tick is dropped.
     if (name === 'uiHover' && !W.flush && W.ui && ctx.currentTime - lastUpd < 0.1) { if (W.hover.length < 4) W.hover.push([pan, gain, p]); return; }
     const df = DEF[name];
@@ -9305,7 +9310,7 @@ const AU = (function () {
     if (DUCK[name]) duckE = Math.max(duckE, DUCK[name] * cl(g, 0, 1));
     if (HOLD[name] && holds.length < 8) holds.push([t + HOLD[name][0], HOLD[name][1]]);
     if (DUCK_LATE[name] && lateDuck.length < 8) lateDuck.push([t + DUCK_LATE[name][0](), DUCK_LATE[name][1] * cl(g, 0, 1)]);
-    if (name === 'thunder') { TH.strikeAt = now; TH.pend.length = 0; } // a strike brings its own thunder: no second, delayed one for its flash
+    if (name === 'thunder') TH.strikeAt = now; // a strike brings its own thunder: no second one for its flash (other flashes' thunder still rolls)
     const sup = SUPER[name];
     if (sup) for (let i = 0; i < act.length - 1; i++) if (act[i].end > now && sup.indexOf(act[i].name) >= 0) steal(act[i], now);
   }
@@ -9452,7 +9457,7 @@ const AU = (function () {
     king: { perc: 'ritual', lead: 'reed', bpm: -4, m: [[0, 62, 4], [4, 63, 4], [8, 65, 6], [14, 63, 2], [16, 62, 6], [22, 60, 2], [24, 62, 8]] },
     leviathan: { perc: 'tide', lead: 'choir', bpm: -8, m: [[0, 57, 8], [8, 60, 8], [16, 59, 6], [22, 55, 2], [24, 57, 4], [28, 58, 4]] }, // A C B G A Bb: a drowned choir
   };
-  const SEQ = { next: 0, step: 0, bar: 0, phrase: 0, bpm: 80, I: 0, tI: 0, lay: {}, pat: 0, ost: 0, motif: -1, rest: false, boss: null, bossKey: null, rage: false, horde: 0, hordeT: 0, hordeWas: false, heard: typeof WeakSet === 'function' ? new WeakSet() : null, seenBoss: typeof WeakSet === 'function' ? new WeakSet() : null, stingTill: 0, low: 0, lastNow: 0, scanAt: 0, choir: null };
+  const SEQ = { next: 0, step: 0, bar: 0, phrase: 0, bpm: 80, I: 0, tI: 0, lay: {}, pat: 0, ost: 0, motif: -1, rest: false, boss: null, bossKey: null, rage: false, horde: 0, hordeT: 0, hordeWas: false, seenBoss: typeof WeakSet === 'function' ? new WeakSet() : null, stingTill: 0, low: 0, lastNow: 0, scanAt: 0, choir: null };
 
   function sv(pan, send) { const v = voice(pan, 1, send, nSeq); V = v; ST.seq++; return v; }
   function drum(t, vel, f) {
@@ -9889,7 +9894,7 @@ const AU = (function () {
       ev: [[(d, t) => grains(d, t, 30, 1.2, 0.2, 0.002, 0.006, 2500, 7000, 2, 0), 0.9, 0.6]] },
     thunderstorm: { lvl: 0.45, rev: 0.35, // the rain hammering down, the wind howling, thunder rolling beyond the board
       bed: (g) => nbed(g, bufWhite, 'bandpass', 4500, 0.6, 0.22, 0.15, 0.4).concat(nbed(g, bufPink, 'bandpass', 1300, 0.8, 0.45, 0.12, 0.6, 0.07, 400), nbed(g, bufPink, 'bandpass', 520, 5, 0.45, 0.14, 0.7, 0.09, 220)),
-      ev: [[(d, t) => thunderV(d, t, rr(0, 0.4), rr(0.5, 0.8)), 7, 0.6], [gust, 4, 0.5], [patter, 0.8, 0.5]] },
+      ev: [[(d, t) => { if (!TH.hook) thunderV(d, t, rr(0, 0.4), rr(0.5, 0.8)); }, 7, 0.6], [gust, 4, 0.5], [patter, 0.8, 0.5]] }, // with Ash's flashes, thunder only follows a flash
   };
 
   // Which land and event are playing now.
@@ -9916,28 +9921,33 @@ const AU = (function () {
     stormTick(now, paused);
   }
   // Thunder in Stormreach. A storm flash (Ash's G.flashT: seconds since the last flash, reset to 0 by each one) brings its
-  // thunder: right away for a near one, after a short delay for a distant one (G.flashX / G.flashZ place it, if given;
-  // otherwise the whole sky lit and it is usually far). A strike that plays sfx('thunder') itself mutes its flash's echo.
+  // thunder: right away for a near one, after a short delay for a distant one (G.flashD says how far, G.flashX / G.flashZ
+  // pan it; without them the whole sky lit and it is usually far). A strike that plays sfx('thunder') itself mutes its flash's echo.
   // Without the hook, distant thunder of its own now and then (far only: nothing lights up).
-  const TH = { ft: -1, hook: false, next: 0, pend: [], n: 0, strikeAt: -9 };
+  const TH = { ft: -1, fn: -1, hook: false, next: 0, pend: [], n: 0, strikeAt: -9 };
   function queueThunder(t, near, vel, pan) { if (TH.pend.length < 4) TH.pend.push([t, near, vel, pan === undefined ? rr(-0.6, 0.6) : pan]); }
-  function flashSeen(now) {
+  function flashSeen(now, ft) {
     if (now - TH.strikeAt < 0.6) return;
     TH.n++;
     let near = Math.pow(rnd(), 1.6), pan = rr(-0.6, 0.6);
-    const fx = G.flashX, fz = G.flashZ;
+    const fx = G.flashX, fz = G.flashZ, fd = G.flashD;
     if (typeof fx === 'number' && typeof fz === 'number' && fx === fx && fz === fz) {
       const dx = fx - CAM.x, dz = fz - CAM.z;
       near = cl(1 - Math.hypot(dx, dz) / 60, 0, 1); pan = cl((dx * Math.cos(CAM.yaw) - dz * Math.sin(CAM.yaw)) / ((R.viewW || 40) * 0.5), -1, 1) * 0.7;
     }
-    queueThunder(now + (near > 0.8 ? 0 : (0.25 + 2.6 * (1 - near)) * rr(0.85, 1.15)), near, rr(0.75, 1), pan);
+    if (typeof fd === 'number' && fd === fd) near = cl(1 - fd, 0, 1); // Ash's distance: 0 a strike on the board, 1 far out at sea
+    // The flash began ft game seconds ago (a frame at most): count that against the delay, in real seconds.
+    const sp = G.speed > 0 ? G.speed : 1, late = typeof ft === 'number' && ft > 0 ? Math.min(ft / sp, 0.3) : 0;
+    queueThunder(now + Math.max(0, (near > 0.8 ? 0 : (0.25 + 2.6 * (1 - near)) * rr(0.85, 1.15)) - late), near, rr(0.75, 1), pan);
   }
   function stormTick(now, paused) {
     const on = LS.key === 'storm' || LS.evKind === 'thunderstorm', ft = typeof G.flashT === 'number' ? G.flashT : typeof FX !== 'undefined' && FX ? FX.flashT : undefined;
     if (typeof ft === 'number' && ft === ft) {
       TH.hook = true;
-      if (TH.ft >= 0 && ft < TH.ft && on && !paused) flashSeen(now);
-      TH.ft = ft;
+      // A new flash: G.flashN went up (two flashes inside one frame still make one roll), or G.flashT went back.
+      const fn = typeof G.flashN === 'number' ? G.flashN : -1, fresh = fn >= 0 ? TH.fn >= 0 && fn !== TH.fn : TH.ft >= 0 && ft < TH.ft;
+      if (fresh && on && !paused) flashSeen(now, ft);
+      TH.ft = ft; TH.fn = fn;
     } else if (on && !paused) {
       if (!TH.next) TH.next = now + rr(6, 16);
       else if (now >= TH.next) { TH.next = now + rr(14, 34) * (LS.evKind === 'thunderstorm' ? 0.4 : 1); queueThunder(now + rr(0.1, 0.4), rr(0, 0.35), rr(0.55, 0.85)); }
@@ -10044,7 +10054,7 @@ const AU = (function () {
       const bk = beastKey(m); if (bk) beastMark(m, bk);
       if (!m.vis && !m.fly) continue;
       const d = m.def;
-      if (m.elite && SEQ.heard && !SEQ.heard.has(m)) { SEQ.heard.add(m); if (live) playAt('elite', m.x, m.z, 1); }
+      // (An elite is announced once, by makeElite's own sfx('elite') when it spawns; a second chime here doubled it.)
       if (d.boss) { if (m.hp > 0 && !(m.dying > 0)) boss = m; else continue; }
       n++;
       if (m.prog > maxP) maxP = m.prog; if (m.prog > 0.75) near++;
@@ -10196,7 +10206,12 @@ const AU = (function () {
     for (let i = 0; i < n; i++) { const u = (i / (n - 1) * 2 - 1) * 2, a = Math.abs(u); c[i] = Math.sign(u) * (a < 0.7 ? a : 0.7 + 0.2 * Math.tanh((a - 0.7) / 0.2)); }
     return c;
   }
-  function sync() { api.ready = !!ctx && ctx.state === 'running'; }
+  // Whenever the context starts running again (a tap after a refused resume, or iPhone handing the sound back after a
+  // call or Siri with the page never hidden), the mix fades back in rather than starting at full level.
+  function sync() {
+    const was = api.ready; api.ready = !!ctx && ctx.state === 'running';
+    if (api.ready && !was && nPage && !hidden) { const t = ctx.currentTime; nPage.gain.cancelScheduledValues(t); nPage.gain.setValueAtTime(0.0001, t); nPage.gain.setTargetAtTime(1, t, 0.25); }
+  }
   function build() {
     sr = ctx.sampleRate;
     const clip = ctx.createWaveShaper(); clip.curve = softClip(); clip.oversample = 'none'; clip.connect(ctx.destination);
@@ -10244,7 +10259,11 @@ const AU = (function () {
       try { ctx = new AC(); build(); ctx.onstatechange = sync; }
       catch (e) { try { if (ctx && ctx.close) ctx.close(); } catch (e2) {} ctx = null; api.ready = false; return false; }
     }
-    if (ctx.state !== 'running' && ctx.resume) { const pr = ctx.resume(); if (pr && pr.then) pr.then(sync, () => {}); }
+    if (ctx.state !== 'running') {
+      // Older iPhones only unlock once a sound starts inside the gesture: a one-sample silent buffer does it.
+      try { const b = ctx.createBufferSource(); b.buffer = ctx.createBuffer(1, 1, sr); b.connect(ctx.destination); b.onended = () => { try { b.disconnect(); } catch (e) {} }; b.start(0); } catch (e) {}
+      if (ctx.resume) { const pr = ctx.resume(); if (pr && pr.then) pr.then(sync, () => {}); }
+    }
     if (nPage && !hidden) nPage.gain.setTargetAtTime(1, ctx.currentTime, 0.1);
     sync();
     return api.ready;
