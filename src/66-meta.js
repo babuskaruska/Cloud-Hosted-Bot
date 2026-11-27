@@ -33,6 +33,9 @@ Object.assign(G, {
   towerDmg: 1, cdMul: 1, spellPow: 1, spellManaMul: 1, hpMul: 1, spdMul: 1, goldMul: 1, ocMul: 1, mendMul: 1, branchMul: 1,
   budgetMul: 1, bossHpMul: 1, eliteShift: 0, eliteMul: 1, waveGold: 0, heatMods: 0, heatAffix: 0,
   diff: 'tavaline', startGoldMul: 1, pressCapMul: 1, pressAdd: 0, act: 1,
+  // Round 14: the weekly challenge's rule (67-keeper.js), the Long Night after Act II (gentler start), the wave budget
+  // ease of a land (Kerge's first land, the first lands after Act II; 1 elsewhere), a free spell (keeper perk), banner colour.
+  weekly: null, postAct2: false, easeMul: 1, freeSpell: 0, bannerCol: null,
 });
 const inRun = () => G.mode === 'campaign' || G.mode === 'night' || G.mode === 'daily';
 // The Long Night's endless lands (the night itself, or the Daily Long Night, which is the night on a seed of the day).
@@ -63,6 +66,10 @@ const dailyBest = () => META.daily && META.daily.date === dailyDate() ? META.dai
 // The land number shown to the player (1-based), and the Long Night depth (1 on its first land).
 const landNo = () => G.level + 1;
 const nightDepth = () => Math.max(0, G.level - CAMPAIGN_LANDS + 1);
+// Round 14: the level the Long Night's mutators and boss affixes count from (modCount, bossAffixes in 64-endless.js).
+// A run that came through Act II meets the Long Night at land 13; its curses start as a fresh Long Night's do (one on
+// its first land) and pile up from there, instead of three at once.
+const nightLv = level => G.postAct2 && level >= CAMPAIGN_LANDS * 2 ? level - CAMPAIGN_LANDS : level;
 
 // The Keeper's Tree. v(l): the effect at level l (0 = not bought); fmt(x): how it reads.
 const UPGRADES = [
@@ -161,6 +168,7 @@ const META_KEY = 'lanternhold.meta', META_V = 1;
 const META = {
   on: !TEST_SESSION, // writes allowed
   embers: 0, earned: 0, up: {}, heatMax: 0, tut: 0, story: {}, seen: {}, night: 0, ach: {}, daily: { date: '', best: 0, runs: 0 }, stars: {}, act: 0, diff: 'tavaline',
+  xp: 0, gift: { date: '', streak: 0 }, week: { done: '', runs: 0 }, banner: 0, // round 14 (67-keeper.js)
   stats: { runs: 0, act2: 0, sacks: 0, slain: 0, bosses: 0, bestWave: 0, bestLand: 0, bestNight: 0, campaigns: 0, time: 0, abandons: 0, heatBest: 0, elites: 0, dailies: 0 },
   dirty: false, saveT: 0,
   run: null, // the live run: { mode, heat, level0, banked, endingSeen, t }
@@ -176,11 +184,14 @@ function loadMeta() {
   if (o.stats && typeof o.stats === 'object') for (const k in META.stats) META.stats[k] = n(o.stats[k], 0, 1e12);
   if (o.stars && typeof o.stars === 'object') for (const k in o.stars) { const v = n(o.stars[k], 0, 3); if (v) META.stars[k] = v; }
   META.act = n(o.act, 0, 2); if (DIFF[o.diff]) META.diff = o.diff;
+  META.xp = n(o.xp, 0, 1e9); META.banner = n(o.banner, 0, 9);
+  const Gf = o.gift; if (Gf && typeof Gf === 'object' && typeof Gf.date === 'string' && /^\d{4}-\d\d-\d\d$/.test(Gf.date)) META.gift = { date: Gf.date, streak: n(Gf.streak, 0, 7) };
+  const Wk = o.week; if (Wk && typeof Wk === 'object') META.week = { done: typeof Wk.done === 'string' && /^\d{4}-W\d\d$/.test(Wk.done) ? Wk.done : '', runs: n(Wk.runs, 0, 1e6) };
   const D = o.daily; if (D && typeof D === 'object' && typeof D.date === 'string' && /^\d{4}-\d\d-\d\d$/.test(D.date)) META.daily = { date: D.date, best: n(D.best, 0, 1e6), runs: n(D.runs, 0, 1e6) };
 }
 function saveMeta() {
   META.dirty = false; if (!META.on) return false;
-  const o = { v: META_V, embers: META.embers, earned: META.earned, up: META.up, heatMax: META.heatMax, tut: META.tut, story: META.story, seen: META.seen, night: META.night, stats: META.stats, ach: META.ach, daily: META.daily, stars: META.stars, act: META.act, diff: META.diff };
+  const o = { v: META_V, embers: META.embers, earned: META.earned, up: META.up, heatMax: META.heatMax, tut: META.tut, story: META.story, seen: META.seen, night: META.night, stats: META.stats, ach: META.ach, daily: META.daily, stars: META.stars, act: META.act, diff: META.diff, xp: META.xp, gift: META.gift, week: META.week, banner: META.banner };
   try { localStorage.setItem(META_KEY, JSON.stringify(o)); return true; } catch (e) { return false; }
 }
 // Throttled save for small changes (sightings, play time).
@@ -233,7 +244,8 @@ function applyMeta() {
   G.ocMul = 1 - upVal('oc') / 100; G.mendMul = (1 - upVal('mend') / 100) * H.mend * D.mend; G.branchMul = 1 - upVal('branch') / 100;
   G.budgetMul = H.budget * D.budget; G.bossHpMul = H.bossHp; G.heatAffix = H.affix; G.eliteShift = H.eliteShift + D.eliteShift; G.eliteMul = H.eliteMul * D.elite; G.heatMods = H.mods;
   G.startGoldMul = D.start; G.pressCapMul = D.capMul; G.pressAdd = D.press; G.act = act2Land() ? 2 : 1;
-  G.maxLives = Math.max(5, 20 + upVal('lives') + H.lives + D.lives) + upVal('heart');
+  G.maxLives = Math.max(5, 20 + upVal('lives') + H.lives + D.lives) + upVal('heart') + (perkOn('heart') ? 2 : 0);
+  G.bannerCol = keeperBanner();
   G.manaMax = 100 + Math.round(upVal('mana') * 2 / 3);
   G.mana = Math.min(G.mana, G.manaMax);
   UI.mutCard = inRun(); // the land arrival card shows the mutators in a run (Forge's banner stays for the demo)
@@ -245,7 +257,13 @@ function metaLandStart(restoring) {
   // A land's starting gold through the difficulty (exactly 1 at Tavaline, the demo and tests).
   if (!restoring && G.startGoldMul !== 1) { G.gold = Math.round(G.gold * G.startGoldMul); UI.goldShown = G.gold; }
   G.act = act2Land() ? 2 : 1;
+  // Round 14: a gentler wave budget where a keeper needs it (buildWave reads G.easeMul; exactly 1 in the demo and tests):
+  // Kerge's first campaign land, and the first two lands of the Long Night after Act II.
+  G.easeMul = 1; G.freeSpell = 0;
   if (!inRun()) return;
+  if (G.mode === 'campaign' && G.level === 0 && diffKey(G.diff) === 'kerge' && !G.weekly) G.easeMul = .8;
+  if (G.postAct2 && G.mode === 'night') G.easeMul = [.82, .92][G.level - CAMPAIGN_LANDS * 2] || 1;
+  if (perkOn('spell')) G.freeSpell = 1;
   // The Daily Long Night: the day's mutators, rolled from the seed instead of the gameplay stream (Forge's roll skips the land).
   if (G.mode === 'daily') { setMods(dailyMods(G.runSeed, G.level)); G.modLevel = G.level; G.bountyMul *= modMul('bounty'); }
   // A continued run keeps the land's saved mutators (before round 11 they rolled afresh, so reloading rerolled the curses).
@@ -254,11 +272,17 @@ function metaLandStart(restoring) {
   else if (act2Land()) {
     const keys = act2Mods(G.B.bio.key);
     if (G.heatMods && typeof MUTATORS === 'object') { const pool = Object.keys(MUTATORS).filter(k => MUTATORS[k].curse && keys.indexOf(k) < 0 && k !== 'titan'); for (let i = 0; i < G.heatMods && pool.length; i++) keys.push(pool.splice(Math.floor(rnd() * pool.length), 1)[0]); }
-    setMods(keys); G.modLevel = G.level; G.bountyMul *= modMul('bounty');
+    setMods(weekMods(keys)); G.modLevel = G.level; G.bountyMul *= modMul('bounty');
   }
+  // The weekly challenge: its own mutators on every land (Act I lands roll none of their own).
+  else if (G.weekly) { setMods(weekMods(G.level >= CAMPAIGN_LANDS && typeof rollMods === 'function' ? rollMods(G.level) : [])); G.modLevel = G.level; G.bountyMul *= modMul('bounty'); }
   G.restoreMods = null;
   achLandStart();
-  if (!restoring) { G.gold += upVal('gold'); UI.goldShown = G.gold; G.mana = Math.min(G.manaMax, G.mana + upVal('mana')); }
+  if (!restoring) {
+    // The Treasure upgrade, the keeper's purses (perks), and on Kerge's first land a little extra to build with.
+    G.gold += upVal('gold') + (perkOn('purse') ? 30 : 0) + (perkOn('purse2') ? 40 : 0) + (G.easeMul < 1 && G.level === 0 ? 60 : 0); UI.goldShown = G.gold;
+    G.mana = Math.min(G.manaMax, G.mana + upVal('mana'));
+  }
   // Heat tier 3 asks for an extra mutator: Forge's modCount adds G.heatMods when the land's mutators roll.
   if (!restoring) {
     const S = META.stats; S.bestLand = Math.max(S.bestLand, landNo()); if (G.level >= CAMPAIGN_LANDS && G.mode !== 'campaign') S.bestNight = Math.max(S.bestNight, nightDepth());
@@ -274,6 +298,8 @@ function metaUnlock(text) { metaNotes.push(text); if (META.run) (META.run.notes 
 function metaLandClear() {
   if (!inRun()) return;
   META.stats.bosses++;
+  // The weekly challenge is one land: its reward, then the results (no stars, no acts).
+  if (G.weekly) { weekClear(); achLandClear(); metaTouch(); return; }
   // Stars for a campaign land (both acts): the best is kept; a new best rings (sfx 'star', arg = stars) and shows a card.
   if (G.mode === 'campaign' && G.level < CAMPAIGN_LANDS * 2) {
     const k = starKey(G.level, G.B.bio.key), n = starsFor(G.lives, G.maxLives, G.diff), was = META.stars[k] || 0;
@@ -295,7 +321,7 @@ function metaLandClear() {
     // Act II is beaten: its ending, then the Long Night from land 13 (generated lands again: BIOME.start back to 0).
     META.stats.act2++; META.act = 2;
     if (META.run) META.run.ending2 = META.run.level0 === CAMPAIGN_LANDS;
-    BIOME.start = 0; G.mode = 'night'; G.holdClear = true; MENU.victory = { stage: 'pending', act: 2 };
+    BIOME.start = 0; G.mode = 'night'; G.postAct2 = true; G.holdClear = true; MENU.victory = { stage: 'pending', act: 2 };
   }
   achLandClear(); STORY.landClear();
   metaTouch();
@@ -317,7 +343,9 @@ function bankRun(how) {
   const sm = runSummary() || { waves: 0, lands: 0, slain: 0 };
   const res = embersFor({ waves: sm.waves, bosses: sm.lands, level: G.level, level0: run.level0, heat: G.heat, diff: G.diff, ending: run.ending && !run.endingPaid, ending2: run.ending2 && !run.ending2Paid });
   run.endingPaid = true; run.ending2Paid = true;
-  Object.assign(res, { how, sum: sm, mode: run.mode, land: landNo(), landName: G.B && G.phase !== 'crumble' ? G.B.bio.name : '', notes: (run.notes || []).slice() });
+  // Keeper XP (67-keeper.js): a new level and perks ring on the results screen with the rest.
+  res.xp = keeperXpFor(sm.waves, sm.lands); for (const n of keeperGain(res.xp)) (run.notes = run.notes || []).push(n);
+  Object.assign(res, { how, sum: sm, mode: run.mode, weekly: run.weekly || null, land: landNo(), landName: G.B && G.phase !== 'crumble' ? G.B.bio.name : '', notes: (run.notes || []).slice() });
   META.embers += res.total; META.earned += res.total;
   const S = META.stats; S.runs++; S.slain += sm.slain || 0; S.bestWave = Math.max(S.bestWave, waveNumber()); if (how === 'abandon') S.abandons++;
   if (run.mode === 'daily') {
@@ -342,7 +370,7 @@ function embersForSave(S) {
 }
 function bankSave(S) {
   const r = embersForSave(S); if (!r) return null;
-  META.embers += r.total; META.earned += r.total; META.stats.runs++; META.stats.abandons++; saveMeta(); return r;
+  META.embers += r.total; META.earned += r.total; META.stats.runs++; META.stats.abandons++; keeperGain(keeperXpFor(r.waves, (S.runStats || {}).lands || 0)); saveMeta(); return r;
 }
 
 // ---- Starting and leaving runs ----
@@ -357,11 +385,13 @@ function startRun(mode, heat, o = {}) {
   G.level = nightMode(G.mode) ? CAMPAIGN_LANDS : L0; G.boardIndex = G.level; BIOME.start = G.mode === 'campaign' && L0 >= CAMPAIGN_LANDS ? -CAMPAIGN_LANDS : 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++; G.holdClear = false; MENU.victory = null;
   G.runSeed = G.mode === 'daily' ? dailySeed() : 1 + Math.floor(Math.random() * 1e9); G.boardSeed = G.mode === 'daily' ? 1 + G.runSeed % 9000 : 1 + Math.floor(Math.random() * 9000);
   G.press = 1; G.speed = 1; G.paused = false; G.modLevel = -1; setMods([]); MENU.arrivalLv = -99;
+  G.weekly = G.mode === 'campaign' && o.weekly && WEEK_RULES[o.weekly] ? o.weekly : null; G.postAct2 = false;
+  if (G.weekly) { META.week.runs = (META.week.runs | 0) + 1; metaTouch(); }
   // The run's tally starts now, not at its first battle: abandoned while the board still crumbles, it must not bank the demo's waves.
   G.k = 0; newRun();
   // A run starts with the lifetime sightings, so "New:" tips only show for monsters this keeper has not met in a run.
   G.seen = {}; for (const k in META.seen) G.seen[k] = 1;
-  META.run = { mode: G.mode, heat: G.heat, diff: G.diff, level0: G.level, banked: false, ending: false, ending2: false, t: 0, notes: [], ach: [], day: G.mode === 'daily' ? dailyDate() : '' };
+  META.run = { mode: G.mode, heat: G.heat, diff: G.diff, level0: G.level, banked: false, ending: false, ending2: false, t: 0, notes: [], ach: [], day: G.mode === 'daily' ? dailyDate() : '', weekly: G.weekly };
   // For Echo's daily sting: true only for a daily started fresh from the menu, never for one continued from a save.
   G.dailyFresh = G.mode === 'daily';
   applyMeta(); G.mana = 30; G.rerolls = upVal('reroll');
@@ -375,7 +405,7 @@ function startRun(mode, heat, o = {}) {
 // Back to the AI demo behind the main menu: a fresh random land, the commander in charge, every number back to 1.
 function startDemo() {
   STORY.clear(); TUT.stop(); SAVE.hold = false;
-  G.mode = 'demo'; G.heat = 0; G.diff = 'tavaline'; META.run = null; G.dailyFresh = false; G.holdClear = false; MENU.victory = null; applyMeta(); G.maxLives = 20;
+  G.mode = 'demo'; G.heat = 0; G.diff = 'tavaline'; G.weekly = null; G.postAct2 = false; META.run = null; G.dailyFresh = false; G.holdClear = false; MENU.victory = null; applyMeta(); G.maxLives = 20;
   BIOME.start = Math.floor(Math.random() * BIOMES.length) - G.boardIndex;
   G.level = 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++; G.press = 1; G.speed = 1; G.paused = false; G.modLevel = -1; setMods([]);
   UI.setManual(false); camReset();
@@ -393,13 +423,15 @@ function metaRestore(S) {
   G.mode = S.mode === 'night' || S.mode === 'daily' || S.mode === 'demo' ? S.mode : 'campaign'; G.holdClear = false; MENU.victory = null;
   G.heat = _int(S.heat, 0, HEAT_MAX) ? S.heat : 0; G.diff = diffKey(S.diff); G.runSeed = _int(S.runSeed, 0, 2e9) ? S.runSeed : S.seed;
   G.rerolls = _int(S.rerolls, 0, 9) ? S.rerolls : upVal('reroll');
-  META.run = { mode: G.mode, heat: G.heat, level0: _int(S.level0, 0, 999) ? S.level0 : (nightMode(G.mode) ? CAMPAIGN_LANDS : 0), banked: false, ending: !!S.ending, endingPaid: !!S.endingPaid, ending2: !!S.ending2, ending2Paid: !!S.ending2Paid, diff: G.diff, t: 0, notes: [], ach: [], day: typeof S.day === 'string' ? S.day : '' };
+  G.weekly = G.mode === 'campaign' && typeof S.weekly === 'string' && WEEK_RULES[S.weekly] ? S.weekly : null; G.postAct2 = G.mode === 'night' && !!S.postAct2;
+  META.run = { mode: G.mode, heat: G.heat, level0: _int(S.level0, 0, 999) ? S.level0 : (nightMode(G.mode) ? CAMPAIGN_LANDS : 0), banked: false, ending: !!S.ending, endingPaid: !!S.endingPaid, ending2: !!S.ending2, ending2Paid: !!S.ending2Paid, diff: G.diff, t: 0, notes: [], ach: [], day: typeof S.day === 'string' ? S.day : '', weekly: G.weekly };
   if (G.mode !== 'demo') { G.seen = {}; for (const k in META.seen) G.seen[k] = 1; }
   G.restoreMods = Array.isArray(S.mods) && _int(S.modLevel, 0, 999) && typeof MUTATORS === 'object' ? { level: S.modLevel, keys: S.mods.filter(k => typeof k === 'string' && MUTATORS[k]).slice(0, 8) } : null;
   applyMeta();
 }
 function metaSnapshot(S) {
   S.mode = G.mode; S.heat = G.heat; S.diff = G.diff; S.runSeed = G.runSeed; S.rerolls = G.rerolls;
+  if (G.weekly) S.weekly = G.weekly; if (G.postAct2) S.postAct2 = 1;
   if (G.modLevel === G.level && Array.isArray(G.mods)) { S.mods = G.mods.slice(); S.modLevel = G.level; }
   if (META.run) { S.level0 = META.run.level0; S.ending = !!META.run.ending; S.endingPaid = !!META.run.endingPaid; S.ending2 = !!META.run.ending2; S.ending2Paid = !!META.run.ending2Paid; if (META.run.day) S.day = META.run.day; }
   return S;
@@ -410,7 +442,7 @@ function metaSaw(key) { if (inRun() && !META.seen[key]) { META.seen[key] = 1; me
 // Reroll the land's mutators (Fate's Lantern) with Forge's rollMods (a fresh roll from the run's random stream). The
 // bounty part of the old roll comes off G.bountyMul and the new one goes on. A roll that comes back the same drops one.
 function rerollMods() {
-  if (!(G.rerolls > 0) || !Array.isArray(G.mods) || !G.mods.length || typeof rollMods !== 'function') return false;
+  if (G.weekly || !(G.rerolls > 0) || !Array.isArray(G.mods) || !G.mods.length || typeof rollMods !== 'function') return false;
   const old = G.mods.slice(), b0 = modMul('bounty'); G.rerolls--;
   let keys = old; try { keys = rollMods(G.level); } catch (e) { keys = old; }
   if (!Array.isArray(keys) || (keys.length === old.length && keys.every((k, i) => k === old[i]))) { keys = old.slice(); keys.splice(Math.floor(Math.random() * keys.length), 1); }

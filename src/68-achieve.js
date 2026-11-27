@@ -40,6 +40,12 @@ const ACH = [
   { id: 'combo50', name: 'Kuldne kombo', tip: 'Saa kombo 50.', icon: 'coin' },
   { id: 'sacks', name: 'Kotipüüdja', tip: 'Püüa kinni 10 kullakotti.', icon: 'coin' },
   { id: 'miner', name: 'Kullakaevur', tip: 'Teeni kaevandustega ühel maal 400 kulda.', icon: 'coin' },
+  // Round 14: rewards and the weekly challenge.
+  { id: 'weekly', name: 'Nädala kangelane', tip: 'Läbi üks nädala katse.', icon: 'crown' },
+  { id: 'keeper5', name: 'Kogenud hoidja', tip: 'Jõua hoidja tasemele 5.', icon: 'lantern' },
+  { id: 'keeper10', name: 'Vana hoidja', tip: 'Jõua hoidja tasemele 10.', icon: 'lantern' },
+  { id: 'gift7', name: 'Iga päev kohal', tip: 'Võta päeva kingitus seitse päeva järjest.', icon: 'ember' },
+  { id: 'dawnwalk', name: 'Koidust edasi', tip: 'Kaitse pärast teist vaatust üks Pika Öö maa.', icon: 'moon' },
 ];
 const ACH_BY = {}; for (const a of ACH) ACH_BY[a.id] = a;
 const ACHQ = []; // toasts waiting: { a, t }
@@ -66,7 +72,10 @@ function achLandClear() {
   if (G.diff === 'raske' || G.diff === 'oudne') achUnlock('brave'); if (G.diff === 'oudne') achUnlock('dread');
   if (typeof ECON === 'object' && ECON.mined >= 400) achUnlock('miner');
   if (G.mode === 'campaign' && G.level === CAMPAIGN_LANDS * 2 - 1) achUnlock('act2win');
+  if (G.postAct2 && G.mode === 'night') achUnlock('dawnwalk');
 }
+// Round 14: the keeper's level and the daily gift streak (checked on the title, any time: these are not run feats).
+function achKeeper() { const L = keeperLevel().lv; if (L >= 5) achUnlock('keeper5', true); if (L >= 10) achUnlock('keeper10', true); if ((META.gift.streak | 0) >= 7) achUnlock('gift7', true); }
 // After a campaign land's stars are set (metaLandClear).
 function achStars() {
   let a1 = true, a2 = true;
@@ -78,7 +87,7 @@ function achTree() {
   let n = 0, all = true; for (const u of UPGRADES) { const l = META.up[u.key] || 0; n += l; if (l < u.max) all = false; }
   if (n >= 10) achUnlock('tree10', true); if (all) achUnlock('treemax', true);
 }
-function achBanked(res) { if (res && res.mode === 'daily') achUnlock('daily'); }
+function achBanked(res) { if (res && res.mode === 'daily') achUnlock('daily'); achKeeper(); }
 function achTick(dt) {
   if (!inRun() || G.phase !== 'play') return;
   ACHL.t -= dt; if (ACHL.t > 0) return; ACHL.t = .5;

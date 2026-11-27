@@ -226,6 +226,32 @@ const UI = (() => {
     return b.n + ' odameest · ' + b.hp + ' elu';
   }
   U.branchStat = branchStat;
+  // Round 14: bigger tap targets (tower menus, build buttons, spells) for the youngest keepers on Kerge and on small
+  // phones (a touch screen whose short side is at most 430 CSS px: a 390x844 iPhone, a 360x800 Android).
+  const kidBig = () => (inRun() && G.diff === 'kerge') || (U.touch && Math.min(R.cssW || 999, R.cssH || 999) <= 430);
+  U.kidBig = kidBig;
+  // The abi (help) button: what to do next, with an icon and an arrow at the thing to use. nextHint() picks the most
+  // useful step now; U.abi = { h, t } is the hint on screen (about 6 s).
+  function nextHint() {
+    const tch = U.touch, P = tch ? 'Puuduta' : 'Klõpsa';
+    if (G.phase !== 'play' || !G.B) return { icon: 'hourglass', head: 'Oota hetk', line: 'Uus maa tuleb kohe.' };
+    const towers = G.towers.filter(t => t.alive && t.def), kinds = (typeof buildKinds === 'function' ? buildKinds() : BUILD_KINDS).filter(k => k !== 'mine');
+    const cheap = kinds.length ? Math.min(...kinds.map(k => TOWER[k].cost[0])) : 1e9, canBuild = (G.gold >= cheap || G.freeTowers > 0) && G.B.pads.some(p => !p.tower);
+    const pad = () => (typeof TUT === 'object' && TUT.pickPad ? TUT.pickPad() : G.B.pads.find(p => !p.tower));
+    if (!towers.length) return { icon: kinds[0] ? TOWER[kinds[0]].icon : 'archer', head: 'Ehita torn', line: P + ' kuldset platsi.', pad: pad() };
+    if (mendCount() >= 4 && G.gold >= mendCost() && G.lives <= G.maxLives * .6) return { icon: 'flame', head: 'Paranda majakat', line: P + ' nuppu „Paranda“.', hud: 'mend' };
+    let vis = 0; for (const m of G.mons) if (!m.dead && m.vis) vis++;
+    const sk = SPELL_KINDS.find(k => spellReady(k)); if (sk && vis >= 4) return { icon: SPELL[sk].icon, head: 'Kasuta loitsu', line: P + ' loitsu, siis teed.', hud: 'sp' + sk };
+    let up = null; for (const t of towers) if (t.state === 'active' && t.lvl < 2 && t.kind !== 'mine' && G.gold >= t.def.cost[t.lvl + 1] && (!up || (t.kills || 0) > (up.kills || 0))) up = t;
+    if (up) return { icon: 'upgrade', head: 'Tee torn tugevamaks', line: P + ' torni, siis Täiusta.', tower: up };
+    if (canBuild) return { icon: kinds[0] ? TOWER[kinds[0]].icon : 'archer', head: 'Ehita veel üks torn', line: 'Sul on kulda!', pad: pad() };
+    const br = towers.find(t => canBranch(t) && G.gold >= Math.min(...BRANCH_KEYS[t.kind].map(k => branchCost(t, k))));
+    if (br) return { icon: 'star', head: 'Vali torni haru', line: P + ' torni ja vali üks kahest.', tower: br };
+    if (!G.spawning && !G.bossWave && G.nextIn > 1 && !(G.count > 0)) return { icon: 'banner', head: 'Kutsu laine', line: P + ' laine silti. Saad lisakulda!', hud: 'wave' };
+    return { icon: 'star', head: 'Kõik on hästi!', line: 'Kogu kulda. Tornid teevad tööd.', ok: true };
+  }
+  U.nextHint = nextHint;
+  function showHint() { touchInput(); U.abi = { h: nextHint(), t: 0 }; sfx('uiHover', CAM.x, CAM.z, .9); buzz(8); }
   // For tests and tools (window.__cw.UI.game): the game actions the UI itself uses.
   U.game = { buildTower, upgradeTower, branchTower, overchargeTower, overchargeCost, canBranch, castSpell, spellReady, branchCost, mendBeacon, mendCount, mendCost, sellTower, callWaveEarly, padCoverage, TOWER, SPELL, BRANCH_KEYS };
   U.keepAwake = () => { try { if (navigator.wakeLock && !document.hidden && (!U.wake || U.wake.released)) navigator.wakeLock.request('screen').then(w => { U.wake = w; }, () => {}); } catch (e) {} };
@@ -288,6 +314,7 @@ const UI = (() => {
   function doSell(t) { if (sellTower(t)) { U.menu = null; return true; } return false; }
   function pickKind(kind) {
     touchInput();
+    if (typeof kindAllowed === 'function' && !kindAllowed(kind)) { deny(); return; } // the weekly challenge's rule
     if (U.menu && U.menu.pad && !U.menu.pad.tower) { doBuild(U.menu.pad, kind); return; }
     if (U.hover && !U.hover.tower) { doBuild(U.hover.pad, kind); return; }
     if (U.gp.active && U.gp.sel >= 0 && !G.B.pads[U.gp.sel].tower) { doBuild(G.B.pads[U.gp.sel], kind); return; }
@@ -557,29 +584,43 @@ const UI = (() => {
       U.soundRect = sq('sound', xl, wide ? wl : zb, soundTap, AU.ready ? (AU.muted ? 'Heli on väljas (M)' : 'Heli on sees (M)') : 'Heli', (x, y) => { if (wide) { PX.icon(c, icn, x + pad, y + Math.round((zb - ih2 * s) / 2), s, .85); text(lbl, x + pad + iw2 * s + 3 * s, y + Math.round((zb - LH) / 2) + s, COLR.tx); } else PX.icon(c, icn, x + Math.round((zb - iw2 * k) / 2), y + Math.round((zb - ih2 * k) / 2), k, AU.ready ? 1 : .8); }, !AU.ready);
       xl += (wide ? wl : zb) + g3; }
     sq('gear', xl, zb, () => inRun() ? MENU.open('pause') : openSettings(), inRun() ? 'Menüü (Esc)' : 'Seaded ja abi (O)', (x, y) => { const [gw, gh] = PX.iconSize('gear'), k = Math.max(s, Math.floor(zb * .5 / gw)); PX.icon(c, 'gear', x + Math.round((zb - gw * k) / 2), y + Math.round((zb - gh * k) / 2), k, 1); }, !!U.sets); xl += zb + g3;
+    // Round 14: the abi (help) button in a run: beside the gear when the row has room, else just above the gear.
+    let abiTop = null;
+    if (inRun() && G.phase === 'play') {
+      const fits = xl + zb + g3 <= Wr - 5 * s - rightW, ax = fits ? xl : xl - zb - g3, ay = fits ? yB : yB - zb - g3;
+      // Kerge and small phones: after 20 s without a touch, the button glows while there is something useful to do.
+      if (kidBig() && U.idle > 20 && !U.abi && !TUT.step) { U.abiT = (U.abiT || 0) - (R.frameDt || .016); if (U.abiT <= 0) { U.abiT = .5; U.hintNow = nextHint(); } } else U.hintNow = null;
+      const pulse = U.hintNow && !U.hintNow.ok && U.idle > 20 && kidBig() && (G.t * 2) % 2 < 1;
+      const r = { id: 'abi', x: ax, y: ay, w: zb, h: zb, fn: showHint, hud: true }, hot = over(ax, ay, zb, zb), down = U.press === 'abi', dy = down ? s : 0; U.hud.push(r); if (hot) { U.hudHot = true; tipB = { x: ax + zb / 2, tip: 'Abi: mida teha?' }; }
+      plate(ax, ay + dy, zb, zb, hot || down ? { bd: COLR.bdHi, bg: COLR.bg2 } : pulse || U.abi ? { bd: COLR.amber, bg: 'rgba(60,44,22,0.95)' } : { bd: '#8a6a3a' });
+      const [hw, hh] = PX.iconSize('help'), k = Math.max(s, Math.floor(zb * .55 / hh)); PX.icon(c, 'help', ax + Math.round((zb - hw * k) / 2), ay + dy + Math.round((zb - hh * k) / 2), k, 1);
+      if (fits) xl += zb + g3; else abiTop = ay;
+    }
     let xr = Wr - 5 * s - zb; const cur = camZoomNow();
     if (nR === 3) { sq('full', xr, zb, toggleFull, 'Täisekraan', corners, false); xr -= zb + g3; }
     sq('zin', xr, zb, () => camZoomBy(1.5), 'Suumi sisse (+)', glyph('+', cur < 2.99 ? COLR.tx : '#5a5448'), false); xr -= zb + g3;
     sq('zout', xr, zb, () => camZoomBy(1 / 1.5), 'Suumi välja (-)', glyph('-', cur > camZoomMin() + .01 ? COLR.tx : '#5a5448'), false);
-    let yUp = yB - g3, rightTop = yB, hudBot = yB; // hudBot: the top of the bottom HUD row (buttons, mana bar)
+    let yUp = abiTop !== null ? abiTop - g3 : yB - g3, rightTop = yB, hudBot = abiTop !== null ? abiTop : yB; // hudBot: the top of the bottom HUD row (buttons, mana bar)
     if (G.phase === 'play') {
       // Spells: three buttons under a mana bar. Bottom centre when there is room, else left of the zoom buttons, else stacked above them.
-      const n = SPELL_KINDS.length, gw = n * zb + (n - 1) * g3, mh = 4 * s;
-      let xs = Math.round((iL + Wr) / 2 - gw / 2), ys = yB, stacked = false;
-      if (xs < xl || xs + gw > xr - g3) { xs = xr - g3 - gw; if (xs < xl) { xs = Wr - 5 * s - gw; ys = yB - g3 - zb - mh - s; stacked = true; rightTop = ys - mh - s; } }
+      // Round 14: bigger spell buttons for the youngest keepers and small phones (kidBig), bottoms level with the row.
+      const zs = kidBig() ? Math.max(zb, Math.round((tch ? 54 : 46) * dpr)) : zb;
+      const n = SPELL_KINDS.length, gw = n * zs + (n - 1) * g3, mh = (zs > zb ? 5 : 4) * s;
+      let xs = Math.round((iL + Wr) / 2 - gw / 2), ys = yB + zb - zs, stacked = false;
+      if (xs < xl || xs + gw > xr - g3) { xs = xr - g3 - gw; if (xs < xl) { xs = Wr - 5 * s - gw; ys = yB - g3 - zs - mh - s; stacked = true; rightTop = ys - mh - s; } }
       if (!stacked) { yUp = Math.min(yUp, yB - mh - s - g3); xr = xs; } else yUp = Math.min(yUp, rightTop - g3);
       const my = ys - mh - s; hudBot = Math.min(hudBot, my); c.fillStyle = COLR.dark; c.fillRect(xs, my, gw, mh); c.fillStyle = '#2a3446'; c.fillRect(xs + s, my + s, gw - 2 * s, mh - 2 * s);
       c.fillStyle = G.mana >= G.manaMax - .01 ? '#bfe4ff' : '#5fa2e6'; c.fillRect(xs + s, my + s, Math.round((gw - 2 * s) * sat(G.mana / G.manaMax)), mh - 2 * s);
       c.fillStyle = 'rgba(239,228,205,0.55)'; for (const k of SPELL_KINDS) c.fillRect(xs + s + Math.round((gw - 2 * s) * spellMana(k) / G.manaMax), my, s, mh);
       SPELL_KINDS.forEach((k, i) => {
-        const S = SPELL[k], x = xs + i * (zb + g3), id = 'sp' + k, ready = spellReady(k), armed = U.spell === k, hot = over(x, ys, zb, zb), down = U.press === id, dy = down ? s : 0, fl = U.spellFlash[k] || 0;
-        U.hud.push({ id, x, y: ys, w: zb, h: zb, fn: () => pickSpell(k), hud: true }); if (hot) { U.hudHot = true; tipB = { x: x + zb / 2, y: my - g3 - hB, tip: S.name + ' (' + S.key + ') · ' + spellMana(k) + ' manat' }; }
-        plate(x, ys + dy, zb, zb, armed || hot || down ? { bd: COLR.bdHi, bg: COLR.bg2 } : fl > .5 && fl % .5 > .25 ? { bd: COLR.ember } : ready ? { bd: '#5f86b0' } : {});
-        const [iw, ih] = PX.iconSize(S.icon), kk = Math.max(s, Math.floor(zb * .6 / Math.max(iw, ih)));
-        PX.icon(c, S.icon, x + Math.round((zb - iw * kk) / 2), ys + dy + Math.round((zb - ih * kk) / 2), kk, ready || armed ? 1 : .35);
-        const cdF = G.spellCd[k] / S.cd; if (cdF > 0) { c.globalAlpha = .6; c.fillStyle = COLR.dark; const hh = Math.round((zb - 4 * s) * cdF); c.fillRect(x + 2 * s, ys + dy + zb - 2 * s - hh, zb - 4 * s, hh); c.globalAlpha = 1; }
+        const S = SPELL[k], x = xs + i * (zs + g3), id = 'sp' + k, ready = spellReady(k), armed = U.spell === k, hot = over(x, ys, zs, zs), down = U.press === id, dy = down ? s : 0, fl = U.spellFlash[k] || 0;
+        U.hud.push({ id, x, y: ys, w: zs, h: zs, fn: () => pickSpell(k), hud: true }); if (hot) { U.hudHot = true; tipB = { x: x + zs / 2, y: my - g3 - hB, tip: S.name + ' (' + S.key + ') · ' + spellMana(k) + ' manat' }; }
+        plate(x, ys + dy, zs, zs, armed || hot || down ? { bd: COLR.bdHi, bg: COLR.bg2 } : fl > .5 && fl % .5 > .25 ? { bd: COLR.ember } : ready ? { bd: zs > zb ? '#8fc7ff' : '#5f86b0' } : {});
+        const [iw, ih] = PX.iconSize(S.icon), kk = Math.max(s, Math.floor(zs * .6 / Math.max(iw, ih)));
+        PX.icon(c, S.icon, x + Math.round((zs - iw * kk) / 2), ys + dy + Math.round((zs - ih * kk) / 2), kk, ready || armed ? 1 : .35);
+        const cdF = G.spellCd[k] / S.cd; if (cdF > 0) { c.globalAlpha = .6; c.fillStyle = COLR.dark; const hh = Math.round((zs - 4 * s) * cdF); c.fillRect(x + 2 * s, ys + dy + zs - 2 * s - hh, zs - 4 * s, hh); c.globalAlpha = 1; }
         if (!tch) PX.text(c, S.key, x + 3 * s, ys + dy + 2 * s, es, ready ? COLR.tx : COLR.dim);
-        if (G.mana < spellMana(k) && cdF <= 0) PX.text(c, '' + spellMana(k), x + zb - 3 * s, ys + dy + zb - PX.LINE * es - s, es, COLR.cold, { align: 'r' });
+        if (G.mana < spellMana(k) && cdF <= 0) PX.text(c, '' + spellMana(k), x + zs - 3 * s, ys + dy + zs - PX.LINE * es - s, es, COLR.cold, { align: 'r' });
       });
     }
     if (CAM.man && play) {
@@ -609,12 +650,33 @@ const UI = (() => {
     } else {
       const first = U.titleT < 16, a = tch ? sat(Math.min(U.titleT - 7.2, first ? 1 : 3 - U.moved, U.manual && !first ? 0 : 1, 62 - U.titleT)) : Math.max(sat(Math.min(U.titleT - 7.2, 3 - Math.min(U.moved, U.idle > 20 ? U.moved : 0) + (U.titleT < 18 ? 8 : 0))), sat(Math.min(U.titleT - 7.2, 15 - U.titleT)));
       if (a > .02 && !U.menu && !G.paused && !U.spell && G.phase === 'play' && !TUT.step) {
-        const parts = tch ? ['Puuduta platsi ja ehita', 'Puuduta loitsu, siis teed', 'Lohista vaatamiseks, näpista suumiks', 'Hammasrattas on abi'] : ['Klõpsa platsi ja ehita', '1-4 valib torni', 'Q E T heidavad loitse', 'R parandab majakat', 'Tühik kutsub laine', 'O: seaded ja abi'];
+        const parts = tch ? ['Puuduta platsi ja ehita', 'Puuduta loitsu, siis teed', 'Lohista vaatamiseks, näpista suumiks', inRun() ? '? näitab, mida teha' : 'Hammasrattas on abi'] : ['Klõpsa platsi ja ehita', '1-4 valib torni', 'Q E T heidavad loitse', 'R parandab majakat', 'Tühik kutsub laine', 'O: seaded ja abi'];
         // As few lines as fit: two halves, else pairs, else one part per line.
         const pack = n => { const out = []; for (let i = 0; i < parts.length; i += n) out.push(parts.slice(i, i + n).join(' · ')); return out; }, fits = ls => ls.every(l => tw(l) + pad * 2 <= boxW);
         let lines = [parts.join(' · ')]; for (const n of [Math.ceil(parts.length / 2), 2, 1]) { if (fits(lines)) break; lines = pack(n); }
         let w = 0; for (const l of lines) w = Math.max(w, tw(l)); w += pad * 2; const h = LH * lines.length + pad * 2 - s, hx = Math.round((iL + Wr - w) / 2), hy = yUp - h;
         if (w <= boxW) { c.globalAlpha = a; plate(hx, hy, w, h); lines.forEach((l, k) => text(l, hx + w / 2, hy + pad - s + k * LH, COLR.dim, { align: 'c' })); c.globalAlpha = 1; }
+      }
+    }
+    // Round 14: the abi hint: an icon, a few words and a bobbing arrow at the thing to use (nextHint).
+    if (U.abi) {
+      const q = U.abi; q.t += R.frameDt || .016;
+      if (q.t > 6.5 || G.phase !== 'play' || U.sets) U.abi = null;
+      else {
+        const h0 = q.h, a = sat(Math.min(q.t * 5, (6.5 - q.t) * 2)), ik = s * 2, [iw, ih] = PX.iconSize(h0.icon);
+        const tw0 = Math.max(tw(h0.head), tw(h0.line)), w = Math.min(boxW, iw * ik + 3 * s + tw0 + pad * 2), h = Math.max(ih * ik, LH * 2) + pad * 2, x = Math.round((iL + Wr - w) / 2), y = yUp - h;
+        c.globalAlpha = a; plate(x, y, w, h, { bd: h0.ok ? COLR.ok : COLR.amber, bg: 'rgba(30,22,12,0.94)' });
+        PX.icon(c, h0.icon, x + pad, y + Math.round((h - ih * ik) / 2), ik, 1);
+        const tx0 = x + pad + iw * ik + 3 * s, ty0 = y + Math.round((h - LH * 2) / 2) + s;
+        text(h0.head, tx0, ty0, COLR.amber); text(h0.line, tx0, ty0 + LH, COLR.tx);
+        // The arrow: at a pad, a tower or a HUD button (spell, mend, the wave sign).
+        let ax = null, ay = null, upA = false;
+        if (h0.pad && !h0.pad.tower) { const p = proj(h0.pad.x, h0.pad.y + 1.6, h0.pad.z); ax = p.x; ay = p.y; }
+        else if (h0.tower && h0.tower.alive) { const t = h0.tower, p = proj(t.x, t.y + Math.min(3.6, t.mounts ? t.mounts.top : 2.5) + .8, t.z); ax = p.x; ay = p.y; }
+        else if (h0.hud === 'wave' && U.waveRect) { ax = U.waveRect.x + U.waveRect.w / 2; ay = U.waveRect.y + U.waveRect.h + 12 * s; upA = true; }
+        else if (h0.hud) { const b = U.hud.find(o => o.id === h0.hud); if (b) { ax = b.x + b.w / 2; ay = b.y - 14 * s; } }
+        if (ax !== null && !U.menu) { const bob = Math.sin(G.t * 7) * 3 * s, k = Math.max(4, s * 2); PX.text(c, upA ? '↑' : '↓', ax, ay + (upA ? -bob : bob) - (upA ? 0 : PX.LINE * k), k, '#ffc870', { align: 'c', outline: '#2a0c04' }); }
+        c.globalAlpha = 1; yUp = y - g3;
       }
     }
     U.yUp = yUp; // the top of the bottom stack (the tutorial guide sits above it)
@@ -636,36 +698,40 @@ const UI = (() => {
       const place = (wP, hP) => { const bot = hudBot - g3 - hP >= y0 + topH + 2 * s ? hudBot - g3 : Hb - 4 * s, below = p.y - hP - 7 * s < y0 + topH + 2 * s && p.y + 26 * s + hP < bot; return [clamp(Math.round(p.x - wP / 2), 4 * s + iL, Wr - wP - 4 * s), below ? Math.round(p.y + 26 * s) : clamp(Math.round(p.y - hP - 7 * s), Math.min(y0 + topH + 4 * s, bot - hP), bot - hP)]; };
       c.globalAlpha = a;
       if (!m.tower) {
-        const NK = BUILD_KINDS.length, bwid = 31 * s, bh = 35 * s, gapb = 3 * s, rowW = NK * bwid + (NK - 1) * gapb, mines = mineCount();
-        let lit = null; const fk = U.gp.active ? BUILD_KINDS[m.focus % NK] : null;
+        // Round 14: only the kinds the run allows (the weekly challenge), bigger buttons and fewer words for kidBig().
+        const KINDS = typeof buildKinds === 'function' ? buildKinds() : BUILD_KINDS, kid = kidBig(), NK = KINDS.length, gapb = 3 * s;
+        const bwid = Math.min((kid ? 40 : 31) * s, Math.floor((Wr - iL - 8 * s - mp * 2 - (NK - 1) * gapb) / NK)), bh = Math.round(bwid * 35 / 31), ik = kid && bwid >= 36 * s ? s + 1 : s, rowW = NK * bwid + (NK - 1) * gapb, mines = mineCount();
+        let lit = null; const fk = U.gp.active ? KINDS[m.focus % NK] : null;
         const cheap = Math.min(...TOWER_KINDS.map(k => TOWER[k].cost[0])), broke = G.gold < cheap && !(G.freeTowers > 0);
         const free = k => G.freeTowers > 0 && k !== 'mine', full = k => k === 'mine' && mines >= MINE_MAX;
-        const lines = k => k ? (k === 'mine' ? [TOWER.mine.name + ' · +' + mineGold({ lvl: 0 }) + ' laine kohta', full(k) ? 'Sul on juba ' + MINE_MAX + ' kaevandust.' : TOWER.mine.desc[0], TOWER.mine.desc[1]] : [TOWER[k].name].concat(TOWER[k].desc)) : broke ? ['Kulda on veel vähe', 'Koletised ja lained annavad kulda,', 'müüdud tornist saad osa tagasi.'] : tch ? ['Vali torn', 'Puuduta, et näha, mida see teeb,', 'ja puuduta uuesti, et ehitada.'] : ['Vali torn', 'Vii hiir peale või vajuta 1–4 (8: kaevandus),', 'et näha, mida see teeb.'];
-        let textW = tw('Puuduta uuesti, et ehitada'); for (const k of [null].concat(BUILD_KINDS)) for (const l of lines(k)) textW = Math.max(textW, tw(l));
-        const wP = Math.max(rowW, textW) + mp * 2, hP = mp * 2 + LH + 3 * s + bh + 4 * s + LH * 3 + 2 * s + (tch ? LH + s : 0), [px, py] = place(wP, hP);
+        const lines0 = k => k ? (k === 'mine' ? [TOWER.mine.name + ' · +' + mineGold({ lvl: 0 }) + ' laine kohta', full(k) ? 'Sul on juba ' + MINE_MAX + ' kaevandust.' : TOWER.mine.desc[0], TOWER.mine.desc[1]] : [TOWER[k].name].concat(TOWER[k].desc)) : broke ? ['Kulda on veel vähe', 'Koletised ja lained annavad kulda,', 'müüdud tornist saad osa tagasi.'] : tch ? ['Vali torn', 'Puuduta, et näha, mida see teeb,', 'ja puuduta uuesti, et ehitada.'] : ['Vali torn', 'Vii hiir peale või vajuta 1–4 (8: kaevandus),', 'et näha, mida see teeb.'];
+        // Kids: two short lines (the name and what it does), and the "tap again" line says it plainly.
+        const lines = k => kid ? (k ? [lines0(k)[0], full(k) ? 'Sul on juba ' + MINE_MAX + '.' : TOWER[k].desc[0]] : broke ? ['Kulda on veel vähe', 'Oota, koletised toovad kulda.'] : ['Vali torn', tch ? 'Puuduta kaks korda = ehita.' : 'Klõpsa, et ehitada.']) : lines0(k), nL = kid ? 2 : 3;
+        let textW = tw('Puuduta uuesti, et ehitada'); for (const k of [null].concat(KINDS)) for (const l of lines(k)) textW = Math.max(textW, tw(l));
+        const wP = Math.min(Wr - iL - 8 * s, Math.max(rowW, textW) + mp * 2), hP = mp * 2 + LH + 3 * s + bh + 4 * s + LH * nL + 2 * s + (tch ? LH + s : 0), [px, py] = place(wP, hP);
         U.menuRect = { x: px, y: py, w: wP, h: hP };
         plate(px, py, wP, hP); text('Ehita siia', px + mp, py + mp - s, COLR.amber);
         const bx0 = px + Math.round((wP - rowW) / 2), by = py + mp + LH + 3 * s;
-        BUILD_KINDS.forEach((kind, i) => {
+        KINDS.forEach((kind, i) => {
           const d = TOWER[kind], can = !full(kind) && (G.gold >= d.cost[0] || free(kind)), bx = bx0 + i * (bwid + gapb);
           const r = button(bx, by, bwid, bh, 'b' + kind, can, () => { if (U.touch && m.sel !== kind) { m.sel = kind; sfx('uiHover', m.pad.x, m.pad.z, .8); } else doBuild(m.pad, kind); }, kind, m.sel === kind);
-          const [iw, ih] = PX.iconSize(d.icon); PX.icon(c, d.icon, bx + Math.round((bwid - iw * s) / 2), by + 6 * s + r.dy, s, can ? 1 : .45);
+          const [iw, ih] = PX.iconSize(d.icon); PX.icon(c, d.icon, bx + Math.round((bwid - iw * ik) / 2), by + Math.round((bh - LH - 3 * s - ih * ik) / 2) + r.dy, ik, can ? 1 : .45);
           if (!tch) text(kind === 'mine' ? '8' : '' + (i + 1), bx + 3 * s, by + 2 * s + r.dy, COLR.dim);
           const cl = full(kind) ? 'Täis' : free(kind) ? 'Tasuta' : '' + d.cost[0], cw2 = 8 * s + 2 * s + tw(cl), cx0 = bx + Math.round((bwid - cw2) / 2);
           PX.icon(c, 'coin', cx0, by + bh - LH - 3 * s + r.dy, s, can ? 1 : .5); text(cl, cx0 + 10 * s, by + bh - LH - 3 * s + r.dy, free(kind) ? COLR.ok : can ? COLR.amber : COLR.red);
           if (r.lit) lit = kind;
         });
         const ls = lines(lit || fk), ty = by + bh + 4 * s;
-        text(ls[0], px + mp, ty, lit || fk ? COLR.tx : broke ? COLR.ember : COLR.dim); text(ls[1], px + mp, ty + LH + s, COLR.dim); if (ls[2]) text(ls[2], px + mp, ty + LH * 2 + s, COLR.dim);
-        if (tch && m.sel) { const can = !full(m.sel) && (G.gold >= TOWER[m.sel].cost[0] || free(m.sel)); text(can ? 'Puuduta uuesti, et ehitada' : 'Kulda on veel vähe', px + mp, ty + LH * 3 + 2 * s, can ? COLR.amber : COLR.red); }
+        text(ls[0], px + mp, ty, lit || fk ? COLR.tx : broke ? COLR.ember : COLR.dim); text(ls[1], px + mp, ty + LH + s, COLR.dim); if (ls[2] && nL > 2) text(ls[2], px + mp, ty + LH * 2 + s, COLR.dim);
+        if (tch && m.sel) { const can = !full(m.sel) && (G.gold >= TOWER[m.sel].cost[0] || free(m.sel)); text(can ? (kid ? 'Puuduta uuesti: ehita!' : 'Puuduta uuesti, et ehitada') : 'Kulda on veel vähe', px + mp, ty + LH * nL + 2 * s, can ? COLR.amber : COLR.red); }
       } else if (m.tower.lvl === 2 && !m.tower.branch && m.tower.def.branches) {
         // Branch choice: two cards with what each does and costs. Touch: tap to see, tap again to buy. Keys 1 and 2.
-        const t = m.tower, d = t.def, keys = BRANCH_KEYS[t.kind], active = t.state === 'active', refund = Math.round(t.spent * .6), cp = 4 * s;
+        const t = m.tower, d = t.def, keys = BRANCH_KEYS[t.kind], active = t.state === 'active', refund = Math.round(t.spent * .6), cp = (kidBig() ? 6 : 4) * s;
         const card = k => { const b = d.branches[k]; return { k, b, cost: branchCost(t, k), lines: b.desc, stat: branchStat(t.kind, k) }; }, cards = keys.map(card);
         let cw = 0; for (const q of cards) cw = Math.max(cw, tw((tch ? '' : '1 ') + q.b.name) + 14 * s + tw('' + q.cost), tw(q.stat), ...q.lines.map(tw));
         cw += cp * 2 + 2 * s; const ch = LH * 4 + cp * 2 - s, gapC = 4 * s, sideBySide = cw * 2 + gapC + mp * 2 <= Wr - iL - 8 * s;
         const head = active ? 'Vali haru' : 'Ehitan...', hint = tch ? (m.sel ? (G.gold >= branchCost(t, m.sel) ? 'Puuduta uuesti, et osta' : 'Kulda on veel vähe') : 'Puuduta haru, et seda näha') : 'Klõpsa, et osta · klahvid 1 ja 2';
-        const sl = m.sellArm ? 'Kinnita +' + refund : 'Müü +' + refund, bh = (tch ? 22 : 14) * s;
+        const sl = m.sellArm ? 'Kinnita +' + refund : 'Müü +' + refund, bh = (tch ? (kidBig() ? 28 : 22) : kidBig() ? 18 : 14) * s;
         const rowW = sideBySide ? cw * 2 + gapC : cw, wP = Math.max(rowW, tw(d.name) + 26 * s, tw(head), tw(hint), tw('Kinnita +' + refund) + 20 * s) + mp * 2;
         const hP = mp * 2 + LH * 2 + 3 * s + (sideBySide ? ch : ch * 2 + gapC) + 4 * s + bh + 3 * s + LH, [px, py] = place(wP, hP);
         U.menuRect = { x: px, y: py, w: wP, h: hP };
@@ -688,7 +754,7 @@ const UI = (() => {
         PX.icon(c, 'sell', bxs + 4 * s, by + Math.round((bh - LH) / 2) + r.dy, s); text(sl, bxs + 4 * s + 12 * s, by + Math.round((bh - LH) / 2) + r.dy, m.sellArm ? COLR.ember : COLR.tx);
       } else {
         const t = m.tower, d = t.def, oc = t.oc || 0, mine = t.kind === 'mine', maxed = t.lvl >= 3, occ = overchargeCost(t), full = (maxed && !occ) || (mine && t.lvl >= 2), upc = maxed ? occ : t.lvl < 2 ? d.cost[t.lvl + 1] : 0, can = !full && upc > 0 && G.gold >= upc && t.state === 'active', refund = Math.round(t.spent * .6), L1 = t.lvl + 1;
-        const building = t.state !== 'active', ul = building ? 'Ehitan...' : full ? (mine ? 'Valmis' : 'Täis laetud') : maxed ? 'Lae üle ' + upc : 'Täiusta ' + upc, sl = m.sellArm ? 'Kinnita +' + refund : 'Müü +' + refund, iw9 = 9 * s, bw3 = Math.max(tw(ul), tw(sl), tw('Kinnita +' + refund)) + iw9 + 11 * s, bh = (tch ? 24 : 15) * s, by0 = Math.round((bh - LH) / 2);
+        const building = t.state !== 'active', ul = building ? 'Ehitan...' : full ? (mine ? 'Valmis' : 'Täis laetud') : maxed ? 'Lae üle ' + upc : 'Täiusta ' + upc, sl = m.sellArm ? 'Kinnita +' + refund : 'Müü +' + refund, iw9 = 9 * s, bw3 = Math.max(tw(ul), tw(sl), tw('Kinnita +' + refund)) + iw9 + 11 * s, bh = (tch ? (kidBig() ? 30 : 24) : kidBig() ? 20 : 15) * s, by0 = Math.round((bh - LH) / 2);
         const name = t.branch ? d.bdef.title : d.name;
         const st = mine ? 'Kulda laine kohta: ' + mineGold(t) + (t.dealt ? ' · kokku ' + Math.round(t.dealt) : '') : (t.branch ? branchStat(t.kind, t.branch) : t.kind === 'guard' ? d.n[t.lvl] + ' sõdurit · ' + d.hp[t.lvl] + ' elu' : 'Ulatus ' + d.range[t.lvl].toFixed(1) + ' · Kahju ' + Math.round(d.dmg[t.lvl] * (1 + OC_DMG * oc))) + (oc ? ' · +' + Math.round(OC_DMG * oc * 100) + '%' : '');
         const nx = mine ? (t.lvl < 2 ? 'Järgmine: ' + mineGold({ lvl: t.lvl + 1 }) + ' kulda laine kohta' : 'Kaevandus on täiesti valmis') : full ? t.kills + ' võitu · täis laetud' : maxed ? 'Ülelaadimine: kahju +' + Math.round(OC_DMG * (oc + 1) * 100) + '%' : t.lvl === 1 ? (t.kind === 'guard' ? 'Järgmine: ' + d.n[L1] + ' sõdurit · ' + d.hp[L1] + ' elu' : 'Järgmine: ulatus ' + d.range[L1].toFixed(1) + ' · kahju ' + d.dmg[L1]) + ', siis haru' : (t.kind === 'guard' ? 'Järgmine: ' + d.n[L1] + ' sõdurit · ' + d.hp[L1] + ' elu' : 'Järgmine: ulatus ' + d.range[L1].toFixed(1) + ' · kahju ' + d.dmg[L1]);
@@ -729,6 +795,8 @@ const UI = (() => {
     'Pika Öö maadel on needused, näiteks Varjutus, Piiramine või Kajad, ja vahel ka õnnistus. Maa saabumiskaart näitab neid.',
     'Päeva väljakutse on täna kõigile sama tee, Kuumusel 0. Sinu päeva parim lainete arv jääb meelde.',
     'Raskus: Kerge on noorematele, Õudne on julgetele. Iga seikluse maa annab 1 kuni 3 tähte: mida rohkem elusid alles, seda rohkem tähti.',
+    'Küsimärgiga nupp (abi) näitab mängu ajal, mida järgmiseks teha, ja noolega, kuhu vajutada.',
+    'Hoidja tase kasvab igast mängust ja avab uusi asju: lipuvärve, lisakulda, tasuta loitsu. Päeva kingitus annab iga päev sütt, mitu päeva järjest veel rohkem. Nädala katse on iga nädal uute reeglitega ja annab auhinna.',
     'Kulda saad ka nii: intress laine lõpus, kui sul on kulda alles; kombo, kui võidad palju koletisi järjest; kullakott, kui püüad kullagoblini kinni; ja kullakaevandus, mis annab kulda iga laine järel.',
   ];
   const HELP_KEYS = [

@@ -126,7 +126,7 @@ function blueprint(kind, lvl, branch) {
     const bx = -W + .34, bz = -W + .36, by = H + .1 + (L2 ? .35 : 0);
     piece('brazier', 6, S => { if (L2) S.cyl(.2, .38, bx, H + .29, bz, sdk, { n: 6, l: L_MASON }); brazier(S, bx, by, bz, bs); if (vo) { S.cyl(.2, .38, -bx, H + .29, bz, sdk, { n: 6, l: L_MASON }); brazier(S, -bx, by, bz, bs); } });
     if (lvl >= 1 && !lb) piece('flag', 7, S => {
-      const poles = vo ? [[W - .08, -W + .08, crim], [-W + .08, W - .08, crim]] : [[W - .08, -W + .08, COL.clothR]];
+      const poles = vo ? [[W - .08, -W + .08, crim], [-W + .08, W - .08, crim]] : [[W - .08, -W + .08, G.bannerCol || COL.clothR]]; // G.bannerCol: the keeper's banner colour (67-keeper.js)
       for (const [px, pz, col] of poles) { const top = H + (vo ? 2.05 : 1.75); S.seg([px, H + .1, pz], [px, top, pz], .035, .025, wd, { l: L_WOOD, n: 4 }); const T = new Soup(); clothPanel(T, { x0: 0, x1: vo ? .8 : .62, yTop: 0, len: vo ? .46 : .36, z: 0, col, col2: vo ? mulC(COL.gold, .7) : undefined, rng, nx: vo ? 4 : 3, ny: vo ? 3 : 2, rag: vo ? .15 : 0, sway: 1.2 }); S.merge(T, { p: [px + .02, top - .05, pz], ao: null }); if (vo) S.sph(.05, px, top + .04, pz, COL.gold, { l: L_METAL, w: 5, h: 3, smooth: false }); }
     });
     if (lb) piece('roof', 8, S => {
@@ -385,7 +385,7 @@ function blueprint(kind, lvl, branch) {
     piece('flag', 6, S => {
       const x = L2 ? tx : -W / 2 + .1, z = L2 ? tz : -D / 2 + .1, y0 = L2 ? th + .4 : .2, y1 = kn ? th + 2.6 : L2 ? th + 1.8 : 2.9;
       S.seg([x, y0, z], [x, y1, z], .04, .028, wd, { l: L_WOOD, n: 4 });
-      const T = new Soup(); clothPanel(T, { x0: 0, x1: kn ? .95 : .7, yTop: 0, len: kn ? .56 : .46, z: 0, col: pk ? red : COL.clothB, col2: pk ? blk : mulC(COL.gold, .6), rng, nx: 4, ny: 3, rag: .2, sway: 1.1 }); S.merge(T, { p: [x + .03, y1 - .06, z], ao: null });
+      const T = new Soup(); clothPanel(T, { x0: 0, x1: kn ? .95 : .7, yTop: 0, len: kn ? .56 : .46, z: 0, col: pk ? red : G.bannerCol || COL.clothB, col2: pk ? blk : mulC(COL.gold, .6), rng, nx: 4, ny: 3, rag: .2, sway: 1.1 }); S.merge(T, { p: [x + .03, y1 - .06, z], ao: null });
       if (kn) { S.sph(.07, x, y1 + .06, z, COL.gold, { l: L_METAL, w: 6, h: 4, smooth: false }); banner(S, 0, .16 + wh - .05, D / 2 + .1, 0, .38, .7, blue, gold, .2); }
       if (pk) { S.cone(.06, .18, x, y1 + .09, z, COL.steel, { n: 4, l: L_METAL }); for (const s of [-1, 1]) S.box(.04, .04, .04, x, y1 - .18 + s * .08, z, COL.bone, { jit: 0 }); }
     });

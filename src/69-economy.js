@@ -70,7 +70,7 @@ function econKill(m) {
 }
 
 // Treasure carriers. sackWave(k, level): whether wave k gets one (not the first wave, a horde or the boss wave).
-function sackWave(k, level) { return k >= 2 && !isBossK(k) && !isHordeK(k, level) && rnd() < .42 + .04 * Math.min(level, 5); }
+function sackWave(k, level) { return k >= 2 && !isBossK(k) && !isHordeK(k, level) && (G.weekly === 'goblins' || rnd() < .42 + .04 * Math.min(level, 5)); }
 function sackDie(m) {
   const g = sackGold(), y = G.B.heightAt(m.x, m.z);
   ECON.sacks++; if (inRun()) { META.stats.sacks = (META.stats.sacks || 0) + 1; if (META.stats.sacks >= 10) achUnlock('sacks'); }

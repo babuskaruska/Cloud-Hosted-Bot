@@ -240,7 +240,7 @@ function buildWave(k, level) {
   // (the board was just rebuilt), the last ones get the full step and a bit more.
   const lvF = .5 + .5 * (k - 1) / (W - 1), lv = 1 + .3 * level * lvF;
   // Budget ramps over the land; the boss wave carries less escort because the boss is the threat (more of it on later lands).
-  let budget = (30 + 19 * (k - 1)) * lv * G.press * (boss ? .6 + .15 * Math.min(level, 6) : 1) * modMul('budget') * G.budgetMul, heavy = 0, air = budget * .42;
+  let budget = (30 + 19 * (k - 1)) * lv * G.press * (boss ? .6 + .15 * Math.min(level, 6) : 1) * modMul('budget') * G.budgetMul * (G.easeMul || 1), heavy = 0, air = budget * .42;
   const hpMul = (1 + .1 * (k - 1)) * (1 + .33 * level * lvF + .045 * level * level * lvF * lvF * lvF) * pressHp() * G.hpMul;
   // Later lands (and high pressure) also pack the monsters closer together.
   const gm = 1 / ((1 + .08 * level) * Math.pow(Math.max(1, G.press / 1.8), level ? .35 : 0));
@@ -276,6 +276,8 @@ function buildWave(k, level) {
   if (boss && budget > 0) { const f = Math.min(2.5, budget0 / Math.max(1, budget0 - budget)); for (const e of q) if (!MON[e.type].boss) e.bm = f; }
   // Round 13: a treasure carrier may run with the wave, somewhere in its middle (69-economy.js).
   if (!boss && sackWave(k, level)) q.push({ t: t * rr(.25, .75), type: 'kullakott', hpMul });
+  // Round 14: the goblins' week (67-keeper.js) sends a carrier with every ordinary wave, and sometimes a second.
+  if (!boss && G.weekly === 'goblins' && k >= 2 && !horde && rnd() < .5) q.push({ t: t * rr(.55, .9), type: 'kullakott', hpMul });
   q.sort((a, b) => a.t - b.t);
   return q;
 }
@@ -377,7 +379,7 @@ function padCoverage(pad, range, air) {
 }
 function buildTower(pad, kind, byPlayer) {
   // Founding Stone (66-meta.js): the first towers of a land cost nothing (and sell for nothing).
-  const def = TOWER[kind], free = G.freeTowers > 0 && kind !== 'mine'; if (pad.tower || (!free && G.gold < def.cost[0]) || G.phase !== 'play' || (kind === 'mine' && mineCount() >= MINE_MAX)) return null;
+  const def = TOWER[kind], free = G.freeTowers > 0 && kind !== 'mine'; if (pad.tower || (!free && G.gold < def.cost[0]) || G.phase !== 'play' || (kind === 'mine' && mineCount() >= MINE_MAX) || !kindAllowed(kind)) return null;
   if (free) G.freeTowers--; else pay(def.cost[0]);
   const t = new Tower(pad, kind, G.B.pads.indexOf(pad)); if (free) t.spent = 0; G.towers.push(t); UI.ping(pad.x, pad.y, pad.z, byPlayer); return t;
 }
@@ -434,7 +436,8 @@ function manaFromKill(m) {
   G.mana = Math.min(G.manaMax, G.mana + (.45 + m.def.bounty * .035) * (m.elite ? 2.5 : 1) * (m.small ? .5 : 1) * (m.def.boss ? 4 : 1));
 }
 // Mana and cooldown through the run's numbers (Heat 10 raises mana costs; Swift Rites shortens cooldowns).
-function spellMana(kind) { return Math.round(SPELL[kind].mana * G.spellManaMul); }
+// Round 14: the keeper's Lisaloits perk makes a land's first spell free (G.freeSpell, 66-meta.js; 0 outside a run).
+function spellMana(kind) { return G.freeSpell > 0 ? 0 : Math.round(SPELL[kind].mana * G.spellManaMul); }
 function spellReady(kind) { const S = SPELL[kind]; return !!S && G.phase === 'play' && G.mana >= spellMana(kind) && G.spellCd[kind] <= 0; }
 // Where a spell lands on the road: the nearest road sample to (x, z).
 function roadNear(x, z) { const B = G.B; let bi = 0, bd = 1e9; for (let i = 0; i < B.n; i++) { const d = dist2(x, z, B.px[i], B.pz[i]); if (d < bd) { bd = d; bi = i; } } return { s: bi * PATH_STEP, d: Math.sqrt(bd) }; }
@@ -442,7 +445,7 @@ function castSpell(kind, x, z, byPlayer) {
   if (!spellReady(kind) || !isFinite(x) || !isFinite(z)) return false;
   const S = SPELL[kind], B = G.B, L = G.level, y = B.heightAt(x, z);
   if (kind === 'rally') { const q = roadNear(x, z); if (q.d > 4.5) return false; }
-  G.mana -= spellMana(kind); G.spellCd[kind] = S.cd * G.cdMul; G.stats.spells++; G.stats[kind] = (G.stats[kind] || 0) + 1;
+  G.mana -= spellMana(kind); if (G.freeSpell > 0) G.freeSpell--; G.spellCd[kind] = S.cd * G.cdMul; G.stats.spells++; G.stats[kind] = (G.stats[kind] || 0) + 1;
   if (kind === 'meteor') {
     if (typeof FX.meteor === 'function') FX.meteor(x, z, S.r, METEOR_FALL);
     else { fxTimed(4, x, y + .1, z, S.r * 2, S.r * 2, 1.8, .7, .2, .5, METEOR_FALL, { ground: true }); fxTimed(4, x, y + .1, z, S.r * .8, S.r * .8, 2.4, 1.1, .3, .6, METEOR_FALL, { ground: true }); }
@@ -587,6 +590,7 @@ function aiThink(dt) {
   const gatePress = sat(G.leaks / 8);
   const opts = [];
   for (const kind of TOWER_KINDS) {
+    if (!kindAllowed(kind)) continue; // the weekly challenge may allow only some towers (67-keeper.js)
     const def = TOWER[kind];
     let need = ideal[kind] * (N + 1.6) - cnt[kind] + .35;
     if (kind === 'archer') need += air * .2 + (N === 0 ? 1 : 0) + AA.short * (1 - AA.hard) * .25; if (kind === 'spire') need += air * .12 + armor * .1 + AA.short * AA.hard * .45; if (kind === 'bombard') need += armor * .08 + swarm * .06 + siege * .12 + (N >= 2 && cnt.bombard === 0 ? .5 : 0); if (kind === 'guard') need += swarm * .04 + (N >= 1 && cnt.guard === 0 ? .9 : 0);
@@ -625,11 +629,14 @@ function aiThink(dt) {
   // Round 13, gold mines (69-economy.js): once the board can hold the road, a mine early in a land pays for itself over
   // the waves still to come; later in the land it would not. Mines take the pads that cover the least road, and upgrade
   // while enough waves are left for the extra gold to pay back.
+  // Round 14: in a land's first waves a mine comes sooner (two towers up instead of three, and a higher score), but only
+  // with the gold in hand for it and a little over while the board is thin, so the road never waits for the mine.
   const remW = G.wavesPerLand - G.k + (G.spawning ? 1 : 0), safe = G.leaks <= 2 && G.lives >= G.maxLives * .7 && !G.bossWave;
-  if (N >= 3 && safe && remW >= 5 && mineCount() < 2 && empty.length >= 2) {
+  const early = G.k <= 3 && G.waveLeaks === 0 && mineCount() === 0, mc = TOWER.mine.cost[0];
+  if (N >= (early ? 2 : 3) && safe && remW >= 5 && mineCount() < 2 && empty.length >= 2 && (!early || G.gold >= mc + (N < 3 ? 50 : 0))) {
     let bp = null, bc = 1e9; for (const pad of empty) { const c = padCoverage(pad, TOWER.archer.range[0]); if (c < bc) { bc = c; bp = pad; } }
     const g = mineGold({ lvl: 0 });
-    if (bp) opts.push({ sc: .55 * remW * g / TOWER.mine.cost[0] * (N >= 5 ? 1.2 : 1), cost: TOWER.mine.cost[0], act: 'build', kind: 'mine', pad: bp });
+    if (bp) opts.push({ sc: .55 * remW * g / mc * (N >= 5 ? 1.2 : 1) * (early ? 2.4 : 1), cost: mc, act: 'build', kind: 'mine', pad: bp });
   }
   for (const t of towers) {
     if (t.kind !== 'mine' || t.state !== 'active' || t.lvl >= 2 || !safe || remW < 4) continue;
