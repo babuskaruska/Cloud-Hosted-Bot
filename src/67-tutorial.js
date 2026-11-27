@@ -5,7 +5,7 @@
 const TUT = {
   step: null, pending: false, t: 0, pad: null, spells0: 0,
   active() { return !!this.step || this.pending; },
-  maybeStart() { this.step = null; this.pending = !META.tut && G.mode === 'campaign' && G.level === 0 && META.on; },
+  maybeStart() { this.step = null; this.pending = !META.tut && G.mode === 'campaign' && G.level === 0 && META.on && !G.weekly; },
   stop() { this.step = null; this.pending = false; },
   finish() { this.stop(); META.tut = 1; saveMeta(); },
   // Skipped before the first wave: the countdown (62-game.js) runs instead.
@@ -39,14 +39,14 @@ const TUT = {
       if (this.t > 4.5) this.finish();
     }
   },
-  // [head, line] for the guide plate.
+  // [head, line, icon] for the guide plate. Round 14: fewer words and an icon for each step (the youngest keepers).
   text() {
-    const tch = UI.touch, s = this.step;
-    if (s === 'build') return ['Ehita torn', (tch ? 'Puuduta' : 'Klõpsa') + ' helendavat platsi ja vali torn. Vibutorn on hea algus.'];
-    if (s === 'upgrade') return ['Tee see tugevamaks', (tch ? 'Puuduta' : 'Klõpsa') + ' oma torni ja vali Täiusta.'];
-    if (s === 'call') return ['Kutsu laine', G.count > 0 ? (tch ? 'Puuduta' : 'Klõpsa') + ' numbrit või laine silti, et laine kohe kutsuda. Mida varem, seda rohkem lisakulda!' : (tch ? 'Puuduta' : 'Klõpsa') + ' üleval laine silti, et see varem kutsuda. Saad lisakulda.'];
-    if (s === 'spell') return anySpellReady() ? ['Loitsi!', (tch ? 'Puuduta helendavat loitsu ja siis teed.' : 'Klõpsa helendavat loitsu (või Q, E, T) ja siis teed.')] : ['Loitsud', 'Iga tapetud koletis täidab sinist manariba. Kui loits süttib, kasuta seda.'];
-    if (s === 'done') return ['Majakas on sinu', 'Hoia maad, hoidja. Vana hoidja vaatab sind.'];
+    const P = UI.touch ? 'Puuduta' : 'Klõpsa', s = this.step;
+    if (s === 'build') return ['Ehita torn', P + ' kuldset platsi ja vali torn.', 'archer'];
+    if (s === 'upgrade') return ['Tee tugevamaks', P + ' oma torni, siis Täiusta.', 'upgrade'];
+    if (s === 'call') return ['Kutsu laine', G.count > 0 ? P + ' numbrit. Varem = rohkem kulda!' : P + ' laine silti. Saad lisakulda!', 'banner'];
+    if (s === 'spell') return anySpellReady() ? ['Loitsi!', P + ' helendavat loitsu, siis teed.' + (UI.touch ? '' : ' (Q, E, T)'), 'meteor'] : ['Loitsud', 'Võidetud koletised täidavad sinise riba.', 'mana'];
+    if (s === 'done') return ['Majakas on sinu', 'Hoia maad, hoidja!', 'lantern'];
     return null;
   },
 };

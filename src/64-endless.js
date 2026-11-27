@@ -26,7 +26,7 @@ const BOSS_AFFIX = {
 G.mods = []; G.modM = {}; G.modLevel = -1; G.heatMods = G.heatMods || 0;
 function modOn(k) { return G.mods.indexOf(k) >= 0; }
 function modMul(stat) { const v = G.modM[stat]; return v === undefined ? 1 : v; }
-function modCount(level) { const deep = level < 6 ? 0 : Math.min(5, 1 + Math.floor((level - 6) / 3)); return deep + (G.heatMods | 0); }
+function modCount(level) { level = typeof nightLv === 'function' ? nightLv(level) : level; const deep = level < 6 ? 0 : Math.min(5, 1 + Math.floor((level - 6) / 3)); return deep + (G.heatMods | 0); }
 function setMods(keys) {
   G.mods = keys.slice(); G.modM = {};
   G.eclipse = G.mods.indexOf('eclipse') >= 0;
@@ -41,7 +41,7 @@ function rollMods(level) {
   return out;
 }
 // Heat 7 (Crowned Dread, 66-meta.js) gives every boss one more affix, campaign lands included (G.heatAffix).
-function bossAffixes(level) { return (level < 6 ? 0 : Math.min(3, 1 + Math.floor((level - 6) / 6))) + (modOn('titan') ? 1 : 0) + (G.heatAffix | 0); }
+function bossAffixes(level) { level = typeof nightLv === 'function' ? nightLv(level) : level; return (level < 6 ? 0 : Math.min(3, 1 + Math.floor((level - 6) / 6))) + (modOn('titan') ? 1 : 0) + (G.heatAffix | 0); }
 
 function updateEndless(dt) {
   if (G.phase !== 'play') { if (G.echoQ) G.echoQ.length = 0; return; }

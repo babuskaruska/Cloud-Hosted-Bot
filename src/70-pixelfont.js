@@ -487,6 +487,9 @@ const PX = (() => {
     bomb: ['.....oE.', '....oY..', '..oooo..', '.okkkko.', 'okkkkkko', 'okSkkkko', 'okkkkkko', '.okkkko.', '..oooo..'],
     crown: ['o...o...o', 'oGooGooGo', 'oGGGGGGGo', 'oGEGYGEGo', 'oGGGGGGGo', 'ogggggggo', 'ooooooooo'],
     back: ['...oo...', '..oBo...', '.oBBoooo', 'oBBBBBBo', '.oBBoooo', '..oBo...', '...oo...'],
+    // Round 14: the daily gift, help (abi), and a hand pointing down for the kids' hints.
+    gift: ['.oo..oo.', 'oEEooEEo', '.ooEEoo.', 'oooEEooo', 'oGGEEGGo', 'oGGEEGGo', 'oGGEEGGo', 'oggEEggo', 'oooooooo'],
+    help: ['..oooo..', '.oYYYYo.', 'oYYooYYo', '.oo.oYYo', '...oYYo.', '...oYo..', '...ooo..', '...oYo..', '...ooo..'],
     starEmpty: [
       '..s..',
       'sssss',

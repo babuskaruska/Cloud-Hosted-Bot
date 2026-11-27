@@ -85,6 +85,17 @@ const BEATS = {
     ['hollow', 'Koit... kestab ainult ühe päeva. Mina olen öö taga, sügaval, kus maad muudavad oma kuju.'],
     ['keeper', 'Siis lähen ma ka sinna. Latern käes, nii kaugele, kui tee läheb.'],
   ] },
+  // Round 14: the first land of the Long Night after Act II (G.postAct2): why it starts gentle and then deepens.
+  'night:dawn': { title: 'Koidu taga', lines: [
+    ['ghost', 'Koidu taga algab Pikk Öö. Siin unistab Õõnsus maad välja, kui sa kõnnid. Ükski neist pole kaardil.'],
+    ['ghost', 'Alguses on teed vaiksemad. Aga iga maaga pimedus pakseneb ja needusi tuleb juurde.'],
+    ['keeper', 'Siis kõnnin ma sammhaaval. Üks tuli korraga.'],
+  ] },
+  // Round 14: the weekly challenge (67-keeper.js), once per keeper.
+  week: { title: 'Nädala katse', lines: [
+    ['ghost', 'Sel nädalal on Õõnsusel uued nipid. Igal nädalal teistsugused.'],
+    ['keeper', 'Ja igal nädalal õpin ma uue vastunipi.'],
+  ] },
   // The Long Night: an interlude every third land, from this pool (min: the first depth it can show at).
   'night:1': { title: 'Kaardita', min: 3, lines: [['ghost', 'Neid maid pole üheski kaardis, mida ma kunagi hoidsin. Õõnsus unistab need välja, kui sa kõnnid.'], ['keeper', 'Siis unistan ma igasse ühe tule.']] },
   'night:2': { title: 'Igavesti', min: 3, lines: [['hollow', 'Sina süütad. Mina neelan. Me võiksime seda igavesti teha, väike hoidja.'], ['keeper', 'Hea. Ma ei ole väsinud.']] },
@@ -128,7 +139,7 @@ const BEATS = {
   ] },
 };
 const NIGHT_POOL = Object.keys(BEATS).filter(k => /^night:\d+$/.test(k));
-const BEAT_ORDER = ['intro', 'land:ashen', 'boss:giant', 'clear:first', 'land:frost', 'boss:jotun', 'land:fen', 'boss:queen', 'halfway', 'land:ember', 'boss:colossus', 'land:dunes', 'boss:king', 'land:storm', 'boss:leviathan', 'ending', 'act2:intro', 'land2:ashen', 'land2:frost', 'land2:fen', 'land2:ember', 'land2:dunes', 'land2:storm', 'ending2', 'herald', 'boss:herald', 'boss:ogre', 'return', 'heat', 'night:enter', 'daily'].concat(NIGHT_POOL);
+const BEAT_ORDER = ['week', 'intro', 'land:ashen', 'boss:giant', 'clear:first', 'land:frost', 'boss:jotun', 'land:fen', 'boss:queen', 'halfway', 'land:ember', 'boss:colossus', 'land:dunes', 'boss:king', 'land:storm', 'boss:leviathan', 'ending', 'act2:intro', 'land2:ashen', 'land2:frost', 'land2:fen', 'land2:ember', 'land2:dunes', 'land2:storm', 'ending2', 'night:dawn', 'herald', 'boss:herald', 'boss:ogre', 'return', 'heat', 'night:enter', 'daily'].concat(NIGHT_POOL);
 
 // Portraits, 16x16, drawn in code. One letter per pixel; '.' is clear.
 const PORTRAIT_PAL = {
@@ -397,6 +408,8 @@ const STORY = {
   },
   landStart(restoring) {
     if (restoring || !inRun()) return;
+    if (G.weekly) { this.play('week'); return; } // the weekly challenge: one short word, once
+    if (G.postAct2 && G.mode === 'night' && G.level === CAMPAIGN_LANDS * 2) { this.play('night:dawn'); return; }
     if (G.level < CAMPAIGN_LANDS) this.play('land:' + G.B.bio.key);
     else if (G.mode === 'campaign') { this.play('act2:intro'); this.play('land2:' + G.B.bio.key); } // Act II
     else {
@@ -412,7 +425,7 @@ const STORY = {
       }
     }
   },
-  ending(onDone, act) { return this.play(act === 2 ? 'ending2' : 'ending', { onDone }); },
+  ending(onDone, act) { if (act !== 1 && act !== 2) return false; return this.play(act === 2 ? 'ending2' : 'ending', { onDone }); },
   // A land cleared: the first beacon re-lit, and the halfway mark of the campaign.
   landClear() {
     if (G.mode !== 'campaign') return;
@@ -420,7 +433,7 @@ const STORY = {
   },
   // A run's opening beat: the intro the first time, then a word on a return, or on the first run with Heat.
   runStart() {
-    if (G.mode !== 'campaign') return;
+    if (G.mode !== 'campaign' || G.weekly) return;
     if (G.level >= CAMPAIGN_LANDS) return; // Act II opens with its own beat (landStart)
     if (!META.story.intro) this.play('intro');
     else if (G.heat > 0 && !META.story.heat) this.play('heat');
