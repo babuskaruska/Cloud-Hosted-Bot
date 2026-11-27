@@ -19,6 +19,7 @@ function makeRng(seed) {
   f.pick = arr => arr[Math.floor(f() * arr.length)];
   f.sign = () => f() < .5 ? -1 : 1;
   f.chance = p => f() < p;
+  f.reseed = v => { s = (v >>> 0) || 1; }; // the Daily Long Night reseeds the gameplay stream per land and wave
   return f;
 }
 const rnd = makeRng(0xC1DE5);

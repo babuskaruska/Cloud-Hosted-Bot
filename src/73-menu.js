@@ -219,8 +219,11 @@ const MENU = (() => {
   // { t: 'title', text } { t: 'text', text, col, c (centred) } { t: 'row', l, r, col, rc } { t: 'gap' } { t: 'big', text, col }
   // { t: 'btns', list: [{ id, label, fn, col, on, off, sub, icon }] } (side by side when they fit, else stacked)
   // { t: 'mod', icon, name, tip } { t: 'sep' }
+  // o.ghost: items still to come (the results screen's unlock lines). They count for the size and the place of the panel
+  // (so nothing moves when they arrive) but the plate is only as tall as what is drawn, and grows downwards.
   function panel(items, o = {}) {
-    const c = C(), avW = E.Wr - E.iL - 8 * E.s, avH = E.Hb - E.iT - 8 * E.s;
+    const c = C(), avW = E.Wr - E.iL - 8 * E.s, avH = E.Hb - E.iT - 8 * E.s, shown = items;
+    if (o.ghost && o.ghost.length) items = items.concat(o.ghost);
     const lay = ps => {
       const p = 5 * ps, L = PX.LINE * ps, gap = 3 * ps, cap = (o.cap || 220) * ps;
       let nat = o.minW ? o.minW * ps : 0;
@@ -252,8 +255,9 @@ const MENU = (() => {
       return { ps, p, L, gap, w, h, inner, ok };
     };
     let Ly = lay(o.ps || E.s); while (Ly.ps > 2 && (Ly.h > avH || !Ly.ok)) Ly = lay(Ly.ps - 1);
+    const hAll = Ly.h; if (items !== shown) { items = shown; Ly = Object.assign({}, Ly, { h: lay(Ly.ps).h }); }
     const { ps, p, L, gap, w, h, inner } = Ly, x = Math.round((E.iL + E.Wr) / 2 - w / 2);
-    const y = Math.round(o.top !== undefined ? clamp(o.top, E.iT + 4 * E.s, Math.max(E.iT + 4 * E.s, E.Hb - h)) : clamp((E.H - h) / 2, E.iT + 4 * E.s, Math.max(E.iT + 4 * E.s, E.Hb - h)));
+    const y = Math.round(o.top !== undefined ? clamp(o.top, E.iT + 4 * E.s, Math.max(E.iT + 4 * E.s, E.Hb - hAll)) : clamp((E.H - hAll) / 2, E.iT + 4 * E.s, Math.max(E.iT + 4 * E.s, E.Hb - hAll)));
     UI.panelRect = { x, y, w, h };
     ctx.globalAlpha = sat(M.t * 6 + .25);
     UI.plate(x, y, w, h, { bd: o.bd || c.bdHi });
@@ -261,7 +265,7 @@ const MENU = (() => {
     for (const it of items) {
       if (it.t === 'title') { tx(it.text, x + w / 2, yy, ps + 1, it.col || '#ffd9a8', { align: 'c' }); yy += PX.LINE * (ps + 1) + gap * 2; }
       else if (it.t === 'big') { tx(it.text, x + w / 2, yy, ps + 2, it.col || c.amber, { align: 'c' }); yy += PX.LINE * (ps + 2) + gap; }
-      else if (it.t === 'text') { for (const l of it._l) { tx(l, it.c === false ? x + p : x + w / 2, yy, ps, it.col || c.tx, it.c === false ? undefined : { align: 'c' }); yy += L; } yy += ps; }
+      else if (it.t === 'text') { if (it.a !== undefined) ctx.globalAlpha = sat(M.t * 6 + .25) * sat(it.a); for (const l of it._l) { tx(l, it.c === false ? x + p : x + w / 2, yy, ps, it.col || c.tx, it.c === false ? undefined : { align: 'c' }); yy += L; } yy += ps; if (it.a !== undefined) ctx.globalAlpha = sat(M.t * 6 + .25); }
       else if (it.t === 'row') { tx(it.l, x + p, yy, ps, it.col || c.dim); tx(it.r, x + w - p, yy, ps, it.rc || c.tx, { align: 'r' }); yy += L + ps; }
       else if (it.t === 'gap') yy += gap * 2;
       else if (it.t === 'sep') { ctx.fillStyle = 'rgba(232,176,74,0.25)'; ctx.fillRect(x + p, yy + gap, inner, Math.max(1, ps >> 1)); yy += gap * 3; }
@@ -429,8 +433,6 @@ const MENU = (() => {
     const kt = sat((rc.t - T.t0) / RC.total), tot = Math.round(r.total * (1 - Math.pow(1 - kt, 2)));
     items.push({ t: 'big', text: '+' + tot + ' embers' + (win ? ' so far' : ''), col: kt >= 1 && (rc.t - T.end) < .25 ? '#fff0c8' : c.amber });
     items.push({ t: 'text', text: win ? 'Banked when the run ends. You have ' + META.embers + '.' : 'You have ' + Math.round((r.before || 0) + (r.after - (r.before || 0)) * (1 - Math.pow(1 - kt, 2))) + ' embers.', col: c.tx });
-    // The unlocks ring one by one; their lines are laid out from the start so nothing jumps.
-    rc.fan.forEach((f, i) => items.push({ t: 'text', text: f.text, col: i < rc.fanAt ? f.col : 'rgba(0,0,0,0)' }));
     const port = E.H > E.W * 1.1;
     const list = win ? [
       { id: 'rnight', label: 'Into the Long Night', fn: intoNight, col: c.amber },
@@ -442,7 +444,12 @@ const MENU = (() => {
       { id: 'rmenu', label: 'Main menu', fn: toMenu },
     ];
     items.push({ t: 'btns', stack: port, list });
-    panel(items, { cap: 200, minW: 150, bd: win ? c.amber : c.ember });
+    // The unlocks ring one by one under the buttons, each line fading in as it rings. The panel keeps their room below
+    // (o.ghost) and grows into it, so neither the panel nor its buttons move, and no blank lines wait for them.
+    const fan = rc.fan.map((f, i) => ({ t: 'text', text: f.text, col: f.col, a: i < rc.fanAt ? (rc.t - (T.end + .3 + i * RC.fan)) / .3 : 0 }));
+    const rung = fan.filter((f, i) => i < rc.fanAt), ghost = fan.slice(rung.length);
+    if (fan.length) { if (rung.length) items.push({ t: 'sep' }, ...rung); else ghost.unshift({ t: 'sep' }); }
+    panel(items, { cap: 200, minW: 150, bd: win ? c.amber : c.ember, ghost });
   }
   function drawArrival() {
     dim(.25); const c = C(), mods = activeMods();

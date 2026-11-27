@@ -62,7 +62,7 @@ const UI = (() => {
   U.closeMenu = () => { U.menu = null; U.armed = null; U.spell = null; };
   U.coinFrom = (x, y, z, value) => {
     if (U.coins.length > 70) { U.goldShown += value; return; }
-    const p = proj(x, y, z); U.coins.push({ sx: p.x, sy: p.y, t: 0, T: rr(.55, .8), value, cx: p.x + rr(-60, 60) * U.s, cy: p.y - rr(30, 70) * U.s });
+    const p = proj(x, y, z); U.coins.push({ sx: p.x, sy: p.y, t: 0, T: frr(.55, .8), value, cx: p.x + frr(-60, 60) * U.s, cy: p.y - frr(30, 70) * U.s }); // the effects stream: coin flights never shift gameplay
   };
 
   function plate(x, y, w, h, o = {}) {
@@ -180,6 +180,7 @@ const UI = (() => {
     branch: () => ['Choose a branch', 'A tower at its top level can take one of two branches. Open its menu to pick one.'],
     idle: () => ['Need a hand?', (U.touch ? 'Tap' : 'Click') + ' the commander plate, top right, and the AI plays again.'],
     oc: () => ['Overcharge', 'A tower with a branch can be overcharged three times, for more damage each time.'],
+    place: () => ['Placing a tower', 'Free pads glow gold where you can afford it, and red while the gold is short. Click one to build.'],
   };
   const tipInfo = key => { if (key.startsWith('help:')) { const h = HELP[key.slice(5)](); return { head: h[0], tip: h[1], bd: COLR.bdHi, dur: 7.5 }; } if (key.startsWith('event:')) { const E = EVENTS[key.slice(6)]; return { head: E.name, tip: E.tip, bd: '#5a7a9a' }; } if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
   // One line of numbers for a branch, in the words the menu uses.
@@ -261,6 +262,7 @@ const UI = (() => {
     if (U.hover && !U.hover.tower) { doBuild(U.hover.pad, kind); return; }
     if (U.gp.active && U.gp.sel >= 0 && !G.B.pads[U.gp.sel].tower) { doBuild(G.B.pads[U.gp.sel], kind); return; }
     U.armed = U.armed === kind ? null : kind; U.menu = null; sfx('uiHover', CAM.x, CAM.z, .7);
+    if (U.armed) helpTip('place');
   }
   function pickPad(mx, my) {
     if (!G.B || G.phase !== 'play') return null;
@@ -397,7 +399,7 @@ const UI = (() => {
       const y = b.boss ? Math.max(Math.round(p.y), Math.round((R.hudTop || 0) + LH + 4 * pix)) : Math.round(p.y);
       if (x < -w || x > W || y < 0 || y > H) continue;
       c.globalAlpha = b.f >= .999 && !b.elite ? .4 : ord ? ordA : .95;
-      c.fillStyle = b.elite ? ELITE[b.elite].col : COLR.dark; c.fillRect(x - pix, y - pix, w + 2 * pix, h + 2 * pix);
+      c.fillStyle = b.elite ? b.col || COLR.tx : COLR.dark; c.fillRect(x - pix, y - pix, w + 2 * pix, h + 2 * pix);
       if (b.elite) { c.fillStyle = COLR.dark; c.fillRect(x, y, w, h); }
       c.fillStyle = b.man ? '#7fb6ea' : (b.f > .5 ? '#d9a13c' : b.f > .25 ? '#e0762c' : '#e04a32'); c.fillRect(x, y, Math.max(pix, Math.round(w * b.f)), h);
       if (b.sh > 0) { c.fillStyle = '#bfe4ff'; c.fillRect(x, y - 2 * pix, Math.max(pix, Math.round(w * Math.min(1, b.sh / .6))), pix); }
@@ -407,7 +409,7 @@ const UI = (() => {
         // Name tags for elites, skipped where they would pile onto one already drawn.
         // Smaller in a crowd (and on a phone's big UI scale), so the tags do not bury the fight.
         const ts = Math.max(1, Math.min(es, Math.max(2, Math.floor(s * (crowd > .25 ? .45 : .55))))), tw2 = PX.measure(b.name) * ts, ty = y - PX.LINE * ts - 2 * pix, tx = p.x - tw2 / 2, th = PX.LINE * ts;
-        if (!tags.some(r => tx < r[0] + r[2] && tx + tw2 > r[0] && ty < r[1] + r[3] && ty + th > r[1])) { tags.push([tx, ty, tw2, th, b.name, p.x, ts, ELITE[b.elite].col]); }
+        if (!tags.some(r => tx < r[0] + r[2] && tx + tw2 > r[0] && ty < r[1] + r[3] && ty + th > r[1])) { tags.push([tx, ty, tw2, th, b.name, p.x, ts, b.col || COLR.tx]); }
       }
     }
     for (const g of tags) PX.text(c, g[4], g[5], g[1], g[6], g[7], { align: 'c', outline: COLR.dark });
@@ -669,6 +671,12 @@ const UI = (() => {
   }
   // Settings (gear, O) and the run summary after a defeat. Both are modal plates drawn over everything,
   // at the HUD's scale or smaller where the screen is short. Their controls go into U.btns so they win over the HUD below.
+  // Runs (both lists): Heat, the Long Night's mutators and the daily.
+  const HELP_RUN = [
+    'Heat makes a run harder and pays more embers. Beat the campaign, then reach land 10 at your top Heat, for the next tier.',
+    'Long Night lands carry mutators: curses such as Eclipse, Siege or Echoes, and now and then a boon. The arrival card lists them.',
+    'The Daily Long Night is the same road for everyone today, at Heat 0. Your best wave count for the day is kept.',
+  ];
   const HELP_KEYS = [
     'Click a pad to build: keys 1 to 4 pick a tower.',
     'Click a tower to upgrade it (U) or sell it (X).',
@@ -677,7 +685,8 @@ const UI = (() => {
     'R mends the beacon: lives back for gold.',
     'Space calls the next wave early, for a little gold.',
     'P pause · Tab speed · C hands command to the AI · drag, arrows or the wheel move the view.',
-  ];
+    'With a tower armed, free pads glow gold where you can afford it and red while the gold is short.',
+  ].concat(HELP_RUN);
   const HELP_TOUCH = [
     'Tap a pad, then a tower twice to build.',
     'Tap a tower to upgrade or sell it.',
@@ -687,7 +696,8 @@ const UI = (() => {
     'Tap the wave plate to call a wave early.',
     'Tap the commander plate to let the AI play.',
     'Drag to look around. Pinch to zoom.',
-  ];
+    'Free pads glow bright when you can afford a tower and dim while the gold is short.',
+  ].concat(HELP_RUN);
   function wrapAt(str, maxW, ps) { const out = []; let cur = ''; for (const wd of str.split(' ')) { const t = cur ? cur + ' ' + wd : wd; if (cur && PX.measure(t) * ps > maxW) { out.push(cur); cur = wd; } else cur = t; } if (cur) out.push(cur); return out; }
   function drawPanels(c, s, W, H, iL, iT, Wr, Hb, tch, over, pad, g3, topY) {
     U.panelRect = null;

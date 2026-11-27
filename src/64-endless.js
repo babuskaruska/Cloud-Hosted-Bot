@@ -94,9 +94,11 @@ function addSiege() {
 }
 // Echoes: a slain ground elite rises once as a pale ghost where it fell (no elite power, half bounty).
 function echoRise(m) {
-  if (m.fly || m.echo || m.def.boss || G.mons.length >= MAX_ALIVE) return;
+  // (Mira, round 10 sims: at 0.6 of its health and with no crowd limit, Echoes alone cost about three times the lives of
+  // a land without it at Long Night depth; at 0.45, and none rising into an already packed road, it sits with Eclipse.)
+  if (m.fly || m.echo || m.def.boss || G.mons.length >= MAX_ALIVE * .8) return;
   G.echoQ = G.echoQ || [];
-  G.echoQ.push({ t: .9, type: m.type, s: m.s, lat: m.lat, hp: m.maxHp * .6 / Math.max(1, m.def.hp) });
+  G.echoQ.push({ t: .9, type: m.type, s: m.s, lat: m.lat, hp: m.maxHp * .45 / Math.max(1, m.def.hp) });
 }
 function updateEchoes(dt) {
   if (!G.echoQ || !G.echoQ.length) return;
@@ -106,6 +108,7 @@ function updateEchoes(dt) {
     if (G.phase !== 'play' || G.mons.length >= MAX_ALIVE) continue;
     const g = spawnMonster(e.type, { hpMul: e.hp, s: e.s, lat: e.lat });
     g.echo = true; g.bmul = .5; g.tint = [.62, .78, 1]; g.pop = .5;
+    G.mix.echo = (G.mix.echo || 0) + 1; G.mix[e.type] = (G.mix[e.type] || 0) + 1; // the commander's tally (aiThink) counts the ghosts too
     if (G.spdMul !== 1) g.spdMul *= G.spdMul;
   }
 }

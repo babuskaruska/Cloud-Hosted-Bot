@@ -48,6 +48,16 @@ function dailyMods(seed, level) {
   if (n > 0 && rng() < .35) out.push(boons[Math.floor(rng() * boons.length)]);
   return out;
 }
+// The Daily Long Night replays the same for everyone: the gameplay stream is reseeded from the day's seed at each land
+// start (k = 0) and at each wave start (before its queue is rolled), so the waves, elites and boss rolls depend only on
+// the date, the land and the wave, and two runs with the same inputs replay identically.
+function dailyReseed(level, k) {
+  if (G.mode !== 'daily' || !Number.isFinite(G.runSeed)) return;
+  rnd.reseed((G.runSeed ^ Math.imul(level + 1, 0x9E3779B1) ^ Math.imul(k + 7, 0x85EBCA6B)) >>> 0);
+  // At a land start the game clock starts over too (flyer sway, regen and the commander's timers read G.t), so how long
+  // the demo ran behind the menu, or how long earlier lands took, cannot change what happens on this one.
+  if (k === 0) { G.t = 0; AIS.lost = G.menLost | 0; AIS.lostT = -99; AIS.lostN = 0; }
+}
 const dailyBest = () => META.daily && META.daily.date === dailyDate() ? META.daily.best : 0;
 // The land number shown to the player (1-based), and the Long Night depth (1 on its first land).
 const landNo = () => G.level + 1;
@@ -209,7 +219,7 @@ function metaLandClear() {
 function embersFor(r) {
   const waves = Math.max(0, r.waves | 0), bosses = Math.max(0, r.bosses | 0), l0 = r.level0 | 0;
   let boss = 0; for (let i = 0; i < bosses; i++) boss += 10 + 2 * (l0 + i);
-  const depth = 3 * Math.max(0, (r.level | 0) - (CAMPAIGN_LANDS - 1)),  story = r.ending ? 40 : 0, mul = heatMul(r.heat | 0);
+  const depth = 3 * Math.max(0, (r.level | 0) - Math.max(CAMPAIGN_LANDS - 1, l0)),  story = r.ending ? 40 : 0, mul = heatMul(r.heat | 0);
   const base = waves + boss + depth + story;
   return { waves, boss, depth, story, mul, heat: r.heat | 0, total: Math.round(base * mul) };
 }
@@ -220,7 +230,7 @@ function bankRun(how) {
   const sm = runSummary() || { waves: 0, lands: 0, slain: 0 };
   const res = embersFor({ waves: sm.waves, bosses: sm.lands, level: G.level, level0: run.level0, heat: G.heat, ending: run.ending && !run.endingPaid });
   run.endingPaid = true;
-  Object.assign(res, { how, sum: sm, mode: run.mode, land: landNo(), landName: G.B ? G.B.bio.name : '', notes: (run.notes || []).slice() });
+  Object.assign(res, { how, sum: sm, mode: run.mode, land: landNo(), landName: G.B && G.phase !== 'crumble' ? G.B.bio.name : '', notes: (run.notes || []).slice() });
   META.embers += res.total; META.earned += res.total;
   const S = META.stats; S.runs++; S.slain += sm.slain || 0; S.bestWave = Math.max(S.bestWave, waveNumber()); if (how === 'abandon') S.abandons++;
   if (run.mode === 'daily') {
@@ -255,6 +265,8 @@ function startRun(mode, heat) {
   G.level = nightMode(G.mode) ? CAMPAIGN_LANDS : 0; G.boardIndex = G.level; BIOME.start = 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++; G.holdClear = false; MENU.victory = null;
   G.runSeed = G.mode === 'daily' ? dailySeed() : 1 + Math.floor(Math.random() * 1e9); G.boardSeed = G.mode === 'daily' ? 1 + G.runSeed % 9000 : 1 + Math.floor(Math.random() * 9000);
   G.press = 1; G.speed = 1; G.paused = false; G.modLevel = -1; setMods([]); MENU.arrivalLv = -99;
+  // The run's tally starts now, not at its first battle: abandoned while the board still crumbles, it must not bank the demo's waves.
+  G.k = 0; newRun();
   // A run starts with the lifetime sightings, so "New:" tips only show for monsters this keeper has not met in a run.
   G.seen = {}; for (const k in META.seen) G.seen[k] = 1;
   META.run = { mode: G.mode, heat: G.heat, level0: G.level, banked: false, ending: false, t: 0, notes: [], ach: [], day: G.mode === 'daily' ? dailyDate() : '' };
