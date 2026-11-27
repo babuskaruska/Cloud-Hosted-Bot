@@ -173,6 +173,8 @@ const UI = (() => {
   function cycleSpeed() { G.speed = G.speed % 3 + 1; if (G.paused) G.paused = false; sfx('uiClick', CAM.x, CAM.z, .6); }
   function soundTap() { if (AU.ready && U.sndArmed) setMute(!AU.muted); }
   U.sawMonster = type => { metaSaw(type); if (G.seen[type]) return; G.seen[type] = 1; if (MON[type].tip && U.tips.length < 4) U.tips.push(type); };
+  // Echo ghosts (the Echoes mutator, the Hollow Herald's call): one tip the first time a keeper sees one.
+  U.sawEcho = () => { if (G.seen.echo) return; G.seen.echo = 1; metaSaw('echo'); U.tips.unshift('echo'); };
   U.sawElite = kind => { const key = 'elite:' + kind; if (G.seen[key]) return; G.seen[key] = 1; if (U.tips.length < 5) U.tips.push(key); };
   const HELP = {
     cmd: () => ['You command', U.touch ? 'Tap a pad to build. Spells: tap one, then the road. The gear button has help and sound.' : 'Click a pad to build. Q E T cast spells on the road. O opens settings and help.'],
@@ -182,7 +184,7 @@ const UI = (() => {
     oc: () => ['Overcharge', 'A tower with a branch can be overcharged three times, for more damage each time.'],
     place: () => ['Placing a tower', 'Free pads glow gold where you can afford it, and red while the gold is short. Click one to build.'],
   };
-  const tipInfo = key => { if (key.startsWith('help:')) { const h = HELP[key.slice(5)](); return { head: h[0], tip: h[1], bd: COLR.bdHi, dur: 7.5 }; } if (key.startsWith('event:')) { const E = EVENTS[key.slice(6)]; return { head: E.name, tip: E.tip, bd: '#5a7a9a' }; } if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
+  const tipInfo = key => { if (key === 'echo') return { head: 'Echo ghosts', tip: 'Pale ghosts of the slain walk the road once more. Weaker, half the gold, but they still cost lives.', bd: ECHO_COL, dur: 6.5 }; if (key.startsWith('help:')) { const h = HELP[key.slice(5)](); return { head: h[0], tip: h[1], bd: COLR.bdHi, dur: 7.5 }; } if (key.startsWith('event:')) { const E = EVENTS[key.slice(6)]; return { head: E.name, tip: E.tip, bd: '#5a7a9a' }; } if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
   // One line of numbers for a branch, in the words the menu uses.
   function branchStat(kind, key) {
     const b = TOWER[kind].branches[key], f = v => (Math.round(v * 10) / 10).toString();
@@ -356,6 +358,7 @@ const UI = (() => {
     if (window.visualViewport && Math.abs(window.visualViewport.scale - 1) > .02) fixPageZoom();
     pollGamepad(dt); MENU.update(dt);
     if (U.sets) U.sets.t += dt;
+    if (G.phase === 'play' && !G.seen.echo && (G.bossWave || (typeof modOn === 'function' && modOn('echoes')))) for (const m of G.mons) if (m.echo && !m.dead && m.vis) { U.sawEcho(); break; }
     // First steps for a player in command: one help line each, the first time it matters.
     if (U.manual && G.phase === 'play') {
       if (G.lives <= G.maxLives - 4) helpTip('mend');

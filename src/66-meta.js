@@ -184,6 +184,9 @@ function metaLandStart(restoring) {
   if (!inRun()) return;
   // The Daily Long Night: the day's mutators, rolled from the seed instead of the gameplay stream (Forge's roll skips the land).
   if (G.mode === 'daily') { setMods(dailyMods(G.runSeed, G.level)); G.modLevel = G.level; G.bountyMul *= modMul('bounty'); }
+  // A continued run keeps the land's saved mutators (before round 11 they rolled afresh, so reloading rerolled the curses).
+  else if (restoring && G.restoreMods && G.restoreMods.level === G.level) { setMods(G.restoreMods.keys); G.modLevel = G.level; G.bountyMul *= modMul('bounty'); }
+  G.restoreMods = null;
   achLandStart();
   if (!restoring) { G.gold += upVal('gold'); UI.goldShown = G.gold; G.mana = Math.min(G.manaMax, G.mana + upVal('mana')); }
   // Heat tier 3 asks for an extra mutator: Forge's modCount adds G.heatMods when the land's mutators roll.
@@ -235,7 +238,9 @@ function bankRun(how) {
   const S = META.stats; S.runs++; S.slain += sm.slain || 0; S.bestWave = Math.max(S.bestWave, waveNumber()); if (how === 'abandon') S.abandons++;
   if (run.mode === 'daily') {
     // The day's best counts waves survived; a run continued past midnight still counts for the day it began.
-    const day = run.day || dailyDate(), D = META.daily && META.daily.date === day ? META.daily : (META.daily = { date: day, best: 0, runs: 0 });
+    // (A day older than the stored record, say yesterday's daily continued today, must not wipe today's best: it is
+    // counted on a throwaway record instead.)
+    const day = run.day || dailyDate(), md = META.daily, D = md && md.date === day ? md : md && md.date > day ? { date: day, best: 0, runs: 0 } : (META.daily = { date: day, best: 0, runs: 0 });
     D.runs++; S.dailies++; res.daily = { day, waves: sm.waves || 0, best: Math.max(D.best, sm.waves || 0), newBest: (sm.waves || 0) > D.best };
     D.best = res.daily.best;
   }
@@ -270,6 +275,8 @@ function startRun(mode, heat) {
   // A run starts with the lifetime sightings, so "New:" tips only show for monsters this keeper has not met in a run.
   G.seen = {}; for (const k in META.seen) G.seen[k] = 1;
   META.run = { mode: G.mode, heat: G.heat, level0: G.level, banked: false, ending: false, t: 0, notes: [], ach: [], day: G.mode === 'daily' ? dailyDate() : '' };
+  // For Echo's daily sting: true only for a daily started fresh from the menu, never for one continued from a save.
+  G.dailyFresh = G.mode === 'daily';
   applyMeta(); G.mana = 30; G.rerolls = upVal('reroll');
   TUT.maybeStart();
   if (TUT.active()) UI.everManual = true; // the tutorial replaces the first "You command" help line
@@ -281,7 +288,7 @@ function startRun(mode, heat) {
 // Back to the AI demo behind the main menu: a fresh random land, the commander in charge, every number back to 1.
 function startDemo() {
   STORY.clear(); TUT.stop(); SAVE.hold = false;
-  G.mode = 'demo'; G.heat = 0; META.run = null; G.holdClear = false; MENU.victory = null; applyMeta(); G.maxLives = 20;
+  G.mode = 'demo'; G.heat = 0; META.run = null; G.dailyFresh = false; G.holdClear = false; MENU.victory = null; applyMeta(); G.maxLives = 20;
   BIOME.start = Math.floor(Math.random() * BIOMES.length) - G.boardIndex;
   G.level = 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++; G.press = 1; G.speed = 1; G.paused = false; G.modLevel = -1; setMods([]);
   UI.setManual(false); camReset();
@@ -295,16 +302,18 @@ function abandonRun(how) {
 }
 // Continue: the saved run's mode and Heat come back with it (restoreRun calls this before rebuilding the board).
 function metaRestore(S) {
-  SAVE.hold = false;
+  SAVE.hold = false; G.dailyFresh = false;
   G.mode = S.mode === 'night' || S.mode === 'daily' || S.mode === 'demo' ? S.mode : 'campaign'; G.holdClear = false; MENU.victory = null;
   G.heat = _int(S.heat, 0, HEAT_MAX) ? S.heat : 0; G.runSeed = _int(S.runSeed, 0, 2e9) ? S.runSeed : S.seed;
   G.rerolls = _int(S.rerolls, 0, 9) ? S.rerolls : upVal('reroll');
   META.run = { mode: G.mode, heat: G.heat, level0: _int(S.level0, 0, 999) ? S.level0 : (nightMode(G.mode) ? CAMPAIGN_LANDS : 0), banked: false, ending: !!S.ending, endingPaid: !!S.endingPaid, t: 0, notes: [], ach: [], day: typeof S.day === 'string' ? S.day : '' };
   if (G.mode !== 'demo') { G.seen = {}; for (const k in META.seen) G.seen[k] = 1; }
+  G.restoreMods = Array.isArray(S.mods) && _int(S.modLevel, 0, 999) && typeof MUTATORS === 'object' ? { level: S.modLevel, keys: S.mods.filter(k => typeof k === 'string' && MUTATORS[k]).slice(0, 8) } : null;
   applyMeta();
 }
 function metaSnapshot(S) {
   S.mode = G.mode; S.heat = G.heat; S.runSeed = G.runSeed; S.rerolls = G.rerolls;
+  if (G.modLevel === G.level && Array.isArray(G.mods)) { S.mods = G.mods.slice(); S.modLevel = G.level; }
   if (META.run) { S.level0 = META.run.level0; S.ending = !!META.run.ending; S.endingPaid = !!META.run.endingPaid; if (META.run.day) S.day = META.run.day; }
   return S;
 }

@@ -39,7 +39,39 @@ function waveMenu(k, level) {
   }
   return menu;
 }
+// The Hollow Herald is a Long Night boss only: Ash's procBiome puts 'herald' into a generated land's boss list (about one
+// land in three from land 8 on). heraldLand(): this land's boss is the Herald (the story and aiThink read it).
+function heraldLand() { return !!(G.B && G.B.bio.key === 'proc' && bossType() === 'herald'); }
 function bossType() { const b = G.B.bio.boss; return b[Math.floor(G.level / BIOMES.length) % b.length]; }
+// The Hollow Herald (MON.herald). Its cage-lantern drinks the light of the towers near it: they go dark and stop for a
+// moment (tower.snuff, seconds; Ash may read it, m.stolen counts the lights it holds for the lantern's glow). Enraged, it
+// does so more often. The look is Ash's FX.snuff (dims the lights in the circle). Sounds for Echo: 'snuff' and 'heraldCall'.
+function heraldSnuff(m, dt) {
+  const sp = m.def.snuff; m.snT -= dt * (m.rage ? 1.45 : 1); if (m.snT > 0) return;
+  m.snT = sp.every; m.cast = 1; let n = 0; const hy = m.y + m.def.top * m.scale / m.def.scale * .8;
+  for (const tw of G.towers) {
+    if (!tw.alive || tw.state !== 'active' || dist2(tw.x, tw.z, m.x, m.z) > sp.r * sp.r) continue;
+    tw.snuff = Math.max(tw.snuff || 0, sp.t); n++;
+    fxBolt([tw.x, tw.y + 2.2, tw.z], [m.x, hy, m.z], .35, [1.5, 1.15, .5], .05);
+    fxTimed(5, tw.x, tw.y + 2, tw.z, 2.6, 2.6, .9, .75, .45, .7, .35);
+  }
+  m.stolen = Math.min(8, (m.stolen || 0) + n);
+  if (typeof FX.snuff === 'function') FX.snuff(m.x, m.z, sp.r, sp.t + 1); else fxTimed(4, m.x, m.y + .08, m.z, sp.r * 2, sp.r * 2, .5, .42, .7, .55, .8, { ground: true });
+  sfx('snuff', m.x, m.z, 1.1);
+}
+// It calls echo ghosts (pale, half bounty, as the Echoes mutator's) of the road's common dead behind it.
+function heraldCall(m, dt) {
+  const cl = m.def.call; m.clT -= dt; if (m.clT > 0) return;
+  m.clT = cl.every; if (G.mons.length >= MAX_ALIVE * .8 || m.sumN >= cl.max) return; m.sumN++;
+  const menu = waveMenu(G.wavesPerLand, G.level).filter(e => ROSTER[e[0]][0] < 13 && !MON[e[0]].fly); if (!menu.length) return;
+  m.cast = 1; sfx('heraldCall', m.x, m.z, 1);
+  for (let i = 0; i < cl.n; i++) {
+    const ty = menu[Math.floor(rnd() * menu.length)][0], g = spawnMonster(ty, { s: Math.max(.5, m.s - 1.4 - .5 * i), lat: clamp(m.lat + rr(-.6, .6), -.9, .9), hpMul: (m.maxHp / m.def.hp) * cl.hp, pop: .5 });
+    g.echo = true; g.bmul = .5; g.tint = [.62, .78, 1];
+    G.mix.echo = (G.mix.echo || 0) + 1; G.mix[ty] = (G.mix[ty] || 0) + 1;
+    if (G.spdMul !== 1) g.spdMul *= G.spdMul;
+  }
+}
 
 // Elites: tougher, richer monsters with one twist each. m.elite is the key; Ash draws the aura from it.
 const ELITE = {
@@ -443,12 +475,15 @@ function aiSpells() {
     if (m.prog > .76) { front++; const w = m.prog * m.prog * (m.def.boss ? 4 : 1); fx += m.x * w; fz += m.z * w; fw += w; }
   }
   if (!lead) return false;
-  if (spellReady('meteor')) {
+  // Armoured flyers on the way: keep enough mana back to freeze them before they reach the beacon.
+  let gq = 0; for (const m of M) if (m.fly && m.def.armor && !m.dead && m.hp > 0) gq++;
+  const airHold = gq >= 1 && G.mana < spellMana('meteor') + spellMana('frost') && G.spellCd.frost < 8;
+  if (spellReady('meteor') && !airHold) {
     let best = null, bs = 0, n = 0;
     for (const m of M) {
       if (m.dead || m.fly || !m.vis || m.hp <= 0 || m.dying) continue; if (++n > 90 && (n & 1)) continue;
       // The Drowned King is worth a meteor sooner: its summons crowd round it and every wave it sweeps costs footmen.
-      let sc = m.def.boss ? 6 + 8 * m.prog + (m.def.tide ? 4 : 0) : 0;
+      let sc = m.def.boss ? 6 + 8 * m.prog + (m.def.tide || m.def.snuff ? 4 : 0) : 0; // the Herald too: every second it lives, towers go dark
       for (const o of M) if (!o.dead && !o.fly && o.vis && !o.def.boss && dist2(o.x, o.z, m.x, m.z) < 8) sc += (o.elite ? 1.8 : 1) * (.6 + Math.min(1.4, o.maxHp / 250)) * (.7 + .6 * o.prog) + (o.def.wardCast ? 2.5 : 0);
       if (sc > bs) { bs = sc; best = m; }
     }
@@ -463,6 +498,14 @@ function aiSpells() {
       if (w.men < 1 && riders < 3) continue;
       const p = pathAt(B, Math.min(B.L - .5, w.front + 1.4), {}); if (castSpell('frost', p.x, p.z)) return true;
     }
+  }
+  // A flyer pack closing on the beacon (gargoyles above all: arrows barely scratch them): freeze it in the air.
+  if (spellReady('frost')) {
+    let n = 0, w = 0, ax = 0, az = 0, hv = 0, last = null;
+    for (const m of M) if (m.fly && !m.dead && m.hp > 0 && m.vis && !m.dying && m.prog > .62 && !(m.frozen > 0)) { const k = m.def.armor ? 2 : m.def.swoop ? 1.3 : .6; n++; hv += k; w += k * m.prog; ax += m.x * k * m.prog; az += m.z * k * m.prog; if (!last || m.prog > last.prog) last = m; }
+    if (n >= 2 && hv >= 2.6) { const cx = ax / w, cz = az / w; let hit = 0; for (const m of M) if (m.fly && !m.dead && m.prog > .62 && dist2(m.x, m.z, cx, cz) < 9) hit += m.def.armor ? 2 : 1; if (hit >= 2 && castSpell('frost', cx, cz)) return true; }
+    // A lone gargoyle or harpy about to reach the beacon: the frost's own bite may finish it, or the freeze buys a volley.
+    if (last && last.prog > .86 && (last.def.armor || last.def.swoop || last.hp < 18 * (1 + .3 * G.level) * G.spellPow)) { const q = aimPoint(last, .2, {}); if (castSpell('frost', q.x, q.z)) return true; }
   }
   if (spellReady('frost') && fw > 0 && (front >= 5 || (boss && boss.prog > .72) || (front >= 2 && lead.prog > .9)) && (!save || lead.prog > .86)) {
     if (castSpell('frost', fx / fw, fz / fw)) return true;
@@ -492,12 +535,17 @@ function aiThink(dt) {
   if (modOn('ironhide')) armor += 3; if (modOn('swarm') || modOn('bloodmoon')) swarm += 3; if (modOn('haste')) { armor += 1; swarm += 1.5; }
   // Siege sends rams every wave (blasts and fire); Echoes brings killed elites back, so more of everything that kills crowds.
   if (modOn('siege')) siege += 4; if (modOn('echoes')) { const e = Math.min(4, (G.mix.echo || 0) * .15); swarm += 1 + e; armor += 1 + e * .5; } // more so as the ghosts pile up
+  // Anti-air: scout what flies this land (sent so far, the next wave's roster and what is in the air now) and weigh it
+  // against the board's air power. Gargoyles shrug off arrows, so a shortfall against them asks for spires first.
+  const AA = aiAir(towers);
+  // A Herald land: its ghosts want crowd-killers, and its lantern snuffs towers in a circle, so spread the board out.
+  const herald = heraldLand() && G.bossWave, snR2 = herald ? MON.herald.snuff.r * MON.herald.snuff.r : 0; if (herald) swarm += 1.5;
   const gatePress = sat(G.leaks / 8);
   const opts = [];
   for (const kind of TOWER_KINDS) {
     const def = TOWER[kind];
     let need = ideal[kind] * (N + 1.6) - cnt[kind] + .35;
-    if (kind === 'archer') need += air * .2 + (N === 0 ? 1 : 0); if (kind === 'spire') need += air * .12 + armor * .1; if (kind === 'bombard') need += armor * .08 + swarm * .06 + siege * .12 + (N >= 2 && cnt.bombard === 0 ? .5 : 0); if (kind === 'guard') need += swarm * .04 + (N >= 1 && cnt.guard === 0 ? .9 : 0);
+    if (kind === 'archer') need += air * .2 + (N === 0 ? 1 : 0) + AA.short * (1 - AA.hard) * .25; if (kind === 'spire') need += air * .12 + armor * .1 + AA.short * AA.hard * .45; if (kind === 'bombard') need += armor * .08 + swarm * .06 + siege * .12 + (N >= 2 && cnt.bombard === 0 ? .5 : 0); if (kind === 'guard') need += swarm * .04 + (N >= 1 && cnt.guard === 0 ? .9 : 0);
     if (need <= 0) continue;
     for (const pad of empty) {
       const cov = padCoverage(pad, def.range[0]) / (def.range[0] * 2);
@@ -506,7 +554,7 @@ function aiThink(dt) {
       if (N < 2) sc *= 1 - Math.abs(rel - .42) * .9;
       sc *= 1 + gatePress * (rel - .5) * .8;
       let syn = 0;
-      for (const t of towers) { const d = Math.hypot(t.x - pad.x, t.z - pad.z); if (kind === 'guard' && t.kind !== 'guard' && d < t.range + 1.5) syn += .16; if (kind !== 'guard' && t.kind === 'guard' && d < def.range[0] + 1) syn += .2; if (t.kind === kind && d < 6) syn -= .12; }
+      for (const t of towers) { const d = Math.hypot(t.x - pad.x, t.z - pad.z); if (kind === 'guard' && t.kind !== 'guard' && d < t.range + 1.5) syn += .16; if (kind !== 'guard' && t.kind === 'guard' && d < def.range[0] + 1) syn += .2; if (t.kind === kind && d < 6) syn -= .12; if (d * d < snR2) syn -= .04; }
       if (kind === 'guard') { sc *= .8 + .5 * rel; for (const t of towers) if (t.kind === 'guard' && Math.abs(t.pad.s - pad.s) < 9) syn -= .5; }
       sc *= 1 + syn;
       opts.push({ sc, cost: G.freeTowers > 0 ? 0 : def.cost[0], act: 'build', kind, pad }); // Founding Stone: the first towers are free
@@ -516,7 +564,7 @@ function aiThink(dt) {
     if (t.state !== 'active' || t.lvl >= 2) continue;
     const c = t.def.cost[t.lvl + 1], use = sat(t.recent / 60);
     let sc = (.5 + use * .9 + (t.lvl === 0 ? .12 : 0)) * (N >= 4 ? 1.25 : .7) * (empty.length === 0 ? 1.6 : 1) * (110 / c);
-    if (t.kind === 'archer') sc *= 1 + air * .06; if (t.kind === 'spire') sc *= 1 + armor * .05; if (t.kind === 'bombard') sc *= 1 + siege * .05;
+    if (t.kind === 'archer') sc *= 1 + air * .06 + AA.short * (1 - AA.hard) * .2; if (t.kind === 'spire') sc *= 1 + armor * .05 + AA.short * AA.hard * .3; if (t.kind === 'bombard') sc *= 1 + siege * .05;
     opts.push({ sc, cost: c, act: 'up', t });
   }
   // Branch maxed towers (the choice follows what this land throws at us), then overcharge them; busy towers first.
@@ -547,6 +595,27 @@ function aiThink(dt) {
   AI.think = N < 3 ? .12 : .8;
 }
 
+// The commander's air picture. want: how much air power this land calls for (flyers in the roster for the next
+// wave, flyers sent so far, flyers alive now, heavier for armoured gargoyles and deeper lands); have: the board's air
+// power (archers and spires by level, volley and tempest count extra, archers count half against armour);
+// short: the shortfall, in tower levels; hard: the armoured share of the threat (0..1), which wants spires.
+function aiAir(towers) {
+  const nk = G.spawning ? G.k : G.k % G.wavesPerLand + 1, menu = waveMenu(nk, G.level), mx = G.mix;
+  let soft = 0, hard = 0;
+  for (const [ty, w] of menu) if (MON[ty].fly) { if (MON[ty].armor) hard += w; else soft += w * (ty === 'harpy' ? 1.2 : .7); }
+  soft += ((mx.bat || 0) + (mx.wisp || 0) * .5 + (mx.harpy || 0) * 1.5) * .06; hard += (mx.gargoyle || 0) * .14;
+  for (const m of G.mons) if (m.fly && !m.dead && m.hp > 0) { if (m.def.armor) hard += .25; else soft += .08; }
+  if (soft + hard <= 0) return { short: 0, hard: 0 };
+  const h = hard / (soft + hard), want = Math.min(4, soft + hard) * (1.2 + .55 * G.level);
+  let have = 0;
+  for (const t of towers) {
+    if (!t.def.air || t.state !== 'active') continue;
+    let v = t.lvl + 1 + (t.branch === 'tempest' || t.branch === 'volley' ? 1.5 : 0) + (t.oc || 0) * .5;
+    if (t.kind === 'archer' && t.branch !== 'longbow') v *= 1 - .5 * h;
+    have += v;
+  }
+  return { short: Math.min(4, Math.max(0, want - have)), hard: h };
+}
 // In a run with Fate's Lantern rerolls left, the commander rerolls a land that came up with two or more curses
 // (once per land, before the first wave is out).
 function aiReroll() {
@@ -793,7 +862,7 @@ function restoreRun(S) {
   } finally { AU.ready = ar; }
   SAVE.last = S.fresh ? null : S;
   sfx('ignite', G.B.beacon.x, G.B.beacon.z, 1, 1);
-  UI.banner(G.B.bio.name + ' · Land ' + (G.level + 1), 3, false);
+  UI.banner(G.B.bio.name + (G.level >= BIOMES.length ? ' · Night land ' + (G.level - BIOMES.length + 1) : ' · Land ' + (G.level + 1)), 3, false);
   return true;
 }
 // A saved tower, built at once: no scaffolding, at its level and branch, with its overcharge.

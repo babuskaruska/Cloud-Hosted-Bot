@@ -6164,9 +6164,11 @@ class Tower {
       return;
     }
     this.appear = Math.min(1, this.appear + dt * 2.2);
-    TOWER_STUN = this.stun > 0;
-    if (TOWER_STUN) { this.stun -= dt; const k = Math.min(1, this.stun * 2); FX.add.push(this.x, this.y + 1.7, this.z, 4.2, 5.6, 0, 0, .2, .5, 1.2, .3 * k, 2, 0, 0, 0); if (rnd() < dt * 5) { const a = rnd() * TAU, h = rr(.6, 3); fxBolt([this.x + Math.cos(a) * .8, this.y + h, this.z + Math.sin(a) * .8], [this.x + Math.cos(a + 1.2) * .8, this.y + h + rr(-.5, .5), this.z + Math.sin(a + 1.2) * .8], .12, [.5, .85, 1.5], .03); } if (rnd() < dt * 18) fxPart(this.x + rr(-.7, .7), this.y + rr(.4, 3.2), this.z + rr(-.7, .7), 0, rr(-.5, .1), 0, rr(.4, .9), rr(.05, .08), .6, 1.1, 2.0, { drag: .5 }); }
-    this.em.on = damp(this.em.on, TOWER_STUN ? .12 : 1, TOWER_STUN ? 8 : 3, dt);
+    // Snuffed by the Hollow Herald (this.snuff, seconds): dark and idle like a stun, without the stun's lightning.
+    const snuffed = this.snuff > 0; if (snuffed) this.snuff -= dt;
+    TOWER_STUN = this.stun > 0 || snuffed;
+    if (this.stun > 0) { this.stun -= dt; const k = Math.min(1, this.stun * 2); FX.add.push(this.x, this.y + 1.7, this.z, 4.2, 5.6, 0, 0, .2, .5, 1.2, .3 * k, 2, 0, 0, 0); if (rnd() < dt * 5) { const a = rnd() * TAU, h = rr(.6, 3); fxBolt([this.x + Math.cos(a) * .8, this.y + h, this.z + Math.sin(a) * .8], [this.x + Math.cos(a + 1.2) * .8, this.y + h + rr(-.5, .5), this.z + Math.sin(a + 1.2) * .8], .12, [.5, .85, 1.5], .03); } if (rnd() < dt * 18) fxPart(this.x + rr(-.7, .7), this.y + rr(.4, 3.2), this.z + rr(-.7, .7), 0, rr(-.5, .1), 0, rr(.4, .9), rr(.05, .08), .6, 1.1, 2.0, { drag: .5 }); }
+    this.em.on = damp(this.em.on, snuffed ? .02 : TOWER_STUN ? .12 : 1, TOWER_STUN ? 8 : 3, dt);
     if (this.flame) this.flame.on = this.em.on; if (this.flame2) this.flame2.on = this.em.on;
     this.drawGlow(dt);
     this.cool -= dt;
@@ -6463,6 +6465,10 @@ const MON = {
   queen: { name: 'Brood Queen', tip: 'Keeps hatching spiders.', hp: 1150, spd: .85, rad: 1.1, mass: 40, bounty: 200, lives: 5, hitH: 1.0, top: 2.0, dmg: 40, atkT: 1.5, eye: [3.8, .3, .9], scale: 4.2, boss: true, summon: { type: 'spider', n: 2, every: 8, max: 99, hp: 1 }, death: 'bug', cat: 'armor', tint: [.85, .55, 1.0] },
   colossus: { name: 'Magma Colossus', tip: 'Speeds up when it is nearly dead.', hp: 1250, spd: .7, rad: 1.05, mass: 60, bounty: 200, lives: 5, hitH: 2.2, top: 4.3, dmg: 60, atkT: 2.0, eye: [4, 1.6, .3], scale: 3.0, boss: true, armor: .85, slowRes: .3, enrage: [.3, 1.25], death: 'rock', cat: 'armor', tint: [1.5, .5, .26] },
   king: { name: 'The Buried King', tip: 'Summons mummies to walk with him.', hp: 1250, spd: .86, rad: .92, mass: 40, bounty: 200, lives: 5, hitH: 2.2, top: 4.2, dmg: 46, atkT: 1.7, eye: [.6, 3.0, 2.6], scale: 2.7, boss: true, summon: { type: 'mummy', n: 1, every: 9, max: 99, hp: .7 }, death: 'bones', blade: true, cat: 'armor', tint: [1.2, 1.0, .55] },
+  // Round 11 (Long Night only: procBiome's boss lists, 35-longnight.js): the Hollowing's messenger. snuff: every few seconds its
+  // cage-lantern drinks the light of the towers within r (they go dark and stop for t seconds; heraldSnuff in 62-game.js);
+  // call: it calls n echo ghosts of the road's dead behind it. Model: RIGS.herald (Ash), else the stand-in below.
+  herald: { name: 'The Hollow Herald', tip: 'Snuffs the lights of towers near it and calls echo ghosts. Spread your towers and burn it fast.', hp: 1050, spd: .8, rad: .8, mass: 36, bounty: 200, lives: 5, hitH: 2.0, top: 4.3, dmg: 40, atkT: 1.6, eye: [1.3, 1.7, 2.6], scale: 2.5, boss: true, snuff: { every: 11, r: 4.2, t: 1.8 }, call: { every: 13, n: 2, hp: .3, max: 8 }, enrage: [.3, 1.15], death: 'flesh', cat: 'armor', rig: 'herald' },
   leviathan: { name: 'The Drowned King', tip: 'Raises the drowned and sweeps a tidal wave down the road. Freeze the wave to break it.', hp: 1250, spd: .8, rad: 1.0, mass: 50, bounty: 200, lives: 5, hitH: 2.1, top: 4.1, dmg: 50, atkT: 1.8, eye: [.4, 3.0, 2.6], scale: 2.75, boss: true, summon: { type: 'drowned', n: 2, every: 8.5, max: 99, hp: .55 }, tide: { every: 12, len: 7.5, dur: 1.5, push: 7, dmg: 16, haste: .4, hasteT: 3.5 }, enrage: [.3, 1.2], death: 'flesh', blade: true, cat: 'armor', rig: 'leviathan' },
 };
 
@@ -6473,7 +6479,7 @@ function spawnMonster(type, o = {}) {
     x: 0, y: 0, z: 0, yaw: 0, ph: rnd() * 6, mv: 1, vf: def.spd, spdNow: def.spd, spdMul: rr(.93, 1.07) * (o.spdMul || 1), slowT: 0, slowF: 0,
     flash: 0, flinch: 0, atk: -1, cd: rr(.1, .5), foe: null, prog: 0, vis: false, dead: false, dying: 0, ks: 0, kl: 0, hop: rnd(), rad: def.rad * (o.radMul || 1), mass: def.mass,
     hitH: def.hitH, scale: def.scale * rr(.95, 1.05), fly: !!def.fly, torch: false, flame: null, tint: (bt && bt[type]) || def.tint || null, men: 0, struck: false, step: 0, alive: true, lI: 0, lx: 0, ly: 0, lz: 0, lseed: rnd() * 9, vx: 0, vz: 0, pop: o.pop || 0,
-    haste: 0, hitAt: -9, beat: rnd() * 6, eth: false, gT: rnd() * 4, cast: 0, sumN: 0, sumT: def.summon ? def.summon.every * rr(.45, .7) : 0, stT: def.stomp ? def.stomp.every * .6 : 0, rage: false, tdT: def.tide ? def.tide.every * .5 : 0, tideT: 0, tideH: 0,
+    haste: 0, hitAt: -9, beat: rnd() * 6, eth: false, gT: rnd() * 4, cast: 0, sumN: 0, sumT: def.summon ? def.summon.every * rr(.45, .7) : 0, stT: def.stomp ? def.stomp.every * .6 : 0, snT: def.snuff ? def.snuff.every * .5 : 0, clT: def.call ? def.call.every * .35 : 0, stolen: 0, rage: false, tdT: def.tide ? def.tide.every * .5 : 0, tideT: 0, tideH: 0,
     // Round 4 state (Ash's rigs may read these): shove 0-1 after a ram hit; swoop 0 cruise / 1 dive / 2 carrying, carry = the footman held,
     // low = near the ground; wardT = time to the next ward cast; trailT = time to the next fire patch.
     shove: 0, swoop: 0, swT: def.swoop ? rr(2, 4) : 0, carry: null, prey: null, low: false, wardT: def.wardCast ? def.wardCast.every * rr(.3, .55) : 0, trailT: def.trail ? rr(.1, .4) : 0,
@@ -6604,9 +6610,11 @@ const RIG_STANDIN = {
   harpy: m => standIn(m, [1.3, .95, .7], e => rigBat(e, KIT.garg, .1, .06)),
   hound: m => standIn(m, [1.25, .42, .3], rigWolf),
   // Round 6 stand-in until RIGS.leviathan lands: a sea-green ogre with a pike for a trident.
+  // Round 11 stand-in until RIGS.herald lands: a tall hooded, robed figure on the giant's frame with a long staff.
+  herald: m => standIn(m, [.5, .46, .72], e => { e.weapon = KIT.item.staff; e.wScale = 1.6; e.staff = true; e.hood = true; e.robe = true; return rigHuman(KIT.giant, SPEC.skel, e); }),
   leviathan: m => standIn(m, [.34, .66, .7], e => { e.weapon = KIT.item.pike; e.wScale = 1.5; e.heavy = true; e.crown = true; return rigHuman(KIT.ogre, SPEC.ogre, e); }),
 };
-const EYE_STANDIN = { ram: 'golem', shaman: 'ghoul', harpy: 'gargoyle', hound: 'wolf', leviathan: 'ogre' };
+const EYE_STANDIN = { ram: 'golem', shaman: 'ghoul', harpy: 'gargoyle', hound: 'wolf', leviathan: 'ogre', herald: 'giant' };
 const EYES = {
   skel: SKEL_EYE, knight: SKEL_EYE, giant: [.058, .185, .152, .075], ogre: OGRE_EYE, rat: [.05, .03, .42, .05], bat: [.04, .03, .16, .05], slime: [.13, .2, .44, .08], slimelet: [.13, .2, .44, .08],
   ghoul: OGRE_EYE, brute: OGRE_EYE, jotun: OGRE_EYE, golem: [.04, .1, .17, .05], colossus: [.04, .1, .17, .05], necro: SKEL_EYE, drummer: SKEL_EYE, bomber: SKEL_EYE, mummy: SKEL_EYE, king: [.058, .185, .152, .075],
@@ -6631,7 +6639,7 @@ function drawMonster(m, t) {
   }
   if (ty === 'wisp') { const k = m.tint || [1, 1, 1]; FX.add.push(m.x, m.y, m.z, .26, .26, 0, 0, k[0] * 2.2, k[1] * 2.2, k[2] * 2.2, tw, 0, 0, 0, 0); FX.add.push(m.x, m.y, m.z, 1.5, 1.5, 0, 0, k[0] * .5, k[1] * .5, k[2] * .5, .5 * tw, 2, 0, 0, 0); m.lx = m.x; m.ly = m.y; m.lz = m.z; if (rnd() < .3) fxPart(m.x + rr(-.05, .05), m.y + rr(-.05, .05), m.z + rr(-.05, .05), -m.vx * .2, rr(-.2, .2), -m.vz * .2, rr(.3, .6), .05, k[0] * 1.6, k[1] * 1.6, k[2] * 1.6, { drag: 1 }); }
   else if (ty === 'wraith') { const a = m.eth ? .5 + .2 * Math.sin(t * 23) : .16; FX.add.push(m.x, m.y + .75 * sc, m.z, 2.3 * sc, 2.6 * sc, 0, 0, .25, .55, 1.2, a, 2, 0, 0, 0); if (m.eth && rnd() < .3) fxPart(m.x + rr(-.25, .25), m.y + rr(.1, 1.3), m.z + rr(-.25, .25), 0, rr(.3, .9), 0, rr(.3, .6), .05, .5, 1.0, 2.0, { drag: .5 }); }
-  else if (ty === 'necro' || ty === 'queen' || ty === 'king' || ty === 'leviathan') { if (m.cast > 0) { const g = ty === 'necro' ? [.4, 1.6, .6] : ty === 'queen' ? [1.2, .5, 1.6] : ty === 'leviathan' ? [.3, 1.3, 1.5] : [.4, 1.5, 1.3]; FX.add.push(m.x, m.y + m.hitH * 1.6, m.z, 3.2 * m.cast * sc, 3.2 * m.cast * sc, 0, 0, g[0], g[1], g[2], .28 * m.cast, 2, 0, 0, 0); } }
+  else if (ty === 'necro' || ty === 'queen' || ty === 'king' || ty === 'leviathan' || ty === 'herald') { if (m.cast > 0) { const g = ty === 'necro' ? [.4, 1.6, .6] : ty === 'queen' ? [1.2, .5, 1.6] : ty === 'leviathan' ? [.3, 1.3, 1.5] : ty === 'herald' ? [1.5, 1.25, .6] : [.4, 1.5, 1.3]; FX.add.push(m.x, m.y + m.hitH * 1.6, m.z, 3.2 * m.cast * sc, 3.2 * m.cast * sc, 0, 0, g[0], g[1], g[2], .28 * m.cast, 2, 0, 0, 0); } }
   else if (ty === 'ram' || ty === 'shaman' || ty === 'harpy' || ty === 'hound') drawMonster4(m, t, ty, M, tw, sc);
   else if (ty === 'colossus' && rnd() < (m.rage ? .5 : .12)) fxPart(m.x + rr(-.7, .7), m.y + rr(.6, 3), m.z + rr(-.7, .7), rr(-.3, .3), rr(.6, 1.8), rr(-.3, .3), rr(.6, 1.2), rr(.05, .08), 2.6, .9, .15, { drag: .3, wob: 1, rise: .3 });
   // A shaman's ward (not the shielded elite's, which has its own aura): a soft green-blue shell that pulses when cast.
@@ -6814,6 +6822,9 @@ function updateUnits(dt) {
         for (const tw of G.towers) if (tw.alive && tw.state === 'active' && dist2(tw.x, tw.z, m.x, m.z) < sp.r * sp.r) { tw.stun = sp.stun; fxTimed(5, tw.x, tw.y + 2, tw.z, 3, 3, .6, 1.2, 2.4, .9, .3); }
       }
     }
+    // The Hollow Herald's lantern and its call (62-game.js).
+    if (def.snuff && m.vis && !m.dying) heraldSnuff(m, dt);
+    if (def.call && m.vis && !m.dying) heraldCall(m, dt);
     // The Drowned King's tidal wave (startTide / updateTides in 62-game.js), more often once it is enraged.
     if (def.tide && m.vis && m.s > B.cave.s + 3) { m.tdT -= dt; if (m.tdT <= 0) { m.tdT = def.tide.every * (m.rage ? .65 : 1); startTide(m); } }
     if (def.wardCast && m.vis && !m.dying) shamanWard(m, dt);
@@ -7044,7 +7055,39 @@ function waveMenu(k, level) {
   }
   return menu;
 }
+// The Hollow Herald is a Long Night boss only: Ash's procBiome puts 'herald' into a generated land's boss list (about one
+// land in three from land 8 on). heraldLand(): this land's boss is the Herald (the story and aiThink read it).
+function heraldLand() { return !!(G.B && G.B.bio.key === 'proc' && bossType() === 'herald'); }
 function bossType() { const b = G.B.bio.boss; return b[Math.floor(G.level / BIOMES.length) % b.length]; }
+// The Hollow Herald (MON.herald). Its cage-lantern drinks the light of the towers near it: they go dark and stop for a
+// moment (tower.snuff, seconds; Ash may read it, m.stolen counts the lights it holds for the lantern's glow). Enraged, it
+// does so more often. The look is Ash's FX.snuff (dims the lights in the circle). Sounds for Echo: 'snuff' and 'heraldCall'.
+function heraldSnuff(m, dt) {
+  const sp = m.def.snuff; m.snT -= dt * (m.rage ? 1.45 : 1); if (m.snT > 0) return;
+  m.snT = sp.every; m.cast = 1; let n = 0; const hy = m.y + m.def.top * m.scale / m.def.scale * .8;
+  for (const tw of G.towers) {
+    if (!tw.alive || tw.state !== 'active' || dist2(tw.x, tw.z, m.x, m.z) > sp.r * sp.r) continue;
+    tw.snuff = Math.max(tw.snuff || 0, sp.t); n++;
+    fxBolt([tw.x, tw.y + 2.2, tw.z], [m.x, hy, m.z], .35, [1.5, 1.15, .5], .05);
+    fxTimed(5, tw.x, tw.y + 2, tw.z, 2.6, 2.6, .9, .75, .45, .7, .35);
+  }
+  m.stolen = Math.min(8, (m.stolen || 0) + n);
+  if (typeof FX.snuff === 'function') FX.snuff(m.x, m.z, sp.r, sp.t + 1); else fxTimed(4, m.x, m.y + .08, m.z, sp.r * 2, sp.r * 2, .5, .42, .7, .55, .8, { ground: true });
+  sfx('snuff', m.x, m.z, 1.1);
+}
+// It calls echo ghosts (pale, half bounty, as the Echoes mutator's) of the road's common dead behind it.
+function heraldCall(m, dt) {
+  const cl = m.def.call; m.clT -= dt; if (m.clT > 0) return;
+  m.clT = cl.every; if (G.mons.length >= MAX_ALIVE * .8 || m.sumN >= cl.max) return; m.sumN++;
+  const menu = waveMenu(G.wavesPerLand, G.level).filter(e => ROSTER[e[0]][0] < 13 && !MON[e[0]].fly); if (!menu.length) return;
+  m.cast = 1; sfx('heraldCall', m.x, m.z, 1);
+  for (let i = 0; i < cl.n; i++) {
+    const ty = menu[Math.floor(rnd() * menu.length)][0], g = spawnMonster(ty, { s: Math.max(.5, m.s - 1.4 - .5 * i), lat: clamp(m.lat + rr(-.6, .6), -.9, .9), hpMul: (m.maxHp / m.def.hp) * cl.hp, pop: .5 });
+    g.echo = true; g.bmul = .5; g.tint = [.62, .78, 1];
+    G.mix.echo = (G.mix.echo || 0) + 1; G.mix[ty] = (G.mix[ty] || 0) + 1;
+    if (G.spdMul !== 1) g.spdMul *= G.spdMul;
+  }
+}
 
 // Elites: tougher, richer monsters with one twist each. m.elite is the key; Ash draws the aura from it.
 const ELITE = {
@@ -7448,12 +7491,15 @@ function aiSpells() {
     if (m.prog > .76) { front++; const w = m.prog * m.prog * (m.def.boss ? 4 : 1); fx += m.x * w; fz += m.z * w; fw += w; }
   }
   if (!lead) return false;
-  if (spellReady('meteor')) {
+  // Armoured flyers on the way: keep enough mana back to freeze them before they reach the beacon.
+  let gq = 0; for (const m of M) if (m.fly && m.def.armor && !m.dead && m.hp > 0) gq++;
+  const airHold = gq >= 1 && G.mana < spellMana('meteor') + spellMana('frost') && G.spellCd.frost < 8;
+  if (spellReady('meteor') && !airHold) {
     let best = null, bs = 0, n = 0;
     for (const m of M) {
       if (m.dead || m.fly || !m.vis || m.hp <= 0 || m.dying) continue; if (++n > 90 && (n & 1)) continue;
       // The Drowned King is worth a meteor sooner: its summons crowd round it and every wave it sweeps costs footmen.
-      let sc = m.def.boss ? 6 + 8 * m.prog + (m.def.tide ? 4 : 0) : 0;
+      let sc = m.def.boss ? 6 + 8 * m.prog + (m.def.tide || m.def.snuff ? 4 : 0) : 0; // the Herald too: every second it lives, towers go dark
       for (const o of M) if (!o.dead && !o.fly && o.vis && !o.def.boss && dist2(o.x, o.z, m.x, m.z) < 8) sc += (o.elite ? 1.8 : 1) * (.6 + Math.min(1.4, o.maxHp / 250)) * (.7 + .6 * o.prog) + (o.def.wardCast ? 2.5 : 0);
       if (sc > bs) { bs = sc; best = m; }
     }
@@ -7468,6 +7514,14 @@ function aiSpells() {
       if (w.men < 1 && riders < 3) continue;
       const p = pathAt(B, Math.min(B.L - .5, w.front + 1.4), {}); if (castSpell('frost', p.x, p.z)) return true;
     }
+  }
+  // A flyer pack closing on the beacon (gargoyles above all: arrows barely scratch them): freeze it in the air.
+  if (spellReady('frost')) {
+    let n = 0, w = 0, ax = 0, az = 0, hv = 0, last = null;
+    for (const m of M) if (m.fly && !m.dead && m.hp > 0 && m.vis && !m.dying && m.prog > .62 && !(m.frozen > 0)) { const k = m.def.armor ? 2 : m.def.swoop ? 1.3 : .6; n++; hv += k; w += k * m.prog; ax += m.x * k * m.prog; az += m.z * k * m.prog; if (!last || m.prog > last.prog) last = m; }
+    if (n >= 2 && hv >= 2.6) { const cx = ax / w, cz = az / w; let hit = 0; for (const m of M) if (m.fly && !m.dead && m.prog > .62 && dist2(m.x, m.z, cx, cz) < 9) hit += m.def.armor ? 2 : 1; if (hit >= 2 && castSpell('frost', cx, cz)) return true; }
+    // A lone gargoyle or harpy about to reach the beacon: the frost's own bite may finish it, or the freeze buys a volley.
+    if (last && last.prog > .86 && (last.def.armor || last.def.swoop || last.hp < 18 * (1 + .3 * G.level) * G.spellPow)) { const q = aimPoint(last, .2, {}); if (castSpell('frost', q.x, q.z)) return true; }
   }
   if (spellReady('frost') && fw > 0 && (front >= 5 || (boss && boss.prog > .72) || (front >= 2 && lead.prog > .9)) && (!save || lead.prog > .86)) {
     if (castSpell('frost', fx / fw, fz / fw)) return true;
@@ -7497,12 +7551,17 @@ function aiThink(dt) {
   if (modOn('ironhide')) armor += 3; if (modOn('swarm') || modOn('bloodmoon')) swarm += 3; if (modOn('haste')) { armor += 1; swarm += 1.5; }
   // Siege sends rams every wave (blasts and fire); Echoes brings killed elites back, so more of everything that kills crowds.
   if (modOn('siege')) siege += 4; if (modOn('echoes')) { const e = Math.min(4, (G.mix.echo || 0) * .15); swarm += 1 + e; armor += 1 + e * .5; } // more so as the ghosts pile up
+  // Anti-air: scout what flies this land (sent so far, the next wave's roster and what is in the air now) and weigh it
+  // against the board's air power. Gargoyles shrug off arrows, so a shortfall against them asks for spires first.
+  const AA = aiAir(towers);
+  // A Herald land: its ghosts want crowd-killers, and its lantern snuffs towers in a circle, so spread the board out.
+  const herald = heraldLand() && G.bossWave, snR2 = herald ? MON.herald.snuff.r * MON.herald.snuff.r : 0; if (herald) swarm += 1.5;
   const gatePress = sat(G.leaks / 8);
   const opts = [];
   for (const kind of TOWER_KINDS) {
     const def = TOWER[kind];
     let need = ideal[kind] * (N + 1.6) - cnt[kind] + .35;
-    if (kind === 'archer') need += air * .2 + (N === 0 ? 1 : 0); if (kind === 'spire') need += air * .12 + armor * .1; if (kind === 'bombard') need += armor * .08 + swarm * .06 + siege * .12 + (N >= 2 && cnt.bombard === 0 ? .5 : 0); if (kind === 'guard') need += swarm * .04 + (N >= 1 && cnt.guard === 0 ? .9 : 0);
+    if (kind === 'archer') need += air * .2 + (N === 0 ? 1 : 0) + AA.short * (1 - AA.hard) * .25; if (kind === 'spire') need += air * .12 + armor * .1 + AA.short * AA.hard * .45; if (kind === 'bombard') need += armor * .08 + swarm * .06 + siege * .12 + (N >= 2 && cnt.bombard === 0 ? .5 : 0); if (kind === 'guard') need += swarm * .04 + (N >= 1 && cnt.guard === 0 ? .9 : 0);
     if (need <= 0) continue;
     for (const pad of empty) {
       const cov = padCoverage(pad, def.range[0]) / (def.range[0] * 2);
@@ -7511,7 +7570,7 @@ function aiThink(dt) {
       if (N < 2) sc *= 1 - Math.abs(rel - .42) * .9;
       sc *= 1 + gatePress * (rel - .5) * .8;
       let syn = 0;
-      for (const t of towers) { const d = Math.hypot(t.x - pad.x, t.z - pad.z); if (kind === 'guard' && t.kind !== 'guard' && d < t.range + 1.5) syn += .16; if (kind !== 'guard' && t.kind === 'guard' && d < def.range[0] + 1) syn += .2; if (t.kind === kind && d < 6) syn -= .12; }
+      for (const t of towers) { const d = Math.hypot(t.x - pad.x, t.z - pad.z); if (kind === 'guard' && t.kind !== 'guard' && d < t.range + 1.5) syn += .16; if (kind !== 'guard' && t.kind === 'guard' && d < def.range[0] + 1) syn += .2; if (t.kind === kind && d < 6) syn -= .12; if (d * d < snR2) syn -= .04; }
       if (kind === 'guard') { sc *= .8 + .5 * rel; for (const t of towers) if (t.kind === 'guard' && Math.abs(t.pad.s - pad.s) < 9) syn -= .5; }
       sc *= 1 + syn;
       opts.push({ sc, cost: G.freeTowers > 0 ? 0 : def.cost[0], act: 'build', kind, pad }); // Founding Stone: the first towers are free
@@ -7521,7 +7580,7 @@ function aiThink(dt) {
     if (t.state !== 'active' || t.lvl >= 2) continue;
     const c = t.def.cost[t.lvl + 1], use = sat(t.recent / 60);
     let sc = (.5 + use * .9 + (t.lvl === 0 ? .12 : 0)) * (N >= 4 ? 1.25 : .7) * (empty.length === 0 ? 1.6 : 1) * (110 / c);
-    if (t.kind === 'archer') sc *= 1 + air * .06; if (t.kind === 'spire') sc *= 1 + armor * .05; if (t.kind === 'bombard') sc *= 1 + siege * .05;
+    if (t.kind === 'archer') sc *= 1 + air * .06 + AA.short * (1 - AA.hard) * .2; if (t.kind === 'spire') sc *= 1 + armor * .05 + AA.short * AA.hard * .3; if (t.kind === 'bombard') sc *= 1 + siege * .05;
     opts.push({ sc, cost: c, act: 'up', t });
   }
   // Branch maxed towers (the choice follows what this land throws at us), then overcharge them; busy towers first.
@@ -7552,6 +7611,27 @@ function aiThink(dt) {
   AI.think = N < 3 ? .12 : .8;
 }
 
+// The commander's air picture. want: how much air power this land calls for (flyers in the roster for the next
+// wave, flyers sent so far, flyers alive now, heavier for armoured gargoyles and deeper lands); have: the board's air
+// power (archers and spires by level, volley and tempest count extra, archers count half against armour);
+// short: the shortfall, in tower levels; hard: the armoured share of the threat (0..1), which wants spires.
+function aiAir(towers) {
+  const nk = G.spawning ? G.k : G.k % G.wavesPerLand + 1, menu = waveMenu(nk, G.level), mx = G.mix;
+  let soft = 0, hard = 0;
+  for (const [ty, w] of menu) if (MON[ty].fly) { if (MON[ty].armor) hard += w; else soft += w * (ty === 'harpy' ? 1.2 : .7); }
+  soft += ((mx.bat || 0) + (mx.wisp || 0) * .5 + (mx.harpy || 0) * 1.5) * .06; hard += (mx.gargoyle || 0) * .14;
+  for (const m of G.mons) if (m.fly && !m.dead && m.hp > 0) { if (m.def.armor) hard += .25; else soft += .08; }
+  if (soft + hard <= 0) return { short: 0, hard: 0 };
+  const h = hard / (soft + hard), want = Math.min(4, soft + hard) * (1.2 + .55 * G.level);
+  let have = 0;
+  for (const t of towers) {
+    if (!t.def.air || t.state !== 'active') continue;
+    let v = t.lvl + 1 + (t.branch === 'tempest' || t.branch === 'volley' ? 1.5 : 0) + (t.oc || 0) * .5;
+    if (t.kind === 'archer' && t.branch !== 'longbow') v *= 1 - .5 * h;
+    have += v;
+  }
+  return { short: Math.min(4, Math.max(0, want - have)), hard: h };
+}
 // In a run with Fate's Lantern rerolls left, the commander rerolls a land that came up with two or more curses
 // (once per land, before the first wave is out).
 function aiReroll() {
@@ -7798,7 +7878,7 @@ function restoreRun(S) {
   } finally { AU.ready = ar; }
   SAVE.last = S.fresh ? null : S;
   sfx('ignite', G.B.beacon.x, G.B.beacon.z, 1, 1);
-  UI.banner(G.B.bio.name + ' · Land ' + (G.level + 1), 3, false);
+  UI.banner(G.B.bio.name + (G.level >= BIOMES.length ? ' · Night land ' + (G.level - BIOMES.length + 1) : ' · Land ' + (G.level + 1)), 3, false);
   return true;
 }
 // A saved tower, built at once: no scaffolding, at its level and branch, with its overcharge.
@@ -8120,7 +8200,7 @@ function bossEmpower(m) {
   m.affix = {}; for (const k of pick) m.affix[k] = 1;
   if (m.affix.swift) m.spdMul = (m.spdMul || 1) * 1.25;
   if (m.affix.warded) { m.wardT = 20; m.ward = m.wardMax = m.maxHp * .22; }
-  m.affixName = pick.map(k => BOSS_AFFIX[k].name).join(' ') + ' ' + m.def.name;
+  m.affixName = (/^The /.test(m.def.name) ? 'The ' : '') + pick.map(k => BOSS_AFFIX[k].name).join(' ') + ' ' + m.def.name.replace(/^The /, ''); // 'The Undying Drowned King', not 'Undying The Drowned King'
   if (UI.banner) UI.banner(m.affixName, 3, true);
 }
 // Called from killMonster: Volatile bursts (they reuse the sapper chain, so they can set each other off).
@@ -8177,7 +8257,7 @@ const SPEAKERS = {
   hollow: { name: 'The Hollowing', col: '#c8a8ff' },
   giant: { name: 'Bone Giant', col: '#efe4cd' }, ogre: { name: 'Ogre', col: '#c8d890' }, jotun: { name: 'Frost Jotun', col: '#9fd4ff' },
   queen: { name: 'Brood Queen', col: '#e0a0e8' }, colossus: { name: 'Magma Colossus', col: '#ffa060' }, king: { name: 'The Buried King', col: '#f0d890' },
-  leviathan: { name: 'The Drowned King', col: '#90e8d8' },
+  leviathan: { name: 'The Drowned King', col: '#90e8d8' }, herald: { name: 'The Hollow Herald', col: '#e8d8a0' },
 };
 // Each beat: a title (for the Codex) and its lines as [speaker, text].
 const BEATS = {
@@ -8217,6 +8297,16 @@ const BEATS = {
   'boss:colossus': { title: 'The Magma Colossus', lines: [['colossus', 'I was fire before your kind learned to fear it.']] },
   'boss:king': { title: 'The Buried King', lines: [['king', 'Kneel, torch-bearer. The dead are owed their tribute.']] },
   'boss:leviathan': { title: 'The Drowned King', lines: [['leviathan', 'The sea took every keeper before you. The sea is patient.']] },
+  'boss:herald': { title: 'The Hollow Herald', lines: [
+    ['herald', 'Hush, little flame. I carry a hundred beacons in this cage. Yours will make a hundred and one.'],
+    ['ghost', 'That light in its lantern was ours once. Break the cage, Keeper.'],
+  ] },
+  // The Long Night: the first land where the Herald walks (STORY.landStart, heraldLand in 62-game.js).
+  herald: { title: 'The Herald', lines: [
+    ['ghost', 'Something walks ahead of the dark tonight. A tall thing, carrying a lantern that does not burn.'],
+    ['ghost', 'The Hollowing\'s herald. It steals light. Do not crowd your towers where it walks.'],
+    ['keeper', 'Then it can try to steal mine.'],
+  ] },
   ending: { title: 'Six Fires', lines: [
     ['ghost', 'Six fires burn again. I could rest now, Keeper... almost.'],
     ['ghost', 'But the Hollowing has no bottom. Past the last beacon the night goes on, and the lands change shape in it.'],
@@ -8265,7 +8355,7 @@ const BEATS = {
   ] },
 };
 const NIGHT_POOL = Object.keys(BEATS).filter(k => /^night:\d+$/.test(k));
-const BEAT_ORDER = ['intro', 'land:ashen', 'boss:giant', 'clear:first', 'land:frost', 'boss:jotun', 'land:fen', 'boss:queen', 'halfway', 'land:ember', 'boss:colossus', 'land:dunes', 'boss:king', 'land:storm', 'boss:leviathan', 'ending', 'boss:ogre', 'return', 'heat', 'night:enter', 'daily'].concat(NIGHT_POOL);
+const BEAT_ORDER = ['intro', 'land:ashen', 'boss:giant', 'clear:first', 'land:frost', 'boss:jotun', 'land:fen', 'boss:queen', 'halfway', 'land:ember', 'boss:colossus', 'land:dunes', 'boss:king', 'land:storm', 'boss:leviathan', 'ending', 'herald', 'boss:herald', 'boss:ogre', 'return', 'heat', 'night:enter', 'daily'].concat(NIGHT_POOL);
 
 // Portraits, 16x16, drawn in code. One letter per pixel; '.' is clear.
 const PORTRAIT_PAL = {
@@ -8437,6 +8527,24 @@ const PORTRAITS = {
     '.....oooooo.....',
     '................',
   ],
+  herald: [
+    '.....oooooo.....',
+    '....okkkkkko....',
+    '...okkKKKKkko...',
+    '..okkKooooKkko..',
+    '..okKoKKKKoKko..',
+    '..okKoYKKYoKko..',
+    '..okKoKKKKoKko..',
+    '..okkKoKKoKkko..',
+    '.okkkKKooKKkkko.',
+    '.okSkkKKKKkkSko.',
+    'okSSkkkKKkkkSSko',
+    'okSoGGokkkkkSSko',
+    'oSSoYEoSkkkSSSSo',
+    'oSSoGGoSSkSSSSSo',
+    'oSSSooSSSSSSSSSo',
+    'oooooooooooooooo',
+  ],
   leviathan: [
     '..G..G.GG.G..G..',
     '..GooGoGGoGooG..',
@@ -8518,6 +8626,7 @@ const STORY = {
     if (restoring || !inRun()) return;
     if (G.level < CAMPAIGN_LANDS) this.play('land:' + G.B.bio.key);
     else {
+      if (heraldLand()) this.play('herald'); // once per keeper, the first land the Herald walks
       const d = nightDepth(), first = META.run && META.run.level0 === G.level;
       if (first && G.mode === 'daily') this.play('daily');
       else if (first && G.mode === 'night') this.play('night:enter');
@@ -8730,6 +8839,9 @@ function metaLandStart(restoring) {
   if (!inRun()) return;
   // The Daily Long Night: the day's mutators, rolled from the seed instead of the gameplay stream (Forge's roll skips the land).
   if (G.mode === 'daily') { setMods(dailyMods(G.runSeed, G.level)); G.modLevel = G.level; G.bountyMul *= modMul('bounty'); }
+  // A continued run keeps the land's saved mutators (before round 11 they rolled afresh, so reloading rerolled the curses).
+  else if (restoring && G.restoreMods && G.restoreMods.level === G.level) { setMods(G.restoreMods.keys); G.modLevel = G.level; G.bountyMul *= modMul('bounty'); }
+  G.restoreMods = null;
   achLandStart();
   if (!restoring) { G.gold += upVal('gold'); UI.goldShown = G.gold; G.mana = Math.min(G.manaMax, G.mana + upVal('mana')); }
   // Heat tier 3 asks for an extra mutator: Forge's modCount adds G.heatMods when the land's mutators roll.
@@ -8781,7 +8893,9 @@ function bankRun(how) {
   const S = META.stats; S.runs++; S.slain += sm.slain || 0; S.bestWave = Math.max(S.bestWave, waveNumber()); if (how === 'abandon') S.abandons++;
   if (run.mode === 'daily') {
     // The day's best counts waves survived; a run continued past midnight still counts for the day it began.
-    const day = run.day || dailyDate(), D = META.daily && META.daily.date === day ? META.daily : (META.daily = { date: day, best: 0, runs: 0 });
+    // (A day older than the stored record, say yesterday's daily continued today, must not wipe today's best: it is
+    // counted on a throwaway record instead.)
+    const day = run.day || dailyDate(), md = META.daily, D = md && md.date === day ? md : md && md.date > day ? { date: day, best: 0, runs: 0 } : (META.daily = { date: day, best: 0, runs: 0 });
     D.runs++; S.dailies++; res.daily = { day, waves: sm.waves || 0, best: Math.max(D.best, sm.waves || 0), newBest: (sm.waves || 0) > D.best };
     D.best = res.daily.best;
   }
@@ -8816,6 +8930,8 @@ function startRun(mode, heat) {
   // A run starts with the lifetime sightings, so "New:" tips only show for monsters this keeper has not met in a run.
   G.seen = {}; for (const k in META.seen) G.seen[k] = 1;
   META.run = { mode: G.mode, heat: G.heat, level0: G.level, banked: false, ending: false, t: 0, notes: [], ach: [], day: G.mode === 'daily' ? dailyDate() : '' };
+  // For Echo's daily sting: true only for a daily started fresh from the menu, never for one continued from a save.
+  G.dailyFresh = G.mode === 'daily';
   applyMeta(); G.mana = 30; G.rerolls = upVal('reroll');
   TUT.maybeStart();
   if (TUT.active()) UI.everManual = true; // the tutorial replaces the first "You command" help line
@@ -8827,7 +8943,7 @@ function startRun(mode, heat) {
 // Back to the AI demo behind the main menu: a fresh random land, the commander in charge, every number back to 1.
 function startDemo() {
   STORY.clear(); TUT.stop(); SAVE.hold = false;
-  G.mode = 'demo'; G.heat = 0; META.run = null; G.holdClear = false; MENU.victory = null; applyMeta(); G.maxLives = 20;
+  G.mode = 'demo'; G.heat = 0; META.run = null; G.dailyFresh = false; G.holdClear = false; MENU.victory = null; applyMeta(); G.maxLives = 20;
   BIOME.start = Math.floor(Math.random() * BIOMES.length) - G.boardIndex;
   G.level = 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++; G.press = 1; G.speed = 1; G.paused = false; G.modLevel = -1; setMods([]);
   UI.setManual(false); camReset();
@@ -8841,16 +8957,18 @@ function abandonRun(how) {
 }
 // Continue: the saved run's mode and Heat come back with it (restoreRun calls this before rebuilding the board).
 function metaRestore(S) {
-  SAVE.hold = false;
+  SAVE.hold = false; G.dailyFresh = false;
   G.mode = S.mode === 'night' || S.mode === 'daily' || S.mode === 'demo' ? S.mode : 'campaign'; G.holdClear = false; MENU.victory = null;
   G.heat = _int(S.heat, 0, HEAT_MAX) ? S.heat : 0; G.runSeed = _int(S.runSeed, 0, 2e9) ? S.runSeed : S.seed;
   G.rerolls = _int(S.rerolls, 0, 9) ? S.rerolls : upVal('reroll');
   META.run = { mode: G.mode, heat: G.heat, level0: _int(S.level0, 0, 999) ? S.level0 : (nightMode(G.mode) ? CAMPAIGN_LANDS : 0), banked: false, ending: !!S.ending, endingPaid: !!S.endingPaid, t: 0, notes: [], ach: [], day: typeof S.day === 'string' ? S.day : '' };
   if (G.mode !== 'demo') { G.seen = {}; for (const k in META.seen) G.seen[k] = 1; }
+  G.restoreMods = Array.isArray(S.mods) && _int(S.modLevel, 0, 999) && typeof MUTATORS === 'object' ? { level: S.modLevel, keys: S.mods.filter(k => typeof k === 'string' && MUTATORS[k]).slice(0, 8) } : null;
   applyMeta();
 }
 function metaSnapshot(S) {
   S.mode = G.mode; S.heat = G.heat; S.runSeed = G.runSeed; S.rerolls = G.rerolls;
+  if (G.modLevel === G.level && Array.isArray(G.mods)) { S.mods = G.mods.slice(); S.modLevel = G.level; }
   if (META.run) { S.level0 = META.run.level0; S.ending = !!META.run.ending; S.endingPaid = !!META.run.endingPaid; if (META.run.day) S.day = META.run.day; }
   return S;
 }
@@ -9714,6 +9832,8 @@ const UI = (() => {
   function cycleSpeed() { G.speed = G.speed % 3 + 1; if (G.paused) G.paused = false; sfx('uiClick', CAM.x, CAM.z, .6); }
   function soundTap() { if (AU.ready && U.sndArmed) setMute(!AU.muted); }
   U.sawMonster = type => { metaSaw(type); if (G.seen[type]) return; G.seen[type] = 1; if (MON[type].tip && U.tips.length < 4) U.tips.push(type); };
+  // Echo ghosts (the Echoes mutator, the Hollow Herald's call): one tip the first time a keeper sees one.
+  U.sawEcho = () => { if (G.seen.echo) return; G.seen.echo = 1; metaSaw('echo'); U.tips.unshift('echo'); };
   U.sawElite = kind => { const key = 'elite:' + kind; if (G.seen[key]) return; G.seen[key] = 1; if (U.tips.length < 5) U.tips.push(key); };
   const HELP = {
     cmd: () => ['You command', U.touch ? 'Tap a pad to build. Spells: tap one, then the road. The gear button has help and sound.' : 'Click a pad to build. Q E T cast spells on the road. O opens settings and help.'],
@@ -9723,7 +9843,7 @@ const UI = (() => {
     oc: () => ['Overcharge', 'A tower with a branch can be overcharged three times, for more damage each time.'],
     place: () => ['Placing a tower', 'Free pads glow gold where you can afford it, and red while the gold is short. Click one to build.'],
   };
-  const tipInfo = key => { if (key.startsWith('help:')) { const h = HELP[key.slice(5)](); return { head: h[0], tip: h[1], bd: COLR.bdHi, dur: 7.5 }; } if (key.startsWith('event:')) { const E = EVENTS[key.slice(6)]; return { head: E.name, tip: E.tip, bd: '#5a7a9a' }; } if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
+  const tipInfo = key => { if (key === 'echo') return { head: 'Echo ghosts', tip: 'Pale ghosts of the slain walk the road once more. Weaker, half the gold, but they still cost lives.', bd: ECHO_COL, dur: 6.5 }; if (key.startsWith('help:')) { const h = HELP[key.slice(5)](); return { head: h[0], tip: h[1], bd: COLR.bdHi, dur: 7.5 }; } if (key.startsWith('event:')) { const E = EVENTS[key.slice(6)]; return { head: E.name, tip: E.tip, bd: '#5a7a9a' }; } if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
   // One line of numbers for a branch, in the words the menu uses.
   function branchStat(kind, key) {
     const b = TOWER[kind].branches[key], f = v => (Math.round(v * 10) / 10).toString();
@@ -9897,6 +10017,7 @@ const UI = (() => {
     if (window.visualViewport && Math.abs(window.visualViewport.scale - 1) > .02) fixPageZoom();
     pollGamepad(dt); MENU.update(dt);
     if (U.sets) U.sets.t += dt;
+    if (G.phase === 'play' && !G.seen.echo && (G.bossWave || (typeof modOn === 'function' && modOn('echoes')))) for (const m of G.mons) if (m.echo && !m.dead && m.vis) { U.sawEcho(); break; }
     // First steps for a player in command: one help line each, the first time it matters.
     if (U.manual && G.phase === 'play') {
       if (G.lives <= G.maxLives - 4) helpTip('mend');
@@ -10646,7 +10767,7 @@ const MENU = (() => {
   function titleList() {
     const c = C(), S = M.save, list = [];
     if (S) { const mins = Math.max(0, (Date.now() - S.t) / 6e4), ago = mins < 1 ? 'just now' : mins < 60 ? Math.round(mins) + ' min ago' : mins < 2880 ? Math.round(mins / 60) + ' h ago' : Math.round(mins / 1440) + ' days ago';
-      list.push({ id: 'mcont', label: 'Continue', sub: 'Land ' + (S.level + 1) + ' · Wave ' + S.k + (S.heat ? ' · Heat ' + S.heat : '') + ' · ' + ago, fn: doContinue, col: c.amber }); }
+      list.push({ id: 'mcont', label: 'Continue', sub: (S.mode === 'daily' ? 'Daily · Night land ' + (S.level - CAMPAIGN_LANDS + 1) : S.level >= CAMPAIGN_LANDS ? 'Night land ' + (S.level - CAMPAIGN_LANDS + 1) : 'Land ' + (S.level + 1)) + ' · Wave ' + S.k + (S.heat ? ' · Heat ' + S.heat : '') + ' · ' + ago, fn: doContinue, col: c.amber }); }
     list.push({ id: 'mcamp', label: 'Campaign', sub: META.stats.campaigns ? 'Six lands · beaten ' + META.stats.campaigns + 'x' : 'Six lands. Light the beacons.', fn: () => pickMode('campaign'), col: S ? null : c.amber });
     list.push({ id: 'mnight', label: 'The Long Night', short: 'Long Night', sub: META.stats.campaigns ? (META.stats.bestNight ? 'Deepest: night land ' + META.stats.bestNight : 'Endless lands') : 'Endless lands · after the campaign', fn: () => pickMode('night') });
     const db = dailyBest();

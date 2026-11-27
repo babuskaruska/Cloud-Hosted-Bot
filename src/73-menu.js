@@ -288,7 +288,7 @@ const MENU = (() => {
   function titleList() {
     const c = C(), S = M.save, list = [];
     if (S) { const mins = Math.max(0, (Date.now() - S.t) / 6e4), ago = mins < 1 ? 'just now' : mins < 60 ? Math.round(mins) + ' min ago' : mins < 2880 ? Math.round(mins / 60) + ' h ago' : Math.round(mins / 1440) + ' days ago';
-      list.push({ id: 'mcont', label: 'Continue', sub: 'Land ' + (S.level + 1) + ' · Wave ' + S.k + (S.heat ? ' · Heat ' + S.heat : '') + ' · ' + ago, fn: doContinue, col: c.amber }); }
+      list.push({ id: 'mcont', label: 'Continue', sub: (S.mode === 'daily' ? 'Daily · Night land ' + (S.level - CAMPAIGN_LANDS + 1) : S.level >= CAMPAIGN_LANDS ? 'Night land ' + (S.level - CAMPAIGN_LANDS + 1) : 'Land ' + (S.level + 1)) + ' · Wave ' + S.k + (S.heat ? ' · Heat ' + S.heat : '') + ' · ' + ago, fn: doContinue, col: c.amber }); }
     list.push({ id: 'mcamp', label: 'Campaign', sub: META.stats.campaigns ? 'Six lands · beaten ' + META.stats.campaigns + 'x' : 'Six lands. Light the beacons.', fn: () => pickMode('campaign'), col: S ? null : c.amber });
     list.push({ id: 'mnight', label: 'The Long Night', short: 'Long Night', sub: META.stats.campaigns ? (META.stats.bestNight ? 'Deepest: night land ' + META.stats.bestNight : 'Endless lands') : 'Endless lands · after the campaign', fn: () => pickMode('night') });
     const db = dailyBest();
