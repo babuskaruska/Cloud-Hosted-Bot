@@ -134,6 +134,15 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
   - Making sure the land rotation, the AI and the QA tests include the new land.
 - **Echo:** keyed on `G.B.bio.key === 'storm'`: rain, surf and thunder ambience (with thunder synced to lightning if Ash exposes a hook such as `FX.lightningAt` or a `G.flashT` value); the land's music mode (stormy, minor, with low strings and timpani feel); the boss theme for `leviathan`; and the `'thunderstorm'` event sound.
 
+## Round 6 results (merged; build version 8)
+
+- **Stormreach** (`storm`, the sixth land):
+  - **Ash:** `42-storm.js` (sea, lighthouse beams, storm flashes; `G.flashT` counts up and resets on a flash; also `G.flashX` / `G.flashZ` / `G.flashD` and `FX.onFlash`), `34-coast.js` (wreck, masts, kelp, tide pools, lighthouse keep), `FX.lightningAt(x, z, power)`, `RIGS.leviathan`.
+  - **Mira:** `MON.leviathan` (The Drowned King: summons `drowned`, tidal wave every 12 s, enrage), `MON.drowned`, the thunderstorm event in `63-events.js`, and `validSave` re-anchoring old 5-land saves by land key.
+  - **Echo:** storm music in A Aeolian, rain, surf and thunder synced to `G.flashT`, the leviathan theme and sting, and the sounds `tidalWave`, `thunder` and `thunderstorm`.
+- QA smoke-tests 6 lands. Sims: no defeats.
+- **Round 7 (in progress): bug bash only, no new features.**
+
 ## Next
 
 - Round 5 ideas: save and continue a run (phones lose progress when the tab is closed), phone performance with LOD or fewer shadows in big crowds, a sound check with the real new monsters, harpy close-up polish.
