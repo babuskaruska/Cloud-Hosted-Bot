@@ -23,6 +23,7 @@ The play link above is the original game. The build in this repository adds the 
 - **Four new monsters:** the siege ram, the goblin shaman that wards its allies, the harpy that snatches footmen, and hell hounds that leave fire.
 - **Feel:** camera shake, hit-stop, gore, ground fire, boss entrances, chain explosions, knights, pikemen and militia footmen.
 - **Sound:** music that follows the danger, with its own mode and drum kit for each land; boss themes and stings; land ambience; and fanfares for clearing a land or losing.
+- **Save and continue:** the run saves at each wave, so closing the tab (or iOS dropping it) offers "Continue" next time.
 - **Settings** (gear button or `O`): volume, graphics quality and a How to play page. A run summary appears on defeat.
 - **Testing:** `node tools/qa.js` runs smoke tests in every land, sims played by the AI commander, and a render-cost check against a saved baseline.
 

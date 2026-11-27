@@ -107,6 +107,33 @@ Mira designs and Ash models four new monsters. Mira adds a `MON` entry with `rig
   - Re-saved the baseline.
 - **Perf note:** measure render cost only while no other agents are running (use `../bench2.js`-style A/B in one browser).
 
+## Round 5 results (merged; build version 7)
+
+- **Mira, save and continue:**
+  - The save is `localStorage` key `cinderwatch.save`, version 1, written at each wave start, on land clear and on hide.
+  - "Welcome back" offers continue or new game.
+  - Test flags (`seed`, `manual`, `ff`, `biome`, `level`, `k`, `board`, `phase`, `nosave`) skip the offer and never write.
+  - Test hook: `__cw.save`.
+- **Ash, phone performance:**
+  - Shadows limited per light; crowd shadow culling.
+  - Off-screen monsters skip drawing (`drawMonsterQuiet` keeps the random calls, so results are identical with rendering on or off).
+  - Fewer particles in big crowds; auto-resolution undoes a drop that didn't help.
+  - Worst case: shadow triangles 604k → 354k, draw calls 316 → 287. Harpy polished.
+- **Echo:** checked against the real monsters, with no double deaths (removed the `sfx` calls in `DEATH_FX`); detection every frame; limits tuned; 20 min live with no errors; mute and every slider at 0 verified silent.
+- **Forge:** merged; balance identical to the baseline; rendering on and off give identical results; killed orphaned headless Chromium processes (35 of them, burning CPU). **Kill stray Chromium before measuring perf:** `pkill -f pw-browsers/chromium` when no tests are running.
+
+## Round 6 contract: a sixth land, Stormreach (`key: 'storm'`)
+
+A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, lightning flashes that light the whole board, a lighthouse-like beacon, wrecked ship timbers, kelp and driftwood.
+
+- **Ash:** the `BIOMES` entry in `29-biome.js` (palette, light, mist, rain weather, water as surf), the terrain and props for this land, lightning flashes (a global flash plus `lightFlash`), and the boss model (`RIGS.leviathan`).
+- **Mira:**
+  - The boss `MON.leviathan` ("The Drowned King"), a sea giant that summons drowned skeletons and sometimes sweeps a wave across the road that pushes footmen back. Its theme and behaviour are Mira's.
+  - The mob preferences for `storm` (harpies, wraiths, skeleton knights and so on).
+  - The land event `'thunderstorm'` in `src/63-events.js`: lightning strikes random spots on the road, hurting monsters and sometimes stunning a tower, plus heavier rain through `eventLook`.
+  - Making sure the land rotation, the AI and the QA tests include the new land.
+- **Echo:** keyed on `G.B.bio.key === 'storm'`: rain, surf and thunder ambience (with thunder synced to lightning if Ash exposes a hook such as `FX.lightningAt` or a `G.flashT` value); the land's music mode (stormy, minor, with low strings and timpani feel); the boss theme for `leviathan`; and the `'thunderstorm'` event sound.
+
 ## Next
 
 - Round 5 ideas: save and continue a run (phones lose progress when the tab is closed), phone performance with LOD or fewer shadows in big crowds, a sound check with the real new monsters, harpy close-up polish.
