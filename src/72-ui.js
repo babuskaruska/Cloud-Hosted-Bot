@@ -58,6 +58,7 @@ const UI = (() => {
   U.banner = (text, dur, big) => { U.msg = { text, t: 0, dur, big }; };
   U.ping = (x, y, z, byPlayer) => { fxTimed(4, x, y + .12, z, 5, 5, byPlayer ? 1.0 : 1.5, byPlayer ? 1.4 : 1.1, byPlayer ? 1.8 : .5, .7, .55, { ground: true }); };
   U.COLR = COLR; U.plate = (...a) => plate(...a); U.openSettings = on => openSettings(on); U.setMute = b => setMute(b);
+  U.bossCard = (kind, name, title) => BOSSCARD.show(kind, name, title); // Ash: 52-portraits.js draws it
   U.closeMenu = () => { U.menu = null; U.armed = null; U.spell = null; };
   U.coinFrom = (x, y, z, value) => {
     if (U.coins.length > 70) { U.goldShown += value; return; }
@@ -66,9 +67,15 @@ const UI = (() => {
 
   function plate(x, y, w, h, o = {}) {
     const c = U.ctx, s = U.s; x = Math.round(x); y = Math.round(y); w = Math.round(w); h = Math.round(h);
+    // The frame (Ash): a soft drop shadow, the notched border, a bevel (lit under the top edge, shaded above the bottom)
+    // and, on bigger plates, bright rivets in the four corners. Same footprint as before.
+    const ga = c.globalAlpha;
+    c.fillStyle = 'rgba(0,0,0,0.4)'; c.fillRect(x + 2 * s, y + h, w - 3 * s, s); c.fillRect(x + w, y + 2 * s, s, h - 3 * s);
     c.fillStyle = o.bd || COLR.bd; c.fillRect(x + s, y, w - 2 * s, h); c.fillRect(x, y + s, w, h - 2 * s);
     c.fillStyle = o.bg || COLR.bg; c.fillRect(x + 2 * s, y + s, w - 4 * s, h - 2 * s); c.fillRect(x + s, y + 2 * s, w - 2 * s, h - 4 * s);
+    if (h >= 8 * s) { c.fillStyle = 'rgba(255,232,190,0.07)'; c.fillRect(x + 2 * s, y + s, w - 4 * s, s); c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(x + 2 * s, y + h - 2 * s, w - 4 * s, s); }
     if (o.hi) { c.fillStyle = o.hi; c.fillRect(x + 2 * s, y + s, w - 4 * s, s); }
+    if (w >= 28 * s && h >= 14 * s) { c.globalAlpha = ga * .75; c.fillStyle = '#ffe2a0'; for (const [cx, cy] of [[x + s, y + s], [x + w - 2 * s, y + s], [x + s, y + h - 2 * s], [x + w - 2 * s, y + h - 2 * s]]) c.fillRect(cx, cy, s, s); c.globalAlpha = ga; }
   }
   function text(str, x, y, col, o) { return PX.text(U.ctx, str, x, y, U.s, col || COLR.tx, o); }
   const tw = str => PX.measure(str) * U.s;
@@ -291,6 +298,15 @@ const UI = (() => {
     if (now - U.lastTap.t < 330 && Math.hypot(x - U.lastTap.x, y - U.lastTap.y) < 40 * (R.dpr || 1)) { U.lastTap.t = -9; if (CAM.man && CAM.mzoom > 1.3) camReset(); else camZoomTo(Math.max(1.9, (CAM.man ? CAM.mzoom : CAM.zoom) * 1.6), x, y); }
     else { U.lastTap.t = now; U.lastTap.x = x; U.lastTap.y = y; }
   }
+  // Placement feedback (Ash): an empty pad with a tower kind in mind (armed, hovered or picked in the build menu) tints
+  // its pad ring and range preview green-gold when that tower can be built there now, red when the gold is short.
+  function placeLook(kind) {
+    if (!kind || !TOWER[kind]) return;
+    const can = G.gold >= TOWER[kind].cost[0] || G.freeTowers > 0, pulse = .5 + .5 * Math.sin(G.t * (can ? 5 : 10));
+    if (can) { U.padMesh.material.color.setRGB(1.5, 2.3, .8); U.rangeMesh.material.color.setRGB(1.1, 1.7, .6); U.rangeMesh.material.opacity = .42 + .12 * pulse; }
+    else { U.padMesh.material.color.setRGB(2.6, .55, .35); U.rangeMesh.material.color.setRGB(1.8, .45, .3); U.rangeMesh.material.opacity = .26; }
+    U.padMesh.material.opacity = .55 + .35 * pulse;
+  }
   function setRing(mesh, cx, cz, radius, width) {
     const P = mesh.geometry.attributes.position, a = P.array, H = G.B.heightAt, n = mesh.seg;
     for (let i = 0; i <= n; i++) { const t = i / n * TAU, c = Math.cos(t), s = Math.sin(t); for (let k = 0; k < 2; k++) { const r = radius + (k ? width : 0), x = cx + c * r, z = cz + s * r, o = (i * 2 + k) * 3; a[o] = x; a[o + 1] = H(x, z) + .1; a[o + 2] = z; } }
@@ -360,9 +376,10 @@ const UI = (() => {
       const pad = tgt.pad, pulse = .5 + .5 * Math.sin(G.t * 5);
       U.rangeMesh.material.color.setRGB(1.5, 1.15, .6);
       setRing(U.padMesh, pad.x, pad.z, 1.5, .1); U.padMesh.material.opacity = .45 + .25 * pulse;
-      let range = 0; const bk = tgt.tower && U.menu && U.menu.tower === tgt.tower && canBranch(tgt.tower) ? (U.menu.sel || (U.hotBtn && U.hotBtn.branch)) : null;
-      if (bk) range = tgt.tower.def.branches[bk].range || tgt.tower.range; else if (tgt.tower) range = tgt.tower.range; else { const kind = (U.menu && (U.menu.sel || (U.hotBtn && U.hotBtn.kind))) || U.armed || (U.menu && U.btns[U.menu.focus] && U.gp.active && U.btns[U.menu.focus].kind) || 'archer'; range = TOWER[kind].range[0]; }
+      let range = 0, pk = null; const bk = tgt.tower && U.menu && U.menu.tower === tgt.tower && canBranch(tgt.tower) ? (U.menu.sel || (U.hotBtn && U.hotBtn.branch)) : null;
+      if (bk) range = tgt.tower.def.branches[bk].range || tgt.tower.range; else if (tgt.tower) range = tgt.tower.range; else { pk = (U.menu && (U.menu.sel || (U.hotBtn && U.hotBtn.kind))) || U.armed || (U.menu && U.btns[U.menu.focus] && U.gp.active && U.btns[U.menu.focus].kind) || null; range = TOWER[pk || 'archer'].range[0]; }
       setRing(U.rangeMesh, pad.x, pad.z, range, .07); U.rangeMesh.material.opacity = .34;
+      U.padMesh.material.color.setRGB(2.2, 1.7, .9); placeLook(pk);
     } else { U.padMesh.visible = false; U.rangeMesh.visible = false; }
     R.canvas.style.cursor = U.panning ? 'grabbing' : U.spell && !U.hotBtn && !U.hudHot ? 'crosshair' : (U.hotBtn || U.hover || U.hudHot) ? 'pointer' : 'default';
   }
@@ -552,6 +569,7 @@ const UI = (() => {
       const m = U.msg; m.t += R.frameDt; const a = sat(Math.min(m.t * 3, (m.dur - m.t) * 2));
       if (m.t >= m.dur || (G.phase === 'defeat' && G.phaseT > SUMMARY_AT)) U.msg = null; else { let sc = s + (m.big ? 2 : 1); while (sc > 2 && PX.measure(m.text) * sc + pad * 4 > Wr - iL - 6 * s) sc--; const w = PX.measure(m.text) * sc + pad * 4, h = PX.LINE * sc + pad * 2; c.globalAlpha = a; const yb = Math.max(Math.round(H * .2), y0 + topH + 4 * s); plate(Math.round(W / 2 - w / 2), yb, w, h, { bd: m.big ? COLR.ember : COLR.bdHi }); PX.text(c, m.text, W / 2, yb + pad, sc, m.big ? '#ffd9a8' : COLR.tx, { align: 'c' }); c.globalAlpha = 1; }
     }
+    BOSSCARD.draw(c, s, iL, y0 + topH, Wr, Hb); // the boss intro card (52-portraits.js)
     U.menuRect = null;
     if (U.menu && G.phase === 'play') {
       const m = U.menu, p = proj(m.pad.x, m.pad.y + (m.tower ? Math.min(3.6, m.tower.mounts.top) : 1.2), m.pad.z), a = sat(m.t * 8), mp = 6 * s;
@@ -636,7 +654,7 @@ const UI = (() => {
     }
     if (hot !== U.hotBtn && hot) sfx('uiHover', CAM.x, CAM.z, .5);
     U.hotBtn = hot;
-    if (U.armed && mouse && G.phase === 'play') { const l = TOWER[U.armed].name + ': click a pad', w = tw(l) + pad * 2; const xx = clamp(U.mx + 10 * s, 2 * s, W - w - 2 * s), yy = clamp(U.my + 10 * s, 2 * s, H - LH - pad * 2); plate(xx, yy, w, LH + pad * 2 - s, { bd: COLR.bdHi }); text(l, xx + pad, yy + pad - s, COLR.tx); }
+    if (U.armed && mouse && G.phase === 'play') { const ok = G.gold >= TOWER[U.armed].cost[0] || G.freeTowers > 0, l = TOWER[U.armed].name + (ok ? ': click a pad' : ': not enough gold'), w = tw(l) + pad * 2; const xx = clamp(U.mx + 10 * s, 2 * s, W - w - 2 * s), yy = clamp(U.my + 10 * s, 2 * s, H - LH - pad * 2); plate(xx, yy, w, LH + pad * 2 - s, { bd: ok ? COLR.bdHi : COLR.red }); text(l, xx + pad, yy + pad - s, ok ? COLR.tx : COLR.red); }
     if (U.titleT < 7 && !U.menu && !U.sets && !U.offer && G.mode === 'demo') {
       const a = sat(Math.min((U.titleT - .4) * 1.5, (6.6 - U.titleT) * 1.2));
       if (a > 0) {
