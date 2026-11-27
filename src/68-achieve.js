@@ -81,7 +81,7 @@ function achDraw(ctx, E) {
   const head = 'Achievement', ic = PX.iconSize(a.icon)[0] ? a.icon : 'star', [iw, ih] = PX.iconSize(ic), ik = ps * 2;
   const tw = Math.max(PX.measure(head) * ps, PX.measure(a.name) * ps), w = Math.min(E.Wr - E.iL - 8 * s, iw * ik + 3 * p + tw), h = Math.max(ih * ik, 2 * L) + 2 * p;
   const k = Math.min(sat(q.t * 4), sat((D - q.t) * 3)), e = 1 - (1 - k) * (1 - k);
-  const x = Math.round((E.iL + E.Wr) / 2 - w / 2), y = Math.round(E.iT + 4 * s + (UI.scr ? 0 : 26 * s) - (1 - e) * (h + 10 * s));
+  const x = Math.round((E.iL + E.Wr) / 2 - w / 2), y = Math.round(E.iT + 4 * s + (UI.scr ? 0 : 32 * s) - (1 - e) * (h + 10 * s));
   ctx.globalAlpha = e;
   ctx.save(); ctx.shadowColor = 'rgba(255,170,80,0.55)'; ctx.shadowBlur = 10 * s * (.6 + .4 * Math.sin(q.t * 5)); UI.plate(x, y, w, h, { bd: c.bdHi, bg: 'rgba(30,22,12,0.96)' }); ctx.restore();
   PX.icon(ctx, ic, x + p, y + Math.round((h - ih * ik) / 2), ik, 1);

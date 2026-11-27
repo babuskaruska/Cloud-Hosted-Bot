@@ -15,7 +15,10 @@ const MENU = (() => {
   const M = { sel: 0, items: [], t: 0, kb: false, save: null, heatPick: 0, heatMode: 'campaign', treeSel: 0, tab: 'beasts', page: 0, res: null, conf: null, from: null, wasPaused: false, arrivalLv: -99, sparks: [], hudTip: null };
   const C = () => UI.COLR;
   M.modal = () => !!UI.scr || STORY.on();
-  M.hideHud = () => !!UI.scr;
+  // A cinematic (Ash's CINE) hides the HUD, banners and toasts as well: only its letterbox and caption show.
+  const cineOn = () => typeof CINE !== 'undefined' && CINE && typeof CINE.on === 'function' && CINE.on();
+  M.cineOn = cineOn;
+  M.hideHud = () => !!UI.scr || cineOn();
   M.open = (scr, o = {}) => {
     const prev = UI.scr;
     if (scr && !prev && (scr === 'pause' || scr === 'arrival' || scr === 'confirm' || scr === 'results')) { M.wasPaused = G.paused; G.paused = true; }
@@ -112,7 +115,7 @@ const MENU = (() => {
 
   // ---- update: results after a defeat, the arrival card, the tutorial, story ----
   M.update = dt => {
-    M.t += dt; metaTick(dt); STORY.update(dt); TUT.update(dt); achTick(dt); achToastTick(dt);
+    M.t += dt; metaTick(dt); STORY.update(dt); TUT.update(dt); achTick(dt); if (!cineOn()) achToastTick(dt);
     if (UI.scr === 'results') resultsTick(dt);
     // Echo's audio scene: the main menu (the demo behind it), a story beat, the results screen, or the game.
     const scene = STORY.on() ? 'story' : UI.scr === 'results' ? 'results' : UI.scr && G.mode === 'demo' ? 'menu' : 'game';
@@ -659,7 +662,7 @@ const MENU = (() => {
     else if (s === 'pause') drawPause(); else if (s === 'confirm') drawConfirm(); else if (s === 'results') drawResults(); else if (s === 'arrival') drawArrival();
     // A story beat (a Codex replay too) sits over everything: the controls under it stop taking taps.
     if (STORY.on()) { M.items.length = 0; UI.btns.length = 0; drawStory(); }
-    achDraw(ctx, E); // an achievement toast sits over everything
+    if (!cineOn()) achDraw(ctx, E); // an achievement toast sits over everything (but waits out a cinematic)
     if (M.sel >= M.items.length) M.sel = Math.max(0, M.items.length - 1);
   };
   return M;
