@@ -175,6 +175,7 @@ function tideFX(w, B, dt) {
   for (let j = -3; j <= 3; j++) { const lat = j / 3 * ROAD_HALF * 1.05; FX.add.push(p.x - tz * lat, p.y + .3 + .5 * k, p.z + tx * lat, 1.3, .9 * k, 0, 0, .45, .85, 1, .8 * k, 2, 0, 0, 0); }
 }
 
+const BOSS_ESCORT = 280;
 function buildWave(k, level) {
   const q = [], boss = isBossK(k), horde = isHordeK(k, level), W = G.wavesPerLand;
   // Each land's step up in strength phases in over its waves: the first waves of a new land are gentler
@@ -201,8 +202,10 @@ function buildWave(k, level) {
     }
     return q;
   }
-  const menu = waveMenu(k, level), tot = menu.reduce((a, b) => a + b[1], 0);
-  while (budget > 0) {
+  const menu = waveMenu(k, level), tot = menu.reduce((a, b) => a + b[1], 0), budget0 = budget;
+  // From the fifth land on, a boss wave's escort would grow past BOSS_ESCORT bodies (and over five minutes long):
+  // it stops there and the budget left over goes into the escort's health and bounty instead.
+  while (budget > 0 && !(boss && q.length >= BOSS_ESCORT)) {
     let r = rnd() * tot, type = 'skel'; for (const [ty, w] of menu) { r -= w; if (r <= 0) { type = ty; break; } }
     let R = ROSTER[type];
     if (R[0] > budget + 5 || (R[0] >= 30 && heavy >= 1 + (level >> 1)) || (MON[type].fly && air <= 0)) { type = 'skel'; R = ROSTER.skel; }
@@ -211,6 +214,7 @@ function buildWave(k, level) {
     for (let i = 0; i < n && budget > 0; i++) { q.push({ t, type, hpMul, elite: el && (i === 0 || rnd() < .35) ? el : undefined }); t += gap * rr(.8, 1.25) * gm; budget -= R[0]; if (MON[type].fly) air -= R[0]; }
     t += rr(1.1, 2.3) * (boss ? 1.5 : 1) * gm;
   }
+  if (boss && budget > 0) { const f = Math.min(2.5, budget0 / Math.max(1, budget0 - budget)); for (const e of q) if (!MON[e.type].boss) { e.hpMul *= f; e.bm = f; } }
   q.sort((a, b) => a.t - b.t);
   return q;
 }
@@ -247,6 +251,7 @@ function updateWaves(dt) {
       if (c) G.mix[c] = (G.mix[c] || 0) + 1;
       G.mix[e.type] = (G.mix[e.type] || 0) + 1;
       if (e.horde) m.bmul = .6;
+      if (e.bm) m.bmul = (m.bmul || 1) * e.bm;
       if (e.elite) makeElite(m, e.elite);
     }
     if (!G.queue.length) {
@@ -552,7 +557,9 @@ function runSummary() {
 const SUMMARY_AT = 2.6, AUTO_RESTART = 14;
 function restartRun(byPlayer) {
   if (G.phase !== 'defeat' || G.phaseT < SUMMARY_AT) return false;
-  G.level = 0; G.press = byPlayer || UI.playerActive() ? 1 : Math.max(.8, G.press * .85); G.run++; G.newRun = true; setPhase('crumble');
+  G.level = 0; G.press = byPlayer || UI.playerActive() ? 1 : Math.max(.8, G.press * .85); G.run++; G.newRun = true;
+  G.evLevel = -1; // a run lost on the first land still gets that land's event the next time round
+  setPhase('crumble');
   return true;
 }
 function setPhase(p) {
