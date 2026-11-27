@@ -5,7 +5,7 @@
 // music (pads + a step sequencer whose layers follow the danger, with a sting and a theme per boss),
 // pause and page-hide handling, and the master chain (glue, limiter, soft clipper).
 const AU = (function () {
-  const api = { ready: false, muted: false, intensity: 0, unlock: unlock, setMuted: setMuted, setPaused: setPaused, play: play, setAmbience: setAmbience, update: update, setVolume: setVolume, stats: stats, has: (n) => typeof n === 'string' && hasOwn(DEF, n) };
+  const api = { ready: false, muted: false, intensity: 0, unlock: unlock, setMuted: setMuted, setPaused: setPaused, play: play, setAmbience: setAmbience, update: update, setVolume: setVolume, stats: stats, setScene: setScene, storyLine: storyLine, scene: () => SC.cur, describe: (bio) => { const lf = bio ? landFor(bio) : null; return describe(lf ? lf.L : LM.def); }, has: (n) => typeof n === 'string' && hasOwn(DEF, n) };
 
   let ctx = null, sr = 44100;
   let nMaster = null, nMute = null, nSfx = null, nAmb = null, nMusic = null, nRevIn = null;
@@ -738,6 +738,12 @@ const AU = (function () {
   // Each land's base music: a mode, its chords (bass + pad notes, calm-melody notes, which chords may follow),
   // a pad colour, a calm solo voice, a percussion kit, a lead for the motifs, and a tempo offset.
   // semi: the land's key against D (the drone, the choir and the stingers move with it).
+  // The lantern motif, Lanternhold's musical signature: a figure rising from the fifth below to the third (A D E F in
+  // D minor, sol do re mi in a major key), held, then falling home. The title theme is built on it; it is one of the
+  // battle motifs in every land, the calm voice hums it now and then, and the wave-cleared and land-cleared stingers
+  // rise through it. As scale degrees, and as a two-bar motif ([step, degree, length in steps]).
+  const LANTERN = [-3, 0, 1, 2];
+  const LANTERN_M = [[0, -3, 2], [2, 0, 2], [4, 1, 2], [6, 2, 10], [16, 1, 3], [19, 0, 3], [22, -1, 2], [24, 0, 8]];
   const DORIAN = [0, 2, 3, 5, 7, 9, 10], AEOLIAN = [0, 2, 3, 5, 7, 8, 10], HARMMIN = [0, 2, 3, 5, 7, 8, 11], PHRYGDOM = [0, 1, 4, 5, 7, 8, 10];
   const LANDMUS = {
     ashen: { semi: 0, tonic: 50, scale: DORIAN, pad: 'saw', calm: 'piano', kit: 'drums', lead: 'brass', bpm: 0, lvl: 1, // dark D Dorian, drums
@@ -784,14 +790,14 @@ const AU = (function () {
       // Its own motifs, sea-shanty shapes in place of the shared ones: a falling lament, a hauling call and answer, a long descent.
       motifs: [[[0, 4, 4], [4, 4, 2], [6, 3, 2], [8, 2, 4], [12, 0, 4], [16, 1, 6], [22, 2, 2], [24, 0, 8]],
         [[0, 0, 2], [2, 0, 2], [4, 2, 4], [8, 4, 6], [14, 5, 2], [16, 4, 4], [20, 2, 4], [24, 1, 8]],
-        [[0, 7, 6], [6, 6, 2], [8, 4, 4], [12, 3, 4], [16, 2, 6], [22, 1, 2], [24, 0, 8]]],
+        [[0, 7, 6], [6, 6, 2], [8, 4, 4], [12, 3, 4], [16, 2, 6], [22, 1, 2], [24, 0, 8]], LANTERN_M],
       arr: [[0, 4, 0.45], [0.45, 3, 0.3], [0.8, 2, 0.35], [1.2, 0, 0.6], [1.9, 1, 0.35], [2.3, 0, 1.6]] },
   };
   const LM = { def: LANDMUS.ashen, key: 'ashen', bus: null, old: [] };
   const deg = (L, d) => { const n = L.scale.length, o = Math.floor(d / n); return L.tonic + 12 * o + L.scale[((d % n) + n) % n]; };
-  function landNow() { // the land on screen right now (the stingers read it when they play)
-    const k = typeof G !== 'undefined' && G && G.B && G.B.bio && G.B.bio.key;
-    return LANDMUS[k] || LM.def || LANDMUS.ashen;
+  function landNow() { // the land on screen right now (the stingers read it when they play); generated lands included
+    const b = typeof G !== 'undefined' && G && G.B && G.B.bio, lf = b ? landFor(b) : null;
+    return lf ? lf.L : LM.def || LANDMUS.ashen;
   }
 
   // Solo voices, each written to a destination node.
@@ -878,7 +884,7 @@ const AU = (function () {
     const T = 62 + landNow().semi, sh = shape(d, 1.2);
     for (let i = 0; i < 10; i++) timpHit(d, t + i * 0.055, 0.12 + 0.03 * i, mtof(T - 24));
     const cs = gn(d), cf = flt(cs, 'highpass', 4500); noi(t, 0.65, cf); cs.gain.setValueAtTime(0.0001, t); cs.gain.exponentialRampToValueAtTime(0.07, t + 0.6); cs.gain.linearRampToValueAtTime(0.0001, t + 0.66);
-    const MEL = [[0.62, -5, 0.12], [0.77, -5, 0.12], [0.92, -5, 0.12], [1.1, 0, 0.48], [1.62, 4, 0.24], [1.9, 7, 1.5]];
+    const MEL = [[0.62, -5, 0.12], [0.77, 0, 0.12], [0.92, 2, 0.12], [1.1, 4, 0.48], [1.62, 2, 0.24], [1.9, 7, 1.5]]; // the lantern rising, in major
     for (let i = 0; i < MEL.length; i++) { const e = MEL[i]; brassNote(sh, t + e[0], mtof(T + e[1]), e[2], 0.2, 1.3); brassNote(sh, t + e[0], mtof(T + e[1] - 12), e[2], 0.08, 1); }
     [0, 7, 12, 16].forEach((n) => brassNote(sh, t + 1.1, mtof(T - 12 + n), 2.3, 0.075, 1.0));
     hornNote(d, t + 1.1, mtof(T - 24), 2.2, 0.16, 0.9);
@@ -910,9 +916,9 @@ const AU = (function () {
     else if (L.kit === 'storm') { for (let i = 0; i < 8; i++) timpHit(d, te + i * 0.06, 0.08 + 0.05 * i, mtof(L.tonic - 12)); }
     else timpHit(d, te, L.kit === 'heavy' ? 0.55 : 0.4, mtof(deg(L, 0) - 24));
   };
-  // A wave is cleared: the land's voice plays a small rising figure, very soft.
+  // A wave is cleared: the land's voice plays the lantern figure, very soft.
   S.waveClear = (d, t) => {
-    const L = landNow(), D = [0, 2, 4, 7];
+    const L = landNow(), D = LANTERN;
     for (let i = 0; i < D.length; i++) { const m = deg(L, D[i]) + 12, tt = t + i * 0.13, v = i === 3 ? 0.7 : 0.5;
       if (L.calm === 'reed') reedTone(d, tt, m, i === 3 ? 0.7 : 0.14, v); else if (L.calm === 'lowbrass') brassNote(d, tt, mtof(m), i === 3 ? 0.7 : 0.14, 0.2 * v, 1); else if (L.calm === 'oud') oudTone(d, tt, m, v * 2.5, false); else if (L.calm === 'glass') glassTone(d, tt, m + 12, v * 1.4); else if (L.calm === 'cello') concertina(d, tt, m, i === 3 ? 0.7 : 0.14, v * 0.14); else pianoTone(d, tt, m + 12, v); }
     const a = gn(d), af = flt(a, 'bandpass', 2500, 0.7); noi(t, 0.9, af, bufPink); ad(a.gain, t, 0.025, 0.25, 0.6);
@@ -1126,6 +1132,125 @@ const AU = (function () {
       const r = gn(d), rf = flt(r, 'bandpass', 420, 0.9); noi(t, 1.2, rf, bufBrown); ad(r.gain, t, 0.22, 0.25, 0.9);
     }
   };
+  // ---- Round 8: Lanternhold. Voices for the lantern, the story panels and the meta screens (embers, the Keeper's tree,
+  // Heat, the main menu). All of them play on the UI bus, so they sound while the game is paused. ----
+  function lanternTone(d, t, m, vel) { // the lantern's own voice: a music-box tine, warm and glassy, with a soft halo
+    const f = mtof(m), dec = 2.6 * Math.pow(660 / f, 0.3), H = [[1, 1, 1], [2.0, 0.22, 0.45], [3.0, 0.07, 0.25], [5.4, 0.03, 0.1]];
+    for (let i = 0; i < H.length; i++) { const h = H[i]; if (f * h[0] > 14000) break; const g = gn(d); osc('sine', f * h[0], t, dec * h[2] + 0.1, g); ad(g.gain, t, vel * 0.1 * h[1], 0.003, dec * h[2]); }
+    const hg = gn(d), o = osc('triangle', f, t, dec * 0.8 + 0.3, flt(hg, 'lowpass', Math.min(9000, f * 2)));
+    o.detune.value = 7; hg.gain.setValueAtTime(0.0001, t); hg.gain.linearRampToValueAtTime(vel * 0.025, t + 0.25); hg.gain.exponentialRampToValueAtTime(0.0001, t + dec * 0.8);
+  }
+  function harpTone(d, t, m, vel) { // a soft harp pluck for the title's arpeggios
+    const f = mtof(m), g = gn(d), lp = flt(g, 'lowpass', f * 6, 0.8);
+    osc('triangle', f, t, 1.7, lp); osc('sine', f * 2, t, 0.6, gn(lp, 0.25)); sw(lp.frequency, t, Math.min(9000, f * 8), f * 2, 0.5); ad(g.gain, t, vel * 0.1, 0.004, 1.5);
+  }
+  // Story voices: a murmur rather than words, one per line, the number of syllables following the line's length.
+  // The Keeper is warm and low, other living voices each get their own pitch, the Old Keeper's ghost is a whisper
+  // with a hollow hum and echoes, and a boss is a deep growl.
+  const VOW = [[730, 1090], [530, 1840], [570, 840], [300, 2250], [440, 1020], [660, 1700]], VDARK = [[570, 840], [440, 1020], [400, 800], [600, 950]];
+  const SL = { n: 0 };
+  function talk(d, t, n, f0, len, bright, growl, vow) {
+    const lp = flt(d, 'lowpass', 1900 * bright, 0.6), V0 = vow || VOW;
+    let ti = t;
+    for (let i = 0; i < n; i++) {
+      const dur = len * rr(0.75, 1.3), v = V0[(rnd() * V0.length) | 0], u = i / Math.max(1, n - 1);
+      const p = f0 * (1 + 0.09 * Math.sin(u * Math.PI) - (i === n - 1 ? 0.08 : 0)) * rr(0.96, 1.04);
+      const T = throat(lp, ti, dur + 0.08, p, growl);
+      T.f1.frequency.value = v[0]; T.f2.frequency.value = v[1];
+      T.o.frequency.setValueAtTime(p, ti); T.o.frequency.linearRampToValueAtTime(p * rr(0.94, 1.03), ti + dur);
+      T.env.gain.setValueAtTime(0.0001, ti); T.env.gain.linearRampToValueAtTime(0.3, ti + 0.02); T.env.gain.setTargetAtTime(0.0001, ti + dur * 0.65, dur * 0.16);
+      const g = gn(lp); osc('sine', p, ti, dur + 0.05, g); ad(g.gain, ti, 0.06, 0.015, dur);
+      ti += dur + rr(0.02, 0.06) + (rnd() < 0.15 ? 0.1 : 0);
+    }
+    return ti;
+  }
+  function ghostTalk(d, t, n) {
+    const lp = flt(d, 'lowpass', 4200, 0.5), dry = gn(lp, 1);
+    // its echoes: three taps, each darker (no feedback loop, so nothing is left running)
+    [[0.13, 0.45, 3000], [0.29, 0.3, 2200], [0.47, 0.18, 1500]].forEach((e) => { const dl = ctx.createDelay(1); dl.delayTime.value = e[0]; dry.connect(dl); dl.connect(flt(gn(lp, e[1]), 'lowpass', e[2])); });
+    const f0 = rr(330, 370); let ti = t;
+    for (let i = 0; i < n; i++) {
+      const dur = rr(0.13, 0.22), v = VOW[(rnd() * VOW.length) | 0];
+      const w = gn(dry), src = gn(null, 1); src.connect(flt(w, 'bandpass', v[0], 5)); src.connect(flt(gn(w, 0.7), 'bandpass', v[1], 7)); noi(ti, dur + 0.12, src, bufPink);
+      w.gain.setValueAtTime(0.0001, ti); w.gain.linearRampToValueAtTime(0.9, ti + 0.05); w.gain.exponentialRampToValueAtTime(0.0001, ti + dur + 0.1);
+      const g = gn(dry), o = osc('sine', f0 * (1 - 0.04 * i / n), ti, dur + 0.25, g); osc('sine', 5.5, ti, dur + 0.25, gn(o.frequency, 7)); ad(g.gain, ti, 0.04, 0.06, dur + 0.15);
+      ti += dur + rr(0.03, 0.09);
+    }
+  }
+  S.storyLine = (d, t, p) => { // p: 0 the Keeper, about 0.25-0.35 another living voice, 0.5 the Old Keeper's ghost, 1 a boss
+    const n = SL.n > 0 ? SL.n : 4 + ((rnd() * 4) | 0); SL.n = 0;
+    if (p >= 0.75) { // a boss: a deep, slow growl and a rumble under it
+      const sh = shape(d, 1.6), f0 = rr(60, 72), te = talk(sh, t, n, f0, 0.17, 0.55, 0.6, VDARK);
+      const g = gn(d), o = osc('sine', f0 / 2, t, te - t + 0.4, g); o.frequency.setValueAtTime(f0 / 2, t); o.frequency.linearRampToValueAtTime(f0 * 0.45, te);
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.18, t + 0.1); g.gain.setValueAtTime(0.18, te - 0.1); g.gain.exponentialRampToValueAtTime(0.0001, te + 0.3);
+    } else if (p >= 0.4) ghostTalk(d, t, n);
+    else if (p >= 0.2) talk(d, t, n, 200 + (p - 0.2) * 800, 0.08, 1.25, 0);
+    else talk(d, t, n, rr(138, 150), 0.095, 1, 0);
+  };
+  S.storyOpen = (d, t) => { // a dialogue panel opens: a soft swish, a warm swell on the land's home chord, two far lantern notes
+    const L = landNow(), c = L.ch[0].n, lp = flt(d, 'lowpass', 2400);
+    const s = gn(d), sf = flt(s, 'bandpass', 900, 0.9); noi(t, 0.7, sf, bufPink); sw(sf.frequency, t, 500, 2600, 0.5);
+    s.gain.setValueAtTime(0.0001, t); s.gain.exponentialRampToValueAtTime(0.05, t + 0.25); s.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    softChord(lp, t + 0.05, [c[2], c[3], c[4], c[2] + 12], 2.6, 0.09);
+    lanternTone(d, t + 0.35, deg(L, -3) + 24, 0.45); lanternTone(d, t + 0.62, deg(L, 0) + 24, 0.55);
+  };
+  // Embers counting up on the results screen: p is how far the count has got (0..1); each tick climbs a D major
+  // pentatonic, and p = 1 (the total) rings a small chord.
+  const EMB = [62, 64, 66, 69, 71, 74, 76, 78, 81, 83, 86, 88];
+  S.emberGain = (d, t, p) => {
+    const m = EMB[Math.round(p * (EMB.length - 1))], lp = flt(d, 'lowpass', 9000);
+    lanternTone(d, t, m, 0.55); belld(lp, t, mtof(m + 12), 0.025, 0.35);
+    grains(lp, t, 3, 0.08, 0.05, 0.002, 0.008, 2500, 6000, 3, 0);
+    if (p >= 0.999) {
+      [74, 78, 81, 86].forEach((n, i) => { lanternTone(d, t + 0.08 + i * 0.07, n, 0.7); belld(lp, t + 0.08 + i * 0.07, mtof(n + 12), 0.03, 1.2); });
+      softChord(d, t + 0.05, [50, 57, 62, 66], 2.0, 0.08);
+      grains(lp, t + 0.1, 16, 1.2, 0.05, 0.003, 0.012, 3000, 8000, 3, 1);
+    }
+  };
+  // A purchase in the Keeper's tree: a hammer on the anvil, then the lantern rising quickly in major (a step higher for
+  // each level: p = level / max level), a warm swell and sparks.
+  S.upgradeBuy = (d, t, p) => {
+    const k = Math.round(p * 5), lp = flt(d, 'lowpass', 8000);
+    const g = gn(d), o = osc('sine', 120, t, 0.35, g); sw(o.frequency, t, 160, 70, 0.2); ad(g.gain, t, 0.45, 0.003, 0.28);
+    ironRing(lp, t, 1180, 0.06, 0.5);
+    const c = gn(d), cf = flt(c, 'bandpass', 2400, 1.5); noi(t, 0.03, cf); ad(c.gain, t, 0.12, 0.0005, 0.015);
+    [-5, 0, 2, 4].forEach((n, i) => lanternTone(d, t + 0.12 + i * 0.085, 74 + n + k, i === 3 ? 0.95 : 0.65));
+    softChord(d, t + 0.12, [50 + k, 57 + k, 62 + k, 66 + k], 1.6, 0.07);
+    grains(lp, t + 0.3, 12, 0.9, 0.06, 0.003, 0.012, 3000, 8000, 3, 1);
+    const s = gn(d), sf = flt(s, 'bandpass', 1200, 1); noi(t + 0.05, 0.6, sf, bufPink); sw(sf.frequency, t + 0.05, 600, 3000, 0.45); ad(s.gain, t + 0.05, 0.05, 0.2, 0.35);
+  };
+  // Choosing a Heat: ominous, and heavier for each tier (p = tier / top tier): a deep blow that drops lower, a dark
+  // brass cluster that grows (a minor second, then the tritone, then more), a low choir, then a cracked bell.
+  S.heatSelect = (d, t, p) => {
+    const k = p, sh = shape(d, 1.5 + 2 * k);
+    const g = gn(sh), o = osc('sine', 60, t, 1.6 + k, g); sw(o.frequency, t, 70 - 10 * k, 30 - 6 * k, 1.0 + 0.6 * k); ad(g.gain, t, 0.5 + 0.25 * k, 0.01, 1.2 + 0.8 * k);
+    drumHit(d, t, 0.45 + 0.3 * k, 48);
+    const ns = [38, 39]; if (k > 0.2) ns.push(44); if (k > 0.45) ns.push(50, 51); if (k > 0.7) ns.push(32);
+    ns.forEach((n) => brassNote(d, t + 0.05, mtof(n), 1.3 + k, 0.06 + 0.03 * k, 0.7 + 0.2 * k));
+    if (k > 0.35) [45, 46, 51].forEach((n, i) => choirTone(d, t + 0.1 + i * 0.05, n, 1.8 + k, 0.1 + 0.1 * k));
+    if (k > 0.6) belld(flt(d, 'lowpass', 4000), t + 0.25, mtof(44), 0.08 * k, 2.5);
+    const a = gn(d), af = flt(a, 'highpass', 3000); noi(t, 1.6, af, bufPink); ad(a.gain, t, 0.025 + 0.035 * k, 0.4, 1.0);
+  };
+  // The main menu: a glass tick per move (p = position in the list, so the cursor plays the lantern's notes),
+  // a warm fifth on select and the same falling back.
+  const MMV = [69, 74, 76, 77, 81, 86];
+  S.menuMove = (d, t, p) => {
+    const f = mtof(MMV[Math.round(p * (MMV.length - 1))] + 12);
+    const g = gn(d); osc('sine', f, t, 0.14, g); ad(g.gain, t, 0.07, 0.002, 0.11);
+    const g2 = gn(d); osc('sine', f * 2.76, t, 0.05, g2); ad(g2.gain, t, 0.018, 0.001, 0.035);
+    const c = gn(d), cf = flt(c, 'bandpass', 1800, 3); noi(t, 0.025, cf); ad(c.gain, t, 0.05, 0.0005, 0.012);
+  };
+  S.menuSelect = (d, t) => {
+    const g = gn(d), o = osc('triangle', 300, t, 0.1, g); sw(o.frequency, t, 340, 220, 0.06); ad(g.gain, t, 0.2, 0.002, 0.07);
+    const k = gn(d), kf = flt(k, 'bandpass', 1100, 4); noi(t, 0.04, kf); ad(k.gain, t, 0.12, 0.001, 0.02);
+    lanternTone(d, t + 0.01, 74, 0.8); lanternTone(d, t + 0.1, 81, 0.9);
+    const s = gn(d), sf = flt(s, 'bandpass', 1500, 1.2); noi(t, 0.3, sf, bufPink); sw(sf.frequency, t, 700, 3000, 0.25); ad(s.gain, t, 0.04, 0.08, 0.2);
+  };
+  S.menuBack = (d, t) => {
+    lanternTone(d, t, 81, 0.6); lanternTone(d, t + 0.09, 74, 0.55);
+    const s = gn(d), sf = flt(s, 'bandpass', 1500, 1.2); noi(t, 0.25, sf, bufPink); sw(sf.frequency, t, 2600, 700, 0.2); ad(s.gain, t, 0.035, 0.03, 0.18);
+  };
+
   // Pad colours: oscillators, lowpass [start, open min, open max, end], Q, detune and vibrato ranges, levels [root, others], attack,
   // and extras: up (upper notes an octave higher), harm (extra sine partials), sub (an octave-down root), peak (a nasal formant),
   // trem (bowed tremolo depth, which grows with the danger when the chord starts).
@@ -1242,6 +1367,14 @@ const AU = (function () {
     thunder: [S.thunder, 0.35, 0.45, 3, 5.6, 0.9, 3],
     tidalWave: [S.tidalWave, 1.0, 0.5, 3, 4.0, 0.8, 1],
     thunderstorm: [S.thunderstorm, 5, 0.5, 3, 5.6, 0.9, 1],
+    storyOpen: [S.storyOpen, 0.8, 0.45, 3, 2.8, 0.8, 1],
+    storyLine: [S.storyLine, 0.25, 0.35, 3, 2.0, 0.8, 2],
+    emberGain: [S.emberGain, 0.03, 0.3, 3, 0.6, 0.6, 4],
+    upgradeBuy: [S.upgradeBuy, 0.15, 0.4, 3, 1.8, 0.75, 2],
+    heatSelect: [S.heatSelect, 0.25, 0.5, 3, 3.0, 0.85, 1],
+    menuMove: [S.menuMove, 0.03, 0.1, 3, 0.15, 0.7, 2],
+    menuSelect: [S.menuSelect, 0.08, 0.3, 3, 0.9, 0.75, 1],
+    menuBack: [S.menuBack, 0.08, 0.2, 3, 0.5, 0.7, 1],
   });
   // Kinds that share a voice budget, and how hard a sound ducks the music and crowd.
   const FAM = { cannon: 'boom', explode: 'boom', chainBoom: 'boom', burn: 'fire', ignite: 'fire', houndFire: 'fire', ratSqueal: 'die', boneRattle: 'die', squelch: 'die', batScreech: 'die', harpyDie: 'die', houndDie: 'die', shamanDie: 'die',
@@ -1253,9 +1386,9 @@ const AU = (function () {
   // Ducks that land later than the call (the meteor hits after its whistle).
   const DUCK_LATE = { meteor: [meteorFall, 0.8] };
   // Exact gaps, no jitter: these are one per event, and the gap is what stops a double start.
-  const NOJIT = { rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1, fanfare: 1, lament: 1, arrival: 1, waveClear: 1, houndHowl: 1, newFoe: 1, ramDie: 1, thunderstorm: 1 };
+  const NOJIT = { rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1, fanfare: 1, lament: 1, arrival: 1, waveClear: 1, houndHowl: 1, newFoe: 1, ramDie: 1, thunderstorm: 1, storyOpen: 1, storyLine: 1 };
   // UI sounds go to their own bus so they still play while the game is paused.
-  const UIS = { uiHover: 1, uiClick: 1, uiDeny: 1, menuOpen: 1, uiPreview: 1, spellArm: 1, spellCancel: 1 };
+  const UIS = { uiHover: 1, uiClick: 1, uiDeny: 1, menuOpen: 1, uiPreview: 1, spellArm: 1, spellCancel: 1, storyOpen: 1, storyLine: 1, emberGain: 1, upgradeBuy: 1, heatSelect: 1, menuMove: 1, menuSelect: 1, menuBack: 1 };
   // Stingers are music: they go to their own bus (the music volume, not ducked), and they hold the music down while they play.
   const STB = { fanfare: 1, lament: 1, arrival: 1, waveClear: 1, newFoe: 1 };
   const HOLD = { fanfare: [3.6, 0.75], lament: [6.6, 0.8], arrival: [4.6, 0.55], waveClear: [1.3, 0.25], newFoe: [1.3, 0.3] }, holds = [];
@@ -1284,7 +1417,9 @@ const AU = (function () {
     if (!(g > 0.003)) return;
     pan = cl(+pan || 0, -1, 1);
     const now = ctx.currentTime;
-    if (now - (lastAt[name] === undefined ? -9 : lastAt[name]) < (gapOf[name] || df[1])) { ST.gap++; return; }
+    // Under the main menu the demo's stingers would talk over the title theme.
+    if (STB[name] && SC.cur === 'menu') { ST.gap++; return; }
+    if (now - (lastAt[name] === undefined ? -9 : lastAt[name]) < (gapOf[name] || df[1]) && !(name === 'emberGain' && +p >= 1)) { ST.gap++; return; }
     for (let i = act.length - 1; i >= 0; i--) if (act[i].end <= now) { act[i] = act[act.length - 1]; act.pop(); }
     const pri = df[3], fam = FAM[name];
     let nk = 0, ok = -1, nf = 0, of = -1, lo = -1;
@@ -1327,7 +1462,7 @@ const AU = (function () {
     const roarG = gn(bed.fireG, 0.32), roarF = flt(flt(roarG, 'highpass', 75, 0.5), 'lowpass', 280, 0.5); loopSrc(bufBrown, roarF, 1.0);
     loopOsc('sine', 6.7, gn(roarG.gain, 0.1)); loopOsc('sine', 2.3, gn(roarG.gain, 0.07));
     bed.popBus = gn(bed.fireG, 2.0); bed.popBus.connect(gn(RV.amb, 0.1));
-    bed.droneG = gn(PZ.pad, 0); bed.droneG.connect(gn(RV.music, 0.3));
+    bed.droneG = gn(PZ.pad, 0); bed.droneG.connect(gn(SC.gameRv, 0.3));
     bed.droneLP = flt(bed.droneG, 'lowpass', 300, 0.6);
     const dv = gn(null, 4); loopOsc('sine', 4.9, dv);
     bed.droneOs = [];
@@ -1349,9 +1484,9 @@ const AU = (function () {
 
   // The land's music: its chords and colours (LANDMUS above). A land change fades the old pads on their own bus
   // while the new land's first chord comes in, and moves the drone and choir to the new key.
-  function landMusic(key, now) {
-    const L = LANDMUS[key] || LANDMUS.ashen; if (L === LM.def && LM.bus) return;
-    LM.def = L; LM.key = LANDMUS[key] ? key : 'ashen';
+  function landMusic(L, id, now) {
+    if (!L) L = LANDMUS.ashen; if (L === LM.def && LM.bus) return;
+    LM.def = L; LM.key = id || 'ashen';
     if (LM.bus) { LM.bus.gain.setTargetAtTime(0, now, 1.1); LM.old.push([LM.bus, now + 12]); }
     LM.bus = landBus();
     mus.chord = 0; mus.nextChord = now + 0.4; mus.pendC = mus.playC = L.ch[0]; mus.pendAt = now; mus.lastNote = -1;
@@ -1359,7 +1494,7 @@ const AU = (function () {
     if (bed.droneOs) for (let i = 0; i < bed.droneOs.length; i++) bed.droneOs[i][0].frequency.setTargetAtTime(bed.droneOs[i][1] * r, now, 1.5);
   }
   // A land's pad bus, with its reverb send after the fade (a land change fades the old echo too).
-  function landBus() { const b = gn(nPad, 1); b.connect(gn(RV.music, 0.5)); b.rv = RV.music; return b; }
+  function landBus() { const b = gn(nPad, 1); b.connect(gn(SC.gameRv, 0.5)); b.rv = SC.gameRv; return b; }
   function padChord(t, c, dur) {
     const L = LM.def, P = PADV[L.pad] || PADV.saw, v = voice(0, 1, 0, LM.bus || nPad); V = v;
     const env = gn(v.out), sides = [], open = rr(P.lp[1], P.lp[2]), td = P.trem ? P.trem * cl((SEQ.I - 0.2) / 0.6, 0, 1) : 0;
@@ -1410,8 +1545,9 @@ const AU = (function () {
       padChord(t, c, dur);
       mus.pendC = c; mus.pendAt = t;
       if (rnd() < 0.75 * (1 - 0.6 * SEQ.I)) {
-        const t1 = t + rr(3, 6.5); calmNote(t1, pickNote(c), rr(0.6, 1));
-        if (rnd() < 0.35) calmNote(t1 + rr(2.4, 4.2), pickNote(c), rr(0.45, 0.8));
+        const t1 = t + rr(3, 6.5);
+        if (c === L.ch[0] && rnd() < 0.3) { for (let i = 0; i < 4; i++) calmNote(t1 + i * 0.55, deg(L, LANTERN[i]) + 12, i === 3 ? 0.75 : 0.55); } // the lantern, hummed
+        else { calmNote(t1, pickNote(c), rr(0.6, 1)); if (rnd() < 0.35) calmNote(t1 + rr(2.4, 4.2), pickNote(c), rr(0.45, 0.8)); }
       }
       mus.nextChord = t + dur - 1.0;
       mus.chord = c.to[(rnd() * c.to.length) | 0];
@@ -1446,6 +1582,7 @@ const AU = (function () {
     [[0, 0, 6], [6, 2, 2], [8, 1, 4], [12, 0, 4], [16, -1, 8], [24, 0, 8]],
     [[0, -3, 4], [4, 0, 4], [8, 2, 6], [14, 1, 2], [16, 0, 8], [24, -3, 8]],
     [[0, 0, 3], [3, 0, 3], [6, -1, 2], [8, -3, 8], [16, -2, 6], [22, -3, 10]],
+    LANTERN_M,
   ];
   // The dunes' hand drums: maqsum (dum tek - tek dum - tek -). Positive = dum, negative = tek.
   const MAQ = [1, 0, -0.6, 0, 0, 0, -0.7, 0, 0.9, 0, 0, 0, -0.7, 0, 0, 0];
@@ -1902,13 +2039,14 @@ const AU = (function () {
 
   // Which land and event are playing now.
   const PAD_LVL = 1.5; // calm pads, a little above the wind
-  const LS = { key: null, land: null, ev: null, evKind: null };
+  const LS = { key: null, base: null, wind: null, land: null, ev: null, evKind: null };
   function scapes(now, paused) {
     if (typeof G === 'undefined' || !G) return;
-    const key = G.B && G.B.bio && typeof G.B.bio.key === 'string' ? G.B.bio.key : null;
+    const lf = G.B && G.B.bio ? landFor(G.B.bio) : null, key = lf ? lf.id : null;
     if (key !== LS.key) { // crossfade the land beds over a few seconds
-      LS.key = key; scapeOff(LS.land, 1.3); LS.land = key && LAND[key] ? scapeOn(LAND[key], nLand, 1.5) : null;
-      if (key) landMusic(key, now);
+      LS.key = key; LS.base = lf ? lf.base : null; LS.wind = lf ? lf.wind : null;
+      scapeOff(LS.land, 1.3); LS.land = lf && lf.scape ? scapeOn(lf.scape, nLand, 1.5) : null;
+      if (lf) landMusic(lf.L, key, now);
     }
     const ek = G.event && typeof G.event.kind === 'string' ? G.event.kind : null;
     if (ek !== LS.evKind) {
@@ -1944,7 +2082,7 @@ const AU = (function () {
     queueThunder(now + Math.max(0, (near > 0.8 ? 0 : (0.25 + 2.6 * (1 - near)) * rr(0.85, 1.15)) - late), near, rr(0.75, 1), pan);
   }
   function stormTick(now, paused) {
-    const on = LS.key === 'storm' || LS.evKind === 'thunderstorm', ft = typeof G.flashT === 'number' ? G.flashT : typeof FX !== 'undefined' && FX ? FX.flashT : undefined;
+    const on = LS.base === 'storm' || LS.evKind === 'thunderstorm' || !!(G.B && G.B.bio && G.B.bio.lightning > 0), ft = typeof G.flashT === 'number' ? G.flashT : typeof FX !== 'undefined' && FX ? FX.flashT : undefined;
     if (typeof ft === 'number' && ft === ft) {
       TH.hook = true;
       // A new flash: G.flashN went up (two flashes inside one frame still make one roll), or G.flashT went back.
@@ -1965,13 +2103,270 @@ const AU = (function () {
       finishVoice(v); ST.amb++;
       if (p[1] > 0.4 && lateDuck.length < 8) lateDuck.push([t + 0.05, 0.35 * p[1]]);
     }
-    if (STORM.close && LS.key === 'storm') { // the near rain follows the camera: louder and brighter zoomed in
+    if (STORM.close && LS.base === 'storm') { // the near rain follows the camera: louder and brighter zoomed in
       const z = typeof CAM !== 'undefined' && CAM && CAM.zoom > 0 ? CAM.zoom : 1, nr = cl((z - 0.7) / 1.4, 0, 1);
       STORM.near = nr;
       if (Math.abs(nr - STORM.aN) > 0.02) { STORM.aN = nr; STORM.close.gain.setTargetAtTime(0.09 + 0.1 * nr, now, 0.5); STORM.closeF.frequency.setTargetAtTime(3800 + 4000 * nr, now, 0.5); }
     }
   }
   const THUNDER_LVL = 1;
+
+  // ---- Round 8: the Long Night's lands. Ash's procBiome gives bio.key 'proc' and bio.music = { seed, base }, base being
+  // a hand-made land. The base sets the family: its modes are the likeliest, and the pad, kit, lead and soundscape lean
+  // towards it; the seed picks the rest (root, chords, tempo, voices, motifs and details). The lantern motif is always
+  // one of the battle motifs and shapes the arrival figure. A land key the audio does not know is treated the same way,
+  // seeded from its key and name. The same seed always gives the same music. ----
+  const PHRYG = [0, 1, 3, 5, 7, 8, 10], HUNGMIN = [0, 2, 3, 6, 7, 8, 11];
+  const MODENAME = [[DORIAN, 'dorian'], [AEOLIAN, 'aeolian'], [HARMMIN, 'harmonic minor'], [PHRYGDOM, 'phrygian dominant'], [PHRYG, 'phrygian'], [HUNGMIN, 'hungarian minor']];
+  const FAMILY = {
+    ashen: [[DORIAN, 3], [AEOLIAN, 2], [PHRYG, 1]],
+    frost: [[AEOLIAN, 3], [DORIAN, 2], [HUNGMIN, 1]],
+    fen: [[AEOLIAN, 3], [PHRYG, 2], [DORIAN, 1]],
+    ember: [[HARMMIN, 3], [HUNGMIN, 2], [PHRYG, 1]],
+    dunes: [[PHRYGDOM, 3], [HUNGMIN, 2], [HARMMIN, 1]],
+    storm: [[AEOLIAN, 3], [DORIAN, 1], [HARMMIN, 1], [PHRYG, 1]],
+  };
+  const BASES = ['ashen', 'frost', 'fen', 'ember', 'dunes', 'storm'];
+  const PADS = ['saw', 'glass', 'murk', 'brass', 'nasal', 'strings'], CALMS = ['piano', 'glass', 'reed', 'lowbrass', 'oud', 'cello'];
+  const KITS = ['drums', 'glass', 'frame', 'heavy', 'hand', 'storm'], LEADS = ['brass', 'bell', 'reed', 'ney', 'lowbrass', 'concertina'];
+  const PADLVL = { saw: 1, glass: 0.75, murk: 0.9, brass: 1.5, nasal: 1, strings: 0.85 };
+  const DETAIL = [crows, pebbles, ember, creak, icePing, tinkle, frog, cricket, drip, bubbles, steam, rustle, chirps, hawk, gust, timber];
+  function hash32(s) { s = String(s); let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function mulb(a) { return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function wpick(r, list) { let s = 0; for (let i = 0; i < list.length; i++) s += list[i][1]; let u = r() * s; for (let i = 0; i < list.length; i++) { u -= list[i][1]; if (u < 0) return list[i][0]; } return list[0][0]; }
+  const lean = (r, own, all, w) => (r() < w ? own : all[(r() * all.length) | 0]);
+  // A chord on scale degree k, voiced like the hand-made lands: [bass, fifth, root, third, fifth (or a 7th / 9th colour)],
+  // with melody notes for the calm voice taken from its tones between C4 and A5.
+  function genChord(r, sc, tonic, k) {
+    const st = (i) => sc[(((k + i) % 7) + 7) % 7] + 12 * Math.floor((k + i) / 7);
+    const root = st(0), third = st(2) - root, fifth = st(4) - root;
+    let bass = tonic + root - 12; while (bass > 41) bass -= 12; while (bass < 29) bass += 12;
+    const top = bass + 12, n = [bass, bass + fifth, top, top + third, top + fifth];
+    let col = -1; if (r() < 0.35) { col = (r() < 0.5 ? st(6) : st(8)) - root; n[4] = top + col; }
+    const pcs = [0, third, fifth].concat(col >= 0 ? [col] : []).map((x) => (bass + x) % 12), all = [], m = [];
+    for (let x = 60; x <= 81; x++) if (pcs.indexOf(x % 12) >= 0) all.push(x);
+    const step = Math.max(1, all.length / 6); for (let i = 0; i < all.length && m.length < 6; i += step) m.push(all[Math.floor(i)]);
+    return { n: n, m: m, to: [] };
+  }
+  function genMotif(r) { // a two-bar line wandering by steps, home on the tonic at the end
+    const out = [], LEN = [2, 2, 4, 4, 6, 2, 8], MV = [-2, -1, -1, 1, 1, 2, 0];
+    let s = 0, d = r() < 0.5 ? 0 : -3;
+    while (s < 24) { const len = Math.min(LEN[(r() * LEN.length) | 0], 24 - s); out.push([s, d, len]); s += len; d = cl(d + MV[(r() * MV.length) | 0], -4, 5); }
+    out.push([24, 0, 8]); return out;
+  }
+  function genLand(seed, base) {
+    const r = mulb(hash32('lanternhold:' + seed + ':' + base)), b = LANDMUS[base], sc = wpick(r, FAMILY[base]);
+    const tonic = 45 + ((r() * 11) | 0), pad = lean(r, b.pad, PADS, 0.55), calm = lean(r, b.calm, CALMS, 0.5), kit = lean(r, b.kit, KITS, 0.6), lead = lean(r, b.lead, LEADS, 0.45);
+    // chords: the tonic and up to four more (VI, iv, VII, III, v, II in that order of liking), skipping any without a perfect fifth
+    const cand = [[5, 3], [3, 3], [6, 2], [2, 2], [4, 2], [1, 1]], degs = [0];
+    for (let n = 0; n < 40 && degs.length < 5; n++) {
+      const k = wpick(r, cand); if (degs.indexOf(k) >= 0) continue;
+      if (sc[(k + 4) % 7] + (k + 4 >= 7 ? 12 : 0) - sc[k] !== 7) continue;
+      degs.push(k);
+    }
+    const ch = degs.map((k) => genChord(r, sc, tonic, k)), N = ch.length;
+    for (let i = 0; i < N; i++) { // which chords may follow: the tonic may go anywhere, the others mostly lean home
+      const o = []; for (let j = 0; j < N; j++) if (j !== i) o.push(j);
+      for (let j = o.length - 1; j > 0; j--) { const q = (r() * (j + 1)) | 0, x = o[j]; o[j] = o[q]; o[q] = x; }
+      const to = o.slice(0, i === 0 ? Math.min(3, o.length) : 1 + ((r() * 2) | 0));
+      if (i > 0 && to.indexOf(0) < 0 && (r() < 0.6 || i === N - 1)) to[0] = 0;
+      ch[i].to = to;
+    }
+    const motifs = [LANTERN_M, b.motifs ? b.motifs[(r() * b.motifs.length) | 0] : MOTIF[(r() * 3) | 0], genMotif(r)];
+    const sp = 0.28 + r() * 0.14, e3 = 3 * sp; // the arrival figure: the lantern rising, then home
+    const arr = [[0, -3, sp], [sp, 0, sp], [2 * sp, 1, sp], [e3, 2, 0.9], [e3 + 0.95, 1, sp], [e3 + 1.05 + sp, 0, 1.6]];
+    const L = { semi: tonic - 50, tonic: tonic, scale: sc, pad: pad, calm: calm, kit: kit, lead: lead, bpm: cl(b.bpm + Math.round((r() - 0.5) * 12), -12, 8), lvl: PADLVL[pad] || 1, ch: ch, motifs: motifs, arr: arr, base: base, gen: seed };
+    if (pad === 'glass' || kit === 'glass') L.sparse = 0.5;
+    // the soundscape: the base land's bed, its details re-timed (one dropped now and then), and a detail from another land
+    const B0 = LAND[base], ev = B0.ev.map((e) => [e[0], e[1] * (0.7 + r() * 0.7), e[2], e[3]]);
+    if (ev.length > 2 && r() < 0.4) ev.splice((r() * ev.length) | 0, 1);
+    const dn = DETAIL[(r() * DETAIL.length) | 0]; if (!ev.some((e) => e[0] === dn)) ev.push([dn, 7 + r() * 14, 0.35 + r() * 0.2, 0.8]);
+    const drone = r() < 0.3, bed0 = B0.bed;
+    const scape = { lvl: B0.lvl * (0.85 + r() * 0.3), rev: (B0.rev || 0.3) + r() * 0.15, bed: drone ? (g) => bed0(g).concat(fogDrone(gn(g, 0.45))) : bed0, ev: ev };
+    const wk = WINDK[base];
+    return { L: L, scape: scape, wind: [wk[0] * (0.85 + r() * 0.3), wk[1] * (0.7 + r() * 0.6)], base: base };
+  }
+  const HAND = Object.create(null), GEN = Object.create(null); let genN = 0;
+  // The music, soundscape and wind for a land (its BIOMES entry): the hand-made ones as they are, anything else generated.
+  function landFor(bio) {
+    if (!bio || typeof bio !== 'object' || typeof bio.key !== 'string' || !bio.key) return null;
+    const k = bio.key;
+    if (LANDMUS[k]) return HAND[k] || (HAND[k] = { id: k, L: LANDMUS[k], scape: LAND[k], wind: WINDK[k], base: k });
+    const mu = bio.music && typeof bio.music === 'object' ? bio.music : null;
+    let seed = mu && mu.seed !== undefined && mu.seed !== null && isFinite(+mu.seed) ? +mu.seed >>> 0 : -1;
+    if (seed < 0) seed = hash32(k + '|' + (typeof bio.name === 'string' ? bio.name : ''));
+    const bk = mu && typeof mu.base === 'string' ? mu.base : typeof bio.dress === 'string' ? bio.dress : '';
+    const base = LANDMUS[bk] ? bk : BASES[seed % 6], id = k + ':' + seed + ':' + base;
+    let e = GEN[id];
+    if (!e) { if (++genN > 32) { for (const q in GEN) delete GEN[q]; genN = 1; } e = genLand(seed, base); e.id = id; GEN[id] = e; }
+    return e;
+  }
+  const NOTE = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+  function describe(L) {
+    if (!L) return '';
+    const mn = MODENAME.find((x) => x[0] === L.scale);
+    return NOTE[((L.tonic % 12) + 12) % 12] + ' ' + (mn ? mn[1] : '?') + ', pad ' + L.pad + ', calm ' + L.calm + ', kit ' + L.kit + ', lead ' + L.lead + ', bpm ' + (L.bpm >= 0 ? '+' : '') + L.bpm + ', ' + L.ch.length + ' chords' + (L.gen !== undefined ? ', from ' + L.base + ' seed ' + L.gen : '');
+  }
+
+  // ---- Round 8: scenes. The main menu plays the title theme over the AI demo (the demo's land music silent, its
+  // effects pushed back, its stingers left out); a story panel ducks the music; the game is everything else. Mira's UI
+  // can say which with AU.setScene('menu' | 'story' | 'game'). Without that the scene is read from the game each frame:
+  // G.phase or G.scene 'menu' / 'story', UI.mainMenu, UI.title, UI.home or UI.offer (the continue prompt) for the menu,
+  // UI.story, UI.dialog or UI.dialogue (an object, or true; an object with open / active / visible false is shut) for
+  // a story panel. What the game shows wins over setScene; setScene covers what the audio cannot see.
+  // Levels per scene: [land music, title theme, effects and crowd, ambience, music duck].
+  const SCL = { game: [1, 0, 1, 1, 1], menu: [0, 1, 0.4, 0.7, 1], story: [1, 0, 0.7, 0.85, 0.35] };
+  const SC = { forced: null, cur: 'game', applied: false, game: null, gameRv: null, fx: null, fxRv: null, amb: null, duck: null, offAt: 0, idle: false, st: null, stKey: null, lineQ: [] };
+  function setScene(s) {
+    SC.forced = s === 'menu' || s === 'story' || s === 'game' ? s : null;
+    if (ctx && api.ready) { try { sceneTick(ctx.currentTime); } catch (e) { if (!ST.err) ST.err = 'scene: ' + e.message; } }
+  }
+  const shown = (o) => o === true || (!!o && typeof o === 'object' && o.open !== false && o.active !== false && o.visible !== false && o.closed !== true && o.done !== true);
+  function storyState() {
+    const U = typeof UI !== 'undefined' && UI ? UI : null, g = typeof G !== 'undefined' && G ? G : null;
+    if (U) { if (shown(U.story)) return U.story; if (shown(U.dialog)) return U.dialog; if (shown(U.dialogue)) return U.dialogue; }
+    if (g && g.story && typeof g.story === 'object' && (g.story.open === true || g.story.active === true)) return g.story;
+    if (g && (g.phase === 'story' || g.scene === 'story')) return true;
+    return null;
+  }
+  function menuShown() {
+    const U = typeof UI !== 'undefined' && UI ? UI : null, g = typeof G !== 'undefined' && G ? G : null;
+    if (g && (g.phase === 'menu' || g.scene === 'menu' || g.mainMenu === true)) return true;
+    return !!U && (shown(U.mainMenu) || shown(U.title) || shown(U.home) || shown(U.offer));
+  }
+  function sceneTick(now) {
+    const st = storyState(), s = st ? 'story' : menuShown() ? 'menu' : SC.forced || 'game';
+    storyWatch(st, now);
+    if (s === SC.cur && SC.applied) return;
+    const was = SC.applied ? SC.cur : 'game', L = SCL[s], tc = s === 'menu' ? 0.5 : was === 'menu' ? 0.9 : 0.35;
+    SC.cur = s; SC.applied = true;
+    const to = (n, v, c) => { n.gain.cancelScheduledValues(now); n.gain.setTargetAtTime(v, now, c); };
+    to(SC.game, L[0], tc); to(SC.gameRv, L[0], tc);
+    to(TT.bus, L[1] * TT_LVL, s === 'menu' ? 0.35 : 1.0); to(TT.rv, L[1] * TT_LVL, s === 'menu' ? 0.35 : 1.0);
+    to(SC.fx, L[2], tc); to(SC.fxRv, L[2], tc); to(SC.amb, L[3], tc);
+    to(SC.duck, L[4], L[4] < 1 ? 0.25 : 0.6);
+    if (s === 'menu') { titleStart(now); SC.offAt = now + 5; }
+    else if (was === 'menu') { // into a run: the title fades over a few seconds while the land's music comes in on a fresh chord
+      TT.stopAt = now + 7;
+      if (SC.idle) { mus.nextChord = now + 0.15; SC.idle = false; }
+      calmDown();
+    }
+  }
+  // Story lines, read from the panel object: a new line index (i, idx, index, line, step or page) or new text plays the
+  // speaker's murmur. The speaker comes from speaker / who / portrait, on the panel or on lines[index].
+  function storyWatch(st, now) {
+    if (!st) { SC.st = null; SC.stKey = null; return; }
+    const first = !SC.st; SC.st = st;
+    if (first) play('storyOpen', 0, 1, 0);
+    if (typeof st !== 'object') return;
+    const ks = ['i', 'idx', 'index', 'line', 'step', 'page']; let idx;
+    for (let j = 0; j < ks.length; j++) if (typeof st[ks[j]] === 'number') { idx = st[ks[j]]; break; }
+    const ln = Array.isArray(st.lines) && idx !== undefined ? st.lines[idx] : null, lo = ln && typeof ln === 'object' ? ln : null;
+    const text = typeof st.text === 'string' ? st.text : lo && typeof lo.text === 'string' ? lo.text : typeof ln === 'string' ? ln : '';
+    const who = st.speaker || st.who || st.portrait || (lo ? lo.speaker || lo.who || lo.portrait : '') || '';
+    const key = (idx === undefined ? '' : idx) + '|' + text.slice(0, 48) + '|' + (typeof who === 'object' ? who.key || who.id || who.name || '' : who);
+    if (key !== SC.stKey) { SC.stKey = key; if ((idx !== undefined || text) && SC.lineQ.length < 3) SC.lineQ.push([now + (first ? 0.45 : 0.03), who, text]); }
+  }
+  // Speaker to voice: 0 the Keeper, 0.5 the Old Keeper's ghost (or any spirit), 1 a boss, other names 0.25-0.35.
+  function speakerP(w) {
+    if (typeof w === 'number' && w === w) return cl(w, 0, 1);
+    if (w && typeof w === 'object') w = w.key || w.id || w.name || w.who || '';
+    const s = String(w || '').toLowerCase();
+    if (!s) return 0;
+    if (/ghost|old ?keeper|spirit|shade|wisp|elder|voice/.test(s)) return 0.5;
+    if (/boss|king|queen|giant|ogre|jotun|colossus|leviathan|hollow|lord|tyrant|drowned|titan/.test(s) || (typeof MON !== 'undefined' && MON && MON[s] && MON[s].boss)) return 1;
+    if (/keeper|lantern|hero|player/.test(s)) return 0;
+    return 0.25 + (hash32(s) % 100) / 1000;
+  }
+  function storyLine(who, text) {
+    if (!api.ready) return;
+    SL.n = typeof text === 'string' && text ? cl(Math.round(text.length / 9), 3, 9) : 0;
+    play('storyLine', 0, 1, speakerP(who)); SL.n = 0;
+  }
+  function storyQueue(now) { for (let i = SC.lineQ.length - 1; i >= 0; i--) if (now >= SC.lineQ[i][0]) { const q = SC.lineQ.splice(i, 1)[0]; if (SC.st) storyLine(q[1], q[2]); } }
+
+  // ---- Round 8: the Lanternhold title theme, for the main menu. D minor, 70 bpm. An intro where the lantern motif rings
+  // alone on a music box over the pad and a far bell; the Keeper's melody on a cello, built on the motif (A); the strings
+  // take it up high over a heartbeat drum, and the bar before the return answers with the motif in A major (B); the
+  // melody on the music box with the cello singing under it (A'); a quiet close on the motif (outro); then it loops
+  // from A (a horn takes the melody the second time). It has its own bus, so it keeps playing over the paused demo. ----
+  const TT = { bus: null, rv: null, on: false, next: 0, sec: 0, bar: 0, loops: 0, stopAt: 0 };
+  const TBAR = 240 / 70, T8 = TBAR / 8, TT_LVL = 2.5; // the title is the foreground on the menu: well above the land music's level
+  const TCH = { Dm: [38, 50, 53, 57, 62], Dm9: [38, 50, 53, 57, 64], Bb: [34, 50, 53, 58, 62], Bbmaj7: [34, 46, 50, 53, 57], F: [41, 48, 53, 57, 60], C: [36, 48, 52, 55, 60],
+    Gm: [43, 50, 55, 58, 62], Gm6: [43, 50, 52, 55, 58], A: [33, 49, 52, 57, 61], Asus: [33, 50, 52, 57, 62] };
+  // Melodies per bar as [eighth, MIDI note, length in eighths].
+  const TA = [[[0, 57, 1], [1, 62, 1], [2, 64, 1], [3, 65, 9]], [[4, 64, 2], [6, 62, 2]], [[0, 60, 2], [2, 65, 2], [4, 69, 4]], [[0, 67, 3], [3, 65, 1], [4, 64, 4]],
+    [[0, 57, 1], [1, 62, 1], [2, 64, 1], [3, 65, 5]], [[0, 67, 2], [2, 65, 2], [4, 62, 4]], [[0, 70, 3], [3, 69, 1], [4, 67, 2], [6, 65, 2]], [[0, 64, 4], [4, 61, 4]]];
+  const TB = [[[0, 67, 2], [2, 70, 2], [4, 74, 4]], [[0, 72, 3], [3, 70, 1], [4, 69, 4]], [[0, 70, 2], [2, 74, 2], [4, 77, 4]], [[0, 76, 3], [3, 74, 1], [4, 72, 4]],
+    [[0, 67, 2], [2, 70, 2], [4, 74, 4]], [[0, 77, 4], [4, 76, 2], [6, 74, 2]], [[0, 74, 3], [3, 72, 1], [4, 70, 2], [6, 69, 2]], [[0, 69, 8]]];
+  const TCTR = [[[0, 50, 8]], [[0, 50, 4], [4, 53, 4]], [[0, 48, 8]], [[0, 48, 4], [4, 52, 4]], [[0, 50, 8]], [[0, 53, 8]], [[0, 55, 4], [4, 58, 4]], [[0, 57, 4], [4, 55, 4]]];
+  const TSEC = [
+    { ch: ['Dm9', 'Bbmaj7', 'Dm9', 'Asus'], mel: [[[0, 69, 1], [1, 74, 1], [2, 76, 1], [3, 77, 9]], [], [[0, 69, 1], [1, 74, 1], [2, 76, 1], [3, 79, 3], [6, 77, 2]], [[0, 76, 8]]], v: 'lantern', bass: 0, arp: 0, drum: 0, bell: 1, pad: 0.7 },
+    { ch: ['Dm', 'Bb', 'F', 'C', 'Dm', 'Bb', 'Gm', 'A'], mel: TA, v: 'cello', bass: 1, arp: 1, drum: 0, pad: 0.85 },
+    { ch: ['Gm', 'Dm', 'Bb', 'F', 'Gm', 'Dm', 'Bb', 'A'], mel: TB, v: 'violin', bass: 1, arp: 2, drum: 1, pad: 1, glint: 1 },
+    { ch: ['Dm', 'Bb', 'F', 'C', 'Dm', 'Bb', 'Gm', 'A'], mel: TA, up: 12, v: 'lantern', ctr: TCTR, bass: 1, arp: 2, drum: 0.5, pad: 0.9 },
+    { ch: ['Dm9', 'Bbmaj7', 'Gm6', 'Dm9'], mel: [[[0, 69, 2], [2, 74, 2], [4, 76, 2], [6, 77, 6]], [[4, 76, 2], [6, 74, 2]], [[0, 67, 2], [2, 70, 2], [4, 76, 4]], [[0, 74, 8]]], v: 'piano', bass: 0.5, arp: 0, drum: 0, bell: 1, pad: 0.7 },
+  ];
+  function tv(pan, send) { const v = voice(pan, 1, send, TT.bus); V = v; return v; }
+  function tNote(vox, t, m, dur, vel) {
+    const v = tv(vox === 'lantern' ? rr(-0.25, 0.25) : rr(-0.12, 0.12), vox === 'lantern' ? 0.55 : 0.4), d = Math.max(0.3, dur);
+    if (vox === 'lantern') lanternTone(v.out, t, m, 0.9 * vel);
+    else if (vox === 'cello') celloTone(v.out, t, m, d, 1.1 * vel);
+    else if (vox === 'violin') { celloTone(v.out, t, m, d, 0.8 * vel); hornNote(v.out, t, mtof(m - 12), d, 0.05 * vel, 0.8); }
+    else if (vox === 'horn') hornNote(v.out, t, mtof(m), d, 0.09 * vel, 0.85);
+    else pianoTone(v.out, t, m, 0.9 * vel);
+    finishVoice(v);
+  }
+  function tPad(t, ch, dur, lvl) { // warm strings: two detuned saws a note, spread, a filter that breathes with the bar
+    const v = tv(0, 0.6), env = gn(v.out), lp = flt(env, 'lowpass', 600, 0.6), end = dur + 2.6;
+    lp.frequency.setValueAtTime(500, t); lp.frequency.linearRampToValueAtTime(700 + 600 * lvl, t + dur * 0.5); lp.frequency.linearRampToValueAtTime(600, t + end);
+    const vib = gn(null, 3); osc('sine', rr(4.5, 5.2), t, end, vib);
+    for (let i = 1; i < ch.length; i++) for (let s = 0; s < 2; s++) { const o = osc('sawtooth', mtof(ch[i]), t, end, gn(panNode(s ? 0.35 : -0.35, lp), 0.03)); o.detune.value = (s ? 1 : -1) * rr(4, 8); vib.connect(o.detune); }
+    env.gain.setValueAtTime(0.0001, t); env.gain.linearRampToValueAtTime(lvl, t + 0.9); env.gain.setValueAtTime(lvl, t + dur - 0.2); env.gain.setTargetAtTime(0.0001, t + dur - 0.2, 0.45);
+    finishVoice(v);
+  }
+  function tBass(t, m, dur, lvl) { // a soft low root, and a bowed cello an octave up so a phone speaker hears it
+    const v = tv(0, 0.2), g = gn(v.out), lp = flt(g, 'lowpass', 400);
+    osc('triangle', mtof(m), t, dur + 1, lp); osc('sine', mtof(m), t, dur + 1, gn(lp, 0.8));
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.055 * lvl, t + 0.3); g.gain.setTargetAtTime(0.0001, t + dur - 0.1, 0.25);
+    celloTone(v.out, t, m + 12, dur - 0.1, 0.45 * lvl);
+    finishVoice(v);
+  }
+  function tArp(t, ch, k) { // a harp: quarter notes rising (k = 1), or eighths rising and falling (k = 2)
+    const up = [ch[1] + 12, ch[2] + 12, ch[3] + 12, ch[4] + 12], seq = k === 1 ? [0, 1, 2, 3] : [0, 1, 2, 3, 2, 1, 2, 3], step = k === 1 ? 2 : 1;
+    for (let i = 0; i < seq.length; i++) { const v = tv(rr(-0.4, 0.4), 0.4); harpTone(v.out, t + i * step * T8, up[seq[i]], (i % 4 === 0 ? 0.9 : 0.65) * (k === 1 ? 0.8 : 0.7)); finishVoice(v); }
+  }
+  function tDrum(t, k, roll) { // a heartbeat on a muffled frame drum; a timpani roll into the return
+    const v = tv(0, 0.35);
+    frameD(v.out, t, 0.35 * k); if (k >= 1) { frameD(v.out, t + 3 * T8, 0.18); frameD(v.out, t + 4 * T8, 0.26); }
+    if (roll) for (let i = 0; i < 12; i++) timpHit(v.out, t + 4 * T8 + i * T8 * 0.33, 0.04 + 0.012 * i, mtof(38));
+    finishVoice(v);
+  }
+  function titleBar(t) {
+    const S0 = TSEC[TT.sec], b = TT.bar, ch = TCH[S0.ch[b]], last = b === S0.ch.length - 1;
+    tPad(t, ch, TBAR + 0.25, S0.pad);
+    if (S0.bass) tBass(t, ch[0], TBAR, S0.bass);
+    if (S0.arp) tArp(t, ch, S0.arp);
+    if (S0.drum) tDrum(t, S0.drum, last && S0.glint);
+    if (S0.bell && b === 0) { const v = tv(rr(-0.3, 0.3), 0.9); belld(flt(v.out, 'lowpass', 3000), t, mtof(62), 0.05, 4); finishVoice(v); }
+    const mel = S0.mel[b] || [], vox = TT.loops > 0 && TT.sec === 1 ? 'horn' : S0.v;
+    for (let i = 0; i < mel.length; i++) tNote(vox, t + mel[i][0] * T8, mel[i][1] + (S0.up || 0), mel[i][2] * T8, 1);
+    if (S0.ctr) for (let i = 0; i < S0.ctr[b].length; i++) { const n = S0.ctr[b][i]; tNote('cello', t + n[0] * T8, n[1], n[2] * T8, 0.6); }
+    if (S0.glint && last) [76, 81, 83, 85].forEach((m, i) => tNote('lantern', t + (2 + i) * T8, m, T8, i === 3 ? 0.9 : 0.7)); // the lantern in A major
+    if (++TT.bar >= S0.ch.length) { TT.bar = 0; if (++TT.sec >= TSEC.length) { TT.sec = 1; TT.loops++; } }
+  }
+  function titleStart(now) {
+    TT.stopAt = 0;
+    if (TT.on) return; // back to the menu before the title had faded: it carries on where it was
+    TT.on = true; TT.sec = 0; TT.bar = 0; TT.loops = 0; TT.next = now + 0.3;
+  }
+  function titleTick(now) {
+    if (!TT.on) return;
+    if (SC.cur !== 'menu' && TT.stopAt && now > TT.stopAt) { TT.on = false; return; }
+    if (api.muted) return;
+    if (TT.next < now - 0.3) TT.next = now + 0.05; // after a stall (muted, hidden), rejoin on the next bar
+    let n = 0; while (TT.next < now + 0.4 && n++ < 2) { titleBar(TT.next); TT.next += TBAR; }
+  }
 
   // ---- Reading the battlefield (about 8 times a second). ----
   // Same pan and distance law as sfx() in 90-main, for sounds the audio plays on its own.
@@ -2200,7 +2595,7 @@ const AU = (function () {
   }
   function stats() {
     const L = SEQ.lay;
-    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(','), land: LS.key, music: LM.key || '', beasts: BT.list.length, beastBeds: Object.keys(BT.beds).filter((k) => BT.beds[k].src).join(','), event: LS.evKind, flashes: TH.n, flashHook: TH.hook, paused: PZ.on, hidden: hidden, state: ctx ? ctx.state : 'none' });
+    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(','), land: LS.key, music: LM.key || '', beasts: BT.list.length, beastBeds: Object.keys(BT.beds).filter((k) => BT.beds[k].src).join(','), event: LS.evKind, scene: SC.cur, title: TT.on ? 'sec' + TT.sec + ' bar' + TT.bar + (TT.loops ? ' loop' + TT.loops : '') : '', musicDesc: describe(LM.def), flashes: TH.n, flashHook: TH.hook, paused: PZ.on, hidden: hidden, state: ctx ? ctx.state : 'none' });
   }
 
   function softClip() {
@@ -2229,12 +2624,16 @@ const AU = (function () {
     // Glue compressor on effects only, so a pile-up of hits thickens instead of spiking.
     const glue = ctx.createDynamicsCompressor();
     glue.threshold.value = -14; glue.knee.value = 10; glue.ratio.value = 2.5; glue.attack.value = 0.006; glue.release.value = 0.25;
-    glue.connect(nMute);
+    // Scene gains (sceneTick): the effects, crowd and ambience step back under the main menu; UI sounds never do.
+    SC.fx = gn(nMute, 1); SC.amb = gn(nMute, 1);
+    glue.connect(SC.fx);
     // Pause gains: one per bus, so pausing can quiet each part differently (see pauseMix).
-    PZ.sfx = gn(glue, 1); PZ.amb = gn(nMute, 1); PZ.crowd = gn(nMute, 1);
-    nSfx = gn(PZ.sfx, VOL.sfx); nUi = gn(glue, VOL.sfx); nAmb = gn(PZ.amb, 0.9 * VOL.ambience);
-    nMusDuck = gn(nMute, 1); nMusic = gn(nMusDuck, 0.5 * VOL.music);
-    PZ.pad = gn(nMusic, 1); PZ.seq = gn(nMusic, 1); nPad = gn(PZ.pad, 1); nSeq = gn(PZ.seq, 1.5);
+    PZ.sfx = gn(glue, 1); PZ.amb = gn(SC.amb, 1); PZ.crowd = gn(SC.fx, 1);
+    nSfx = gn(PZ.sfx, VOL.sfx); nUi = gn(nMute, VOL.sfx); nAmb = gn(PZ.amb, 0.9 * VOL.ambience);
+    // Music: the duck (loud hits, stingers), the story duck, the music volume, then the land's music and the title theme.
+    nMusDuck = gn(nMute, 1); SC.duck = gn(nMusDuck, 1); nMusic = gn(SC.duck, 0.5 * VOL.music);
+    SC.game = gn(nMusic, 1); TT.bus = gn(nMusic, 0);
+    PZ.pad = gn(SC.game, 1); PZ.seq = gn(SC.game, 1); nPad = gn(PZ.pad, 1); nSeq = gn(PZ.seq, 1.5);
     PZ.sting = gn(nMute, 1); nSting = gn(PZ.sting, STING_LVL * VOL.music);
     nCrowdDuck = gn(PZ.crowd, 1);
     nBeast = gn(nCrowdDuck, VOL.crowd); // the new monsters' loops: crowd volume, ducked and paused with the crowd
@@ -2244,8 +2643,10 @@ const AU = (function () {
     PZ.rev = gn(nMute, 0.5); conv.connect(PZ.rev);
     nRevIn = gn(null, 1); nRevIn.connect(flt(conv, 'highpass', 120));
     // Reverb sends per bus, so turning a bus down in the settings turns its echo down too.
-    RV.sfx = gn(nRevIn, VOL.sfx); RV.music = gn(nRevIn, VOL.music); RV.amb = gn(nRevIn, VOL.ambience); RV.crowd = gn(nRevIn, VOL.crowd);
-    nSfx.rv = nUi.rv = RV.sfx; nSting.rv = nPad.rv = nSeq.rv = RV.music; nLand.rv = RV.amb; // the land's thunder echoes with the ambience volume
+    SC.fxRv = gn(nRevIn, 1);
+    RV.sfx = gn(SC.fxRv, VOL.sfx); RV.ui = gn(nRevIn, VOL.sfx); RV.music = gn(nRevIn, VOL.music); RV.amb = gn(nRevIn, VOL.ambience); RV.crowd = gn(SC.fxRv, VOL.crowd);
+    SC.gameRv = gn(RV.music, 1); TT.rv = gn(RV.music, 0); TT.bus.rv = TT.rv;
+    nSfx.rv = RV.sfx; nUi.rv = RV.ui; nSting.rv = RV.music; nPad.rv = nSeq.rv = SC.gameRv; nLand.rv = RV.amb; // the land's thunder echoes with the ambience volume
     LM.bus = landBus();
     PZ.crowd.connect(gn(nRevIn, 0.15));
     startBeds();
@@ -2296,14 +2697,14 @@ const AU = (function () {
   }
   // Bus levels 0..1 for a future settings menu: 'sfx', 'music', 'ambience' (wind, fire), 'crowd'.
   const VOL = { sfx: 1, music: 1, ambience: 1, crowd: 1 };
-  const STING_LVL = 0.9, RV = { sfx: null, music: null, amb: null, crowd: null };
+  const STING_LVL = 0.9, RV = { sfx: null, ui: null, music: null, amb: null, crowd: null };
   function setVolume(bus, v) {
     if (!hasOwn(VOL, bus)) return;
     VOL[bus] = cl(+v || 0, 0, 1);
     if (!ctx || !nSfx) return;
     const now = ctx.currentTime, n = { sfx: nSfx, music: nMusic, ambience: nAmb, crowd: nCrowd }[bus], base = { sfx: 1, music: 0.5, ambience: 0.9, crowd: 1 }[bus];
     if (n && bus !== 'crowd') n.gain.setTargetAtTime(base * VOL[bus], now, 0.05);
-    if (bus === 'sfx') nUi.gain.setTargetAtTime(VOL.sfx, now, 0.05);
+    if (bus === 'sfx') { nUi.gain.setTargetAtTime(VOL.sfx, now, 0.05); RV.ui.gain.setTargetAtTime(VOL.sfx, now, 0.05); }
     if (bus === 'music') nSting.gain.setTargetAtTime(STING_LVL * VOL.music, now, 0.05);
     const rv = { sfx: RV.sfx, music: RV.music, ambience: RV.amb, crowd: RV.crowd }[bus]; if (rv) rv.gain.setTargetAtTime(VOL[bus], now, 0.05);
     if (bus === 'crowd') { appM.crowd = -1; if (nBeast) nBeast.gain.setTargetAtTime(VOL.crowd, now, 0.05); }
@@ -2326,14 +2727,15 @@ const AU = (function () {
     api.intensity = SEQ.I;
     if (SEQ.horde > 0.05) choirOn(); else if (SEQ.choir) choirOff(now);
     if (SEQ.choir) SEQ.choir.g.gain.setTargetAtTime(0.05 * SEQ.horde * (0.6 + 0.4 * SEQ.I), now, 0.3);
-    if (!api.muted) seqTick(now); else SEQ.next = 0;
+    if (!api.muted && !SC.idle) seqTick(now); else SEQ.next = 0;
     const dr = Math.max(cur.tension, SEQ.I * 0.75);
     if (Math.abs(dr - appM.drone) > 0.01) { appM.drone = dr; bed.droneG.gain.setTargetAtTime(dr * 0.1, now, 0.4); bed.droneLP.frequency.setTargetAtTime(280 + 220 * dr, now, 0.4); }
     setM('pad', nPad.gain, PAD_LVL * (1 - 0.3 * SEQ.I), now, 0.6);
     duckE *= Math.exp(-adt / 0.35);
     for (let i = lateDuck.length - 1; i >= 0; i--) if (now >= lateDuck[i][0]) { duckE = Math.max(duckE, lateDuck[i][1]); lateDuck.splice(i, 1); }
     let hold = 0; for (let i = holds.length - 1; i >= 0; i--) { if (now >= holds[i][0]) { holds[i] = holds[holds.length - 1]; holds.pop(); } else if (holds[i][1] > hold) hold = holds[i][1]; }
-    setM('dm', nMusDuck.gain, Math.min(1 - 0.45 * duckE, 1 - hold), now, hold ? 0.25 : 0.04);
+    const dk = SC.cur === 'menu' ? 0.3 : 1; // the demo's explosions only nudge the title theme
+    setM('dm', nMusDuck.gain, Math.min(1 - 0.45 * duckE * dk, 1 - hold * dk), now, hold ? 0.25 : 0.04);
     setM('dc', nCrowdDuck.gain, 1 - 0.35 * duckE, now, 0.04);
     if (nCrowd) {
       CR.lvl += (CR.tl - CR.lvl) * (1 - Math.exp(-adt / 0.8));
@@ -2365,7 +2767,7 @@ const AU = (function () {
     bed.timer -= dt;
     if (bed.timer <= 0) {
       bed.timer = rr(2, 5);
-      const wk = WINDK[LS.key] || WINDK.ashen, tc = rr(1.2, 3), f = rr(200, 520) * (0.7 + 0.6 * cur.wind) * wk[0];
+      const wk = LS.wind || WINDK.ashen, tc = rr(1.2, 3), f = rr(200, 520) * (0.7 + 0.6 * cur.wind) * wk[0];
       for (let i = 0; i < bed.windLP.length; i++) bed.windLP[i].frequency.setTargetAtTime(f * rr(0.85, 1.15), now, tc);
       bed.gustG.gain.setTargetAtTime(rr(0.45, 1.0), now, tc);
       const w = rnd(); bed.whG.gain.setTargetAtTime(w * w * 0.3 * wk[1], now, tc); bed.whF.frequency.setTargetAtTime(rr(600, 1100) * wk[0], now, tc);
@@ -2376,7 +2778,9 @@ const AU = (function () {
       while (bed.popAcc >= 1 && n++ < 4) { bed.popAcc -= rr(0.5, 1.5); pop(); }
       if (bed.popAcc > 4) bed.popAcc = 0;
     }
-    musicTick(now);
+    try { sceneTick(now); titleTick(now); storyQueue(now); } catch (e) { if (!ST.err) ST.err = 'scene: ' + String(e && e.message || e).slice(0, 200); }
+    SC.idle = SC.cur === 'menu' && now > SC.offAt; // under the menu, once faded, the land's music stops being written
+    if (!SC.idle) musicTick(now);
     // The reactive parts never take the game down: any fault is recorded in stats().err.
     for (let i = LM.old.length - 1; i >= 0; i--) if (now >= LM.old[i][1]) { try { LM.old[i][0].disconnect(); } catch (e) {} LM.old.splice(i, 1); }
     try { scapes(now, paused); watch(now); if (!paused) reactive(now); else { SEQ.lastNow = now; SEQ.next = 0; } } catch (e) { if (!ST.err) ST.err = String(e && e.stack || e).slice(0, 300); }
