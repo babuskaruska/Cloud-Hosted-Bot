@@ -3686,19 +3686,19 @@ const DEATH_FX = {
   // Siege ram: the frame, wheels, log and crew fly apart; dust and a heavy crack.
   wood(m, kind, ix, iz, up) {
     shatter(e => rigMonster(e), m, [ix, 1.5 * up, iz], { spread: 1.9, life: .9, up });
-    sfx('hammer', m.x, m.z, 1, frnd()); sfx('boneRattle', m.x, m.z, .7, frnd());
+    // Sound: the audio plays ramDie on its own (it watches G.mons), so no sfx() here.
     fxDust(m.x, m.y + .2, m.z, 9, 1.1, { speed: 2.6 }); shake(.3);
   },
   // Harpy: falls apart in the air with a screech and a burst of pale down.
   feather(m, kind, ix, iz) {
     shatter(e => rigMonster(e), m, [ix + m.vx * .5, .6, iz + m.vz * .5], { spread: 1.2, life: .8 });
-    sfx('batScreech', m.x, m.z, .75, .15);
+    // Sound: harpyDie, from the audio.
     for (let i = 0; i < 5; i++) fxSmoke(m.x + frr(-.2, .2), m.y + frr(-.1, .2), m.z + frr(-.2, .2), frr(-.6, .6), frr(-.2, .5), frr(-.6, .6), frr(.6, 1), .22, .5, .5, .45, .42, .5, { drag: 2 });
   },
   // Hell hound: bursts into embers and black smoke, leaving a scorch mark.
   ember(m, kind, ix, iz, up) {
     shatter(e => rigMonster(e), m, [ix, 2 * up, iz], { spread: 1.4, life: .6 });
-    sfx('ignite', m.x, m.z, .8, frnd()); sfx('ratSqueal', m.x, m.z, .45, .1);
+    // Sound: houndDie, from the audio.
     const sc = m.scale || 1; fxTimed(5, m.x, m.y + .45 * sc, m.z, 2.2 * sc, 2.2 * sc, 2.2, .8, .2, .9, .25); fxEmbers(m.x, m.y + .3, m.z, 18, .35 * sc);
     for (let i = 0; i < 6; i++) fxSmoke(m.x + frr(-.2, .2), m.y + frr(.2, .6), m.z + frr(-.2, .2), frr(-.5, .5), frr(.6, 1.4), frr(-.5, .5), frr(1, 1.8), .3 * sc, .8, .08, .07, .07, .55, { drag: 1.5, rise: .3 });
     lightFlash(m.x, m.y + 1, m.z, 0xff7030, 120, .3, 10);
@@ -3706,7 +3706,7 @@ const DEATH_FX = {
   // Goblin shaman: its ward magic escapes in a green flash and rising motes.
   hex(m, kind, ix, iz, up) {
     shatter(e => rigMonster(e), m, [ix, 1.6 * up, iz], { spread: 1.4, life: .7, up });
-    sfx('squelch', m.x, m.z, .6, .6); sfx('ignite', m.x, m.z, .5, .2);
+    // Sound: shamanDie, from the audio.
     const g = SHAMAN_GLOW; fxTimed(5, m.x, m.y + .6, m.z, 2.4, 2.4, g[0] * 1.6, g[1] * 1.6, g[2] * 1.6, .9, .3);
     for (let i = 0; i < 12; i++) fxPart(m.x + frr(-.25, .25), m.y + frr(.2, .9), m.z + frr(-.25, .25), frr(-.4, .4), frr(.6, 1.8), frr(-.4, .4), frr(.5, 1.1), frr(.04, .07), g[0] * 1.6, g[1] * 1.6, g[2] * 1.6, { drag: .6, wob: 1, rise: .3 });
   },
@@ -8284,13 +8284,13 @@ const AU = (function () {
     overcharge: [S.overcharge, 0.2, 0.35, 2, 1.4, 0.7, 2],
     ramHit: [S.ramHit, 0.14, 0.35, 2, 0.6, 0.85, 2],
     ramCreak: [S.ramCreak, 0.3, 0.25, 0, 1.1, 0.6, 2],
-    ramDie: [S.ramDie, 0.25, 0.45, 2, 1.9, 0.85, 2],
+    ramDie: [S.ramDie, 0.08, 0.45, 2, 1.9, 0.85, 3],
     shamanChant: [S.shamanChant, 0.6, 0.35, 0, 2.6, 0.6, 2],
     shamanWard: [S.shamanWard, 0.3, 0.55, 2, 1.6, 0.7, 2],
-    shamanDie: [S.shamanDie, 0.15, 0.4, 1, 0.8, 0.65, 2],
-    harpyScreech: [S.harpyScreech, 0.3, 0.4, 2, 0.8, 0.6, 2],
+    shamanDie: [S.shamanDie, 0.1, 0.4, 2, 0.8, 0.65, 3],
+    harpyScreech: [S.harpyScreech, 0.2, 0.4, 2, 0.8, 0.6, 2],
     harpyWings: [S.harpyWings, 0.25, 0.2, 0, 0.9, 0.55, 2],
-    harpyDie: [S.harpyDie, 0.15, 0.35, 1, 0.9, 0.6, 2],
+    harpyDie: [S.harpyDie, 0.1, 0.35, 2, 0.9, 0.6, 3],
     houndSnarl: [S.houndSnarl, 0.2, 0.25, 0, 0.65, 0.55, 2],
     houndPant: [S.houndPant, 0.3, 0.15, 0, 0.9, 0.5, 1],
     houndHowl: [S.houndHowl, 6, 0.6, 2, 2.6, 0.75, 1],
@@ -8307,7 +8307,7 @@ const AU = (function () {
   // Ducks that land later than the call (the meteor hits after its whistle).
   const DUCK_LATE = { meteor: [meteorFall, 0.8] };
   // Exact gaps, no jitter: these are one per event, and the gap is what stops a double start.
-  const NOJIT = { rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1, fanfare: 1, lament: 1, arrival: 1, waveClear: 1, houndHowl: 1, newFoe: 1 };
+  const NOJIT = { rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1, fanfare: 1, lament: 1, arrival: 1, waveClear: 1, houndHowl: 1, newFoe: 1, ramDie: 1 };
   // UI sounds go to their own bus so they still play while the game is paused.
   const UIS = { uiHover: 1, uiClick: 1, uiDeny: 1, menuOpen: 1, uiPreview: 1, spellArm: 1, spellCancel: 1 };
   // Stingers are music: they go to their own bus (the music volume, not ducked), and they hold the music down while they play.
@@ -9017,23 +9017,28 @@ const AU = (function () {
   // Calls per kind: [sound, calls a second for each nearby one, most calls a second, gain].
   const BCALL = { ram: [['ramCreak', 0.4, 0.8, 0.8]], shaman: [['shamanChant', 0.35, 0.5, 0.9]], harpy: [['harpyWings', 0.45, 0.9, 0.8]],
     hound: [['houndSnarl', 0.3, 0.7, 0.8], ['houndPant', 0.22, 0.4, 0.7], ['houndFire', 0.5, 1.0, 0.7]] };
-  const BDONE = {}, BT = { list: [], map: typeof WeakMap === 'function' ? new WeakMap() : null, men: typeof WeakMap === 'function' ? new WeakMap() : null, first: {}, queue: [], qAt: 0, at: 0, packs: [], howlAt: -99, howl: null, acc: {}, sum: {}, beds: {}, rams: 0 };
+  const BDONE = {}, BT = { list: [], map: typeof WeakMap === 'function' ? new WeakMap() : null, first: {}, queue: [], qAt: 0, at: 0, packs: [], howlAt: -99, howl: null, acc: {}, sum: {}, beds: {}, rams: 0 };
   function beastKey(m) {
     const t = m.type; if (typeof t === 'string' && hasOwn(BEASTS, t)) return t;
     const r = m.def && m.def.rig; return typeof r === 'string' && hasOwn(BEASTS, r) ? r : null;
   }
-  function beastMark(m, k) { // from scan(): note that it is still on the field, and start tracking it once it is in view
+  // From scan() (8 times a second): note that it is still on the field, and track it from its first scan, even in the
+  // cave, so that one killed the moment it comes out is still heard. beastTick() watches the tracked ones every frame.
+  function beastMark(m, k) {
     if (!BT.map) return;
     const now = ctx.currentTime, e = BT.map.get(m);
     if (e) { if (e !== BDONE) e.at = now; return; }
-    if ((!m.vis && !m.fly) || !(m.hp > 0)) return;
-    const n = { m: m, k: k, at: now, sw: +m.swoop || 0, ca: +m.cast || 0, sh: +m.shove || 0, st: !!m.struck };
+    if (!(m.hp > 0)) return;
+    const n = { m: m, k: k, at: now, v: false, sw: +m.swoop || 0, ca: +m.cast || 0, sh: +m.shove || 0 };
     BT.map.set(m, n); BT.list.push(n);
+  }
+  function beastSeen(k, now) { // it has just come into view: a first-sighting cue, and hounds count towards a pack
     if (G.phase !== 'play') return;
     if (!BT.first[k]) { BT.first[k] = 1; BT.queue.push(k); }
     if (k === 'hound') { BT.packs.push(now); if (BT.packs.length > 8) BT.packs.shift(); }
   }
   function nearW(x, z) { const d = Math.hypot(x - CAM.x, z - CAM.z); return cl(1.15 - d / 34, 0, 1) * (0.72 + 0.28 * CAM.zoom); }
+  // Every frame (not just on the scan), so a death, a shove, a ward or a dive is heard on the frame it happens.
   function beastTick(now) {
     if (typeof G === 'undefined' || !G) return;
     const live = G.phase === 'play', dt = cl(now - BT.at, 0, 0.5), half = (R.viewW || 40) * 0.5, cy = Math.cos(CAM.yaw), sy = Math.sin(CAM.yaw);
@@ -9042,14 +9047,15 @@ const AU = (function () {
     let rams = 0;
     for (let i = BT.list.length - 1; i >= 0; i--) {
       const e = BT.list[i], m = e.m, k = e.k;
-      if (m.hp <= 0) { if (live || G.phase === 'clear' || G.phase === 'defeat') playAt(k + 'Die', m.x, m.z, 1); }
+      if (m.hp <= 0) { if (e.v && (live || G.phase === 'clear' || G.phase === 'defeat')) playAt(k + 'Die', m.x, m.z, 1); }
       else if (!m.dead && now - e.at < 2.5) {
+        if (!e.v) { if (!m.vis && !m.fly) continue; e.v = true; beastSeen(k, now); }
         if (live) {
-          const sw = +m.swoop || 0, ca = +m.cast || 0, sh = +m.shove || 0, st = !!m.struck;
+          const sw = +m.swoop || 0, ca = +m.cast || 0, sh = +m.shove || 0;
           if (k === 'harpy' && sw > 0 && e.sw <= 0) { playAt('harpyScreech', m.x, m.z, 1); playAt('harpyWings', m.x, m.z, 0.9); }
           if (k === 'shaman' && ca > e.ca + 0.15) playAt('shamanWard', m.x, m.z, 1);
-          if (k === 'ram' && (sh > e.sh + 0.2 || (st && !e.st && m.foe))) playAt('ramHit', m.x, m.z, 1);
-          e.sw = sw; e.ca = ca; e.sh = sh; e.st = st;
+          if (k === 'ram' && sh > e.sh + 0.2) playAt('ramHit', m.x, m.z, 1); // ramShove() sets m.shove = 1 on each footman it knocks aside
+          e.sw = sw; e.ca = ca; e.sh = sh;
         }
         if (k === 'ram') rams++;
         const w = nearW(m.x, m.z), s = BT.sum[k];
@@ -9059,11 +9065,6 @@ const AU = (function () {
       BT.map.set(m, BDONE); BT.list[i] = BT.list[BT.list.length - 1]; BT.list.pop(); // dead, leaked or gone from the field: never tracked again
     }
     BT.rams = rams;
-    // A ram's shove, seen from the footman's side (f.shoveAt is set when a ram knocks him aside).
-    if (rams && G.men && BT.men) for (let i = 0; i < G.men.length; i++) {
-      const f = G.men[i], sa = f.shoveAt; if (typeof sa !== 'number' || sa === BT.men.get(f)) continue;
-      BT.men.set(f, sa); if (live && !(G.t - sa > 0.5)) playAt('ramHit', f.x, f.z, 1);
-    }
     if (!live) { BT.queue.length = 0; BT.howl = null; return; }
     // First sightings, one at a time.
     if (BT.queue.length && now >= BT.qAt) { const k = BT.queue.shift(); play('newFoe', 0, 1, BEASTS[k]); BT.qAt = now + 1.7; }
@@ -9229,7 +9230,8 @@ const AU = (function () {
   function setM(key, param, v, now, tc) { if (Math.abs(v - appM[key]) > 0.005) { appM[key] = v; param.setTargetAtTime(v, now, tc); } }
   function reactive(now) {
     const adt = cl(now - SEQ.lastNow, 0, 0.25); SEQ.lastNow = now;
-    if (now >= SEQ.scanAt) { SEQ.scanAt = now + 0.125; scan(); beastTick(now); }
+    if (now >= SEQ.scanAt) { SEQ.scanAt = now + 0.125; scan(); }
+    beastTick(now);
     beastBeds(now, adt);
     // Danger rises in a couple of seconds and settles slowly, so the music never flickers.
     SEQ.I += (SEQ.tI - SEQ.I) * (1 - Math.exp(-adt / (SEQ.tI > SEQ.I ? 1.6 : 5.5)));
