@@ -173,6 +173,7 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
 4. Run `pkill -f pw-browsers/chromium` before perf measurements (orphaned browsers burn CPU).
 5. Republish the playable build: copy `index.html` to the scratchpad and publish it with the Artifact tool, with `url` set to https://claude.ai/artifact/53H8ujm4JWWLAGVr5KhyHs (read it first from a new session).
 6. Update this file and push.
+7. Run `node tools/menuqa.js` after merging (real clicks through the menus on desktop and iPhone 13).
 
 ## Round 9 plan (polish toward a shipped game)
 
@@ -198,6 +199,45 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
   - More mutators (e.g. *Eclipse*, darker with fewer tower lights; *Siege*, rams every wave; *Echoes*, killed elites return once).
   - QA coverage for menu flows (Playwright clicks through title → campaign → results).
   - Merges.
+
+## Round 9 results (merged; build not yet republished)
+
+- **Mira:**
+  - Phone bottom-sheet menu (short side under 700 CSS px).
+  - Results screen with ember count-up and unlock fanfare. Defeat → `CINE.play('defeat')` → results. A campaign win → victory cinematic → ending → results ("Into the Long Night").
+  - 23 achievements (`src/68-achieve.js`, `ACH`, `achUnlock`, `META.ach`, a Codex tab).
+  - Daily Long Night (`G.mode === 'daily'`, `dailySeed()`, `META.daily`; button `mdaily`).
+  - Six Long Night interludes plus six beats. The HUD hides while `CINE.on()`.
+  - High-Heat balance: Heat 5 with a half tree reaches land 11, Heat 10 with a full tree survives. `aiThink` knows siege and echoes and rerolls lands with 2+ curses.
+  - Hooks: `G.holdClear`, `MENU.victory`, `MENU.cineOn()`, `MENU.skipCount()`, `nightMode()`, `abandonRun(how)`.
+- **Ash:**
+  - `src/52-portraits.js` (`bossPortrait`, `UI.bossCard` from `bossEntrance`).
+  - `src/43-cine.js` (`CINE.play/on/skip`, URL flag `cine=victory|defeat`, `__cw.cineRun`), one composite-shader branch.
+  - Placement tints (gold = affordable, red = not).
+  - 7 Long Night set pieces; `plate()` has a bevel, rivets and a shadow.
+- **Echo:**
+  - Generated lands crossfade by `bio.id`.
+  - Sounds `achievement`, `unlock` (p=1 for Heat), `emberTick`, `cineVictory`, `cineDefeat`.
+  - Results music (win, defeat or rest). The title is 4 dB softer with varied loops.
+  - Fixed the sting duck never lifting while paused. `AU.meter(true)`.
+- **Forge:**
+  - Mutators `eclipse` (`G.eclipse`, `G.eclA` darken the look in `eventLook`; tower light distance shrinks), `siege` (rams spread into every wave's queue) and `echoes` (a slain ground elite returns once as a pale ghost, `m.echo`, half bounty).
+  - `tools/menuqa.js` (real clicks and taps; desktop and iPhone 13; abandon path and defeat path, confirms the cinematic).
+- **QA:** `node tools/qa.js` PASS (balance equals the baseline). `node tools/menuqa.js` PASS on both profiles. Perf 419 ms/frame against a 353 baseline in the QA run (software GL; earlier runs on the old build measured 407 under load, so most of it is noise). Re-measure on a quiet machine with `__cw.bench()` A/B.
+- **Publishing:** the artifact republish was blocked by the session's permission check in this session; the owner must allow it (or republish `index.html` manually).
+- **Known:**
+  - Daily wave rolls use the shared stream.
+  - The results panel reserves blank lines for unlocks.
+  - A first-land daily death still pays 3 embers.
+  - The Long Night set-piece cycle repeats after 3–4 lands.
+  - The boss card shows no Eclipse look; Eclipse ghosts have no label.
+
+## Round 10 plan
+
+- **Mira:** fix the known results and daily issues (seeded wave stream for daily); a label for Echo ghosts; a tutorial pass for the new placement tints; balance of the new mutators in sims.
+- **Ash:** a perf pass (A/B bench of round 9 against round 8 on a quiet machine); an Eclipse look for the sky and moon; ghost shader for `m.echo`; more set pieces so the cycle doesn't repeat.
+- **Echo:** listen-proofing by analysis (spectra and loudness per scene); a sound for an echo rising; a siege-ram horn on waves with Siege.
+- **Forge:** add menuqa to the QA routine; a daily-run determinism check; merges; publish.
 
 ## Round 9 contracts
 
