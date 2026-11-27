@@ -203,6 +203,31 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
   - QA coverage for menu flows (Playwright clicks through title → campaign → results).
   - Merges.
 
+## Owner wishes (after round 11, big push)
+
+The owner's kids play it; the youngest plays on a Poco M7 Pro (about 200 EUR Android), where it lags. Wishes:
+- Fully Estonian, with all old text gone, including credits. The MIT notice stays only in `LICENSE` and a hidden source comment, as the license requires.
+- A 6 → 0 countdown before a round starts.
+- Optimized from low-end Android to high-end phones, including battery.
+- An Ultra graphics setting with no haze: everything super clear.
+- More depth, progress, harder levels and good ways to earn gold.
+- Awesome effects and 8-bit music.
+- A deeper campaign.
+
+## Round 12 contracts (language, countdown, graphics tiers, performance, chiptune)
+
+- **Language: Estonian only (Mira).** Every player-visible string (menus, HUD, help, story, Codex, achievements, tips, banners, monster, tower, boss and land names, generated land names in `35-longnight.js` and mutator names in `64-endless.js`) is in Estonian. Agents who add strings write them in Estonian directly. The pixel font (`70-pixelfont.js`, Mira) gets Õ õ Ä ä Ö ö Ü ü Š š Ž ž. Use informal "sina" forms, suited to kids. Code identifiers stay English.
+- **Countdown (Mira, with Echo):** before the first wave of every land, big pixel numbers count 6, 5, 4, 3, 2, 1, 0 ("Alusta!"), one per second. It is skippable with a tap. While it runs, `G.count` holds the seconds left (null otherwise). Echo plays `sfx('countTick', 0, 0, 1)` on each number and `sfx('countGo')` at 0. The demo behind the menu skips it.
+- **Graphics tiers (Ash; Mira draws the settings rows):**
+  - `GFX.tiers` is `['low', 'mid', 'high', 'ultra']`, with Estonian labels in `GFX.label[key]`.
+  - `GFX.set(key)`, `GFX.tier` (current), plus `'auto'`, which picks from device memory, cores, GPU string and measured frame time.
+  - Low (for low-end Android): render scale cap about 0.6–0.75, no or minimal shadows, fewer particles and lights, simpler post.
+  - Ultra: no haze, mist or fog in the post and atmosphere, full resolution and sharp.
+  - `GFX.fpsCap` is 30, 60 or 0 (uncapped), set with `GFX.setFps(n)`. Default on phones: 60 on high, 30 on low.
+  - Battery: render less (or skip frames) while paused or on a static menu, and stop when hidden.
+- **Chiptune (Echo):** an 8-bit soundtrack style (pulse, triangle and noise channels; arpeggios) for all scenes, the default for this game. `AU.setStyle('chip' | 'classic')`, with `AU.style`. Mira adds the settings row; the label is Estonian.
+- **Performance harness (Forge):** `tools/perfphone.js` runs the game in a phone profile with CPU throttling (4×–6×). It reports JS time per frame (sim, UI, draw submit) in big crowds so the low-end budget can be tracked.
+
 ## Round 11 results (merged; build version 14)
 
 - **Mira:**
