@@ -61,6 +61,7 @@ function makeRng(seed) {
   f.pick = arr => arr[Math.floor(f() * arr.length)];
   f.sign = () => f() < .5 ? -1 : 1;
   f.chance = p => f() < p;
+  f.reseed = v => { s = (v >>> 0) || 1; }; // the Daily Long Night reseeds the gameplay stream per land and wave
   return f;
 }
 const rnd = makeRng(0xC1DE5);
@@ -6402,7 +6403,7 @@ function drawMonster(m, t) {
   if (m.slowT > 0 && rnd() < .2) { const a = rnd() * TAU; fxBolt([m.x, m.y + m.hitH, m.z], [m.x + Math.cos(a) * m.rad * 1.4, m.y + m.hitH + rr(-.3, .4), m.z + Math.sin(a) * m.rad * 1.4], .08, [.4, .65, 1.3], .028); }
   if (m.frozen > 0) { drawFrozen(m, sc); const a = Math.min(1, m.frozen * 2); FX.add.push(m.x, m.y + m.hitH, m.z, (1.2 + m.rad * 2.5) * sc, (1.4 + m.rad * 2.5) * sc, 0, 0, .5, .85, 1.3, .3 * a, 2, 0, 0, 0); if (rnd() < .15) fxPart(m.x + rr(-.25, .25), m.y + rr(.1, m.hitH * 2), m.z + rr(-.25, .25), 0, rr(-.2, .3), 0, rr(.4, .8), .045, 1.2, 1.6, 2, { drag: 1 }); }
   // Health bars only where they say something: hurt monsters, elites, warded ones and bosses. Full-health ordinary ones stay clean.
-  if ((m.vis || m.fly) && (m.hp < m.maxHp * .995 || m.def.boss || m.elite || m.ward > 0)) G.hbars.push({ x: m.x, y: m.y + m.def.top * sc / m.def.scale + .22, z: m.z, f: sat(m.hp / m.maxHp), boss: !!m.def.boss, man: false, name: m.def.boss ? m.affixName || m.def.name : m.elite ? eliteName(m) : null, elite: m.elite || null, sh: m.ward > 0 ? sat(m.ward / m.maxHp) : 0 });
+  if ((m.vis || m.fly) && (m.hp < m.maxHp * .995 || m.def.boss || m.elite || m.echo || m.ward > 0)) G.hbars.push({ x: m.x, y: m.y + m.def.top * sc / m.def.scale + .22, z: m.z, f: sat(m.hp / m.maxHp), boss: !!m.def.boss, man: false, name: m.def.boss ? m.affixName || m.def.name : m.echo ? 'Echo of ' + m.def.name : m.elite ? eliteName(m) : null, elite: m.echo ? 'echo' : m.elite || null, col: m.echo ? ECHO_COL : m.elite ? ELITE[m.elite].col : null, sh: m.ward > 0 ? sat(m.ward / m.maxHp) : 0 });
 }
 
 // A monster that is not drawn this step still makes the same calls into the gameplay random stream as
@@ -6836,6 +6837,7 @@ function makeElite(m, kind) {
   sfx('elite', m.x, m.z);
   return m;
 }
+const ECHO_COL = '#a9c6ff'; // Echoes (64-endless.js): a slain elite's pale ghost gets a tag of its own colour
 function eliteName(m) { return ELITE[m.elite] ? ELITE[m.elite].name + ' ' + m.def.name : m.def.name; }
 // Called from hitMonster: the ward absorbs damage first. Returns the damage that gets through.
 function wardAbsorb(m, dmg) {
@@ -7012,7 +7014,7 @@ function pressHp() { const p = G.press; return .85 + .15 * Math.min(p, 2.2) + .3
 function pressCap() { return 2.2 + .3 * G.level + .1 * G.heat; }
 function startWave() {
   const W = G.wavesPerLand;
-  G.k = G.k % W + 1; G.queue = buildWave(G.k, G.level); if (waveNumber() > G.best && (inRun() || TEST_SESSION)) { G.best = waveNumber(); if (!TEST_SESSION) try { localStorage.setItem('lanternhold.best', '' + G.best); } catch (e) {} } G.waveT = 0; G.spawning = true; G.bossWave = isBossK(G.k); G.horde = isHordeK(G.k, G.level); G.waveKills = 0; G.waveLeaks = 0; G.bossDown = false; G.trickle = 6; G.trickleN = 0;
+  G.k = G.k % W + 1; dailyReseed(G.level, G.k); G.queue = buildWave(G.k, G.level); if (waveNumber() > G.best && (inRun() || TEST_SESSION)) { G.best = waveNumber(); if (!TEST_SESSION) try { localStorage.setItem('lanternhold.best', '' + G.best); } catch (e) {} } G.waveT = 0; G.spawning = true; G.bossWave = isBossK(G.k); G.horde = isHordeK(G.k, G.level); G.waveKills = 0; G.waveLeaks = 0; G.bossDown = false; G.trickle = 6; G.trickleN = 0;
   const cv = G.B.cave, wl = 'Wave ' + G.k + '/' + W;
   sfx(G.bossWave ? 'hornBoss' : 'horn', cv.x, cv.z, 1.1);
   if (G.horde) { sfx('horde', cv.x, cv.z, 1.1); UI.banner(wl + ' · The horde is coming!', 3.4, true); }
@@ -7257,7 +7259,7 @@ function aiThink(dt) {
   // Mutators: armoured monsters want bombards and spires, swarms want splash and guards, fast ones want the slow of spires.
   if (modOn('ironhide')) armor += 3; if (modOn('swarm') || modOn('bloodmoon')) swarm += 3; if (modOn('haste')) { armor += 1; swarm += 1.5; }
   // Siege sends rams every wave (blasts and fire); Echoes brings killed elites back, so more of everything that kills crowds.
-  if (modOn('siege')) siege += 4; if (modOn('echoes')) { swarm += 1; armor += 1; }
+  if (modOn('siege')) siege += 4; if (modOn('echoes')) { const e = Math.min(4, (G.mix.echo || 0) * .15); swarm += 1 + e; armor += 1 + e * .5; } // more so as the ghosts pile up
   const gatePress = sat(G.leaks / 8);
   const opts = [];
   for (const kind of TOWER_KINDS) {
@@ -7408,7 +7410,7 @@ function activateBoard(B, lit) {
 }
 // S: a wave snapshot being restored (restoreRun): no warm-up monsters; restoreRun sets the saved numbers afterwards.
 function beginBattle(first, S) {
-  const B = G.B;
+  const B = G.B; dailyReseed(G.level, 0);
   G.mix = {}; G.mana = Math.max(G.mana * .5, 30); for (const k in G.spellCd) G.spellCd[k] = 0; G.pending.length = 0; G.rallies.length = 0;
   G.lives = G.maxLives; G.gold = 300 + 100 * G.level + 12 * G.level * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.snatched = 0; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; G.queue = []; AI.think = .15; AI.wait = 0;
   const n = S || TUT.active() ? 0 : 4 + Math.min(3, G.level);
@@ -7903,9 +7905,11 @@ function addSiege() {
 }
 // Echoes: a slain ground elite rises once as a pale ghost where it fell (no elite power, half bounty).
 function echoRise(m) {
-  if (m.fly || m.echo || m.def.boss || G.mons.length >= MAX_ALIVE) return;
+  // (Mira, round 10 sims: at 0.6 of its health and with no crowd limit, Echoes alone cost about three times the lives of
+  // a land without it at Long Night depth; at 0.45, and none rising into an already packed road, it sits with Eclipse.)
+  if (m.fly || m.echo || m.def.boss || G.mons.length >= MAX_ALIVE * .8) return;
   G.echoQ = G.echoQ || [];
-  G.echoQ.push({ t: .9, type: m.type, s: m.s, lat: m.lat, hp: m.maxHp * .6 / Math.max(1, m.def.hp) });
+  G.echoQ.push({ t: .9, type: m.type, s: m.s, lat: m.lat, hp: m.maxHp * .45 / Math.max(1, m.def.hp) });
 }
 function updateEchoes(dt) {
   if (!G.echoQ || !G.echoQ.length) return;
@@ -7915,6 +7919,7 @@ function updateEchoes(dt) {
     if (G.phase !== 'play' || G.mons.length >= MAX_ALIVE) continue;
     const g = spawnMonster(e.type, { hpMul: e.hp, s: e.s, lat: e.lat });
     g.echo = true; g.bmul = .5; g.tint = [.62, .78, 1]; g.pop = .5;
+    G.mix.echo = (G.mix.echo || 0) + 1; G.mix[e.type] = (G.mix[e.type] || 0) + 1; // the commander's tally (aiThink) counts the ghosts too
     if (G.spdMul !== 1) g.spdMul *= G.spdMul;
   }
 }
@@ -8352,6 +8357,16 @@ function dailyMods(seed, level) {
   if (n > 0 && rng() < .35) out.push(boons[Math.floor(rng() * boons.length)]);
   return out;
 }
+// The Daily Long Night replays the same for everyone: the gameplay stream is reseeded from the day's seed at each land
+// start (k = 0) and at each wave start (before its queue is rolled), so the waves, elites and boss rolls depend only on
+// the date, the land and the wave, and two runs with the same inputs replay identically.
+function dailyReseed(level, k) {
+  if (G.mode !== 'daily' || !Number.isFinite(G.runSeed)) return;
+  rnd.reseed((G.runSeed ^ Math.imul(level + 1, 0x9E3779B1) ^ Math.imul(k + 7, 0x85EBCA6B)) >>> 0);
+  // At a land start the game clock starts over too (flyer sway, regen and the commander's timers read G.t), so how long
+  // the demo ran behind the menu, or how long earlier lands took, cannot change what happens on this one.
+  if (k === 0) { G.t = 0; AIS.lost = G.menLost | 0; AIS.lostT = -99; AIS.lostN = 0; }
+}
 const dailyBest = () => META.daily && META.daily.date === dailyDate() ? META.daily.best : 0;
 // The land number shown to the player (1-based), and the Long Night depth (1 on its first land).
 const landNo = () => G.level + 1;
@@ -8513,7 +8528,7 @@ function metaLandClear() {
 function embersFor(r) {
   const waves = Math.max(0, r.waves | 0), bosses = Math.max(0, r.bosses | 0), l0 = r.level0 | 0;
   let boss = 0; for (let i = 0; i < bosses; i++) boss += 10 + 2 * (l0 + i);
-  const depth = 3 * Math.max(0, (r.level | 0) - (CAMPAIGN_LANDS - 1)),  story = r.ending ? 40 : 0, mul = heatMul(r.heat | 0);
+  const depth = 3 * Math.max(0, (r.level | 0) - Math.max(CAMPAIGN_LANDS - 1, l0)),  story = r.ending ? 40 : 0, mul = heatMul(r.heat | 0);
   const base = waves + boss + depth + story;
   return { waves, boss, depth, story, mul, heat: r.heat | 0, total: Math.round(base * mul) };
 }
@@ -8524,7 +8539,7 @@ function bankRun(how) {
   const sm = runSummary() || { waves: 0, lands: 0, slain: 0 };
   const res = embersFor({ waves: sm.waves, bosses: sm.lands, level: G.level, level0: run.level0, heat: G.heat, ending: run.ending && !run.endingPaid });
   run.endingPaid = true;
-  Object.assign(res, { how, sum: sm, mode: run.mode, land: landNo(), landName: G.B ? G.B.bio.name : '', notes: (run.notes || []).slice() });
+  Object.assign(res, { how, sum: sm, mode: run.mode, land: landNo(), landName: G.B && G.phase !== 'crumble' ? G.B.bio.name : '', notes: (run.notes || []).slice() });
   META.embers += res.total; META.earned += res.total;
   const S = META.stats; S.runs++; S.slain += sm.slain || 0; S.bestWave = Math.max(S.bestWave, waveNumber()); if (how === 'abandon') S.abandons++;
   if (run.mode === 'daily') {
@@ -8559,6 +8574,8 @@ function startRun(mode, heat) {
   G.level = nightMode(G.mode) ? CAMPAIGN_LANDS : 0; G.boardIndex = G.level; BIOME.start = 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++; G.holdClear = false; MENU.victory = null;
   G.runSeed = G.mode === 'daily' ? dailySeed() : 1 + Math.floor(Math.random() * 1e9); G.boardSeed = G.mode === 'daily' ? 1 + G.runSeed % 9000 : 1 + Math.floor(Math.random() * 9000);
   G.press = 1; G.speed = 1; G.paused = false; G.modLevel = -1; setMods([]); MENU.arrivalLv = -99;
+  // The run's tally starts now, not at its first battle: abandoned while the board still crumbles, it must not bank the demo's waves.
+  G.k = 0; newRun();
   // A run starts with the lifetime sightings, so "New:" tips only show for monsters this keeper has not met in a run.
   G.seen = {}; for (const k in META.seen) G.seen[k] = 1;
   META.run = { mode: G.mode, heat: G.heat, level0: G.level, banked: false, ending: false, t: 0, notes: [], ach: [], day: G.mode === 'daily' ? dailyDate() : '' };
@@ -9349,7 +9366,7 @@ const UI = (() => {
   U.closeMenu = () => { U.menu = null; U.armed = null; U.spell = null; };
   U.coinFrom = (x, y, z, value) => {
     if (U.coins.length > 70) { U.goldShown += value; return; }
-    const p = proj(x, y, z); U.coins.push({ sx: p.x, sy: p.y, t: 0, T: rr(.55, .8), value, cx: p.x + rr(-60, 60) * U.s, cy: p.y - rr(30, 70) * U.s });
+    const p = proj(x, y, z); U.coins.push({ sx: p.x, sy: p.y, t: 0, T: frr(.55, .8), value, cx: p.x + frr(-60, 60) * U.s, cy: p.y - frr(30, 70) * U.s }); // the effects stream: coin flights never shift gameplay
   };
 
   function plate(x, y, w, h, o = {}) {
@@ -9467,6 +9484,7 @@ const UI = (() => {
     branch: () => ['Choose a branch', 'A tower at its top level can take one of two branches. Open its menu to pick one.'],
     idle: () => ['Need a hand?', (U.touch ? 'Tap' : 'Click') + ' the commander plate, top right, and the AI plays again.'],
     oc: () => ['Overcharge', 'A tower with a branch can be overcharged three times, for more damage each time.'],
+    place: () => ['Placing a tower', 'Free pads glow gold where you can afford it, and red while the gold is short. Click one to build.'],
   };
   const tipInfo = key => { if (key.startsWith('help:')) { const h = HELP[key.slice(5)](); return { head: h[0], tip: h[1], bd: COLR.bdHi, dur: 7.5 }; } if (key.startsWith('event:')) { const E = EVENTS[key.slice(6)]; return { head: E.name, tip: E.tip, bd: '#5a7a9a' }; } if (key.startsWith('elite:')) { const E = ELITE[key.slice(6)]; return { head: 'Elite: ' + E.name, tip: E.tip + ' Worth more gold.', bd: E.col }; } const d = MON[key]; return { head: (d.boss ? 'Boss: ' : 'New: ') + d.name, tip: d.tip, bd: d.boss ? COLR.ember : '#8a6a3a' }; };
   // One line of numbers for a branch, in the words the menu uses.
@@ -9548,6 +9566,7 @@ const UI = (() => {
     if (U.hover && !U.hover.tower) { doBuild(U.hover.pad, kind); return; }
     if (U.gp.active && U.gp.sel >= 0 && !G.B.pads[U.gp.sel].tower) { doBuild(G.B.pads[U.gp.sel], kind); return; }
     U.armed = U.armed === kind ? null : kind; U.menu = null; sfx('uiHover', CAM.x, CAM.z, .7);
+    if (U.armed) helpTip('place');
   }
   function pickPad(mx, my) {
     if (!G.B || G.phase !== 'play') return null;
@@ -9684,7 +9703,7 @@ const UI = (() => {
       const y = b.boss ? Math.max(Math.round(p.y), Math.round((R.hudTop || 0) + LH + 4 * pix)) : Math.round(p.y);
       if (x < -w || x > W || y < 0 || y > H) continue;
       c.globalAlpha = b.f >= .999 && !b.elite ? .4 : ord ? ordA : .95;
-      c.fillStyle = b.elite ? ELITE[b.elite].col : COLR.dark; c.fillRect(x - pix, y - pix, w + 2 * pix, h + 2 * pix);
+      c.fillStyle = b.elite ? b.col || COLR.tx : COLR.dark; c.fillRect(x - pix, y - pix, w + 2 * pix, h + 2 * pix);
       if (b.elite) { c.fillStyle = COLR.dark; c.fillRect(x, y, w, h); }
       c.fillStyle = b.man ? '#7fb6ea' : (b.f > .5 ? '#d9a13c' : b.f > .25 ? '#e0762c' : '#e04a32'); c.fillRect(x, y, Math.max(pix, Math.round(w * b.f)), h);
       if (b.sh > 0) { c.fillStyle = '#bfe4ff'; c.fillRect(x, y - 2 * pix, Math.max(pix, Math.round(w * Math.min(1, b.sh / .6))), pix); }
@@ -9694,7 +9713,7 @@ const UI = (() => {
         // Name tags for elites, skipped where they would pile onto one already drawn.
         // Smaller in a crowd (and on a phone's big UI scale), so the tags do not bury the fight.
         const ts = Math.max(1, Math.min(es, Math.max(2, Math.floor(s * (crowd > .25 ? .45 : .55))))), tw2 = PX.measure(b.name) * ts, ty = y - PX.LINE * ts - 2 * pix, tx = p.x - tw2 / 2, th = PX.LINE * ts;
-        if (!tags.some(r => tx < r[0] + r[2] && tx + tw2 > r[0] && ty < r[1] + r[3] && ty + th > r[1])) { tags.push([tx, ty, tw2, th, b.name, p.x, ts, ELITE[b.elite].col]); }
+        if (!tags.some(r => tx < r[0] + r[2] && tx + tw2 > r[0] && ty < r[1] + r[3] && ty + th > r[1])) { tags.push([tx, ty, tw2, th, b.name, p.x, ts, b.col || COLR.tx]); }
       }
     }
     for (const g of tags) PX.text(c, g[4], g[5], g[1], g[6], g[7], { align: 'c', outline: COLR.dark });
@@ -9956,6 +9975,12 @@ const UI = (() => {
   }
   // Settings (gear, O) and the run summary after a defeat. Both are modal plates drawn over everything,
   // at the HUD's scale or smaller where the screen is short. Their controls go into U.btns so they win over the HUD below.
+  // Runs (both lists): Heat, the Long Night's mutators and the daily.
+  const HELP_RUN = [
+    'Heat makes a run harder and pays more embers. Beat the campaign, then reach land 10 at your top Heat, for the next tier.',
+    'Long Night lands carry mutators: curses such as Eclipse, Siege or Echoes, and now and then a boon. The arrival card lists them.',
+    'The Daily Long Night is the same road for everyone today, at Heat 0. Your best wave count for the day is kept.',
+  ];
   const HELP_KEYS = [
     'Click a pad to build: keys 1 to 4 pick a tower.',
     'Click a tower to upgrade it (U) or sell it (X).',
@@ -9964,7 +9989,8 @@ const UI = (() => {
     'R mends the beacon: lives back for gold.',
     'Space calls the next wave early, for a little gold.',
     'P pause · Tab speed · C hands command to the AI · drag, arrows or the wheel move the view.',
-  ];
+    'With a tower armed, free pads glow gold where you can afford it and red while the gold is short.',
+  ].concat(HELP_RUN);
   const HELP_TOUCH = [
     'Tap a pad, then a tower twice to build.',
     'Tap a tower to upgrade or sell it.',
@@ -9974,7 +10000,8 @@ const UI = (() => {
     'Tap the wave plate to call a wave early.',
     'Tap the commander plate to let the AI play.',
     'Drag to look around. Pinch to zoom.',
-  ];
+    'Free pads glow bright when you can afford a tower and dim while the gold is short.',
+  ].concat(HELP_RUN);
   function wrapAt(str, maxW, ps) { const out = []; let cur = ''; for (const wd of str.split(' ')) { const t = cur ? cur + ' ' + wd : wd; if (cur && PX.measure(t) * ps > maxW) { out.push(cur); cur = wd; } else cur = t; } if (cur) out.push(cur); return out; }
   function drawPanels(c, s, W, H, iL, iT, Wr, Hb, tch, over, pad, g3, topY) {
     U.panelRect = null;
@@ -10313,8 +10340,11 @@ const MENU = (() => {
   // { t: 'title', text } { t: 'text', text, col, c (centred) } { t: 'row', l, r, col, rc } { t: 'gap' } { t: 'big', text, col }
   // { t: 'btns', list: [{ id, label, fn, col, on, off, sub, icon }] } (side by side when they fit, else stacked)
   // { t: 'mod', icon, name, tip } { t: 'sep' }
+  // o.ghost: items still to come (the results screen's unlock lines). They count for the size and the place of the panel
+  // (so nothing moves when they arrive) but the plate is only as tall as what is drawn, and grows downwards.
   function panel(items, o = {}) {
-    const c = C(), avW = E.Wr - E.iL - 8 * E.s, avH = E.Hb - E.iT - 8 * E.s;
+    const c = C(), avW = E.Wr - E.iL - 8 * E.s, avH = E.Hb - E.iT - 8 * E.s, shown = items;
+    if (o.ghost && o.ghost.length) items = items.concat(o.ghost);
     const lay = ps => {
       const p = 5 * ps, L = PX.LINE * ps, gap = 3 * ps, cap = (o.cap || 220) * ps;
       let nat = o.minW ? o.minW * ps : 0;
@@ -10346,8 +10376,9 @@ const MENU = (() => {
       return { ps, p, L, gap, w, h, inner, ok };
     };
     let Ly = lay(o.ps || E.s); while (Ly.ps > 2 && (Ly.h > avH || !Ly.ok)) Ly = lay(Ly.ps - 1);
+    const hAll = Ly.h; if (items !== shown) { items = shown; Ly = Object.assign({}, Ly, { h: lay(Ly.ps).h }); }
     const { ps, p, L, gap, w, h, inner } = Ly, x = Math.round((E.iL + E.Wr) / 2 - w / 2);
-    const y = Math.round(o.top !== undefined ? clamp(o.top, E.iT + 4 * E.s, Math.max(E.iT + 4 * E.s, E.Hb - h)) : clamp((E.H - h) / 2, E.iT + 4 * E.s, Math.max(E.iT + 4 * E.s, E.Hb - h)));
+    const y = Math.round(o.top !== undefined ? clamp(o.top, E.iT + 4 * E.s, Math.max(E.iT + 4 * E.s, E.Hb - hAll)) : clamp((E.H - hAll) / 2, E.iT + 4 * E.s, Math.max(E.iT + 4 * E.s, E.Hb - hAll)));
     UI.panelRect = { x, y, w, h };
     ctx.globalAlpha = sat(M.t * 6 + .25);
     UI.plate(x, y, w, h, { bd: o.bd || c.bdHi });
@@ -10355,7 +10386,7 @@ const MENU = (() => {
     for (const it of items) {
       if (it.t === 'title') { tx(it.text, x + w / 2, yy, ps + 1, it.col || '#ffd9a8', { align: 'c' }); yy += PX.LINE * (ps + 1) + gap * 2; }
       else if (it.t === 'big') { tx(it.text, x + w / 2, yy, ps + 2, it.col || c.amber, { align: 'c' }); yy += PX.LINE * (ps + 2) + gap; }
-      else if (it.t === 'text') { for (const l of it._l) { tx(l, it.c === false ? x + p : x + w / 2, yy, ps, it.col || c.tx, it.c === false ? undefined : { align: 'c' }); yy += L; } yy += ps; }
+      else if (it.t === 'text') { if (it.a !== undefined) ctx.globalAlpha = sat(M.t * 6 + .25) * sat(it.a); for (const l of it._l) { tx(l, it.c === false ? x + p : x + w / 2, yy, ps, it.col || c.tx, it.c === false ? undefined : { align: 'c' }); yy += L; } yy += ps; if (it.a !== undefined) ctx.globalAlpha = sat(M.t * 6 + .25); }
       else if (it.t === 'row') { tx(it.l, x + p, yy, ps, it.col || c.dim); tx(it.r, x + w - p, yy, ps, it.rc || c.tx, { align: 'r' }); yy += L + ps; }
       else if (it.t === 'gap') yy += gap * 2;
       else if (it.t === 'sep') { ctx.fillStyle = 'rgba(232,176,74,0.25)'; ctx.fillRect(x + p, yy + gap, inner, Math.max(1, ps >> 1)); yy += gap * 3; }
@@ -10523,8 +10554,6 @@ const MENU = (() => {
     const kt = sat((rc.t - T.t0) / RC.total), tot = Math.round(r.total * (1 - Math.pow(1 - kt, 2)));
     items.push({ t: 'big', text: '+' + tot + ' embers' + (win ? ' so far' : ''), col: kt >= 1 && (rc.t - T.end) < .25 ? '#fff0c8' : c.amber });
     items.push({ t: 'text', text: win ? 'Banked when the run ends. You have ' + META.embers + '.' : 'You have ' + Math.round((r.before || 0) + (r.after - (r.before || 0)) * (1 - Math.pow(1 - kt, 2))) + ' embers.', col: c.tx });
-    // The unlocks ring one by one; their lines are laid out from the start so nothing jumps.
-    rc.fan.forEach((f, i) => items.push({ t: 'text', text: f.text, col: i < rc.fanAt ? f.col : 'rgba(0,0,0,0)' }));
     const port = E.H > E.W * 1.1;
     const list = win ? [
       { id: 'rnight', label: 'Into the Long Night', fn: intoNight, col: c.amber },
@@ -10536,7 +10565,12 @@ const MENU = (() => {
       { id: 'rmenu', label: 'Main menu', fn: toMenu },
     ];
     items.push({ t: 'btns', stack: port, list });
-    panel(items, { cap: 200, minW: 150, bd: win ? c.amber : c.ember });
+    // The unlocks ring one by one under the buttons, each line fading in as it rings. The panel keeps their room below
+    // (o.ghost) and grows into it, so neither the panel nor its buttons move, and no blank lines wait for them.
+    const fan = rc.fan.map((f, i) => ({ t: 'text', text: f.text, col: f.col, a: i < rc.fanAt ? (rc.t - (T.end + .3 + i * RC.fan)) / .3 : 0 }));
+    const rung = fan.filter((f, i) => i < rc.fanAt), ghost = fan.slice(rung.length);
+    if (fan.length) { if (rung.length) items.push({ t: 'sep' }, ...rung); else ghost.unshift({ t: 'sep' }); }
+    panel(items, { cap: 200, minW: 150, bd: win ? c.amber : c.ember, ghost });
   }
   function drawArrival() {
     dim(.25); const c = C(), mods = activeMods();

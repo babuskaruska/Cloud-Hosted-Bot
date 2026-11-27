@@ -69,6 +69,7 @@ function makeElite(m, kind) {
   sfx('elite', m.x, m.z);
   return m;
 }
+const ECHO_COL = '#a9c6ff'; // Echoes (64-endless.js): a slain elite's pale ghost gets a tag of its own colour
 function eliteName(m) { return ELITE[m.elite] ? ELITE[m.elite].name + ' ' + m.def.name : m.def.name; }
 // Called from hitMonster: the ward absorbs damage first. Returns the damage that gets through.
 function wardAbsorb(m, dmg) {
@@ -245,7 +246,7 @@ function pressHp() { const p = G.press; return .85 + .15 * Math.min(p, 2.2) + .3
 function pressCap() { return 2.2 + .3 * G.level + .1 * G.heat; }
 function startWave() {
   const W = G.wavesPerLand;
-  G.k = G.k % W + 1; G.queue = buildWave(G.k, G.level); if (waveNumber() > G.best && (inRun() || TEST_SESSION)) { G.best = waveNumber(); if (!TEST_SESSION) try { localStorage.setItem('lanternhold.best', '' + G.best); } catch (e) {} } G.waveT = 0; G.spawning = true; G.bossWave = isBossK(G.k); G.horde = isHordeK(G.k, G.level); G.waveKills = 0; G.waveLeaks = 0; G.bossDown = false; G.trickle = 6; G.trickleN = 0;
+  G.k = G.k % W + 1; dailyReseed(G.level, G.k); G.queue = buildWave(G.k, G.level); if (waveNumber() > G.best && (inRun() || TEST_SESSION)) { G.best = waveNumber(); if (!TEST_SESSION) try { localStorage.setItem('lanternhold.best', '' + G.best); } catch (e) {} } G.waveT = 0; G.spawning = true; G.bossWave = isBossK(G.k); G.horde = isHordeK(G.k, G.level); G.waveKills = 0; G.waveLeaks = 0; G.bossDown = false; G.trickle = 6; G.trickleN = 0;
   const cv = G.B.cave, wl = 'Wave ' + G.k + '/' + W;
   sfx(G.bossWave ? 'hornBoss' : 'horn', cv.x, cv.z, 1.1);
   if (G.horde) { sfx('horde', cv.x, cv.z, 1.1); UI.banner(wl + ' · The horde is coming!', 3.4, true); }
@@ -490,7 +491,7 @@ function aiThink(dt) {
   // Mutators: armoured monsters want bombards and spires, swarms want splash and guards, fast ones want the slow of spires.
   if (modOn('ironhide')) armor += 3; if (modOn('swarm') || modOn('bloodmoon')) swarm += 3; if (modOn('haste')) { armor += 1; swarm += 1.5; }
   // Siege sends rams every wave (blasts and fire); Echoes brings killed elites back, so more of everything that kills crowds.
-  if (modOn('siege')) siege += 4; if (modOn('echoes')) { swarm += 1; armor += 1; }
+  if (modOn('siege')) siege += 4; if (modOn('echoes')) { const e = Math.min(4, (G.mix.echo || 0) * .15); swarm += 1 + e; armor += 1 + e * .5; } // more so as the ghosts pile up
   const gatePress = sat(G.leaks / 8);
   const opts = [];
   for (const kind of TOWER_KINDS) {
@@ -641,7 +642,7 @@ function activateBoard(B, lit) {
 }
 // S: a wave snapshot being restored (restoreRun): no warm-up monsters; restoreRun sets the saved numbers afterwards.
 function beginBattle(first, S) {
-  const B = G.B;
+  const B = G.B; dailyReseed(G.level, 0);
   G.mix = {}; G.mana = Math.max(G.mana * .5, 30); for (const k in G.spellCd) G.spellCd[k] = 0; G.pending.length = 0; G.rallies.length = 0;
   G.lives = G.maxLives; G.gold = 300 + 100 * G.level + 12 * G.level * G.level; G.bountyMul = 1 + .12 * G.level; G.dmgMul = 1.55 + .2 * G.level; G.press = lerp(G.press, 1, .6); UI.goldShown = G.gold; G.k = 0; G.leaks = 0; G.leakTypes = {}; G.snatched = 0; G.spawning = false; G.bossWave = false; G.horde = false; G.fires.length = 0; G.nextIn = first ? .9 : 1.6; G.queue = []; AI.think = .15; AI.wait = 0;
   const n = S || TUT.active() ? 0 : 4 + Math.min(3, G.level);
