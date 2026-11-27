@@ -1,4 +1,4 @@
-# Cinderwatch
+# Lanternhold (formerly Cinderwatch)
 
 New session? Read `HANDOFF.md` first.
 

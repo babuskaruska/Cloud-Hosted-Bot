@@ -173,7 +173,8 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
 4. Run `pkill -f pw-browsers/chromium` before perf measurements (orphaned browsers burn CPU).
 5. Republish the playable build: copy `index.html` to the scratchpad and publish it with the Artifact tool, with `url` set to https://claude.ai/artifact/53H8ujm4JWWLAGVr5KhyHs (read it first from a new session).
 6. Update this file and push.
-7. Run `node tools/menuqa.js` after merging (real clicks through the menus on desktop and iPhone 13).
+7. The owner asked for `main` to carry the game: after each merged round, fast-forward it with `git push origin HEAD:main` (never force).
+8. Run `node tools/menuqa.js` after merging (real clicks through the menus on desktop and iPhone 13).
 
 ## Round 9 plan (polish toward a shipped game)
 
