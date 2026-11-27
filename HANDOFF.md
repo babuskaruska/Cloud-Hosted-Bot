@@ -203,6 +203,36 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
   - QA coverage for menu flows (Playwright clicks through title → campaign → results).
   - Merges.
 
+## Round 13 results (merged; build version 19, live)
+
+- **Mira:**
+  - Difficulty `G.diff` (Kerge, Tavaline, Raske, Õudne; embers ×0.5/1/1.5/2.2; `#diff=` for tests).
+  - Stars `META.stars` and a campaign map (`UI.scr === 'map'`).
+  - Act II: levels 6–11, `G.act === 2`, `act2Land()`, 8 beats, `ending2`.
+  - Economy in `src/69-economy.js`: interest, early-call bonus, combo gold, `MON.kullakott`, `TOWER.mine` (at most 3, no branch; `BUILD_KINDS`).
+  - The AI handles all of it. 10 achievements.
+- **Ash:**
+  - `src/44-juice.js`: `FX.goldBurst`, `FX.pop`, `FX.combo`, `FX.crit`, `FX.mineTick`, `UI.drawStars`.
+  - `blueprint('mine', 0..2)`, `RIGS.goblinSack`.
+  - `drawCountBig` countdown; low-tier bloom fixed; bigger explosions on high and ultra.
+- **Echo:**
+  - Sounds `combo`, `interest`, `goldBurst`, `star`, `mineTick`, `sackRun` (self-detected), and a real `heraldCall`.
+  - Map theme; darker Act II variants of the land music.
+  - Chip scheduling survives 4–6× CPU throttling (`tools/audiothrottle.js`).
+- **QA:** PASS; the baseline was re-saved after the intended economy and balance change (seed 3 min lives 15, mines take tower levels). menuqa PASS.
+- **Known:**
+  - Act II has no distinct night look (only via its eclipse curse); Ash should add one.
+  - The AI builds mines late.
+  - Long Night after Act II starts at depth 7.
+  - The classic-style map music is quieter.
+
+## Round 14 ideas
+
+- **Ash:** an Act II night look per land; mine and goblin polish; Ultra extras.
+- **Mira:** onboarding for kids (bigger tap targets on Kerge, a simpler first land); the AI builds mines earlier; Long Night depth after Act II; more achievements and rewards; a weekly event.
+- **Echo:** a listening pass once the owner reports; boss and Act II stingers.
+- **Forge:** a real-device check report from the owner (the Poco); performance follow-ups.
+
 ## Round 12 results (merged; build version 18, live on Pages)
 
 - **Mira:**
