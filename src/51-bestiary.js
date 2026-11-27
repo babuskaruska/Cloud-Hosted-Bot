@@ -437,19 +437,19 @@ const DEATH_FX = {
   // Siege ram: the frame, wheels, log and crew fly apart; dust and a heavy crack.
   wood(m, kind, ix, iz, up) {
     shatter(e => rigMonster(e), m, [ix, 1.5 * up, iz], { spread: 1.9, life: .9, up });
-    sfx('hammer', m.x, m.z, 1, frnd()); sfx('boneRattle', m.x, m.z, .7, frnd());
+    // Sound: the audio plays ramDie on its own (it watches G.mons), so no sfx() here.
     fxDust(m.x, m.y + .2, m.z, 9, 1.1, { speed: 2.6 }); shake(.3);
   },
   // Harpy: falls apart in the air with a screech and a burst of pale down.
   feather(m, kind, ix, iz) {
     shatter(e => rigMonster(e), m, [ix + m.vx * .5, .6, iz + m.vz * .5], { spread: 1.2, life: .8 });
-    sfx('batScreech', m.x, m.z, .75, .15);
+    // Sound: harpyDie, from the audio.
     for (let i = 0; i < 5; i++) fxSmoke(m.x + frr(-.2, .2), m.y + frr(-.1, .2), m.z + frr(-.2, .2), frr(-.6, .6), frr(-.2, .5), frr(-.6, .6), frr(.6, 1), .22, .5, .5, .45, .42, .5, { drag: 2 });
   },
   // Hell hound: bursts into embers and black smoke, leaving a scorch mark.
   ember(m, kind, ix, iz, up) {
     shatter(e => rigMonster(e), m, [ix, 2 * up, iz], { spread: 1.4, life: .6 });
-    sfx('ignite', m.x, m.z, .8, frnd()); sfx('ratSqueal', m.x, m.z, .45, .1);
+    // Sound: houndDie, from the audio.
     const sc = m.scale || 1; fxTimed(5, m.x, m.y + .45 * sc, m.z, 2.2 * sc, 2.2 * sc, 2.2, .8, .2, .9, .25); fxEmbers(m.x, m.y + .3, m.z, 18, .35 * sc);
     for (let i = 0; i < 6; i++) fxSmoke(m.x + frr(-.2, .2), m.y + frr(.2, .6), m.z + frr(-.2, .2), frr(-.5, .5), frr(.6, 1.4), frr(-.5, .5), frr(1, 1.8), .3 * sc, .8, .08, .07, .07, .55, { drag: 1.5, rise: .3 });
     lightFlash(m.x, m.y + 1, m.z, 0xff7030, 120, .3, 10);
@@ -457,7 +457,7 @@ const DEATH_FX = {
   // Goblin shaman: its ward magic escapes in a green flash and rising motes.
   hex(m, kind, ix, iz, up) {
     shatter(e => rigMonster(e), m, [ix, 1.6 * up, iz], { spread: 1.4, life: .7, up });
-    sfx('squelch', m.x, m.z, .6, .6); sfx('ignite', m.x, m.z, .5, .2);
+    // Sound: shamanDie, from the audio.
     const g = SHAMAN_GLOW; fxTimed(5, m.x, m.y + .6, m.z, 2.4, 2.4, g[0] * 1.6, g[1] * 1.6, g[2] * 1.6, .9, .3);
     for (let i = 0; i < 12; i++) fxPart(m.x + frr(-.25, .25), m.y + frr(.2, .9), m.z + frr(-.25, .25), frr(-.4, .4), frr(.6, 1.8), frr(-.4, .4), frr(.5, 1.1), frr(.04, .07), g[0] * 1.6, g[1] * 1.6, g[2] * 1.6, { drag: .6, wob: 1, rise: .3 });
   },
