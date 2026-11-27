@@ -200,7 +200,46 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
   - QA coverage for menu flows (Playwright clicks through title → campaign → results).
   - Merges.
 
-## Round 9 results (merged; build not yet republished)
+## Round 10 results (merged; build version 13)
+
+- **Mira:**
+  - The daily is deterministic: `rnd.reseed`; `dailyReseed(level, k)` runs at each land and wave start and resets `G.t` at land start.
+  - UI coin flights now use the fx stream (they were consuming the gameplay stream).
+  - The results screen has no blank unlock lines. Depth embers count only lands past the run's first.
+  - Echo ghosts get labels (`ECHO_COL`, "Echo of X") and are counted in `G.mix.echo` for `aiThink`.
+  - Echoes tuned (0.45 health; none rise past 80% of `MAX_ALIVE`).
+  - Help tips for placement tints, Heat, mutators and the daily.
+  - Fixed an exploit: abandoning during the crumble banked the demo's waves.
+- **Ash:**
+  - Eclipse sky (black sun and corona in `20-post.js`); the boss card goes cold under Eclipse.
+  - Echo ghost look (dither, rim, motes).
+  - 16 Long Night set pieces in shuffled 8-land cycles, with `dropBig` placement.
+  - Siege rams carry a banner and horns.
+  - Perf A/B: round 9 and round 10 match round 8 within noise (about 10%).
+- **Echo:**
+  - `AU.meter` reports LUFS and band shares.
+  - Phone high-pass at 100 Hz (36 Hz on desktop).
+  - Results music +3.5 dB; trimmed boss sub.
+  - Sounds `echoRise`, `siegeHorn`, an eclipse drone and cold mix, `dailySting`.
+  - Soak runs flat. The measurement scripts were not committed.
+- **Forge:** QA PASS, menuqa PASS (desktop and iPhone 13).
+  - The baseline was re-saved: lives went 20 → 18 on all 3 seeds. The cause is the shifted gameplay stream from the coin fix (bisected: Ash's build equals the old baseline; Mira's commit makes the change and has no rule changes that touch lives).
+  - Live runs show gargoyle packs on land 4 leaking several lives at once: an AI anti-air weakness exposed by the new rolls.
+- **Known:**
+  - The daily sting also plays when a saved daily is continued.
+  - The siege banner reads dark in shadow.
+  - The boss card briefly covers the eclipse disc on desktop.
+  - Echo ghosts have no first-sighting tip.
+  - The `discard` in the monster shader is unmeasured on real phones.
+
+## Round 11 plan
+
+- **Mira:** AI anti-air (gargoyle packs on land 4: build or upgrade archers/spires earlier when flyers show up; check `G.leakTypes`); a first-sighting tip for Echo ghosts; no daily sting on continue (coordinate with Echo); a pass over balance after the stream shift; maybe weekly challenges or a seeded "share code".
+- **Ash:** siege banner lighting; the boss card position against the eclipse disc; a cheaper path for echo ghosts if needed; new monster or boss for the Long Night (a Hollow herald) with Mira.
+- **Echo:** commit the mix and soak harnesses under `tools/` (`tools/audiomix.js`); a brighter eclipse layer; voice for the new boss.
+- **Forge:** an AI leak report in `qa.js` (leaks per type per land); merges; publish.
+
+## Round 9 results (merged; build version 12)
 
 - **Mira:**
   - Phone bottom-sheet menu (short side under 700 CSS px).
@@ -224,7 +263,6 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
   - Mutators `eclipse` (`G.eclipse`, `G.eclA` darken the look in `eventLook`; tower light distance shrinks), `siege` (rams spread into every wave's queue) and `echoes` (a slain ground elite returns once as a pale ghost, `m.echo`, half bounty).
   - `tools/menuqa.js` (real clicks and taps; desktop and iPhone 13; abandon path and defeat path, confirms the cinematic).
 - **QA:** `node tools/qa.js` PASS (balance equals the baseline). `node tools/menuqa.js` PASS on both profiles. Perf 419 ms/frame against a 353 baseline in the QA run (software GL; earlier runs on the old build measured 407 under load, so most of it is noise). Re-measure on a quiet machine with `__cw.bench()` A/B.
-- **Publishing:** the artifact republish was blocked by the session's permission check in this session; the owner must allow it (or republish `index.html` manually).
 - **Known:**
   - Daily wave rolls use the shared stream.
   - The results panel reserves blank lines for unlocks.
