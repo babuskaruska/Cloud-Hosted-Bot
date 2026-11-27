@@ -144,7 +144,7 @@ function eventLook() {
   if (L.wind) { const rx = Math.cos(CAM.yaw), rz = -Math.sin(CAM.yaw), va = WX.u.uVelA.value, vb = WX.u.uVelB.value, s = L.wind * a; va.set(lerp(va.x, rx * s * .7, a), va.y, lerp(va.z, rz * s * .7, a)); vb.set(lerp(vb.x, rx * s, a), lerp(vb.y, -.15, a), lerp(vb.z, rz * s, a)); }
   // Light: darker and tinted, with a slow red pulse for the lava. The lift tints the shadows (added in the comp pass).
   const pul = L.pulse ? .75 + .25 * Math.sin(G.t * 5.3) * Math.sin(G.t * 2.1 + 1) : 1, c = R.mats.comp.uniforms, lf = c.uLift.value;
-  R.exposure *= lerp(1, L.expo, a) * (L.flash ? 1 + .9 * (ev.flash || 0) : 1); c.uGrade.value.y *= lerp(1, L.sat, a);
+  R.exposure *= lerp(1, L.expo, a) * (L.flash ? 1 + .2 * (ev.flash || 0) * FX.flashK : 1); c.uGrade.value.y *= lerp(1, L.sat, a);
   lf.set(lf.x + L.lift[0] * a * pul, lf.y + L.lift[1] * a * pul, lf.z + L.lift[2] * a * pul);
   LT.moon.intensity *= lerp(1, L.moon, a); LT.hemi.intensity *= lerp(1, L.hemi, a);
   if (L.hemiCol) { const h = LT.hemi.color, hc = L.hemiCol; h.setRGB(h.r * lerp(1, hc[0], a), h.g * lerp(1, hc[1], a), h.b * lerp(1, hc[2], a)); }

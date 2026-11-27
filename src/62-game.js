@@ -162,17 +162,36 @@ function updateTides(dt) {
     if (w.t >= w.dur + .3) swapRemove(T, i);
   }
 }
-// The wave's look (effects stream only): a churning wall of spray across the road at the front with a pale foam crest,
-// spray and droplets thrown forward, shrinking as the wave runs out.
+// The wave's look (effects stream only): a dark green-blue wall of water across the road at the front, a pale
+// crest that leans forward over it, a wet sheet of water behind it, and spray thrown ahead; it shrinks as it runs out.
+const _tdq = { x: 0, y: 0, z: 0, tx: 0, tz: 0 };
 function tideFX(w, B, dt) {
-  const p = pathAt(B, w.front, _tdp), k = 1 - .55 * sat(w.t / w.dur), tx = p.tx, tz = p.tz;
-  w.acc += dt * 120;
-  while (w.acc >= 1) {
-    w.acc -= 1; const lat = frr(-1.2, 1.2) * ROAD_HALF, x = p.x - tz * lat + tx * frr(-.3, .3), z = p.z + tx * lat + tz * frr(-.3, .3), v = frr(1.5, 3.5), h = frr(0, 1.4) * k;
-    fxSmoke(x, p.y + .15 + h, z, tx * v, frr(.4, 1.6) * k, tz * v, frr(.35, .7), frr(.3, .55) * k + .18, 1.7, .6, .84, .95, .75, { drag: 3 });
-    if (frnd() < .5) fxPart(x, p.y + .2 + h, z, tx * v * 1.6 + frr(-.7, .7), frr(2, 5) * k, tz * v * 1.6 + frr(-.7, .7), frr(.4, .8), frr(.035, .06), .9, 1.3, 1.45, { grav: 10, drag: .3, streak: 1 });
+  const u = sat(w.t / w.dur), p = pathAt(B, w.front, _tdp), k = 1 - .55 * u, tx = p.tx, tz = p.tz, AL = FX.alpha, SG = FX.segs, T = SH.uTime.value;
+  // Behind the front: the road under a sheet of churned water, fading back towards where the wave rose.
+  for (let s = w.front - .7, n = 0; s > w.s0 - .3 && n < 9; s -= .9, n++) {
+    const q = pathAt(B, s, _tdq), f = 1 - n / 9;
+    AL.push(q.x, q.y + .06, q.z, ROAD_HALF * 2.6, ROAD_HALF * 2.6, n * 1.7 + T * .4, 0, .12, .32, .36, .6 * f * k, 0, n * 3.1, .35, 1);
   }
-  for (let j = -3; j <= 3; j++) { const lat = j / 3 * ROAD_HALF * 1.05; FX.add.push(p.x - tz * lat, p.y + .3 + .5 * k, p.z + tx * lat, 1.3, .9 * k, 0, 0, .45, .85, 1, .8 * k, 2, 0, 0, 0); }
+  // The wall: two rows of green-blue water, then the foam crest higher up and leaning forward, with glints.
+  for (let j = -4; j <= 4; j++) {
+    const lat = j / 4 * ROAD_HALF * 1.1, bob = Math.sin(T * 7 + j * 1.3) * .1, x = p.x - tz * lat, z = p.z + tx * lat, sd = j * 2.3 + w.s0;
+    AL.push(x - tx * .3, p.y + .5 * k, z - tz * .3, 1.4 * k + .3, 1.4 * k + .3, sd, 0, .16, .42, .48, .92, 0, sd, .25, 0);
+    AL.push(x - tx * .1, p.y + (1.2 + bob) * k, z - tz * .1, 1.2 * k + .25, 1.1 * k + .25, sd + 1, 0, .3, .62, .68, .9, 0, sd + 1, .3, 0);
+    AL.push(x + tx * .25, p.y + (1.75 + bob) * k, z + tz * .25, .95 * k + .2, .7 * k + .15, sd + 2, 0, 1.5, 1.7, 1.75, .95, 0, sd + 2, .35, 0);
+    FX.add.push(x + tx * .3, p.y + (1.85 + bob) * k, z + tz * .3, .9 * k + .3, .5 * k + .2, 0, 0, .35, .55, .6, .45 * k, 2, 0, 0, 0);
+  }
+  // A bright lip along the crest.
+  for (let j = -4; j < 4; j++) {
+    const l0 = j / 4 * ROAD_HALF * 1.1, l1 = (j + 1) / 4 * ROAD_HALF * 1.1, b0 = Math.sin(T * 7 + j * 1.3) * .1, b1 = Math.sin(T * 7 + (j + 1) * 1.3) * .1;
+    SG.push(p.x - tz * l0 + tx * .35, p.y + (1.95 + b0) * k, p.z + tx * l0 + tz * .35, .08, p.x - tz * l1 + tx * .35, p.y + (1.95 + b1) * k, p.z + tx * l1 + tz * .35, .08, .6, .85, .95, .8 * k);
+  }
+  w.acc += dt * 60;
+  while (w.acc >= 1) {
+    w.acc -= 1; const lat = frr(-1.2, 1.2) * ROAD_HALF, x = p.x - tz * lat + tx * frr(0, .4), z = p.z + tx * lat + tz * frr(0, .4), v = frr(1.5, 3.5), h = frr(1.3, 2.1) * k;
+    fxSmoke(x, p.y + h, z, tx * v, frr(.4, 1.4) * k, tz * v, frr(.35, .6), frr(.25, .45) * k + .12, 1.4, .62, .78, .84, .6, { drag: 3 });
+    if (frnd() < .7) fxPart(x, p.y + .2 + h, z, tx * v * 1.6 + frr(-.7, .7), frr(2, 5) * k, tz * v * 1.6 + frr(-.7, .7), frr(.4, .8), frr(.035, .06), .8, 1.15, 1.3, { grav: 10, drag: .3, streak: 1 });
+  }
+  for (let j = -3; j <= 3; j++) { const lat = j / 3 * ROAD_HALF * 1.05; FX.add.push(p.x - tz * lat, p.y + .3 + .5 * k, p.z + tx * lat, 1.3, .9 * k, 0, 0, .2, .5, .6, .5 * k, 2, 0, 0, 0); }
 }
 
 function buildWave(k, level) {

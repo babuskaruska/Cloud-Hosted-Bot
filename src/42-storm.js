@@ -22,14 +22,14 @@ function initStormMeshes() {
   const v3 = (x, y, z) => ({ value: new THREE.Vector3(x, y, z) }), v4 = () => ({ value: new THREE.Vector4() });
   const u = STORM.u = {
     uTime: SH.uTime, uFade: { value: 0 }, uDeep: v3(.008, .02, .026), uFoam: v3(.4, .46, .5), uMoonDir: v3(0, 1, 0), uMoonCol: v3(1, 1, 1), uAmb: v3(.05, .07, .09),
-    uClear: v3(0, 0, 0), uView: v3(0, 1, 0), uBeacon: v4(), uBeaconCol: v3(1, .6, .3), uBeam: v4(), uFall: v4(), uStrike: v4(), uFlash: { value: 0 }, uSkyCol: v3(.02, .04, .06),
+    uClear: v3(0, 0, 0), uView: v3(0, 1, 0), uBeacon: v4(), uBeaconCol: v3(1, .6, .3), uBeam: v4(), uFall: v4(), uStrike: v4(), uFlash: { value: 0 }, uSkyCol: v3(.02, .04, .06), uSlab: { value: 1 },
   };
   const m = new THREE.ShaderMaterial({
     uniforms: u,
     vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
     fragmentShader: `precision highp float; varying vec3 vW;
 uniform float uTime; uniform float uFade; uniform vec3 uDeep; uniform vec3 uFoam; uniform vec3 uMoonDir; uniform vec3 uMoonCol; uniform vec3 uAmb;
-uniform vec3 uClear; uniform vec3 uView; uniform vec4 uBeacon; uniform vec3 uBeaconCol; uniform vec4 uBeam; uniform vec4 uFall; uniform vec4 uStrike; uniform float uFlash; uniform vec3 uSkyCol;
+uniform vec3 uClear; uniform vec3 uView; uniform vec4 uBeacon; uniform vec3 uBeaconCol; uniform vec4 uBeam; uniform vec4 uFall; uniform vec4 uStrike; uniform float uFlash; uniform vec3 uSkyCol; uniform float uSlab;
 float hh(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float nn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(hh(i), hh(i + vec2(1.0, 0.0)), f.x), mix(hh(i + vec2(0.0, 1.0)), hh(i + vec2(1.0, 1.0)), f.x), f.y); }
@@ -40,16 +40,17 @@ void main(){
   vec2 q = max(abs(p) - 18.0, 0.0); float d = length(q) - 1.0 + (n0 - 0.5) * 1.8;
   // Swells roll in toward the cliffs and break: crests near the shore, white water churning at the foot, lace
   // left behind, and whitecaps out at sea.
-  float swell = sin(d * 1.8 - t * 1.6 + n1 * 3.2), near = smoothstep(12.0, 1.0, d);
+  // uSlab: how much of the slab stands (0 while it crumbles away or before it rises), so no surf breaks on nothing.
+  float swell = sin(d * 1.8 - t * 1.6 + n1 * 3.2), near = smoothstep(12.0, 1.0, d) * uSlab;
   // Long wind swells out at sea (running with the wind, toward +x/+z), which catch the moon in streaks.
   float roll = sin(dot(p, vec2(0.62, 0.34)) * 1.1 - t * 1.3 + n0 * 5.0);
   float crest = smoothstep(0.78, 0.97, swell) * near * (0.3 + 0.7 * n2);
-  float churn = smoothstep(1.3, -0.5, d + (n2 - 0.5) * 1.4) * (0.55 + 0.45 * n3);
-  float lace = smoothstep(0.64, 0.8, n2 * 0.65 + n3 * 0.35) * smoothstep(5.0, 0.3, d) * 0.45;
+  float churn = smoothstep(1.3, -0.5, d + (n2 - 0.5) * 1.4) * (0.55 + 0.45 * n3) * uSlab;
+  float lace = smoothstep(0.64, 0.8, n2 * 0.65 + n3 * 0.35) * smoothstep(5.0, 0.3, d) * 0.45 * uSlab;
   float cw = nn(vec2(dot(p, vec2(0.62, 0.34)) * 1.6 - t * 0.9, dot(p, vec2(-0.34, 0.62)) * 0.45 + t * 0.1));
   float caps = smoothstep(0.84, 0.97, cw * 0.55 + n1 * 0.25 + (roll * 0.5 + 0.5) * 0.2) * 0.22;
   float foam = clamp(max(max(churn, crest), max(lace, caps)), 0.0, 1.0);
-  if (uFall.w > 0.0) foam = max(foam, smoothstep(2.4, 0.2, length(p - uFall.xy) + (n3 - 0.5) * 1.2) * uFall.w);
+  if (uFall.w > 0.0) foam = max(foam, smoothstep(2.4, 0.2, length(p - uFall.xy) + (n3 - 0.5) * 1.2) * uFall.w * uSlab);
   // A bumped normal from the swells and the noise (screen-space slopes, as in the terrain shader).
   float h = swell * 0.25 * near + roll * 0.3 + n1 * 0.35 + n2 * 0.1;
   vec3 dPx = dFdx(vW), dPy = dFdy(vW), N0 = vec3(0.0, 1.0, 0.0), R1 = cross(dPy, N0), R2 = cross(N0, dPx);
@@ -93,6 +94,8 @@ void main(){
 // Called by setBiomeLook when a board becomes the current one.
 function setStormLand(B, instant) {
   const b = B.bio; STORM.bio = b; STORM.B = B; STORM.want = b.sea ? 1 : 0;
+  // The lighthouse lamp burns paler and its light stops short of the back cliffs, which stay cold, wet rock.
+  LT.beacon.color.setHex(b.lighthouse ? 0xffb47e : 0xff8a3a); LT.beacon.distance = b.lighthouse ? 36 : 80;
   if (b.sea && !STORM.sea) initStormMeshes();
   if (b.sea) {
     STORM.level = b.sea[0]; STORM.sea.position.y = STORM.level;
@@ -106,11 +109,11 @@ function setStormLand(B, instant) {
 }
 
 // Flash envelope: quick rise, exponential fall.
-function flashEnv(u, d) { return u < 0 ? 0 : Math.min(1, u / .018) * Math.exp(-u / d); }
+function flashEnv(u, d) { return u < 0 ? 0 : Math.min(1, u / .045) * Math.exp(-u / d); }
 // Starts a flash: a double (sometimes triple) flicker. dist 0 (on the board) .. 1 (far out at sea).
 function stormFlash(x, z, dist, power) {
-  const a = power * lerp(1, .5, dist), p2 = frr(.12, .22), ps = [[0, .055, a], [p2, frr(.07, .12), a * frr(.6, 1.05)]];
-  if (frnd() < .45) ps.push([p2 + frr(.16, .3), frr(.1, .2), a * frr(.25, .5)]);
+  const a = power * lerp(1, .5, dist), p2 = frr(.12, .22), ps = [[0, .07, a], [p2, frr(.08, .12), a * frr(.3, .5)]];
+  if (frnd() < .45) ps.push([p2 + frr(.16, .3), frr(.1, .2), a * frr(.12, .25)]);
   const fl = { t: 0, ps, x, z, dist, power, bolt: null };
   STORM.flashes.push(fl);
   G.flashN = (G.flashN || 0) + 1; G.flashT = 0; G.flashD = dist; G.flashX = x; G.flashZ = z;
@@ -152,10 +155,10 @@ function drawBolt(segs, k, w0, w1) {
 // FX.lightningAt(x, z, power): a bolt from the sky onto that ground point. Looks only.
 FX.lightningAt = function (x, z, power = 1) {
   if (!G.B || !isFinite(x) || !isFinite(z) || G.phase === 'crumble' || G.phase === 'rise') return;
-  const y = G.B.heightAt(x, z), fl = stormFlash(x, z, 0, 1.1 * power);
+  const y = G.B.heightAt(x, z), fl = stormFlash(x, z, 0, .6 * power);
   fl.bolt = makeBolt([x + frr(-4, 4), y + 26, z + frr(-4, 4)], [x, y + .05, z], .22, 3); fl.w = [.075, .5];
   fl.strike = [x, z];
-  lightFlash(x, y + 2.2, z, 0xc4dcff, 1500 * power, .32, 26);
+  lightFlash(x, y + 2.2, z, 0xc4dcff, 1000 * power * (.4 + .6 * (FX.flashK === undefined ? 1 : FX.flashK)), .32, 26);
   fxTimed(5, x, y + .5, z, 4.6, 4.6, 2.2, 2.6, 3.6, 1, .16);
   fxTimed(4, x, y + .08, z, 4.4, 4.4, 1.0, 1.3, 2.0, .7, .4, { ground: true });
   fxTimed(2, x, y + .3, z, 6, 6, .5, .65, 1.1, .8, .5);
@@ -196,6 +199,9 @@ function updateStorm(dt) {
   k *= fk; STORM.k = k; G.flashK = k;
   if (k > .002) stormLook(k);
   const sea = STORM.sea; if (!sea) return;
+  // The slab (and the lighthouse on it) goes as the land crumbles and comes back as the next one rises.
+  const slabW = G.phase === 'crumble' ? (G.phaseT < .6 ? 1 : 0) : G.phase === 'rise' ? (G.phaseT > 1.4 ? 1 : 0) : 1;
+  STORM.slab = damp(STORM.slab === undefined ? 1 : STORM.slab, slabW, slabW ? 1.2 : 2.2, dt);
   sea.visible = STORM.vis > .004; STORM.beams.visible = sea.visible && !!b.lighthouse;
   if (!sea.visible) return;
   const u = STORM.u, mp = LT.moon.position, ml = mp.length() || 1, cl = R.renderer.getClearColor(_stc);
@@ -204,13 +210,13 @@ function updateStorm(dt) {
   u.uAmb.value.set(LT.hemi.color.r, LT.hemi.color.g, LT.hemi.color.b).multiplyScalar(LT.hemi.intensity * .09);
   u.uClear.value.set(cl.r, cl.g, cl.b); { const sk = SH.uSky.value; u.uSkyCol.value.set(sk.r, sk.g, sk.b); }
   u.uView.value.set(Math.cos(CAM.elev) * Math.sin(CAM.yaw), Math.sin(CAM.elev), Math.cos(CAM.elev) * Math.cos(CAM.yaw));
-  u.uFlash.value = k; u.uStrike.value.set(sx, sz, 0, sk * fk);
+  u.uFlash.value = k; u.uSlab.value = STORM.slab; u.uStrike.value.set(sx, sz, 0, sk * fk);
   const bp = LT.beaconPos || { x: 0, y: 0, z: 0 }, bi = LT.beacon.intensity;
   u.uBeacon.value.set(bp.x, bp.y + .5, bp.z, bi); u.uBeaconCol.value.set(LT.beacon.color.r, LT.beacon.color.g, LT.beacon.color.b);
   if (STORM.fall) u.uFall.value.set(STORM.fall[0], STORM.fall[1], 0, 1); else u.uFall.value.set(0, 0, 0, 0);
   // Lighthouse beams: two opposite beams turning once every nine seconds, as bright as the beacon burns.
   STORM.beamA = (STORM.beamA + dt * TAU / 9) % TAU;
-  const on = b.lighthouse ? LT.beaconOn * (.35 + .65 * LT.beaconLevel) : 0;
+  const on = b.lighthouse ? LT.beaconOn * (.35 + .65 * LT.beaconLevel) * STORM.slab : 0;
   u.uBeam.value.set(bp.x, bp.z, STORM.beamA, on * STORM.vis);
   const bm = STORM.beams; bm.position.set(bp.x, bp.y + 1.2, bp.z); bm.rotation.set(0, -STORM.beamA, 0);
   STORM.bu.uK.value = .085 * on * STORM.vis * (1 - .5 * sat(k));
@@ -235,13 +241,13 @@ function updateStorm(dt) {
 // The flash on top of the land's look (called after applyLook and eventLook each step).
 function stormLook(k) {
   const m = LT.moon, h = LT.hemi, c = Math.min(1, k);
-  m.intensity += 3.8 * k; m.color.setRGB(lerp(m.color.r, .8, c), lerp(m.color.g, .88, c), lerp(m.color.b, 1, c));
-  h.intensity += 1.2 * k; h.color.setRGB(lerp(h.color.r, .7, c * .6), lerp(h.color.g, .8, c * .6), lerp(h.color.b, 1, c * .6));
+  m.intensity += 2.4 * k; m.color.setRGB(lerp(m.color.r, .8, c), lerp(m.color.g, .88, c), lerp(m.color.b, 1, c));
+  h.intensity += .8 * k; h.color.setRGB(lerp(h.color.r, .7, c * .6), lerp(h.color.g, .8, c * .6), lerp(h.color.b, 1, c * .6));
   const a = R.mats.atmo.uniforms.uMistAmb.value; a.set(a.x + .16 * k, a.y + .2 * k, a.z + .28 * k);
   const s = SH.uSky.value; s.setRGB(s.r + .16 * k, s.g + .2 * k, s.b + .28 * k);
   const cl = R.renderer.getClearColor(_stc); R.renderer.setClearColor(_stc.setRGB(cl.r + .02 * k, cl.g + .028 * k, cl.b + .045 * k), 1);
   const w = WX.u.uAmb.value; w.set(w.x + .9 * k, w.y + 1.02 * k, w.z + 1.3 * k);
   const fa = FX.alpha.mesh.material.uniforms.uAmb.value; fa.set(fa.x + .15 * k, fa.y + .18 * k, fa.z + .24 * k);
-  R.exposure *= 1 + .18 * k;
+  R.exposure *= 1 + .08 * k;
 }
 window.__cwStorm = STORM; // test hook
