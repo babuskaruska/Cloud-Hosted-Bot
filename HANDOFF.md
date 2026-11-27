@@ -160,6 +160,45 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
 - **Echo:** the lantern motif and title theme, `AU.setScene`, story voices, meta sounds, and music generated from `bio.music`.
 - **Known follow-ups:** on phones, the menu buttons cover most of the board. Echo should detect generated-land changes by `bio.id` (every generated land has key `'proc'`). At high Heat the AI needs upgrades.
 
+## How Forge runs a round (for the next session)
+
+1. Write the round's contracts into this file and push.
+2. Spawn at most 3 agents (Mira: game/UI/story/meta; Ash: graphics/lands/models/perf; Echo: audio), each with `isolation: worktree`, `run_in_background: true`, and a brief that says:
+   - start with `git merge --ff-only claude/sleepy-cannon-hu2caw`
+   - read HANDOFF and CLAUDE
+   - QA must pass
+   - commit on the worktree branch with the attribution lines; don't push; don't edit HANDOFF
+   - send a short report
+3. Merge each branch as it reports. On conflicts keep both sides' intent, rebuild `index.html` and never hand-merge it. Then run `node tools/qa.js`. Relay hooks between agents with SendMessage.
+4. Run `pkill -f pw-browsers/chromium` before perf measurements (orphaned browsers burn CPU).
+5. Republish the playable build: copy `index.html` to the scratchpad and publish it with the Artifact tool, with `url` set to https://claude.ai/artifact/53H8ujm4JWWLAGVr5KhyHs (read it first from a new session).
+6. Update this file and push.
+
+## Round 9 plan (polish toward a shipped game)
+
+- **Mira:**
+  - The phone menu layout (buttons cover the board; try a compact bottom sheet).
+  - A run-results screen with ember count-up and new-unlock fanfare.
+  - Achievements (about 20) shown in the Codex.
+  - Balance for high Heat with upgrades, so a well-upgraded player can push Heat 5+.
+  - More story interludes.
+  - A daily-seed Long Night with a local best.
+- **Ash:**
+  - A boss intro card with portrait art.
+  - Better tower-placement feedback.
+  - Victory and defeat cinematics (a beacon re-lighting, the dark swallowing the keep).
+  - More prop variety for generated lands.
+  - Polish the UI frame (panel borders, icons).
+- **Echo:**
+  - Detect generated-land changes by `bio.id` and crossfade between consecutive generated lands.
+  - Achievement and unlock fanfares.
+  - Results-screen music.
+  - A listening-safe mix pass for the title.
+- **Forge:**
+  - More mutators (e.g. *Eclipse*, darker with fewer tower lights; *Siege*, rams every wave; *Echoes*, killed elites return once).
+  - QA coverage for menu flows (Playwright clicks through title → campaign → results).
+  - Merges.
+
 ## Phase 2: Lanternhold (a full game). Round 8 contracts
 
 The owner's ask: a new name, story, procedural endless rounds that never end, carry-over points between runs, harder levels, more mayhem, a polished real-game feel, and better visuals even on phones.
