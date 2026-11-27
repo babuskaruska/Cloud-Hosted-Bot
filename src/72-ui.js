@@ -6,11 +6,11 @@ const UI = (() => {
     touch: false, ptrs: new Map(), gest: null, lastTap: { t: -9, x: 0, y: 0 }, waveRect: null, followRect: null, menuRect: null, wake: null, panning: false,
     hud: [], tips: [], tip: null, keys: new Set(), sndArmed: false, vvT: 0, vvN: 0,
     spell: null, gpt: null, spellFlash: {}, spellSeen: {},
-    sets: null, panelRect: null, everManual: false, helpSeen: {}, sumT: 0, offer: null,
+    sets: null, panelRect: null, everManual: false, helpSeen: {}, sumT: 0, offer: null, scr: null, mutCard: false,
   };
   // Settings, remembered between visits: volumes (0..1) and the graphics mode.
   const SET = { music: 1, sfx: 1, amb: 1, q: 'auto' }, Q0 = { noscale: HASH.noscale, quality: -1 };
-  function saveSettings() { try { localStorage.setItem('cinderwatch.settings', JSON.stringify(SET)); } catch (e) {} }
+  function saveSettings() { try { localStorage.setItem('lanternhold.settings', JSON.stringify(SET)); } catch (e) {} }
   function applyVolumes() { AU.setVolume('music', SET.music); AU.setVolume('sfx', SET.sfx); AU.setVolume('crowd', SET.sfx); AU.setVolume('ambience', SET.amb); }
   // Graphics: Auto lets the frame-rate watcher pick the resolution; Sharp holds full resolution; Fast holds a low one.
   function applyQuality() {
@@ -20,17 +20,17 @@ const UI = (() => {
   }
   function loadSettings() {
     try {
-      const o = JSON.parse(localStorage.getItem('cinderwatch.settings') || '{}') || {};
+      const o = JSON.parse(localStorage.getItem('lanternhold.settings') || '{}') || {};
       for (const k of ['music', 'sfx', 'amb']) if (o[k] !== undefined && isFinite(+o[k])) SET[k] = clamp(+o[k], 0, 1);
       if (o.q === 'auto' || o.q === 'sharp' || o.q === 'fast') SET.q = o.q;
-      const h = JSON.parse(localStorage.getItem('cinderwatch.help') || '[]'); if (Array.isArray(h)) for (const k of h) U.helpSeen[k] = 1;
+      const h = JSON.parse(localStorage.getItem('lanternhold.help') || '[]'); if (Array.isArray(h)) for (const k of h) U.helpSeen[k] = 1;
     } catch (e) {}
     applyVolumes(); if (SET.q !== 'auto') applyQuality();
   }
   // One-time help lines for the player's first steps (remembered, so they show once per browser).
   function helpTip(key) {
     if (U.helpSeen[key]) return; U.helpSeen[key] = 1; U.tips.unshift('help:' + key);
-    try { localStorage.setItem('cinderwatch.help', JSON.stringify(Object.keys(U.helpSeen))); } catch (e) {}
+    try { localStorage.setItem('lanternhold.help', JSON.stringify(Object.keys(U.helpSeen))); } catch (e) {}
   }
   function openSettings(on) {
     if (on === undefined) on = !U.sets; if (!!on === !!U.sets) return;
@@ -57,6 +57,7 @@ const UI = (() => {
   function takeCommand() { if (!U.everManual) { U.everManual = true; helpTip('cmd'); } }
   U.banner = (text, dur, big) => { U.msg = { text, t: 0, dur, big }; };
   U.ping = (x, y, z, byPlayer) => { fxTimed(4, x, y + .12, z, 5, 5, byPlayer ? 1.0 : 1.5, byPlayer ? 1.4 : 1.1, byPlayer ? 1.8 : .5, .7, .55, { ground: true }); };
+  U.COLR = COLR; U.plate = (...a) => plate(...a); U.openSettings = on => openSettings(on); U.setMute = b => setMute(b);
   U.closeMenu = () => { U.menu = null; U.armed = null; U.spell = null; };
   U.coinFrom = (x, y, z, value) => {
     if (U.coins.length > 70) { U.goldShown += value; return; }
@@ -115,7 +116,7 @@ const UI = (() => {
     window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
     window.addEventListener('pointerleave', () => { if (!U.ptrs.size) U.inside = false; });
     document.addEventListener('mouseleave', () => { if (!U.ptrs.size) U.inside = false; });
-    window.addEventListener('wheel', e => { if (U.sets) { e.preventDefault(); return; } const [x, y] = pos(e), d = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY; camZoomTo(camZoomNow() * Math.exp(-clamp(d, -160, 160) * (e.ctrlKey ? .012 : .0024)), x, y, 16); e.preventDefault(); }, { passive: false });
+    window.addEventListener('wheel', e => { if (U.sets || MENU.modal()) { e.preventDefault(); return; } const [x, y] = pos(e), d = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY; camZoomTo(camZoomNow() * Math.exp(-clamp(d, -160, 160) * (e.ctrlKey ? .012 : .0024)), x, y, 16); e.preventDefault(); }, { passive: false });
     const stop = e => { if (e.cancelable) e.preventDefault(); };
     for (const ev of ['touchmove', 'touchcancel', 'dblclick', 'gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, stop, { passive: false });
     document.addEventListener('touchstart', e => {
@@ -124,19 +125,20 @@ const UI = (() => {
     }, { passive: false });
     document.addEventListener('touchend', e => { audioGesture(); stop(e); if (!e.touches.length && U.ptrs.size) setTimeout(() => { if (U.ptrs.size) U.dropTouches(); }, 80); }, { passive: false });
     if (window.visualViewport) for (const ev of ['resize', 'scroll']) window.visualViewport.addEventListener(ev, fixPageZoom);
-    try { if (localStorage.getItem('cinderwatch.muted') === '1') AU.muted = true; G.best = +localStorage.getItem('cinderwatch.best') || 0; } catch (e) {}
+    try { if (localStorage.getItem('lanternhold.muted') === '1') AU.muted = true; G.best = +localStorage.getItem('lanternhold.best') || 0; } catch (e) {}
     loadSettings();
     window.addEventListener('keyup', e => { U.keys.delete(e.code); });
     window.addEventListener('blur', () => U.keys.clear());
     window.addEventListener('contextmenu', e => e.preventDefault());
     window.addEventListener('keydown', e => {
-      if (PAN[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey) { if (!U.sets && !U.offer) U.keys.add(e.code); e.preventDefault(); }
+      if (PAN[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey) { if (!U.sets && !U.offer && !MENU.modal()) U.keys.add(e.code); e.preventDefault(); }
       if (e.repeat) return; audioGesture(); U.keepAwake(); U.touch = false;
       const k = e.key;
       if (U.offer) { if (k === ' ' || k === 'Enter') takeOffer(true); else if (k === 'n' || k === 'N') takeOffer(false); else if (k === 'm' || k === 'M') setMute(!AU.muted); e.preventDefault(); return; }
-      if (k === 'o' || k === 'O' || (k === 'Escape' && U.sets)) { openSettings(); e.preventDefault(); return; }
+      if ((k === 'o' || k === 'O') && !STORY.on() || (k === 'Escape' && U.sets)) { openSettings(); e.preventDefault(); return; }
       if (U.sets) { if (k === 'm' || k === 'M') setMute(!AU.muted); return; }
-      if (G.phase === 'defeat' && (k === ' ' || k === 'Enter')) { if (restartRun(true)) sfx('uiClick', CAM.x, CAM.z, .8); e.preventDefault(); return; }
+      if (MENU.modal() || (k === 'Escape' && inRun())) { if (MENU.key(e)) { e.preventDefault(); return; } if (MENU.modal() && k !== 'm' && k !== 'M') return; }
+      if (G.phase === 'defeat' && G.mode === 'demo' && (k === ' ' || k === 'Enter')) { if (restartRun(true)) sfx('uiClick', CAM.x, CAM.z, .8); e.preventDefault(); return; }
       const bt = U.menu && U.menu.tower;
       if ((k === '1' || k === '2') && bt && canBranch(bt)) { touchInput(); doBranch(bt, BRANCH_KEYS[bt.kind][+k - 1]); e.preventDefault(); }
       else if (k >= '1' && k <= '4') { pickKind(TOWER_KINDS[+k - 1]); e.preventDefault(); }
@@ -163,7 +165,7 @@ const UI = (() => {
   function togglePause() { G.paused = !G.paused; sfx('uiClick', CAM.x, CAM.z, .6); }
   function cycleSpeed() { G.speed = G.speed % 3 + 1; if (G.paused) G.paused = false; sfx('uiClick', CAM.x, CAM.z, .6); }
   function soundTap() { if (AU.ready && U.sndArmed) setMute(!AU.muted); }
-  U.sawMonster = type => { if (G.seen[type]) return; G.seen[type] = 1; if (MON[type].tip && U.tips.length < 4) U.tips.push(type); };
+  U.sawMonster = type => { metaSaw(type); if (G.seen[type]) return; G.seen[type] = 1; if (MON[type].tip && U.tips.length < 4) U.tips.push(type); };
   U.sawElite = kind => { const key = 'elite:' + kind; if (G.seen[key]) return; G.seen[key] = 1; if (U.tips.length < 5) U.tips.push(key); };
   const HELP = {
     cmd: () => ['You command', U.touch ? 'Tap a pad to build. Spells: tap one, then the road. The gear button has help and sound.' : 'Click a pad to build. Q E T cast spells on the road. O opens settings and help.'],
@@ -196,7 +198,7 @@ const UI = (() => {
     const c = 'width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover';
     m.setAttribute('content', c + ',shrink-to-fit=no'); setTimeout(() => { m.setAttribute('content', c); try { window.scrollTo(0, 0); } catch (e) {} resizeRenderer(); }, 40);
   }
-  function setMute(b) { AU.setMuted(b); try { localStorage.setItem('cinderwatch.muted', b ? '1' : '0'); } catch (e) {} }
+  function setMute(b) { AU.setMuted(b); try { localStorage.setItem('lanternhold.muted', b ? '1' : '0'); } catch (e) {} }
   function fullscreenOK() { const d = document; return !!(d.fullscreenEnabled || d.webkitFullscreenEnabled) && !(window.navigator.standalone); }
   function isFull() { const d = document; return !!(d.fullscreenElement || d.webkitFullscreenElement); }
   function toggleFull() {
@@ -213,7 +215,7 @@ const UI = (() => {
     if (inRect(U.panelRect, x, y, 0) || inRect(U.menuRect, x, y, 0)) return null; // a modal plate or a tower menu covers the HUD buttons under it
     for (const b of U.hud) if (inRect(b, x, y, m)) return b; return null;
   }
-  function hudAt(x, y) { return inRect(U.menuRect, x, y, 0) || inRect(U.panelRect, x, y, 0); }
+  function hudAt(x, y) { return MENU.modal() || inRect(U.menuRect, x, y, 0) || inRect(U.panelRect, x, y, 0); }
   function callWave() { touchInput(); if (callWaveEarly()) { sfx('uiClick', CAM.x, CAM.z, .8); buzz(10); } else sfx('uiDeny', CAM.x, CAM.z, .5); }
   function audioGesture() { if (!AU.ready) AU.unlock(); }
   function touchInput() { U.idle = 0; if (!U.manual) { U.manual = true; takeCommand(); } }
@@ -273,6 +275,7 @@ const UI = (() => {
     if (now - (U.offerShut || -1e9) < 450) return; // a double tap on Continue must not land on the board behind it
     // Settings and the run summary are modal: a tap outside the settings closes them; nothing reaches the board or the HUD underneath.
     if (U.sets && !(b && U.btns.some(o => o.id === b.id))) { if (!inRect(U.panelRect, x, y, 0) || (b && b.id === 'gear')) openSettings(false); return; }
+    if (MENU.modal()) { if (b && U.btns.includes(b)) b.fn(x, y); else MENU.tapOutside(x, y); return; }
     if (b) { if (!b.hud) touchInput(); b.fn(x, y); return; }
     if (U.panelRect && inRect(U.panelRect, x, y, 0)) return;
     if (U.spell) { castAt(x, y); return; }
@@ -295,10 +298,12 @@ const UI = (() => {
   }
   function pollGamepad(dt) {
     const pads = navigator.getGamepads ? navigator.getGamepads() : []; let gp = null; for (const p of pads) if (p && p.connected) { gp = p; break; }
-    if (!gp || !G.B || G.phase !== 'play') return;
+    if (!gp || !G.B) return;
     const st = U.gp, b = i => !!(gp.buttons[i] && gp.buttons[i].pressed), was = i => !!st.prev[i], hit = i => b(i) && !was(i);
     let ax = (Math.abs(gp.axes[0]) > .5 ? Math.sign(gp.axes[0]) : 0) + (b(15) ? 1 : 0) - (b(14) ? 1 : 0), ay = (Math.abs(gp.axes[1]) > .5 ? Math.sign(gp.axes[1]) : 0) + (b(13) ? 1 : 0) - (b(12) ? 1 : 0);
     st.t -= dt;
+    if (MENU.modal() || hit(9) && inRun() && G.phase === 'play' && !U.sets) { MENU.pad(ax, ay, hit); for (let i = 0; i < 16; i++) st.prev[i] = b(i); return; }
+    if (G.phase !== 'play' || U.sets) { for (let i = 0; i < 16; i++) st.prev[i] = b(i); return; }
     if (U.offer) { if (hit(0)) takeOffer(true); else if (hit(1)) takeOffer(false); for (let i = 0; i < 16; i++) st.prev[i] = b(i); return; }
     if ((ax || ay) && st.t <= 0) {
       st.t = .22; st.active = true; touchInput(); audioGesture();
@@ -313,7 +318,7 @@ const UI = (() => {
     if (hit(0)) { touchInput(); audioGesture(); st.active = true; if (st.sel < 0) st.sel = 0; if (U.menu) { const bt = U.btns[U.menu.focus]; if (bt) bt.fn(); } else { const pad = G.B.pads[st.sel]; U.menu = { pad, tower: pad.tower, t: 0, focus: 0, sel: null, sellArm: false }; sfx('uiHover', pad.x, pad.z, .9); } }
     if (hit(1)) { U.closeMenu(); touchInput(); }
     if (hit(2)) { const pad = st.sel >= 0 ? G.B.pads[st.sel] : null; if (pad && pad.tower) { touchInput(); doUpgrade(pad.tower); } }
-    if (hit(3) || hit(9)) callWave();
+    if (hit(3)) callWave();
     for (let i = 0; i < 16; i++) st.prev[i] = b(i);
   }
 
@@ -329,9 +334,9 @@ const UI = (() => {
     if (AU.ready && !U.ptrs.size) U.sndArmed = true;
     if (U.keys.size) { let kx = 0, ky = 0; for (const k of U.keys) { kx += PAN[k][0]; ky += PAN[k][1]; } if (kx || ky) { CAM.za = null; camPan(kx * R.dh * .9 * dt, ky * R.dh * .9 * dt); } }
     if (G.phase === 'defeat') U.tip = null;
-    else if (U.tip) { if (!U.menu) U.tip.t += dt; if (U.tip.t > U.tip.dur) U.tip = null; } else if (U.tips.length && U.titleT > 7.5) { const type = U.tips.shift(); U.tip = { type, t: 0, dur: tipInfo(type).dur || 5.2 }; }
+    else if (U.tip) { if (!U.menu && !STORY.on()) U.tip.t += dt; if (U.tip.t > U.tip.dur) U.tip = null; } else if (U.tips.length && U.titleT > 7.5) { const type = U.tips.shift(); U.tip = { type, t: 0, dur: tipInfo(type).dur || 5.2 }; }
     if (window.visualViewport && Math.abs(window.visualViewport.scale - 1) > .02) fixPageZoom();
-    pollGamepad(dt);
+    pollGamepad(dt); MENU.update(dt);
     if (U.sets) U.sets.t += dt;
     // First steps for a player in command: one help line each, the first time it matters.
     if (U.manual && G.phase === 'play') {
@@ -341,7 +346,7 @@ const UI = (() => {
     }
     if (U.menu) { U.menu.t += dt; if ((U.menu.tower && !U.menu.tower.alive) || G.phase !== 'play') U.menu = null; else if (U.menu.pad.tower !== U.menu.tower) U.menu.tower = U.menu.pad.tower; }
     if (G.phase !== 'play') { U.armed = null; U.hover = null; U.spell = null; }
-    else U.hover = (U.inside && !U.touch && !U.hotBtn && !U.panning && !U.spell && !U.sets && !U.offer) ? pickPad(U.mx, U.my) : null;
+    else U.hover = (U.inside && !U.touch && !U.hotBtn && !U.panning && !U.spell && !U.sets && !U.offer && !MENU.modal()) ? pickPad(U.mx, U.my) : null;
     for (const k of SPELL_KINDS) { const n = G.stats[k] || 0; if (n !== (U.spellSeen[k] || 0)) { U.spellSeen[k] = n; U.spellFlash[k] = 1; } U.spellFlash[k] = Math.max(0, (U.spellFlash[k] || 0) - dt * 1.5); }
     U.gpt = U.spell && U.inside && !U.touch && !U.hotBtn && !U.hudHot ? groundPick(U.mx, U.my) : null;
     if (U.goldShown > G.gold) U.goldShown = G.gold;
@@ -391,6 +396,13 @@ const UI = (() => {
     for (const g of tags) PX.text(c, g[4], g[5], g[1], g[6], g[7], { align: 'c', outline: COLR.dark });
     const [iL, iT, iR, iB] = R.safe, Wr = W - iR, Hb = H - iB, tch = U.touch, mouse = U.inside && !tch && !U.panning;
     const over = (x, y, w, h) => mouse && U.mx >= x && U.mx <= x + w && U.my >= y && U.my <= y + h;
+    const menuEnv = { s, W, H, iL, iT, Wr, Hb, tch, over, dpr: R.dpr || 1 };
+    // A Lanternhold screen (main menu, tree, results...) hides the HUD and takes the whole canvas.
+    if (MENU.hideHud()) {
+      U.hud.length = 0; U.menuRect = null; U.waveRect = null; U.mendRect = null; U.followRect = null; U.hudHot = false; U.panelRect = null; R.hudTop = iT;
+      MENU.draw(c, menuEnv); if (U.sets) drawPanels(c, s, W, H, iL, iT, Wr, Hb, tch, over, 5 * s, 3 * s, iT);
+      U.hotBtn = null; return;
+    }
     const stats = [['flame', '' + G.lives, U.hurt > 0 ? COLR.red : COLR.tx], ['coin', '' + Math.floor(U.goldShown), U.deny > 0 ? COLR.red : (U.goldBump > 0 ? '#ffe2a0' : COLR.tx)], ['skull', '' + G.slain, U.slainBump > .5 ? '#ffffff' : COLR.tx]];
     let wS = pad; for (const st of stats) wS += PX.iconSize(st[0])[0] * s + 2 * s + Math.max(tw(st[1]), tw('000')) + 6 * s; wS += pad - 6 * s;
     const hS = 10 * s + pad * 2 - 2 * s, x0 = 5 * s + iL, y0 = 5 * s + iT + U.insetTop;
@@ -474,7 +486,7 @@ const UI = (() => {
       const wide = !AU.ready && xl + wl + g3 + zb + g3 + rightW + 5 * s + iR <= W;
       U.soundRect = sq('sound', xl, wide ? wl : zb, soundTap, AU.ready ? (AU.muted ? 'Sound is off (M)' : 'Sound is on (M)') : 'Sound', (x, y) => { if (wide) { PX.icon(c, icn, x + pad, y + Math.round((zb - ih2 * s) / 2), s, .85); text(lbl, x + pad + iw2 * s + 3 * s, y + Math.round((zb - LH) / 2) + s, COLR.tx); } else PX.icon(c, icn, x + Math.round((zb - iw2 * k) / 2), y + Math.round((zb - ih2 * k) / 2), k, AU.ready ? 1 : .8); }, !AU.ready);
       xl += (wide ? wl : zb) + g3; }
-    sq('gear', xl, zb, () => openSettings(), 'Settings and help (O)', (x, y) => { const [gw, gh] = PX.iconSize('gear'), k = Math.max(s, Math.floor(zb * .5 / gw)); PX.icon(c, 'gear', x + Math.round((zb - gw * k) / 2), y + Math.round((zb - gh * k) / 2), k, 1); }, !!U.sets); xl += zb + g3;
+    sq('gear', xl, zb, () => inRun() ? MENU.open('pause') : openSettings(), inRun() ? 'Menu (Esc)' : 'Settings and help (O)', (x, y) => { const [gw, gh] = PX.iconSize('gear'), k = Math.max(s, Math.floor(zb * .5 / gw)); PX.icon(c, 'gear', x + Math.round((zb - gw * k) / 2), y + Math.round((zb - gh * k) / 2), k, 1); }, !!U.sets); xl += zb + g3;
     let xr = Wr - 5 * s - zb; const cur = camZoomNow();
     if (nR === 3) { sq('full', xr, zb, toggleFull, 'Full screen', corners, false); xr -= zb + g3; }
     sq('zin', xr, zb, () => camZoomBy(1.5), 'Zoom in (+)', glyph('+', cur < 2.99 ? COLR.tx : '#5a5448'), false); xr -= zb + g3;
@@ -488,16 +500,16 @@ const UI = (() => {
       if (!stacked) { yUp = Math.min(yUp, yB - mh - s - g3); xr = xs; } else yUp = Math.min(yUp, rightTop - g3);
       const my = ys - mh - s; hudBot = Math.min(hudBot, my); c.fillStyle = COLR.dark; c.fillRect(xs, my, gw, mh); c.fillStyle = '#2a3446'; c.fillRect(xs + s, my + s, gw - 2 * s, mh - 2 * s);
       c.fillStyle = G.mana >= G.manaMax - .01 ? '#bfe4ff' : '#5fa2e6'; c.fillRect(xs + s, my + s, Math.round((gw - 2 * s) * sat(G.mana / G.manaMax)), mh - 2 * s);
-      c.fillStyle = 'rgba(239,228,205,0.55)'; for (const k of SPELL_KINDS) c.fillRect(xs + s + Math.round((gw - 2 * s) * SPELL[k].mana / G.manaMax), my, s, mh);
+      c.fillStyle = 'rgba(239,228,205,0.55)'; for (const k of SPELL_KINDS) c.fillRect(xs + s + Math.round((gw - 2 * s) * spellMana(k) / G.manaMax), my, s, mh);
       SPELL_KINDS.forEach((k, i) => {
         const S = SPELL[k], x = xs + i * (zb + g3), id = 'sp' + k, ready = spellReady(k), armed = U.spell === k, hot = over(x, ys, zb, zb), down = U.press === id, dy = down ? s : 0, fl = U.spellFlash[k] || 0;
-        U.hud.push({ id, x, y: ys, w: zb, h: zb, fn: () => pickSpell(k), hud: true }); if (hot) { U.hudHot = true; tipB = { x: x + zb / 2, y: my - g3 - hB, tip: S.name + ' (' + S.key + ') · ' + S.mana + ' mana' }; }
+        U.hud.push({ id, x, y: ys, w: zb, h: zb, fn: () => pickSpell(k), hud: true }); if (hot) { U.hudHot = true; tipB = { x: x + zb / 2, y: my - g3 - hB, tip: S.name + ' (' + S.key + ') · ' + spellMana(k) + ' mana' }; }
         plate(x, ys + dy, zb, zb, armed || hot || down ? { bd: COLR.bdHi, bg: COLR.bg2 } : fl > .5 && fl % .5 > .25 ? { bd: COLR.ember } : ready ? { bd: '#5f86b0' } : {});
         const [iw, ih] = PX.iconSize(S.icon), kk = Math.max(s, Math.floor(zb * .6 / Math.max(iw, ih)));
         PX.icon(c, S.icon, x + Math.round((zb - iw * kk) / 2), ys + dy + Math.round((zb - ih * kk) / 2), kk, ready || armed ? 1 : .35);
         const cdF = G.spellCd[k] / S.cd; if (cdF > 0) { c.globalAlpha = .6; c.fillStyle = COLR.dark; const hh = Math.round((zb - 4 * s) * cdF); c.fillRect(x + 2 * s, ys + dy + zb - 2 * s - hh, zb - 4 * s, hh); c.globalAlpha = 1; }
         if (!tch) PX.text(c, S.key, x + 3 * s, ys + dy + 2 * s, es, ready ? COLR.tx : COLR.dim);
-        if (G.mana < S.mana && cdF <= 0) PX.text(c, '' + S.mana, x + zb - 3 * s, ys + dy + zb - PX.LINE * es - s, es, COLR.cold, { align: 'r' });
+        if (G.mana < spellMana(k) && cdF <= 0) PX.text(c, '' + spellMana(k), x + zb - 3 * s, ys + dy + zb - PX.LINE * es - s, es, COLR.cold, { align: 'r' });
       });
     }
     if (CAM.man && play) {
@@ -520,13 +532,13 @@ const UI = (() => {
       yUp = y - g3;
     }
     if (G.paused && !U.sets) { const k = s + 1, t1 = 'Paused', w = PX.measure(t1) * k + pad * 4, h = PX.LINE * k + pad * 2; plate(Math.round(W / 2 - w / 2), yUp - h, w, h, { bd: COLR.bdHi }); PX.text(c, t1, W / 2, yUp - h + pad, k, COLR.amber, { align: 'c' }); yUp -= h + g3; }
-    if (U.tip && !U.menu) {
+    if (U.tip && !U.menu && !STORY.on()) {
       const d = tipInfo(U.tip.type), a = sat(Math.min(U.tip.t * 4, (U.tip.dur - U.tip.t) * 2)), head = d.head, lines = wrap(d.tip, Math.min(boxW - pad * 2, 46 * 6 * s));
       let w = tw(head); for (const l of lines) w = Math.max(w, tw(l)); w += pad * 2; const h = LH * (lines.length + 1) + pad * 2 - s, x = Math.round((iL + Wr - w) / 2), y = yUp - h;
       c.globalAlpha = a; plate(x, y, w, h, { bd: d.bd }); text(head, x + w / 2, y + pad - s, COLR.amber, { align: 'c' }); lines.forEach((l, k) => text(l, x + w / 2, y + pad - s + (k + 1) * LH, COLR.tx, { align: 'c' })); c.globalAlpha = 1; yUp = y - g3;
     } else {
       const first = U.titleT < 16, a = tch ? sat(Math.min(U.titleT - 7.2, first ? 1 : 3 - U.moved, U.manual && !first ? 0 : 1, 62 - U.titleT)) : Math.max(sat(Math.min(U.titleT - 7.2, 3 - Math.min(U.moved, U.idle > 20 ? U.moved : 0) + (U.titleT < 18 ? 8 : 0))), sat(Math.min(U.titleT - 7.2, 15 - U.titleT)));
-      if (a > .02 && !U.menu && !G.paused && !U.spell && G.phase === 'play') {
+      if (a > .02 && !U.menu && !G.paused && !U.spell && G.phase === 'play' && !TUT.step) {
         const parts = tch ? ['Tap a pad to build', 'Tap a spell, then the road', 'Drag to look, pinch to zoom', 'The gear has help'] : ['Click a pad to build', '1-4 pick a tower', 'Q E T cast spells', 'R mends the beacon', 'Space calls the next wave', 'O settings and help'];
         // As few lines as fit: two halves, else pairs, else one part per line.
         const pack = n => { const out = []; for (let i = 0; i < parts.length; i += n) out.push(parts.slice(i, i + n).join(' · ')); return out; }, fits = ls => ls.every(l => tw(l) + pad * 2 <= boxW);
@@ -535,6 +547,7 @@ const UI = (() => {
         if (w <= boxW) { c.globalAlpha = a; plate(hx, hy, w, h); lines.forEach((l, k) => text(l, hx + w / 2, hy + pad - s + k * LH, COLR.dim, { align: 'c' })); c.globalAlpha = 1; }
       }
     }
+    U.yUp = yUp; // the top of the bottom stack (the tutorial guide sits above it)
     if (U.msg) {
       const m = U.msg; m.t += R.frameDt; const a = sat(Math.min(m.t * 3, (m.dur - m.t) * 2));
       if (m.t >= m.dur || (G.phase === 'defeat' && G.phaseT > SUMMARY_AT)) U.msg = null; else { let sc = s + (m.big ? 2 : 1); while (sc > 2 && PX.measure(m.text) * sc + pad * 4 > Wr - iL - 6 * s) sc--; const w = PX.measure(m.text) * sc + pad * 4, h = PX.LINE * sc + pad * 2; c.globalAlpha = a; const yb = Math.max(Math.round(H * .2), y0 + topH + 4 * s); plate(Math.round(W / 2 - w / 2), yb, w, h, { bd: m.big ? COLR.ember : COLR.bdHi }); PX.text(c, m.text, W / 2, yb + pad, sc, m.big ? '#ffd9a8' : COLR.tx, { align: 'c' }); c.globalAlpha = 1; }
@@ -554,7 +567,7 @@ const UI = (() => {
       if (!m.tower) {
         const bwid = 31 * s, bh = 35 * s, gapb = 3 * s, rowW = 4 * bwid + 3 * gapb;
         let lit = null; const fk = U.gp.active ? TOWER_KINDS[m.focus % 4] : null;
-        const cheap = Math.min(...TOWER_KINDS.map(k => TOWER[k].cost[0])), broke = G.gold < cheap;
+        const cheap = Math.min(...TOWER_KINDS.map(k => TOWER[k].cost[0])), broke = G.gold < cheap && !(G.freeTowers > 0);
         const lines = k => k ? [TOWER[k].name].concat(TOWER[k].desc) : broke ? ['Not enough gold yet', 'Kills and each wave pay gold;', 'selling a tower gives some back.'] : tch ? ['Choose a tower', 'Tap one to see what it does,', 'then tap it again to build.'] : ['Choose a tower', 'Hover or press 1 to 4', 'to see what each does.'];
         let textW = tw('Tap again to build'); for (const k of [null].concat(TOWER_KINDS)) for (const l of lines(k)) textW = Math.max(textW, tw(l));
         const wP = Math.max(rowW, textW) + mp * 2, hP = mp * 2 + LH + 3 * s + bh + 4 * s + LH * 3 + 2 * s + (tch ? LH + s : 0), [px, py] = place(wP, hP);
@@ -562,17 +575,17 @@ const UI = (() => {
         plate(px, py, wP, hP); text('Build here', px + mp, py + mp - s, COLR.amber);
         const bx0 = px + Math.round((wP - rowW) / 2), by = py + mp + LH + 3 * s;
         TOWER_KINDS.forEach((kind, i) => {
-          const d = TOWER[kind], can = G.gold >= d.cost[0], bx = bx0 + i * (bwid + gapb);
+          const d = TOWER[kind], can = G.gold >= d.cost[0] || G.freeTowers > 0, bx = bx0 + i * (bwid + gapb);
           const r = button(bx, by, bwid, bh, 'b' + kind, can, () => { if (U.touch && m.sel !== kind) { m.sel = kind; sfx('uiHover', m.pad.x, m.pad.z, .8); } else doBuild(m.pad, kind); }, kind, m.sel === kind);
           const [iw, ih] = PX.iconSize(d.icon); PX.icon(c, d.icon, bx + Math.round((bwid - iw * s) / 2), by + 6 * s + r.dy, s, can ? 1 : .45);
           if (!tch) text('' + (i + 1), bx + 3 * s, by + 2 * s + r.dy, COLR.dim);
-          const cw2 = 8 * s + 2 * s + tw('' + d.cost[0]), cx0 = bx + Math.round((bwid - cw2) / 2);
-          PX.icon(c, 'coin', cx0, by + bh - LH - 3 * s + r.dy, s, can ? 1 : .5); text('' + d.cost[0], cx0 + 10 * s, by + bh - LH - 3 * s + r.dy, can ? COLR.amber : COLR.red);
+          const cl = G.freeTowers > 0 ? 'Free' : '' + d.cost[0], cw2 = 8 * s + 2 * s + tw(cl), cx0 = bx + Math.round((bwid - cw2) / 2);
+          PX.icon(c, 'coin', cx0, by + bh - LH - 3 * s + r.dy, s, can ? 1 : .5); text(cl, cx0 + 10 * s, by + bh - LH - 3 * s + r.dy, G.freeTowers > 0 ? COLR.ok : can ? COLR.amber : COLR.red);
           if (r.lit) lit = kind;
         });
         const ls = lines(lit || fk), ty = by + bh + 4 * s;
         text(ls[0], px + mp, ty, lit || fk ? COLR.tx : broke ? COLR.ember : COLR.dim); text(ls[1], px + mp, ty + LH + s, COLR.dim); if (ls[2]) text(ls[2], px + mp, ty + LH * 2 + s, COLR.dim);
-        if (tch && m.sel) { const can = G.gold >= TOWER[m.sel].cost[0]; text(can ? 'Tap again to build' : 'Not enough gold yet', px + mp, ty + LH * 3 + 2 * s, can ? COLR.amber : COLR.red); }
+        if (tch && m.sel) { const can = G.gold >= TOWER[m.sel].cost[0] || G.freeTowers > 0; text(can ? 'Tap again to build' : 'Not enough gold yet', px + mp, ty + LH * 3 + 2 * s, can ? COLR.amber : COLR.red); }
       } else if (m.tower.lvl === 2 && !m.tower.branch) {
         // Branch choice: two cards with what each does and costs. Touch: tap to see, tap again to buy. Keys 1 and 2.
         const t = m.tower, d = t.def, keys = BRANCH_KEYS[t.kind], active = t.state === 'active', refund = Math.round(t.spent * .6), cp = 4 * s;
@@ -624,15 +637,16 @@ const UI = (() => {
     if (hot !== U.hotBtn && hot) sfx('uiHover', CAM.x, CAM.z, .5);
     U.hotBtn = hot;
     if (U.armed && mouse && G.phase === 'play') { const l = TOWER[U.armed].name + ': click a pad', w = tw(l) + pad * 2; const xx = clamp(U.mx + 10 * s, 2 * s, W - w - 2 * s), yy = clamp(U.my + 10 * s, 2 * s, H - LH - pad * 2); plate(xx, yy, w, LH + pad * 2 - s, { bd: COLR.bdHi }); text(l, xx + pad, yy + pad - s, COLR.tx); }
-    if (U.titleT < 7 && !U.menu && !U.sets && !U.offer) {
+    if (U.titleT < 7 && !U.menu && !U.sets && !U.offer && G.mode === 'demo') {
       const a = sat(Math.min((U.titleT - .4) * 1.5, (6.6 - U.titleT) * 1.2));
       if (a > 0) {
-        const sc = s * 2, t1 = 'Cinderwatch', full = G.B.bio.name + ' · The commander plays until you take over.', t2 = tw(full) + pad * 4 > Wr - iL - 6 * s ? [G.B.bio.name, 'The commander plays', 'until you take over.'] : [full]; if (G.best > G.wavesPerLand) t2.push('Best run: wave ' + G.best);
+        const sc = s * 2, t1 = 'Lanternhold', full = G.B.bio.name + ' · The commander plays until you take over.', t2 = tw(full) + pad * 4 > Wr - iL - 6 * s ? [G.B.bio.name, 'The commander plays', 'until you take over.'] : [full]; if (G.best > G.wavesPerLand) t2.push('Best run: wave ' + G.best);
         let w = PX.measure(t1) * sc; for (const l of t2) w = Math.max(w, tw(l)); w += pad * 4; const h = PX.LINE * sc + LH * t2.length + pad * 2 + 2 * s, yy = Math.min(Hb - h - 12 * s - zb, yUp - h);
         c.globalAlpha = a; plate(Math.round(W / 2 - w / 2), yy, w, h); PX.text(c, t1, W / 2, yy + pad, sc, '#ffd9a8', { align: 'c' }); t2.forEach((l, k) => text(l, W / 2, yy + pad + PX.LINE * sc + s + k * LH, k === 0 && t2.length > 1 ? COLR.tx : COLR.dim, { align: 'c' })); c.globalAlpha = 1;
       }
     }
     drawPanels(c, s, W, H, iL, iT, Wr, Hb, tch, over, pad, g3, y0 + topH);
+    MENU.draw(c, menuEnv);
     if (HASH.fps) { text(R.fpsText || '', 6 * s + iL, Hb - 30 * s, COLR.ok, { outline: COLR.dark }); }
   }
   // Settings (gear, O) and the run summary after a defeat. Both are modal plates drawn over everything,
@@ -667,7 +681,7 @@ const UI = (() => {
       return b;
     };
     const sm = G.phase === 'defeat' && G.phaseT > SUMMARY_AT && G.runStats && G.runStats.sum;
-    if (sm && !U.sets) {
+    if (sm && !U.sets && G.mode === 'demo') {
       const you = U.playerActive(), a = sat((G.phaseT - SUMMARY_AT) * 3), title = 'The beacon is out';
       const rows = [['Waves survived', '' + sm.waves], ['Lands cleared', '' + sm.lands], ['Monsters slain', '' + sm.slain], ['Gold earned', '' + sm.earned],
         ['Best branch', sm.branch ? sm.branch.name + ' · ' + sm.branch.kills + ' kills' : 'none this run'], ['Best tower', sm.tower ? sm.tower.name + ' · ' + sm.tower.kills + ' kills' : 'none this run']];

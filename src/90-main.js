@@ -237,8 +237,12 @@ function boot() {
   window.addEventListener('pagehide', saveOnHide);
   for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => setTimeout(resizeRenderer, 60));
   window.__cw = { G, R, CAM, UI, LT, FX, AI, PX, MON, step, shake, hitStop, setPhase, spawnMonster, hitMonster, MAT, render() { applyCamera(); renderFrame(); }, autoScale, tick(dt, render) { R.frameDt = dt; step(dt); R.fade = 1; applyCamera(); if (render) renderFrame(); UI.draw(); }, save: { SAVE, snapshot, write: writeSave, read: continueOffer, valid: validSave, clear: clearSave, restore: restoreRun, onHide: saveOnHide }, bench(n = 40) { const gl = R.renderer.getContext(), px = new Uint8Array(4); applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { applyCamera(); renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((performance.now() - t0) / n).toFixed(2); }, build(i, kind, lvl) { const pad = G.B.pads[i]; if (pad.tower) return; G.gold += 999; const t = buildTower(pad, kind, false); for (let k = 0; k < 90; k++) step(1 / 30); for (let l = 0; l < (lvl || 0); l++) { G.gold += 999; upgradeTower(t); for (let k = 0; k < 90; k++) step(1 / 30); } return t.kind + t.lvl; } };
-  // A saved run is offered over the demo, except in test sessions (these URL flags set up a run of their own).
-  if (!['seed', 'manual', 'ff', 'biome', 'level', 'k', 'board', 'phase', 'nosave'].some(f => HASH[f] !== undefined)) { const sv = continueOffer(); if (sv) UI.offerContinue(sv); }
+  window.__cw.META = META; window.__cw.STORY = STORY; window.__cw.MENU = MENU; window.__cw.TUT = TUT;
+  window.__cw.meta = { startRun, startDemo, abandonRun, bankRun, buyUpgrade, applyMeta, embersFor, heatRules, UPGRADES, HEAT, saveMeta, loadMeta, rerollMods, activeMods };
+  // The main menu over the AI demo (Continue there replaces the old "Welcome back" offer), except in test sessions:
+  // their URL flags set up a run of their own and play exactly as before.
+  G.runSeed = G.boardSeed;
+  if (!TEST_SESSION) MENU.open('title');
   if (HASH.k) G.k = +HASH.k;
   if (HASH.ff) { const n = Math.round(+HASH.ff * 30); for (let i = 0; i < n; i++) step(1 / 30); CAM.sx = CAM.fx; CAM.sz = CAM.fz; R.fade = 1; }
   if (HASH.phase) setPhase(HASH.phase);
@@ -250,6 +254,6 @@ function boot() {
 }
 function start() {
   try { boot(); }
-  catch (e) { const ld = document.getElementById('load'); if (ld) ld.innerHTML = 'Cinderwatch could not start.<br><small>It needs a browser with WebGL 2 turned on.</small>'; throw e; }
+  catch (e) { const ld = document.getElementById('load'); if (ld) ld.innerHTML = 'Lanternhold could not start.<br><small>It needs a browser with WebGL 2 turned on.</small>'; throw e; }
 }
 if (HASH.manual || HASH.ff) start(); else requestAnimationFrame(() => setTimeout(start, 0));

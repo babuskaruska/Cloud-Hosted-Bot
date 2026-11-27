@@ -74,6 +74,7 @@ function hitMonster(m, dmg, kind, dx, dz, tower) {
   if (m.eth) { if (kind === 'arrow' || kind === 'sword') { if (rnd() < .5) fxTimed(0, m.x + rr(-.2, .2), m.y + m.hitH + rr(-.2, .3), m.z + rr(-.2, .2), .5, .5, .5, .9, 1.8, .7, .18); return false; } dmg *= .5; }
   if (kind === 'arrow' && m.def.armor) { const ap = (tower && tower.def && tower.def.ap) || 0; dmg *= m.def.armor + (1 - m.def.armor) * ap; if (rnd() < .6) { fxSparks(m.x, m.y + m.hitH, m.z, 3, 3, 2.4, 2.2, 1.6, { size: .05 }); } }
   if (tower && tower.oc) dmg *= 1 + OC_DMG * tower.oc;
+  if (tower && G.towerDmg !== 1) dmg *= G.towerDmg; // Keen Steel (66-meta.js); exactly 1 outside a run
   if (m.def.weak && m.def.weak[kind]) dmg *= m.def.weak[kind];
   if (m.low) dmg *= m.def.swoop.low;
   if (m.ward > 0) { const d0 = dmg; dmg = wardAbsorb(m, dmg); if (tower) tower.recent += d0 - dmg; if (dmg <= 0) { m.flash = .6; m.hitAt = G.t; return false; } }
@@ -214,7 +215,7 @@ function drawMonster(m, t) {
   if (m.slowT > 0 && rnd() < .2) { const a = rnd() * TAU; fxBolt([m.x, m.y + m.hitH, m.z], [m.x + Math.cos(a) * m.rad * 1.4, m.y + m.hitH + rr(-.3, .4), m.z + Math.sin(a) * m.rad * 1.4], .08, [.4, .65, 1.3], .028); }
   if (m.frozen > 0) { drawFrozen(m, sc); const a = Math.min(1, m.frozen * 2); FX.add.push(m.x, m.y + m.hitH, m.z, (1.2 + m.rad * 2.5) * sc, (1.4 + m.rad * 2.5) * sc, 0, 0, .5, .85, 1.3, .3 * a, 2, 0, 0, 0); if (rnd() < .15) fxPart(m.x + rr(-.25, .25), m.y + rr(.1, m.hitH * 2), m.z + rr(-.25, .25), 0, rr(-.2, .3), 0, rr(.4, .8), .045, 1.2, 1.6, 2, { drag: 1 }); }
   // Health bars only where they say something: hurt monsters, elites, warded ones and bosses. Full-health ordinary ones stay clean.
-  if ((m.vis || m.fly) && (m.hp < m.maxHp * .995 || m.def.boss || m.elite || m.ward > 0)) G.hbars.push({ x: m.x, y: m.y + m.def.top * sc / m.def.scale + .22, z: m.z, f: sat(m.hp / m.maxHp), boss: !!m.def.boss, man: false, name: m.def.boss ? m.def.name : m.elite ? eliteName(m) : null, elite: m.elite || null, sh: m.ward > 0 ? sat(m.ward / m.maxHp) : 0 });
+  if ((m.vis || m.fly) && (m.hp < m.maxHp * .995 || m.def.boss || m.elite || m.ward > 0)) G.hbars.push({ x: m.x, y: m.y + m.def.top * sc / m.def.scale + .22, z: m.z, f: sat(m.hp / m.maxHp), boss: !!m.def.boss, man: false, name: m.def.boss ? m.affixName || m.def.name : m.elite ? eliteName(m) : null, elite: m.elite || null, sh: m.ward > 0 ? sat(m.ward / m.maxHp) : 0 });
 }
 
 // A monster that is not drawn this step still makes the same calls into the gameplay random stream as

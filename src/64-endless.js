@@ -36,7 +36,8 @@ function rollMods(level) {
   setMods(out);
   return out;
 }
-function bossAffixes(level) { return level < 6 ? 0 : Math.min(3, 1 + Math.floor((level - 6) / 6)) + (modOn('titan') ? 1 : 0); }
+// Heat 7 (Crowned Dread, 66-meta.js) gives every boss one more affix, campaign lands included (G.heatAffix).
+function bossAffixes(level) { return (level < 6 ? 0 : Math.min(3, 1 + Math.floor((level - 6) / 6))) + (modOn('titan') ? 1 : 0) + (G.heatAffix | 0); }
 
 function updateEndless(dt) {
   if (G.phase !== 'play') return;
@@ -48,7 +49,7 @@ function updateEndless(dt) {
   const plague = modOn('plague');
   for (const m of G.mons) {
     if (m.dead || m.hp <= 0) continue;
-    if (m.def.boss && !m.affixed && G.level >= 6) bossEmpower(m);
+    if (m.def.boss && !m.affixed && (G.level >= 6 || G.heatAffix)) bossEmpower(m);
     if (m.affix) {
       if (m.affix.regen && G.t - m.hitAt > 2) m.hp = Math.min(m.maxHp, m.hp + m.maxHp * .012 * dt);
       if (m.affix.warded) { m.wardT = (m.wardT || 0) - dt; if (m.wardT <= 0 && !(m.ward > 0)) { m.wardT = 20; m.ward = m.wardMax = m.maxHp * .22; } }
