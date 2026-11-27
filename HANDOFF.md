@@ -203,6 +203,32 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
   - QA coverage for menu flows (Playwright clicks through title → campaign → results).
   - Merges.
 
+## Round 14 results (merged; build version 20, live)
+
+- **Mira:**
+  - Kids' onboarding on Kerge or narrow touch screens (big buttons, icon hints, an `abi` help button that glows after 20 s idle; Kerge's first land is gentler).
+  - The AI builds mines in waves 1–3.
+  - The Long Night after Act II counts depth fresh (`nightLv()`, `G.postAct2`, story beat `night:dawn`).
+  - "Hoidja tase" (keeper level), XP and perks, plus a daily gift with a 7-day streak, in `src/67-keeper.js` (`__cwKeeper`).
+  - Weekly challenge: button `mweek`, ISO week, 5 rule sets, `G.weekly`.
+  - 5 achievements. Fixes: countdown over the tower menu; Codex tips cut off.
+- **Ash:**
+  - Act II night look in `src/36-night.js` (`nightBiome`, `bio.night`, per-land skies and moons, ghost lanterns; test flag `night=1`).
+  - Ultra extras (4096 shadows, anisotropy, denser foliage, glassier water).
+  - Low trims for the round 13 effects. The mine faces the camera.
+- **QA:** PASS (min lives 18/20/20, better), so the baseline was re-saved. menuqa PASS. Phone shots at 390×844 and 360×800 look right.
+- **Known:**
+  - Ultra memory on a real iPhone is untested.
+  - Ultra nights have no fog.
+  - The headless victory cinematic runs in real time.
+- **Next ideas:**
+  - Wait for the owner's report from the Poco and on the music.
+  - A boss rush mode.
+  - Hero units.
+  - More tower types.
+  - Seasonal events.
+  - An Echo pass on the stingers for keeper level-ups and the daily gift (`sfx` names to add).
+
 ## Round 13 results (merged; build version 19, live)
 
 - **Mira:**
