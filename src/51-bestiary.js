@@ -303,7 +303,7 @@ function initBestiary4() {
         // as separate feathers, and the outer feathers drooping a little so the wing is not one flat sheet.
         const pts = [[0, 0, .06, feD], [.18, .04, .12, fe], [.36, .05, .1, tawny], [.58, .03, .04, tawny], [.86, -.02, -.04, feL], [.82, -.035, -.14, feD], [.7, -.03, -.12, feL], [.66, -.045, -.24, feD], [.54, -.035, -.2, feL], [.48, -.045, -.3, feD], [.36, -.035, -.24, feL], [.28, -.04, -.32, feD], [.16, -.025, -.25, tawny], [.06, -.02, -.28, feD], [0, 0, -.14, feD]];
         const c0 = [.06, .01, -.04, feD];
-        for (let i = 0; i < 5; i++) S.box(.1, .012, .055, .08 + i * .1, .05 - i * .006, .07 - i * .016, i & 1 ? feL : [.92, .8, .6], { jit: .05, r: [0, .12, 0] });
+        for (let i = 0; i < 5; i++) S.box(.1, .012, .055, .08 + i * .1, .05 - i * .006, .07 - i * .016, i & 1 ? feL : [.88, .74, .52], { jit: .05, r: [0, .12, 0] });
         for (let i = 0; i < pts.length - 1; i++) { S.tri(c0, pts[i + 1], pts[i], fe, L_PLAIN, .95); S.tri(c0, pts[i], pts[i + 1], fe, L_PLAIN, .95); }
         S.seg([0, 0, .06], [.36, .05, .1], .03, .02, skinD, { n: 4 }); S.seg([.36, .05, .1], [.58, .03, .04], .02, .012, skinD, { n: 4 });
         for (let i = 0; i < 4; i++) S.box(.22, .01, .045, .7 + i * .035, .005, .0 - i * .045, i & 1 ? feD : fe, { jit: .06, r: [0, .35 + i * .22, 0] });
