@@ -270,7 +270,7 @@ function blueprint(kind, lvl, branch) {
       const H = 1.05 * k;
       S.box(1.7 * k, H * .8, .9, 0, H * .4, -.62, mixC(COL.stoneD, earth, .4), { l: L_ROCK });
       for (const [x, y, z, r] of [[-.62, .45, -.55, .55], [.62, .42, -.6, .52], [0, .8, -.72, .58], [-.4, .95, -.8, .42], [.42, .9, -.78, .44], [-.86, .25, -.15, .36], [.86, .25, -.2, .34], [0, 1.2, -.85, .36]])
-        S.rock(r * k, x * k, y * k, z, mixC(COL.stoneD, COL.stone, r9() * .6), { sq: .8 });
+        S.rock(r * k, x * k, y * k, z, mixC(COL.stone, COL.stoneL, r9() * .5), { sq: .8 }); // lighter than the ground round it (round 14: readability)
       if (lv >= 1) for (const [x, z] of [[-.75, -.85], [.7, -.9]]) S.rock(.3, x * k, 1.15 * k, z, mixC(COL.stoneD, COL.basaltL, r9()), { sq: .7 });
       // The mouth: a dark recess with a darker throat.
       S.box(.78, .9 * k, .1, 0, .45 * k + .06, -.16, hole, { jit: 0 });
@@ -289,7 +289,7 @@ function blueprint(kind, lvl, branch) {
       if (lv >= 1) { for (let i = 0; i < 4; i++) S.box(1.32, .05, .14, 0, fh + .26 + i * .015, -.12 + i * .13, i & 1 ? wl : w, { l: L_WOOD, r: [-.12, 0, 0] }); }
       // A sign over the mouth with a painted gold coin.
       const sy = fh + (lv >= 1 ? .46 : .32);
-      S.box(.42, .2, .04, 0, sy, .02, wl, { l: L_WOOD }); S.cyl(.07, .02, 0, sy, .05, gold, { n: 8, r: [HPI, 0, 0], l: L_METAL, emis: .2 });
+      S.box(.5, .24, .04, 0, sy, .02, wl, { l: L_WOOD }); S.cyl(.1, .025, 0, sy, .05, gold, { n: 10, r: [HPI, 0, 0], l: L_METAL, emis: .55 }); // a bright coin: reads as 'gold' from the default camera
     });
     piece('rails', 3, S => {
       const z0 = -.25, z1 = 1.02;
@@ -304,7 +304,7 @@ function blueprint(kind, lvl, branch) {
       for (const y of [.14, .36]) S.cyl(.36 + y * .2, .04, 0, cy + .1 + y, cz, COL.iron, { n: 4, r: [0, PI / 4, 0], l: L_METAL, rz: .46 + y * .2 });
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) S.cyl(.075, .045, sx * .19, cy + .06, cz + sz * .2, COL.iron, { n: 8, r: [0, 0, HPI], l: L_METAL });
       S.ico(.27, 0, cy + .44, cz, mulC(COL.stoneD, .9), { sc: [1, .45, 1.2], d: 1, l: L_ROCK });
-      for (let i = 0; i < 12; i++) { const a = i * 2.4, rr2 = i ? .07 + .13 * r9() : 0, x = Math.cos(a) * rr2, z = cz + Math.sin(a) * rr2 * 1.2, y = cy + .55 + (.2 - rr2) * .7; nug(S, x, y, z, .065 + r9() * .035); if (i % 3 === 0) ore.push([x, y + .04, z]); }
+      for (let i = 0; i < 12; i++) { const a = i * 2.4, rr2 = i ? .07 + .13 * r9() : 0, x = Math.cos(a) * rr2, z = cz + Math.sin(a) * rr2 * 1.2, y = cy + .55 + (.2 - rr2) * .7; nug(S, x, y, z, .075 + r9() * .035, .5); if (i % 3 === 0) ore.push([x, y + .04, z]); }
     });
     piece('lantern', 5, S => {
       const lx = -.72, lz = .42, lh = 1.15 * k;
@@ -467,7 +467,7 @@ const SPIRE_BOLT = [.5, .78, 1.6];
 class Tower {
   constructor(pad, kind, idx) {
     this.pad = pad; this.kind = kind; this.idx = idx; this.lvl = 0; this.def = TOWER[kind];
-    this.x = pad.x; this.y = pad.y; this.z = pad.z; this.yaw = pad.face; this.cs = Math.cos(this.yaw); this.sn = Math.sin(this.yaw);
+    this.x = pad.x; this.y = pad.y; this.z = pad.z; this.yaw = kind === 'mine' ? CAM_YAW : pad.face; this.cs = Math.cos(this.yaw); this.sn = Math.sin(this.yaw); // the gold mine faces the camera (round 14), the other towers the road
     this.spent = this.def.cost[0]; this.state = 'build'; this.bt = 0; this.cool = rr(.2, .8); this.kills = 0; this.dealt = 0; this.alive = true; this.recent = 0;
     this.group = new THREE.Group(); this.group.position.set(this.x, this.y, this.z); this.group.rotation.y = this.yaw; R.scene.add(this.group);
     this.pieces = []; this.staticMesh = null; this.scaf = null; this.flame = null; this.flame2 = null; this.archers = []; this.crew = []; this.ocA = 0; this.ocAcc = 0; this.men = []; this.respawn = 0;

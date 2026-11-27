@@ -376,8 +376,10 @@ function fxExplosion(x, y, z, sc = 1) {
   fxTimed(5, x, y + .4 * sc, z, 4.2 * sc, 4.2 * sc, 3.5, 2.4, 1.2, 1, .12);
   fxTimed(4, x, y + .08, z, 5.4 * sc, 5.4 * sc, 1.6, 1.0, .5, .55, .4, { ground: true });
   fxSparks(x, y + .2, z, Math.round(22 * sc), 7.5 * sc, 3.2, 1.7, .5, { size: .08 });
-  for (let i = 0; i < 9 * sc; i++) { const a = frnd() * TAU, s = frr(.4, 1.6) * sc; fxSmoke(x + Math.cos(a) * .3, y + frr(.2, .7), z + Math.sin(a) * .3, Math.cos(a) * s, frr(.6, 1.7), Math.sin(a) * s, frr(1.6, 3.4), frr(.7, 1.1) * sc, 1.5 * sc, .2, .19, .19, .62, { drag: 1.5, rise: .25 }); }
-  fxDust(x, y, z, 6, .9 * sc, { speed: 2.6 });
+  // Low (round 14): fewer big smoke puffs and dust (alpha overdraw is the weak phone GPU's cost).
+  const low = GFX.tier === 'low';
+  for (let i = 0, n = (low ? 5 : 9) * sc; i < n; i++) { const a = frnd() * TAU, s = frr(.4, 1.6) * sc; fxSmoke(x + Math.cos(a) * .3, y + frr(.2, .7), z + Math.sin(a) * .3, Math.cos(a) * s, frr(.6, 1.7), Math.sin(a) * s, frr(1.6, 3.4), frr(.7, 1.1) * sc, 1.5 * sc, .2, .19, .19, .62, { drag: 1.5, rise: .25 }); }
+  fxDust(x, y, z, low ? 3 : 6, .9 * sc, { speed: 2.6 });
   if (FX.impact) FX.impact(x, y, z, sc); // round 13: shockwave, hot debris and a dust skirt (by tier, 44-juice.js)
   shake(.2 * sc);
 }

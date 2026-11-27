@@ -26,12 +26,13 @@ FX.goldBurst = (x, z, n = 12, o = {}) => {
   B.push({ x, z, t: now });
   const rk = gfxRank(), y = (o.y !== undefined ? o.y : FX.groundAt(x, z)) + .4;
   // Flash: a gold star burst, a ring on the ground, and a gold light on Mid and up.
-  fxTimed(5, x, y + .2, z, 2.6, 2.6, 3.2, 2.4, .7, 1, .16);
-  fxTimed(4, x, FX.groundAt(x, z) + .1, z, 3.4, 3.4, 2.2, 1.6, .45, .7, .5, { ground: true });
+  // (Low, round 14: a smaller flash and no ground ring; big additive quads are what a weak phone GPU pays for.)
+  fxTimed(5, x, y + .2, z, rk ? 2.6 : 1.9, rk ? 2.6 : 1.9, 3.2, 2.4, .7, 1, .16);
+  if (rk) fxTimed(4, x, FX.groundAt(x, z) + .1, z, 3.4, 3.4, 2.2, 1.6, .45, .7, .5, { ground: true });
   if (rk >= 1) lightFlash(x, y + .8, z, 0xffcc55, 90 + rk * 40, .3, 10);
   if (rk >= 2) fxTimed(4, x, y + .3, z, 3, 3, 2.4, 1.8, .6, .45, .3);
   // Coins: real coin pieces in a fountain; each flies to the gold counter after its hang time (onCoin, 90-main).
-  const nc = Math.min(Math.round(n), [5, 9, 14, 20][rk]);
+  const nc = Math.min(Math.round(n), [4, 9, 14, 20][rk]);
   for (let i = 0; i < nc; i++) {
     const a = frnd() * TAU, s = frr(.6, 2.3);
     _jm.compose(_jv.set(x + frr(-.15, .15), y, z + frr(-.15, .15)), _jq.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _js);
@@ -39,14 +40,14 @@ FX.goldBurst = (x, z, n = 12, o = {}) => {
     if (d) d.value = 0;
   }
   // Sparkles: gold streaks out, then twinkling motes that drift up.
-  fxSparks(x, y, z, [6, 10, 16, 22][rk], 6.5, 3.4, 2.5, .7, { size: .06, grav: 7, lo: .5, hi: 1.4 });
-  for (let i = 0, m = [4, 8, 14, 20][rk]; i < m; i++) fxPart(x + frr(-.5, .5), y + frr(0, .8), z + frr(-.5, .5), frr(-.4, .4), frr(.5, 1.6), frr(-.4, .4), frr(.7, 1.5), frr(.05, .09), 3.4, 2.7, 1.1, { drag: .6, wob: 1, rise: .2 });
+  fxSparks(x, y, z, [4, 10, 16, 22][rk], 6.5, 3.4, 2.5, .7, { size: .06, grav: 7, lo: .5, hi: 1.4 });
+  for (let i = 0, m = [2, 8, 14, 20][rk]; i < m; i++) fxPart(x + frr(-.5, .5), y + frr(0, .8), z + frr(-.5, .5), frr(-.4, .4), frr(.5, 1.6), frr(-.4, .4), frr(.7, 1.5), frr(.05, .09), 3.4, 2.7, 1.1, { drag: .6, wob: 1, rise: .2 });
   if (rk >= 3) fxDust(x, y - .3, z, 4, .7, { c: [.42, .34, .2], a: .3 });
 };
 
 // ---- world pop-ups --------------------------------------------------------------------------------------------
 FX.pop = (x, y, z, text, color = '#ffe2a0', o = {}) => {
-  const P = JUICE.pops, cap = [8, 14, 22, 28][gfxRank()];
+  const P = JUICE.pops, cap = [6, 14, 22, 28][gfxRank()];
   if (P.length >= cap) P.shift();
   P.push({ x, y, z, text: String(text), color, size: o.size || 1, t: 0, T: o.life || .95, rise: o.rise === undefined ? 34 : o.rise, dx: frr(-6, 6), crit: !!o.crit, out: o.outline || '#1a0a04' });
 };
@@ -104,7 +105,7 @@ FX.impact = (x, y, z, sc = 1, col = [1.6, 1.0, .45]) => {
 // ---- gold mine glints (Tower.drawGlow calls this for a tower with mounts.ore) ------------------------------
 function mineGlint(t, on, dt) {
   const ore = t.mounts.ore; if (!ore || !ore.length) return;
-  const rk = gfxRank(); t._gl = (t._gl || 0) + dt * [1.2, 2, 3, 4][rk] * on * (1 + .5 * t.lvl);
+  const rk = gfxRank(); t._gl = (t._gl || 0) + dt * [.7, 2, 3, 4][rk] * on * (1 + .5 * t.lvl);
   while (t._gl >= 1) {
     t._gl -= 1; const o = ore[Math.floor(frnd() * ore.length)], p = t.w(o, _jp);
     fxTimed(5, p.x, p.y, p.z, frr(.35, .6), frr(.35, .6), 3.2, 2.6, 1.1, 1, frr(.25, .45));
@@ -120,7 +121,7 @@ FX.mineTick = (t, n = 6) => { if (!t || !t.mounts || !t.mounts.cart) return; con
 // ---- treasure carrier sparkle (called from its rig while drawn) -----------------------------------------------
 function sackTrail(m, top) {
   const dt = FX.dt || 0, rk = gfxRank(); if (!dt) return;
-  m._cfx = (m._cfx || 0) + dt * [4, 7, 11, 15][rk] * FX.keep;
+  m._cfx = (m._cfx || 0) + dt * [2.5, 4.5, 7, 9][rk] * FX.keep; // round 14: calmer (was 4, 7, 11, 15)
   while (m._cfx >= 1) {
     m._cfx -= 1; const r = frnd();
     if (r < .45) fxTimed(5, top.x + frr(-.3, .3), top.y + frr(-.3, .2), top.z + frr(-.3, .3), frr(.25, .5), frr(.25, .5), 3.2, 2.5, .9, 1, frr(.15, .3));
