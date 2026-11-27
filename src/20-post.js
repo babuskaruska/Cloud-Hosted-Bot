@@ -291,6 +291,7 @@ function fsPass(mat, target) {
 
 const _ivp = new THREE.Matrix4();
 function renderFrame() {
+  syncEchoDither();
   const r = R.renderer, M = R.mats, T = R.rt, cam = R.cam;
   r.info.reset();
   scheduleShadows(G.phase === 'crumble' || G.phase === 'rise');

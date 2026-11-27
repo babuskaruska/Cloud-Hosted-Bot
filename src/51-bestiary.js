@@ -131,7 +131,7 @@ function initBestiary() {
     }, 40, { rad: .3 }),
     legR: toadLeg(1), legL: toadLeg(-1),
   };
-  initBestiary4(); initLeviathan();
+  initBestiary4(); initLeviathan(); initHerald();
 }
 
 function rigSpider(e) {
@@ -236,7 +236,8 @@ function initBestiary4() {
       // Siege mutator only (rigRam): a war banner on a pole at the back and a pair of great horns on the front ridge.
       siege: new PartBatch(S => {
         S.cyl(.025, 1.55, -.42, 1.92, -.72, wd, { n: 4, l: L_WOOD }); S.box(.52, .035, .035, -.19, 2.62, -.72, wd, o());
-        clothPanel(S, { x0: -.44, x1: .04, yTop: 2.6, len: .62, z: -.72, col: mulC(COL.clothR, 1.5), col2: mulC(COL.bone, .8), rng: makeRng(11), sway: .08, nx: 3, ny: 5, rag: .45 });
+        // A little self-light (emis) and a brighter red so the banner still reads in shadow, away from any lantern.
+        clothPanel(S, { x0: -.44, x1: .04, yTop: 2.6, len: .62, z: -.72, col: mulC(COL.clothR, 1.85), col2: mulC(COL.bone, .95), rng: makeRng(11), sway: .08, nx: 3, ny: 5, rag: .45, emis: .045 });
         PROP.skull(S, -.42, 2.74, -.72, .085, 0);
         for (const s of [-1, 1]) { S.seg([s * .06, 1.6, .8], [s * .36, 1.86, 1.0], .075, .045, COL.bone, { l: L_BONE, n: 5 }); S.seg([s * .36, 1.86, 1.0], [s * .42, 2.2, .88], .045, .008, COL.boneD, { l: L_BONE, n: 4 }); }
       }, 8, { rad: .5 }),
@@ -616,3 +617,140 @@ function leviathanSplash(m) {
   if (G.B.bio.lightning) FX.lightningAt(x + frr(-.5, .5), z + frr(-.5, .5), .8);
 }
 DEATH_FX.drown = (m, kind, ix, iz, up) => { shatter(e => rigMonster(e), m, [ix, 1.6 * up, iz], { spread: 1.5, life: .8, up }); leviathanSplash(m); };
+
+// ---- Round 11: The Hollow Herald (RIGS.herald), a Long Night boss ------------------------------------------------
+// A tall, gaunt figure in a tattered night-blue robe on the human rig (a slow, stooped walk; the legs are mostly
+// hidden in the robe). Under a deep pointed hood there is no face, only black and two cold pinpoints. In its right
+// hand a crooked staff; from the crook hangs a cage lantern on a chain, holding the warm light it has stolen from the
+// keepers' towers (a warm torch light rides with it). The ragged hem trails dark wisps. MON.herald is Mira's
+// (61-monsters.js); the entry below is only a stand-in so the model and the boss pool work on their own.
+// Death (RIG_DEATH 'hollow'): the robe collapses into black smoke and the lantern bursts, letting its stolen light go.
+SPEC.herald = { hip: .64, pelvisH: .1, torsoH: .5, shX: .19, shY: .45, uArm: .29, lArm: .33, hipX: .08, uLeg: .31, lLeg: .31, stride: .3, lean: .05, stoop: .22, eyeX: 0, eyeY: 0, eyeZ: 0, top: 1.62 };
+const HERALD = { robe: C(0x20253a), robeL: C(0x343b58), robeD: C(0x10121c), skin: C(0x7c8296), iron: C(0x2a2c34), ironL: C(0x4c505e), wood: C(0x2e261f), bone: C(0xb8b2a0), rim: C(0x56607e), warm: [1.0, .62, .26], eye: [1.3, 1.7, 2.6], light: 0xffa246, tilt: -.35, drop: .24 };
+// The pinpoints in head space: (+-x, y, z) of a point in the hood's opening, turned with the hood's tilt.
+HERALD.eyeP = (() => { const y = .125, z = .05, a = HERALD.tilt; return [.036, y * Math.cos(a) - z * Math.sin(a), y * Math.sin(a) + z * Math.cos(a)]; })();
+function initHerald() {
+  const H = HERALD, N = { rad: .12, shadow: false };
+  // A ragged strip of cloth hanging from (x, y, z): three segments, narrowing, drifting by `out`.
+  const rag = (S, x, y, z, len, w, c, rng, out = [0, 0]) => {
+    let p = [x, y, z], w0 = w;
+    for (let k = 0; k < 3; k++) { const u = (k + 1) / 3, q = [x + out[0] * u + rng.range(-.015, .015), y - len * u, z + out[1] * u + rng.range(-.015, .015)], w1 = w * (1 - u * .55); ribbon(S, [p[0] - w0, p[1], p[2]], [p[0] + w0, p[1], p[2]], [q[0] + w1, q[1], q[2]], [q[0] - w1, q[1], q[2]], mulC(c, .8 + .35 * rng()), [0, 0, 0, 0]); p = q; w0 = w1; }
+  };
+  const K = KIT.herald = {};
+  // The robe skirt hangs from the pelvis to just above the ground, flaring and ragged at the hem; tatters below it.
+  K.pelvis = new PartBatch(S => {
+    const rng = makeRng(111);
+    S.add(gCyl(14, .5, true), { s: [.3, .7, .27], p: [0, -.27, 0], c: H.robe, l: L_CLOTH, dbl: true, deform: v => { if (v.y < 0) { const a = Math.atan2(v.z, v.x), j = vnoise(a * 2.6 + 4, 1, 13); v.y += (j - .5) * .16 - (v.z < 0 ? .05 : 0); v.x *= .92 + .16 * j; v.z = v.z * (.92 + .16 * j) - .03; } }, cf: v => .55 + .45 * sat(v.y / .35 + .5) });
+    for (let k = 0; k < 7; k++) { const a = k / 7 * TAU + .3; S.box(.02, .6, .012, Math.cos(a) * .235, -.27, Math.sin(a) * .21, H.robeD, { l: L_CLOTH, jit: 0, r: [Math.sin(a) * .2, -a + HPI, -Math.cos(a) * .2] }); }
+    S.cyl(.17, .06, 0, .06, 0, H.robeD, { n: 10, l: L_CLOTH }); S.box(.05, .26, .02, .05, -.06, .165, H.robeL, { l: L_CLOTH, r: [.08, 0, .06] });
+    for (let k = 0; k < 13; k++) { const a = k / 13 * TAU + rng() * .3, back = Math.sin(a) < 0 ? 1 : .55; rag(S, Math.cos(a) * .28, -.58 + rng() * .05, Math.sin(a) * .25 - .03, rng.range(.06, .14) * back, .035, k & 1 ? H.robe : H.robeD, rng, [Math.cos(a) * .03, Math.sin(a) * .03 - .04 * back]); }
+  }, 2, { rad: .3 });
+  // A narrow robed chest, a ragged mantle over the shoulders, a long drape down the back, a bone clasp with charms.
+  K.torso = new PartBatch(S => {
+    const rng = makeRng(112);
+    S.add(gCyl(10, 1.3, false), { s: [.15, .46, .13], p: [0, .22, 0], c: H.robe, l: L_CLOTH, cf: v => .7 + .3 * sat(v.y / .23 + .5) });
+    S.add(gDome(10, 4), { s: [.27, .14, .2], p: [0, .4, -.01], c: H.robeL, l: L_CLOTH });
+    for (let k = 0; k < 14; k++) { const a = k / 14 * TAU, c = Math.cos(a), s = Math.sin(a); rag(S, c * .26, .41, s * .19 - .01, rng.range(.08, .15) * (s < 0 ? 1.3 : 1), .045, k & 1 ? H.robeL : H.robe, rng, [c * .04, s * .03]); }
+    for (let k = 0; k < 5; k++) rag(S, (k - 2) * .07, .44, -.17, rng.range(.42, .58), .045, k & 1 ? H.robe : H.robeD, rng, [0, -.05]);
+    for (let k = 0; k < 4; k++) S.box(.012, .3, .012, (k - 1.5) * .05, .2, .135, H.robeD, { jit: 0, r: [-.1, 0, (k - 1.5) * .05] });
+    S.ico(.035, 0, .4, .17, H.bone, { d: 0, l: L_BONE, sc: [1, 1.2, .6] }); S.box(.1, .015, .015, 0, .4, .165, H.ironL, { l: L_METAL, jit: 0 });
+    for (let k = 0; k < 3; k++) { const x = (k - 1) * .035; S.seg([x, .38, .17], [x * 1.3, .3 - (k & 1) * .03, .175], .006, .006, H.ironL, { n: 3, l: L_METAL }); S.ico(.014, x * 1.3, .29 - (k & 1) * .03, .175, H.bone, { d: 0, l: L_BONE }); }
+  }, 2, { rad: .3 });
+  // The hood: open at the front onto a black void (the pinpoint eyes are sprites from heraldFx), tall and pointed,
+  // a pale-edged rim, side panels falling onto the mantle.
+  K.head = new PartBatch(S => {
+    const T = new Soup();
+    T.add(gDome(10, 5), { s: [.165, .2, .2], p: [0, .12, .02], r: [-HPI, 0, 0], c: H.robe, l: L_CLOTH, dbl: true });
+    T.sph(.13, 0, .12, -.03, COL.black, { sc: [1, 1.2, .55], w: 8, h: 5, jit: 0, rough: 1 });
+    T.add(gTorus(12, .2, 4), { s: [.155, .19, .16], p: [0, .12, .03], c: H.rim, l: L_CLOTH, emis: .05 });
+    T.cone(.15, .3, 0, .33, -.1, H.robe, { n: 8, r: [-.55, 0, 0], l: L_CLOTH });
+    T.cone(.06, .16, 0, .5, -.24, H.robeD, { n: 6, r: [-1.1, 0, 0], l: L_CLOTH });
+    for (const sg of [-1, 1]) T.box(.04, .26, .2, sg * .15, -.0, -.03, H.robe, { l: L_CLOTH, r: [0, 0, sg * -.12] });
+    // Tipped back a little so the opening (and the pinpoints, HERALD.eyeP) still shows from the high camera.
+    S.merge(T, { r: [HERALD.tilt, 0, 0], ao: null });
+    S.box(.3, .1, .14, 0, -.05, -.1, H.robeD, { l: L_CLOTH });
+  }, 2, { rad: .2 });
+  K.uArm = new PartBatch(S => { S.cyl(.062, .3, 0, -.14, 0, H.robe, { n: 7, l: L_CLOTH, rt: 1.1 }); }, 4, { rad: .07 });
+  // A wide, drooping bell sleeve with ragged ends and long grey fingers.
+  K.lArm = new PartBatch(S => {
+    const rng = makeRng(113);
+    S.add(gCyl(9, .42, true), { s: [.12, .32, .11], p: [0, -.15, .01], c: H.robeL, l: L_CLOTH, dbl: true, deform: v => { if (v.y < 0) { const j = vnoise(Math.atan2(v.z, v.x) * 2.2 + 9, 2, 5); v.y += (j - .5) * .1 - (v.z < 0 ? .05 : 0); } } });
+    for (let k = 0; k < 4; k++) { const a = k / 4 * TAU + .5; rag(S, Math.cos(a) * .1, -.31, Math.sin(a) * .09, rng.range(.06, .1), .03, H.robe, rng); }
+    S.box(.05, .05, .045, 0, -.31, .01, H.skin, { l: L_BONE });
+    for (let k = 0; k < 4; k++) { const x = (k - 1.5) * .017; S.seg([x, -.33, .015], [x * 1.4, -.42, .04], .009, .007, H.skin, { n: 3, l: L_BONE }); S.seg([x * 1.4, -.42, .04], [x * 1.5, -.47, .07], .007, .003, H.skin, { n: 3, l: L_BONE }); }
+  }, 4, { rad: .12 });
+  K.uLeg = new PartBatch(S => { S.cyl(.05, .3, 0, -.15, 0, H.robeD, { n: 6, l: L_CLOTH }); }, 4, N);
+  K.lLeg = new PartBatch(S => { S.cyl(.042, .3, 0, -.15, 0, H.robeD, { n: 6, l: L_CLOTH }); S.box(.07, .04, .17, 0, -.3, .05, mulC(H.robeD, .8), { l: L_CLOTH }); S.cone(.03, .07, 0, -.3, .16, H.robeD, { n: 4, r: [HPI, 0, 0] }); }, 4, N);
+  // The crook: a dark, knotted staff, its head bent outward into a hook with bone charms tied on.
+  KIT.item.crook = new PartBatch(S => {
+    const w = H.wood, rng = makeRng(114);
+    let p = [0, -.6, 0]; for (let k = 1; k <= 5; k++) { const q = [rng.range(-.02, .02), -.6 + k * .42, rng.range(-.02, .02)]; S.seg(p, q, .03 - k * .002, .028 - k * .002, w, { n: 5, l: L_WOOD }); S.ico(.034, q[0], q[1], q[2], mulC(w, 1.1), { d: 0, l: L_WOOD }); p = q; }
+    const hook = [[0, 1.5, 0], [-.06, 1.66, 0], [-.2, 1.73, 0], [-.34, 1.68, 0], [-.4, 1.57, 0], [-.38, 1.48, 0]];
+    for (let k = 1; k < hook.length; k++) S.seg(hook[k - 1], hook[k], .026 - k * .002, .024 - k * .002, w, { n: 5, l: L_WOOD });
+    S.cyl(.034, .05, 0, 1.4, 0, H.ironL, { n: 7, l: L_METAL, rough: .5 });
+    for (let k = 0; k < 3; k++) { const a = k * 2.1; S.seg([0, 1.36, 0], [Math.cos(a) * .05, 1.2 - k * .03, Math.sin(a) * .05], .005, .005, COL.rope, { n: 3 }); S.ico(.022, Math.cos(a) * .05, 1.19 - k * .03, Math.sin(a) * .05, H.bone, { d: 0, l: L_BONE }); }
+  }, 2, { rad: .12 });
+  // The cage lantern, hanging from its chain (origin at the top link, hanging down -y). The core is the stolen light.
+  K.lantern = new PartBatch(S => {
+    const ir = H.iron, il = H.ironL, d = H.drop;
+    for (let k = 0; k < 9; k++) S.add(gTorus(6, .3, 3), { s: [.028, .02, .02], p: [0, -.025 - k * .046, 0], r: [0, k & 1 ? HPI : 0, HPI], c: il, l: L_METAL, rough: .5, jit: 0 });
+    S.add(gTorus(8, .25, 3), { s: .03, p: [0, -.19 - d, 0], c: il, l: L_METAL, rough: .5 });
+    S.cone(.085, .07, 0, -.24 - d, 0, ir, { n: 6, l: L_METAL, rough: .5 }); S.cyl(.08, .02, 0, -.275 - d, 0, il, { n: 6, l: L_METAL });
+    for (let k = 0; k < 6; k++) { const a = k / 6 * TAU; S.seg([Math.cos(a) * .072, -.28 - d, Math.sin(a) * .072], [Math.cos(a) * .066, -.45 - d, Math.sin(a) * .066], .008, .008, ir, { n: 3, l: L_METAL }); }
+    S.cyl(.075, .025, 0, -.455 - d, 0, il, { n: 6, l: L_METAL }); S.cone(.04, .07, 0, -.5 - d, 0, ir, { n: 6, l: L_METAL, r: [PI, 0, 0] });
+    S.ico(.045, 0, -.365 - d, 0, H.warm, { d: 1, emis: 1.1, jit: 0 }); S.ico(.026, 0, -.33 - d, 0, [1, .9, .6], { d: 0, emis: 1.6, jit: 0 });
+  }, 2, { rad: .1 });
+  RIGS.herald = rigHerald; EYES.herald = null; RIG_DEATH.herald = 'hollow';
+  // Stand-in stats so the model works on its own. The game's own MON.herald (Mira's) replaces this.
+  if (!MON.herald) MON.herald = { name: 'The Hollow Herald', tip: 'Snuffs your tower lights and calls the echoes of the slain.', hp: 1300, spd: .72, rad: .9, mass: 40, bounty: 220, lives: 5, hitH: 2.2, top: 4.3, dmg: 42, atkT: 1.9, eye: [1.3, 1.7, 2.6], scale: 2.5, boss: true, summon: { type: 'wraith', n: 2, every: 9, max: 99, hp: .6 }, death: 'flesh', cat: 'armor', rig: 'herald' };
+}
+const _hA = new THREE.Vector3();
+function rigHerald(e) {
+  e.weapon = KIT.item.crook; e.wScale = 1.05; e.staffOut = true;
+  const M = rigHuman(KIT.herald, SPEC.herald, e), s = e.scale || 1, t = G.t + (e.lseed || 0) * 3;
+  // The lantern hangs plumb from the crook, swinging a little and trailing back when he walks.
+  _hA.set(-.4, 1.56, 0).applyMatrix4(_M[8]);
+  const dying = e.dying > 0, sx = .1 * Math.sin(t * 1.9) + .28 * (e.mv || 0) + (dying ? .25 * Math.sin(t * 11) : 0), sz = .09 * Math.sin(t * 1.3 + 1.1);
+  const Y = xf(_M[20], null, _hA.x, _hA.y, _hA.z, 0, e.yaw, 0, s, s, s), L = xf(_M[21], Y, 0, 0, 0, sx, 0, sz);
+  KIT.herald.lantern.put(L, 0, null);
+  if (!RIG_CAPTURE) heraldFx(e, M, L);
+  return M;
+}
+// Per drawn step: the lantern's warm glow and light (it flickers, and gutters while he dies), the two cold pinpoints
+// in the hood, dark wisps off the hem, a few pale motes; at the end of the death throes the release (heraldEnd).
+function heraldFx(m, M, L) {
+  if (!(m.vis || m.fly) || m.dead || !G.B) return;
+  const A = FX.add, dt = FX.dt || 0, sc = m.scale || 1, t = G.t + (m.lseed || 0) * 3, H = HERALD, w = H.warm, e = H.eye, dying = m.dying > 0;
+  const fl = (.82 + .12 * Math.sin(t * 9.3) + .08 * Math.sin(t * 23.1)) * (dying ? .55 + .45 * Math.abs(Math.sin(t * 17)) : 1);
+  _d4.set(0, -.36 - H.drop, 0).applyMatrix4(L);
+  A.push(_d4.x, _d4.y, _d4.z, .26 * sc, .26 * sc, 0, 0, w[0] * 2.4, w[1] * 2.2, w[2] * 2, fl, 0, 0, 0, 0);
+  A.push(_d4.x, _d4.y, _d4.z, 1.5 * sc, 1.5 * sc, 0, 0, w[0] * .55, w[1] * .4, w[2] * .25, .55 * fl, 2, 0, 0, 0);
+  m.glowL = true; m.lI = 6.5 * fl; m.lCol = H.light; m.lx = _d4.x; m.ly = _d4.y; m.lz = _d4.z;
+  if (frnd() < dt * 3 * FX.keep) fxPart(_d4.x + frr(-.05, .05) * sc, _d4.y, _d4.z + frr(-.05, .05) * sc, frr(-.15, .15), frr(.3, .8), frr(-.15, .15), frr(.5, 1), frr(.03, .05), w[0] * 2.6, w[1] * 2.2, w[2] * 1.6, { drag: .6, wob: 1, rise: .2 });
+  if (dying && m.dying < .1 && !m._burst) { m._burst = 1; heraldEnd(m, _d4); }
+  // Cold pinpoints in the hood's dark (no face).
+  const ek = (.85 + .15 * Math.sin(t * 6.1)) * (dying ? Math.max(0, 1 - (1.9 - m.dying) * .4) : 1);
+  const P = H.eyeP; for (const sg of [-1, 1]) { _d4.set(sg * P[0], P[1], P[2]).applyMatrix4(M); A.push(_d4.x, _d4.y, _d4.z, .058 * sc, .058 * sc, 0, 0, e[0] * 1.5, e[1] * 1.5, e[2] * 1.5, ek, 0, 0, 0, 0); }
+  _d4.set(0, P[1], P[2]).applyMatrix4(M); A.push(_d4.x, _d4.y, _d4.z, .42 * sc, .3 * sc, 0, 0, e[0] * .12, e[1] * .14, e[2] * .2, .5 * ek, 2, 0, 0, 0);
+  // Dark wisps trailing off the ragged hem (alpha smoke), thinner in a crowd (FX.keep).
+  m._wisp = (m._wisp || 0) + dt * (dying ? 30 : 13) * FX.keep;
+  const k = sc / 2.5, bx = -Math.sin(m.yaw) * .25 * (m.mv || 0), bz = -Math.cos(m.yaw) * .25 * (m.mv || 0);
+  while (m._wisp >= 1) {
+    m._wisp -= 1; const a = frnd() * TAU; _d4.set(Math.cos(a) * .28, -.6, Math.sin(a) * .25 - .05).applyMatrix4(_M[1]);
+    fxSmoke(_d4.x, _d4.y, _d4.z, frr(-.15, .15) + bx, frr(.05, .3), frr(-.15, .15) + bz, frr(1, 1.8), frr(.18, .3) * k, .5 * k, .025, .025, .04, .55, { drag: 1.2, rise: .12 });
+  }
+  if (frnd() < dt * 2) { _d4.set(frr(-.2, .2), frr(.2, .8), frr(-.2, .2)).applyMatrix4(_M[2]); fxPart(_d4.x, _d4.y, _d4.z, frr(-.1, .1), frr(.15, .4), frr(-.1, .1), frr(.6, 1.2), .03, e[0] * .8, e[1] * .8, e[2] * .9, { drag: .8, wob: 1 }); }
+}
+// The Herald's end: the robe falls in on itself as black smoke, a cold flash where the face was, and the lantern
+// bursts: its stolen warm light streams up and away (motes rising, a warm flash, a soft ring on the ground).
+function heraldEnd(m, lp) {
+  const sc = m.scale || 1, k = sc / 2.5, x = m.x, y = m.y, z = m.z, w = HERALD.warm, e = HERALD.eye, lx = lp ? lp.x : x, ly = lp ? lp.y : y + 1.4 * sc, lz = lp ? lp.z : z;
+  fxTimed(5, x, y + 1.55 * sc, z, 4 * k, 4 * k, e[0], e[1], e[2], .9, .25);
+  fxTimed(5, lx, ly, lz, 5 * k, 5 * k, w[0] * 2.4, w[1] * 2, w[2] * 1.6, 1, .35); fxTimed(4, x, y + .1, z, 8 * k, 8 * k, w[0] * 1.4, w[1] * 1.1, w[2] * .8, .8, .7, { ground: true });
+  lightFlash(lx, ly + .5, lz, HERALD.light, 900, .7, 20);
+  for (let i = 0; i < 40; i++) { const a = frnd() * TAU, s = frr(.4, 2.2); fxPart(lx + Math.cos(a) * .2, ly + frr(-.2, .3), lz + Math.sin(a) * .2, Math.cos(a) * s, frr(1.5, 5), Math.sin(a) * s, frr(1.2, 2.6), frr(.04, .08), w[0] * frr(2, 3), w[1] * frr(1.6, 2.4), w[2] * 1.6, { drag: .7, wob: 1, rise: .6 }); }
+  for (let i = 0; i < 18; i++) { const a = frnd() * TAU, s = frr(.4, 1.6); fxSmoke(x + Math.cos(a) * .5, y + frr(.2, 3.2) * k, z + Math.sin(a) * .5, Math.cos(a) * s, frr(-.2, .8), Math.sin(a) * s, frr(1.6, 3), frr(.6, 1.1) * k, 1.6 * k, .02, .02, .035, .7, { drag: 1.3, rise: .2 }); }
+  for (let i = 0; i < 10; i++) { _gm.compose(_gp.set(lx + frr(-.2, .2), ly + frr(-.1, .2), lz + frr(-.2, .2)), _gq.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _gs.setScalar(frr(.5, .9))); addDebris(KIT.bit, _gm, [.18, .18, .2], frr(-3, 3), frr(2, 5), frr(-3, 3), frr(4, 10), frr(2.5, 4), { extra: 1 }); }
+  FX.decals.add(G.B.heightAt, x, z, 2.6 * k, .006, .006, .01, .75, 40, 40);
+}
+DEATH_FX.hollow = (m, kind, ix, iz, up) => { shatter(e => rigMonster(e), m, [ix, 1.4 * up, iz], { spread: 1.3, life: .8, up }); heraldEnd(m, null); };

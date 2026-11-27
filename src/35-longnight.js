@@ -213,6 +213,9 @@ function procBiome(seed, i) {
   const early = {}; for (const k in D.early) early[k] = D.early[k] + 1; for (const k in A.early) early[k] = A.early[k];
   const boss = rng() < .65 ? [A.boss[0], D.boss[0]] : [D.boss[0], A.boss[0]];
   if (A.boss.length > 1) boss.push(A.boss[1]);
+  // The Hollow Herald (Long Night only): on about one generated land in three from land 8 on, it takes the boss slot
+  // bossType() will pick. Its own random stream, so the rest of the land is the same with or without it.
+  if (typeof MON !== 'undefined' && MON.herald && i >= 7) { const hr = makeRng(Math.imul(seed + 4241, 0x2C1B3C6D) ^ Math.imul(i + 59, 0x297A2D39)); hr(); if (hr() < .34) boss[Math.floor(i / NB) % boss.length] = 'herald'; }
   const tints = Object.assign({}, D.tints, A.tints);
   const wispHex = hexMix(hexMix(A.wispHex, D.wispHex, t), M.wisp || A.wispHex, mk * .8);
 

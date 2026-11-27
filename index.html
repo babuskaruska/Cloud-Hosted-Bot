@@ -244,10 +244,26 @@ const SH = {
   uMoonV: { value: new THREE.Vector3(0, 1, 0) }, uMoonC: { value: new THREE.Vector3(1, 1, 1) }, uGlint: { value: 1 },
 };
 
+// The Echo ghost's screen-door (a discard in the monster shader) only where it is cheap: not on touch devices
+// (phones and tablets, tile-based GPUs) and not on the Fast setting. HASH.dither=0/1 forces it for tests.
+function echoDitherWanted() {
+  if (HASH.dither !== undefined) return HASH.dither !== '0';
+  if (R.coarse === undefined) R.coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+  return !R.coarse && !(HASH.noscale && R.quality < .75);
+}
+// Switches MAT.inst to the program with or without the screen-door (a one-time recompile, on a settings change).
+function syncEchoDither() {
+  const m = MAT.inst; if (!m) return;
+  const want = echoDitherWanted(), has = !!m.defines && m.defines.CW_DITHER !== undefined;
+  if (want === has) return;
+  if (!m.defines) m.defines = {};
+  if (want) m.defines.CW_DITHER = ''; else delete m.defines.CW_DITHER;
+  m.needsUpdate = true;
+}
 function litMaterial(kind, params = {}) {
   const mat = new THREE.MeshStandardMaterial(Object.assign({ vertexColors: kind !== 'water', roughness: 1, metalness: 0 }, params));
   const inst = kind === 'inst', water = kind === 'water', world = !inst && !water;
-  mat.customProgramCacheKey = () => 'cw-' + kind;
+  mat.customProgramCacheKey = () => 'cw-' + kind + (mat.defines && mat.defines.CW_DITHER !== undefined ? '-d' : '');
   mat.onBeforeCompile = sh => {
     sh.uniforms.uTime = SH.uTime; sh.uniforms.uTexA = SH.uTexA; sh.uniforms.uTexH = SH.uTexH; sh.uniforms.uBump = SH.uBump; sh.uniforms.uSky = SH.uSky; sh.uniforms.uWind = SH.uWind;
     sh.uniforms.uCover = SH.uCover; sh.uniforms.uCoverCol = SH.uCoverCol; sh.uniforms.uCoverP = SH.uCoverP; sh.uniforms.uWat = SH.uWat; sh.uniforms.uWatA = SH.uWatA; sh.uniforms.uWatB = SH.uWatB; sh.uniforms.uWet = SH.uWet; sh.uniforms.uMoonV = SH.uMoonV; sh.uniforms.uMoonC = SH.uMoonC; sh.uniforms.uGlint = SH.uGlint;
@@ -358,12 +374,20 @@ ${inst ? `{
   float cwEc = floor(vFlash * 0.25 + 0.002), cwFl = vFlash - cwEc * 4.0;
   totalEmissiveRadiance += vec3(1.0, 0.8, 0.55) * cwFl * 0.55;
   if (cwEc > 4.5) {
-    // An Echo ghost (m.echo, code 5): a screen-door see-through in drifting bands, a pale cold body and a flickering rim.
+    // An Echo ghost (m.echo, code 5): a pale cold body, a flickering rim and drifting bands. With CW_DITHER (desktop,
+    // not on Fast: echoDitherWanted) the bands are a screen-door see-through. Phones and Fast get no discard at all:
+    // any discard in this shader costs every monster part on tile-based GPUs (no early depth / hidden-surface
+    // removal), so there the bands are drawn as darker stripes in a plain cold tint instead.
     float cwSl = fract(gl_FragCoord.y * 0.045 - uTime * 0.7 + vViewPosition.x * 0.3);
+    #ifdef CW_DITHER
     if (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 0.5 && cwSl < 0.6) discard;
+    #endif
     float cwFk = 0.78 + 0.22 * sin(uTime * 17.0 + vViewPosition.x * 2.3) * sin(uTime * 3.7 + vViewPosition.y);
     float cwFr = pow(1.0 - clamp(abs(normal.z), 0.0, 1.0), 2.0);
     diffuseColor.rgb = vec3(dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15))) * vec3(0.5, 0.68, 0.95);
+    #ifndef CW_DITHER
+    diffuseColor.rgb *= 0.55 + 0.45 * smoothstep(0.5, 0.65, cwSl);
+    #endif
     totalEmissiveRadiance += vec3(0.42, 0.7, 1.5) * (cwFr * 1.15 + 0.1 + cwSl * 0.06) * cwFk;
   } else if (cwEc > 0.5) {
     vec3 cwRc = cwEc < 1.5 ? vec3(1.7, 0.55, 0.1) : cwEc < 2.5 ? vec3(0.55, 0.9, 1.7) : cwEc < 3.5 ? vec3(1.5, 1.2, 0.18) : vec3(0.4, 1.6, 0.35);
@@ -822,6 +846,7 @@ function fsPass(mat, target) {
 
 const _ivp = new THREE.Matrix4();
 function renderFrame() {
+  syncEchoDither();
   const r = R.renderer, M = R.mats, T = R.rt, cam = R.cam;
   r.info.reset();
   scheduleShadows(G.phase === 'crumble' || G.phase === 'rise');
@@ -1619,7 +1644,7 @@ function clothPanel(S, o) {
     const emblem = o.col2 && i >= 1 && i < nx - 1 && j >= 1 && j <= 2;
     const c = mulC(emblem ? o.col2 : o.col, .78 + .3 * rng());
     const q = [[xa, yAt(j), sw(j)], [xb, yAt(j), sw(j)], [xb, yAt(j + 1), sw(j + 1)], [xa, yAt(j + 1), sw(j + 1)]];
-    for (const [order, nz] of [[[0, 3, 2, 0, 2, 1], 1], [[0, 1, 2, 0, 2, 3], -1]]) for (const k of order) S.v(q[k][0], q[k][1], o.z, 0, 0, nz, c[0], c[1], c[2], q[k][0] * .5, q[k][1] * .5, L_CLOTH, .95, q[k][2], 0);
+    for (const [order, nz] of [[[0, 3, 2, 0, 2, 1], 1], [[0, 1, 2, 0, 2, 3], -1]]) for (const k of order) S.v(q[k][0], q[k][1], o.z, 0, 0, nz, c[0], c[1], c[2], q[k][0] * .5, q[k][1] * .5, L_CLOTH, .95, q[k][2], o.emis || 0);
   }
 }
 
@@ -2607,6 +2632,9 @@ function procBiome(seed, i) {
   const early = {}; for (const k in D.early) early[k] = D.early[k] + 1; for (const k in A.early) early[k] = A.early[k];
   const boss = rng() < .65 ? [A.boss[0], D.boss[0]] : [D.boss[0], A.boss[0]];
   if (A.boss.length > 1) boss.push(A.boss[1]);
+  // The Hollow Herald (Long Night only): on about one generated land in three from land 8 on, it takes the boss slot
+  // bossType() will pick. Its own random stream, so the rest of the land is the same with or without it.
+  if (typeof MON !== 'undefined' && MON.herald && i >= 7) { const hr = makeRng(Math.imul(seed + 4241, 0x2C1B3C6D) ^ Math.imul(i + 59, 0x297A2D39)); hr(); if (hr() < .34) boss[Math.floor(i / NB) % boss.length] = 'herald'; }
   const tints = Object.assign({}, D.tints, A.tints);
   const wispHex = hexMix(hexMix(A.wispHex, D.wispHex, t), M.wisp || A.wispHex, mk * .8);
 
@@ -2970,7 +2998,7 @@ function updateLights(dt, t, focusX, focusZ) {
     if (e) {
       e._spot = s.fade;
       s.l.position.set(e.x, e.y + .25, e.z); s.l.target.position.set(e.x + (e.dx || 0) * 1.2, e.y - 3, e.z + (e.dz || 0) * 1.2);
-      s.l.color.setRGB(e.r, e.g, e.b); s.l.intensity = e.I * e.on * (e.fl || 1) * s.fade * 1.25;
+      s.l.color.setRGB(e.r, e.g, e.b); s.l.intensity = e.I * e.on * (e.fl || 1) * (e.snf === undefined ? 1 : e.snf) * s.fade * 1.25;
     } else s.l.intensity = 0;
   }
   for (let i = 0; i < LT.env.length; i++) {
@@ -2982,7 +3010,8 @@ function updateLights(dt, t, focusX, focusZ) {
     if (e && e.alive) {
       e.fl = .86 + .1 * n1(t * 7 + e.seed, e.seed) + .05 * n1(t * 19 + e.seed, e.seed + 1);
       l.position.set(e.x, e.y, e.z); l.color.setRGB(e.r, e.g, e.b); l.distance = e.range * (1 - .3 * (G.eclA || 0)); // Eclipse shrinks tower light
-      l.intensity = e.I * e.on * e.fl * (1 - .68 * (e._spot || 0));
+      e.snf = FX.snuffs.length ? snuffMul(e.x, e.z) : 1; // the Hollow Herald's snuff (FX.snuff) dims it
+      l.intensity = e.I * e.on * e.fl * e.snf * (1 - .68 * (e._spot || 0));
     } else l.intensity = 0;
   }
 }
@@ -3009,7 +3038,7 @@ function collectMistLights() {
   put(LT.beacon, .05);
   for (const f of LT.flashes) put(f.l, .06);
   // Tower lanterns at their full strength (a tower whose spotlight is on dims its point light, not its glow in the air).
-  const tw = LT.towers.filter((l, i) => l.intensity > 0 || (LT.emitters[i] && LT.emitters[i]._spot > 0)).map(l => { const e = LT.emitters[LT.towers.indexOf(l)]; l.userData.full = e && e.alive ? e.I * e.on * (e.fl || 1) : l.intensity; return l; }).sort((a, b) => b.userData.full - a.userData.full);
+  const tw = LT.towers.filter((l, i) => l.intensity > 0 || (LT.emitters[i] && LT.emitters[i]._spot > 0)).map(l => { const e = LT.emitters[LT.towers.indexOf(l)]; l.userData.full = e && e.alive ? e.I * e.on * (e.fl || 1) * (e.snf === undefined ? 1 : e.snf) : l.intensity; return l; }).sort((a, b) => b.userData.full - a.userData.full);
   for (const l of tw) { if (k >= R.NL) break; R.lightPos[k].copy(l.position); R.lightCol[k].set(l.color.r, l.color.g, l.color.b).multiplyScalar(l.userData.full * .16); k++; }
   for (const l of LT.env) if (l.intensity > 0) put(l, .1);
   for (; k < R.NL; k++) R.lightCol[k].set(0, 0, 0);
@@ -3216,7 +3245,7 @@ const DECAL_MIN_LIFE = 150;
 
 const FX = {
   add: null, alpha: null, segs: null, decals: null,
-  parts: [], smokes: [], flames: [], timed: [], bolts: [], fires: [], scorch: [], meteors: [], novas: [], lit: [], keep: 1, shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, shakeT: 0, flash: 0, flashK: 1, dt: 0, calm: false, groundAt: () => 0,
+  parts: [], smokes: [], flames: [], timed: [], bolts: [], fires: [], scorch: [], meteors: [], novas: [], snuffs: [], lit: [], keep: 1, shake: 0, shakeK: 1, shakeX: 0, shakeY: 0, shakeT: 0, flash: 0, flashK: 1, dt: 0, calm: false, groundAt: () => 0,
 };
 function initFX() {
   FX.add = new SpriteBatch(4000, false); FX.alpha = new SpriteBatch(800, true); FX.segs = new SegBatch(900); FX.decals = new DecalBatch(200);
@@ -3271,8 +3300,9 @@ function updateFX(dt, t) {
   const A = FX.add, AL = FX.alpha, SG = FX.segs, groundAt = FX.groundAt;
   A.begin(); AL.begin(); SG.begin(); FX.dt = dt;
   const rx = Math.cos(CAM.yaw), rz = -Math.sin(CAM.yaw), se = Math.sin(CAM.elev), ce = Math.cos(CAM.elev), ux = -se * Math.sin(CAM.yaw), uy = ce, uz = -se * Math.cos(CAM.yaw);
+  const sn = FX.snuffs.length > 0;
   for (const f of FX.flames) {
-    const on = f.on; if (on <= .01) continue;
+    const on = sn ? f.on * snuffMul(f.x, f.z) : f.on; if (on <= .01) continue;
     const s = f.size * (.9 + .1 * on), fl = .88 + .12 * n1(t * 8 + f.seed * 3, f.seed);
     for (let k = 0; k < f.layers; k++) {
       const kk = k / Math.max(1, f.layers), w = s * (1 - kk * .28) * (.92 + .08 * fl), h = s * (1.55 - kk * .2) * (.75 + .25 * on);
@@ -3326,14 +3356,14 @@ function updateFX(dt, t) {
     for (let j = 0; j < b.pts.length - 1; j++) { const p = b.pts[j], q = b.pts[j + 1]; SG.push(p[0], p[1], p[2], w, q[0], q[1], q[2], w, c[0] * 4, c[1] * 4, c[2] * 4, k); SG.push(p[0], p[1], p[2], w * 3.5, q[0], q[1], q[2], w * 3.5, c[0], c[1], c[2], k * .35); }
     if (b.fork > 0) { const p = b.pts[b.fork]; SG.push(p[0], p[1], p[2], w * .7, p[0] + b.fd[0] * .7, p[1] + b.fd[1] * .7, p[2] + b.fd[2] * .7, w * .2, c[0] * 3, c[1] * 3, c[2] * 3, k); }
   }
-  updateFires(dt, t); updateSpellFX(dt, t); updateBossIn(dt);
+  updateFires(dt, t); updateSpellFX(dt, t); updateSnuffs(dt); updateBossIn(dt);
   const calm = G.phase === 'play' && !G.spawning && !G.mons.length;
   if (calm && !FX.calm) FX.decals.fadeAll(4.5);
   FX.calm = calm;
   FX.decals.update(dt);
 }
 function endFX() { FX.add.end(); FX.alpha.end(); FX.segs.end(); }
-function clearFX() { for (const o of FX.lit) o.alive = false; FX.lit.length = 0; FX.bossIn.length = 0; FX.meteors.length = 0; FX.novas.length = 0; FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; for (const f of FX.fires) f.alive = false; FX.fires.length = 0; FX.scorch.length = 0; FX.decals.clear(); }
+function clearFX() { for (const o of FX.lit) o.alive = false; FX.lit.length = 0; FX.bossIn.length = 0; FX.meteors.length = 0; FX.novas.length = 0; FX.snuffs.length = 0; FX.parts.length = 0; FX.smokes.length = 0; FX.timed.length = 0; FX.bolts.length = 0; for (const f of FX.fires) f.alive = false; FX.fires.length = 0; FX.scorch.length = 0; FX.decals.clear(); }
 
 // ---- Camera shake, hit-stop and flash ----------------------------------------------------------------
 // shake(amount): adds trauma that decays smoothly. ~.2 shell, ~.5 sapper, ~1 boss stomp; the total is capped
@@ -3478,6 +3508,54 @@ FX.frostNova = function (x, z, r = 3, secs = 3) {
   shake(.25);
   return o;
 };
+// FX.snuff(x, z, r, seconds = 4): the Hollow Herald puts out the lights. A dark ring sweeps out from (x, z) to r
+// with a thin cold edge; every tower light, lantern flame and spotlight the ring passes over drops to a faint
+// glow (a puff of black smoke from each tower as it goes out), the ground under it stays dim, and the lights come
+// back over the last second. Looks only: the gameplay side (MON.herald) decides what being snuffed does.
+// snuffMul(x, z) is the light left at a point (1 = untouched, down to .12). Returns the handle, or null.
+const SNUFF_SWEEP = .6;
+FX.snuff = function (x, z, r = 5, secs = 4) {
+  if (!isFinite(x) || !isFinite(z) || !G.B || G.phase === 'crumble' || G.phase === 'rise') return null;
+  r = clamp(+r || 5, 1, 14); secs = clamp(+secs || 4, 1.2, 20);
+  const gy = FX.groundAt(x, z), puffs = [];
+  for (const e of LT.emitters) if (e && e.alive) { const d = Math.hypot(e.x - x, e.z - z); if (d < r) puffs.push({ x: e.x, y: e.y, z: e.z, at: SNUFF_SWEEP * Math.pow(d / r, 1 / .6) }); }
+  const o = { x, z, r, gy, t: 0, T: secs, puffs, seed: frnd() * 50 };
+  if (FX.snuffs.length >= 4) FX.snuffs.shift();
+  FX.snuffs.push(o);
+  fxTimed(4, x, gy + .14, z, r * 2.15, r * 2.15, .2, .27, .6, .45, SNUFF_SWEEP * 1.3, { ground: true });
+  fxTimed(5, x, gy + 1.2, z, 2.2, 2.2, .4, .55, 1.2, .6, .25);
+  for (let i = 0; i < 12; i++) { const a = i / 12 * TAU + frnd() * .4, s = r / SNUFF_SWEEP * frr(.5, .8); fxSmoke(x + Math.cos(a) * .4, gy + frr(.1, .5), z + Math.sin(a) * .4, Math.cos(a) * s, frr(.1, .5), Math.sin(a) * s, frr(.8, 1.4), frr(.5, .8), 1.2, .02, .02, .035, .6, { drag: 2.6 }); }
+  return o;
+};
+function snuffMul(x, z) {
+  let m = 1;
+  for (const s of FX.snuffs) {
+    const u = Math.min(1, s.t / SNUFF_SWEEP), R = s.r * Math.pow(u, .6), d = Math.hypot(x - s.x, z - s.z);
+    if (d > R + .01) continue;
+    const k = sat((R - d) / .8 + .25) * sat((s.T - s.t) / .9);
+    m = Math.min(m, 1 - .88 * k);
+  }
+  return m;
+}
+function updateSnuffs(dt) {
+  const L = FX.snuffs, AL = FX.alpha;
+  for (let i = L.length - 1; i >= 0; i--) {
+    const s = L[i]; s.t += dt; if (s.t >= s.T) { L.splice(i, 1); continue; }
+    const u = Math.min(1, s.t / SNUFF_SWEEP), R = s.r * Math.pow(u, .6), fin = sat((s.T - s.t) / .9);
+    // The sweeping ring: flat black blots along the front, fading as it reaches the edge.
+    if (u < 1) {
+      const n = clamp(Math.round(TAU * R / .6), 6, 44), a0 = s.seed + s.t * .7, al = .9 * (1 - u * u * u);
+      for (let k = 0; k < n; k++) { const a = a0 + k / n * TAU, px = s.x + Math.cos(a) * R, pz = s.z + Math.sin(a) * R; AL.push(px, FX.groundAt(px, pz) + .16, pz, 1.7, 1.7, a, 0, 0, 0, .002, al, 0, s.seed + k * 3.1, .3, 1); }
+    }
+    // The dimmed ground inside, while it lasts.
+    AL.push(s.x, s.gy + .12, s.z, R * 2.1, R * 2.1, s.seed, 0, 0, 0, .002, .42 * fin, 0, s.seed, .2, 1);
+    for (const p of s.puffs) if (p.at >= 0 && s.t >= p.at) {
+      p.at = -1;
+      for (let k = 0; k < 4; k++) fxSmoke(p.x + frr(-.1, .1), p.y + frr(0, .2), p.z + frr(-.1, .1), frr(-.2, .2), frr(.5, 1.1), frr(-.2, .2), frr(1, 1.8), frr(.25, .4), .7, .006, .006, .01, .7, { drag: 1, rise: .2 });
+      for (let k = 0; k < 5; k++) fxPart(p.x, p.y + .1, p.z, frr(-.6, .6), frr(.3, 1.2), frr(-.6, .6), frr(.3, .6), .04, 1.6, .7, .25, { drag: 1.5 });
+    }
+  }
+}
 const _spM = new THREE.Matrix4(), _spQ = new THREE.Quaternion(), _spV = new THREE.Vector3(), _spS = new THREE.Vector3(), _spE = new THREE.Euler();
 function fxMeteorImpact(m) {
   const { x, z, r, gy } = m, sc = r / 2.2;
@@ -3562,7 +3640,7 @@ function drawFrozen(m, sc) {
 // cracks with heaved slabs, a dust ring rolls out, a light flare in the boss's colour, a short flash and shake,
 // and the camera is asked to frame the boss for a moment (CAM.ent, read by updateCamera; skipped while the
 // player holds the view). Visual only: effects random stream, no hit-stop, so the simulation is unchanged.
-const BOSS_GLOW = { giant: [1.2, .95, .6], ogre: [1.3, .8, .45], jotun: [.55, .9, 1.5], queen: [1.1, .45, 1.4], colossus: [1.8, .6, .18], king: [.45, 1.4, 1.15], leviathan: [.4, 1.3, 1.25] };
+const BOSS_GLOW = { giant: [1.2, .95, .6], ogre: [1.3, .8, .45], jotun: [.55, .9, 1.5], queen: [1.1, .45, 1.4], colossus: [1.8, .6, .18], king: [.45, 1.4, 1.15], leviathan: [.4, 1.3, 1.25], herald: [.55, .7, 1.5] };
 FX.bossIn = [];
 function bossEntrance(m) {
   if (!G.B || G.phase !== 'play') return;
@@ -4672,7 +4750,7 @@ function initBestiary() {
     }, 40, { rad: .3 }),
     legR: toadLeg(1), legL: toadLeg(-1),
   };
-  initBestiary4(); initLeviathan();
+  initBestiary4(); initLeviathan(); initHerald();
 }
 
 function rigSpider(e) {
@@ -4777,7 +4855,8 @@ function initBestiary4() {
       // Siege mutator only (rigRam): a war banner on a pole at the back and a pair of great horns on the front ridge.
       siege: new PartBatch(S => {
         S.cyl(.025, 1.55, -.42, 1.92, -.72, wd, { n: 4, l: L_WOOD }); S.box(.52, .035, .035, -.19, 2.62, -.72, wd, o());
-        clothPanel(S, { x0: -.44, x1: .04, yTop: 2.6, len: .62, z: -.72, col: mulC(COL.clothR, 1.5), col2: mulC(COL.bone, .8), rng: makeRng(11), sway: .08, nx: 3, ny: 5, rag: .45 });
+        // A little self-light (emis) and a brighter red so the banner still reads in shadow, away from any lantern.
+        clothPanel(S, { x0: -.44, x1: .04, yTop: 2.6, len: .62, z: -.72, col: mulC(COL.clothR, 1.85), col2: mulC(COL.bone, .95), rng: makeRng(11), sway: .08, nx: 3, ny: 5, rag: .45, emis: .045 });
         PROP.skull(S, -.42, 2.74, -.72, .085, 0);
         for (const s of [-1, 1]) { S.seg([s * .06, 1.6, .8], [s * .36, 1.86, 1.0], .075, .045, COL.bone, { l: L_BONE, n: 5 }); S.seg([s * .36, 1.86, 1.0], [s * .42, 2.2, .88], .045, .008, COL.boneD, { l: L_BONE, n: 4 }); }
       }, 8, { rad: .5 }),
@@ -5158,6 +5237,143 @@ function leviathanSplash(m) {
 }
 DEATH_FX.drown = (m, kind, ix, iz, up) => { shatter(e => rigMonster(e), m, [ix, 1.6 * up, iz], { spread: 1.5, life: .8, up }); leviathanSplash(m); };
 
+// ---- Round 11: The Hollow Herald (RIGS.herald), a Long Night boss ------------------------------------------------
+// A tall, gaunt figure in a tattered night-blue robe on the human rig (a slow, stooped walk; the legs are mostly
+// hidden in the robe). Under a deep pointed hood there is no face, only black and two cold pinpoints. In its right
+// hand a crooked staff; from the crook hangs a cage lantern on a chain, holding the warm light it has stolen from the
+// keepers' towers (a warm torch light rides with it). The ragged hem trails dark wisps. MON.herald is Mira's
+// (61-monsters.js); the entry below is only a stand-in so the model and the boss pool work on their own.
+// Death (RIG_DEATH 'hollow'): the robe collapses into black smoke and the lantern bursts, letting its stolen light go.
+SPEC.herald = { hip: .64, pelvisH: .1, torsoH: .5, shX: .19, shY: .45, uArm: .29, lArm: .33, hipX: .08, uLeg: .31, lLeg: .31, stride: .3, lean: .05, stoop: .22, eyeX: 0, eyeY: 0, eyeZ: 0, top: 1.62 };
+const HERALD = { robe: C(0x20253a), robeL: C(0x343b58), robeD: C(0x10121c), skin: C(0x7c8296), iron: C(0x2a2c34), ironL: C(0x4c505e), wood: C(0x2e261f), bone: C(0xb8b2a0), rim: C(0x56607e), warm: [1.0, .62, .26], eye: [1.3, 1.7, 2.6], light: 0xffa246, tilt: -.35, drop: .24 };
+// The pinpoints in head space: (+-x, y, z) of a point in the hood's opening, turned with the hood's tilt.
+HERALD.eyeP = (() => { const y = .125, z = .05, a = HERALD.tilt; return [.036, y * Math.cos(a) - z * Math.sin(a), y * Math.sin(a) + z * Math.cos(a)]; })();
+function initHerald() {
+  const H = HERALD, N = { rad: .12, shadow: false };
+  // A ragged strip of cloth hanging from (x, y, z): three segments, narrowing, drifting by `out`.
+  const rag = (S, x, y, z, len, w, c, rng, out = [0, 0]) => {
+    let p = [x, y, z], w0 = w;
+    for (let k = 0; k < 3; k++) { const u = (k + 1) / 3, q = [x + out[0] * u + rng.range(-.015, .015), y - len * u, z + out[1] * u + rng.range(-.015, .015)], w1 = w * (1 - u * .55); ribbon(S, [p[0] - w0, p[1], p[2]], [p[0] + w0, p[1], p[2]], [q[0] + w1, q[1], q[2]], [q[0] - w1, q[1], q[2]], mulC(c, .8 + .35 * rng()), [0, 0, 0, 0]); p = q; w0 = w1; }
+  };
+  const K = KIT.herald = {};
+  // The robe skirt hangs from the pelvis to just above the ground, flaring and ragged at the hem; tatters below it.
+  K.pelvis = new PartBatch(S => {
+    const rng = makeRng(111);
+    S.add(gCyl(14, .5, true), { s: [.3, .7, .27], p: [0, -.27, 0], c: H.robe, l: L_CLOTH, dbl: true, deform: v => { if (v.y < 0) { const a = Math.atan2(v.z, v.x), j = vnoise(a * 2.6 + 4, 1, 13); v.y += (j - .5) * .16 - (v.z < 0 ? .05 : 0); v.x *= .92 + .16 * j; v.z = v.z * (.92 + .16 * j) - .03; } }, cf: v => .55 + .45 * sat(v.y / .35 + .5) });
+    for (let k = 0; k < 7; k++) { const a = k / 7 * TAU + .3; S.box(.02, .6, .012, Math.cos(a) * .235, -.27, Math.sin(a) * .21, H.robeD, { l: L_CLOTH, jit: 0, r: [Math.sin(a) * .2, -a + HPI, -Math.cos(a) * .2] }); }
+    S.cyl(.17, .06, 0, .06, 0, H.robeD, { n: 10, l: L_CLOTH }); S.box(.05, .26, .02, .05, -.06, .165, H.robeL, { l: L_CLOTH, r: [.08, 0, .06] });
+    for (let k = 0; k < 13; k++) { const a = k / 13 * TAU + rng() * .3, back = Math.sin(a) < 0 ? 1 : .55; rag(S, Math.cos(a) * .28, -.58 + rng() * .05, Math.sin(a) * .25 - .03, rng.range(.06, .14) * back, .035, k & 1 ? H.robe : H.robeD, rng, [Math.cos(a) * .03, Math.sin(a) * .03 - .04 * back]); }
+  }, 2, { rad: .3 });
+  // A narrow robed chest, a ragged mantle over the shoulders, a long drape down the back, a bone clasp with charms.
+  K.torso = new PartBatch(S => {
+    const rng = makeRng(112);
+    S.add(gCyl(10, 1.3, false), { s: [.15, .46, .13], p: [0, .22, 0], c: H.robe, l: L_CLOTH, cf: v => .7 + .3 * sat(v.y / .23 + .5) });
+    S.add(gDome(10, 4), { s: [.27, .14, .2], p: [0, .4, -.01], c: H.robeL, l: L_CLOTH });
+    for (let k = 0; k < 14; k++) { const a = k / 14 * TAU, c = Math.cos(a), s = Math.sin(a); rag(S, c * .26, .41, s * .19 - .01, rng.range(.08, .15) * (s < 0 ? 1.3 : 1), .045, k & 1 ? H.robeL : H.robe, rng, [c * .04, s * .03]); }
+    for (let k = 0; k < 5; k++) rag(S, (k - 2) * .07, .44, -.17, rng.range(.42, .58), .045, k & 1 ? H.robe : H.robeD, rng, [0, -.05]);
+    for (let k = 0; k < 4; k++) S.box(.012, .3, .012, (k - 1.5) * .05, .2, .135, H.robeD, { jit: 0, r: [-.1, 0, (k - 1.5) * .05] });
+    S.ico(.035, 0, .4, .17, H.bone, { d: 0, l: L_BONE, sc: [1, 1.2, .6] }); S.box(.1, .015, .015, 0, .4, .165, H.ironL, { l: L_METAL, jit: 0 });
+    for (let k = 0; k < 3; k++) { const x = (k - 1) * .035; S.seg([x, .38, .17], [x * 1.3, .3 - (k & 1) * .03, .175], .006, .006, H.ironL, { n: 3, l: L_METAL }); S.ico(.014, x * 1.3, .29 - (k & 1) * .03, .175, H.bone, { d: 0, l: L_BONE }); }
+  }, 2, { rad: .3 });
+  // The hood: open at the front onto a black void (the pinpoint eyes are sprites from heraldFx), tall and pointed,
+  // a pale-edged rim, side panels falling onto the mantle.
+  K.head = new PartBatch(S => {
+    const T = new Soup();
+    T.add(gDome(10, 5), { s: [.165, .2, .2], p: [0, .12, .02], r: [-HPI, 0, 0], c: H.robe, l: L_CLOTH, dbl: true });
+    T.sph(.13, 0, .12, -.03, COL.black, { sc: [1, 1.2, .55], w: 8, h: 5, jit: 0, rough: 1 });
+    T.add(gTorus(12, .2, 4), { s: [.155, .19, .16], p: [0, .12, .03], c: H.rim, l: L_CLOTH, emis: .05 });
+    T.cone(.15, .3, 0, .33, -.1, H.robe, { n: 8, r: [-.55, 0, 0], l: L_CLOTH });
+    T.cone(.06, .16, 0, .5, -.24, H.robeD, { n: 6, r: [-1.1, 0, 0], l: L_CLOTH });
+    for (const sg of [-1, 1]) T.box(.04, .26, .2, sg * .15, -.0, -.03, H.robe, { l: L_CLOTH, r: [0, 0, sg * -.12] });
+    // Tipped back a little so the opening (and the pinpoints, HERALD.eyeP) still shows from the high camera.
+    S.merge(T, { r: [HERALD.tilt, 0, 0], ao: null });
+    S.box(.3, .1, .14, 0, -.05, -.1, H.robeD, { l: L_CLOTH });
+  }, 2, { rad: .2 });
+  K.uArm = new PartBatch(S => { S.cyl(.062, .3, 0, -.14, 0, H.robe, { n: 7, l: L_CLOTH, rt: 1.1 }); }, 4, { rad: .07 });
+  // A wide, drooping bell sleeve with ragged ends and long grey fingers.
+  K.lArm = new PartBatch(S => {
+    const rng = makeRng(113);
+    S.add(gCyl(9, .42, true), { s: [.12, .32, .11], p: [0, -.15, .01], c: H.robeL, l: L_CLOTH, dbl: true, deform: v => { if (v.y < 0) { const j = vnoise(Math.atan2(v.z, v.x) * 2.2 + 9, 2, 5); v.y += (j - .5) * .1 - (v.z < 0 ? .05 : 0); } } });
+    for (let k = 0; k < 4; k++) { const a = k / 4 * TAU + .5; rag(S, Math.cos(a) * .1, -.31, Math.sin(a) * .09, rng.range(.06, .1), .03, H.robe, rng); }
+    S.box(.05, .05, .045, 0, -.31, .01, H.skin, { l: L_BONE });
+    for (let k = 0; k < 4; k++) { const x = (k - 1.5) * .017; S.seg([x, -.33, .015], [x * 1.4, -.42, .04], .009, .007, H.skin, { n: 3, l: L_BONE }); S.seg([x * 1.4, -.42, .04], [x * 1.5, -.47, .07], .007, .003, H.skin, { n: 3, l: L_BONE }); }
+  }, 4, { rad: .12 });
+  K.uLeg = new PartBatch(S => { S.cyl(.05, .3, 0, -.15, 0, H.robeD, { n: 6, l: L_CLOTH }); }, 4, N);
+  K.lLeg = new PartBatch(S => { S.cyl(.042, .3, 0, -.15, 0, H.robeD, { n: 6, l: L_CLOTH }); S.box(.07, .04, .17, 0, -.3, .05, mulC(H.robeD, .8), { l: L_CLOTH }); S.cone(.03, .07, 0, -.3, .16, H.robeD, { n: 4, r: [HPI, 0, 0] }); }, 4, N);
+  // The crook: a dark, knotted staff, its head bent outward into a hook with bone charms tied on.
+  KIT.item.crook = new PartBatch(S => {
+    const w = H.wood, rng = makeRng(114);
+    let p = [0, -.6, 0]; for (let k = 1; k <= 5; k++) { const q = [rng.range(-.02, .02), -.6 + k * .42, rng.range(-.02, .02)]; S.seg(p, q, .03 - k * .002, .028 - k * .002, w, { n: 5, l: L_WOOD }); S.ico(.034, q[0], q[1], q[2], mulC(w, 1.1), { d: 0, l: L_WOOD }); p = q; }
+    const hook = [[0, 1.5, 0], [-.06, 1.66, 0], [-.2, 1.73, 0], [-.34, 1.68, 0], [-.4, 1.57, 0], [-.38, 1.48, 0]];
+    for (let k = 1; k < hook.length; k++) S.seg(hook[k - 1], hook[k], .026 - k * .002, .024 - k * .002, w, { n: 5, l: L_WOOD });
+    S.cyl(.034, .05, 0, 1.4, 0, H.ironL, { n: 7, l: L_METAL, rough: .5 });
+    for (let k = 0; k < 3; k++) { const a = k * 2.1; S.seg([0, 1.36, 0], [Math.cos(a) * .05, 1.2 - k * .03, Math.sin(a) * .05], .005, .005, COL.rope, { n: 3 }); S.ico(.022, Math.cos(a) * .05, 1.19 - k * .03, Math.sin(a) * .05, H.bone, { d: 0, l: L_BONE }); }
+  }, 2, { rad: .12 });
+  // The cage lantern, hanging from its chain (origin at the top link, hanging down -y). The core is the stolen light.
+  K.lantern = new PartBatch(S => {
+    const ir = H.iron, il = H.ironL, d = H.drop;
+    for (let k = 0; k < 9; k++) S.add(gTorus(6, .3, 3), { s: [.028, .02, .02], p: [0, -.025 - k * .046, 0], r: [0, k & 1 ? HPI : 0, HPI], c: il, l: L_METAL, rough: .5, jit: 0 });
+    S.add(gTorus(8, .25, 3), { s: .03, p: [0, -.19 - d, 0], c: il, l: L_METAL, rough: .5 });
+    S.cone(.085, .07, 0, -.24 - d, 0, ir, { n: 6, l: L_METAL, rough: .5 }); S.cyl(.08, .02, 0, -.275 - d, 0, il, { n: 6, l: L_METAL });
+    for (let k = 0; k < 6; k++) { const a = k / 6 * TAU; S.seg([Math.cos(a) * .072, -.28 - d, Math.sin(a) * .072], [Math.cos(a) * .066, -.45 - d, Math.sin(a) * .066], .008, .008, ir, { n: 3, l: L_METAL }); }
+    S.cyl(.075, .025, 0, -.455 - d, 0, il, { n: 6, l: L_METAL }); S.cone(.04, .07, 0, -.5 - d, 0, ir, { n: 6, l: L_METAL, r: [PI, 0, 0] });
+    S.ico(.045, 0, -.365 - d, 0, H.warm, { d: 1, emis: 1.1, jit: 0 }); S.ico(.026, 0, -.33 - d, 0, [1, .9, .6], { d: 0, emis: 1.6, jit: 0 });
+  }, 2, { rad: .1 });
+  RIGS.herald = rigHerald; EYES.herald = null; RIG_DEATH.herald = 'hollow';
+  // Stand-in stats so the model works on its own. The game's own MON.herald (Mira's) replaces this.
+  if (!MON.herald) MON.herald = { name: 'The Hollow Herald', tip: 'Snuffs your tower lights and calls the echoes of the slain.', hp: 1300, spd: .72, rad: .9, mass: 40, bounty: 220, lives: 5, hitH: 2.2, top: 4.3, dmg: 42, atkT: 1.9, eye: [1.3, 1.7, 2.6], scale: 2.5, boss: true, summon: { type: 'wraith', n: 2, every: 9, max: 99, hp: .6 }, death: 'flesh', cat: 'armor', rig: 'herald' };
+}
+const _hA = new THREE.Vector3();
+function rigHerald(e) {
+  e.weapon = KIT.item.crook; e.wScale = 1.05; e.staffOut = true;
+  const M = rigHuman(KIT.herald, SPEC.herald, e), s = e.scale || 1, t = G.t + (e.lseed || 0) * 3;
+  // The lantern hangs plumb from the crook, swinging a little and trailing back when he walks.
+  _hA.set(-.4, 1.56, 0).applyMatrix4(_M[8]);
+  const dying = e.dying > 0, sx = .1 * Math.sin(t * 1.9) + .28 * (e.mv || 0) + (dying ? .25 * Math.sin(t * 11) : 0), sz = .09 * Math.sin(t * 1.3 + 1.1);
+  const Y = xf(_M[20], null, _hA.x, _hA.y, _hA.z, 0, e.yaw, 0, s, s, s), L = xf(_M[21], Y, 0, 0, 0, sx, 0, sz);
+  KIT.herald.lantern.put(L, 0, null);
+  if (!RIG_CAPTURE) heraldFx(e, M, L);
+  return M;
+}
+// Per drawn step: the lantern's warm glow and light (it flickers, and gutters while he dies), the two cold pinpoints
+// in the hood, dark wisps off the hem, a few pale motes; at the end of the death throes the release (heraldEnd).
+function heraldFx(m, M, L) {
+  if (!(m.vis || m.fly) || m.dead || !G.B) return;
+  const A = FX.add, dt = FX.dt || 0, sc = m.scale || 1, t = G.t + (m.lseed || 0) * 3, H = HERALD, w = H.warm, e = H.eye, dying = m.dying > 0;
+  const fl = (.82 + .12 * Math.sin(t * 9.3) + .08 * Math.sin(t * 23.1)) * (dying ? .55 + .45 * Math.abs(Math.sin(t * 17)) : 1);
+  _d4.set(0, -.36 - H.drop, 0).applyMatrix4(L);
+  A.push(_d4.x, _d4.y, _d4.z, .26 * sc, .26 * sc, 0, 0, w[0] * 2.4, w[1] * 2.2, w[2] * 2, fl, 0, 0, 0, 0);
+  A.push(_d4.x, _d4.y, _d4.z, 1.5 * sc, 1.5 * sc, 0, 0, w[0] * .55, w[1] * .4, w[2] * .25, .55 * fl, 2, 0, 0, 0);
+  m.glowL = true; m.lI = 6.5 * fl; m.lCol = H.light; m.lx = _d4.x; m.ly = _d4.y; m.lz = _d4.z;
+  if (frnd() < dt * 3 * FX.keep) fxPart(_d4.x + frr(-.05, .05) * sc, _d4.y, _d4.z + frr(-.05, .05) * sc, frr(-.15, .15), frr(.3, .8), frr(-.15, .15), frr(.5, 1), frr(.03, .05), w[0] * 2.6, w[1] * 2.2, w[2] * 1.6, { drag: .6, wob: 1, rise: .2 });
+  if (dying && m.dying < .1 && !m._burst) { m._burst = 1; heraldEnd(m, _d4); }
+  // Cold pinpoints in the hood's dark (no face).
+  const ek = (.85 + .15 * Math.sin(t * 6.1)) * (dying ? Math.max(0, 1 - (1.9 - m.dying) * .4) : 1);
+  const P = H.eyeP; for (const sg of [-1, 1]) { _d4.set(sg * P[0], P[1], P[2]).applyMatrix4(M); A.push(_d4.x, _d4.y, _d4.z, .058 * sc, .058 * sc, 0, 0, e[0] * 1.5, e[1] * 1.5, e[2] * 1.5, ek, 0, 0, 0, 0); }
+  _d4.set(0, P[1], P[2]).applyMatrix4(M); A.push(_d4.x, _d4.y, _d4.z, .42 * sc, .3 * sc, 0, 0, e[0] * .12, e[1] * .14, e[2] * .2, .5 * ek, 2, 0, 0, 0);
+  // Dark wisps trailing off the ragged hem (alpha smoke), thinner in a crowd (FX.keep).
+  m._wisp = (m._wisp || 0) + dt * (dying ? 30 : 13) * FX.keep;
+  const k = sc / 2.5, bx = -Math.sin(m.yaw) * .25 * (m.mv || 0), bz = -Math.cos(m.yaw) * .25 * (m.mv || 0);
+  while (m._wisp >= 1) {
+    m._wisp -= 1; const a = frnd() * TAU; _d4.set(Math.cos(a) * .28, -.6, Math.sin(a) * .25 - .05).applyMatrix4(_M[1]);
+    fxSmoke(_d4.x, _d4.y, _d4.z, frr(-.15, .15) + bx, frr(.05, .3), frr(-.15, .15) + bz, frr(1, 1.8), frr(.18, .3) * k, .5 * k, .025, .025, .04, .55, { drag: 1.2, rise: .12 });
+  }
+  if (frnd() < dt * 2) { _d4.set(frr(-.2, .2), frr(.2, .8), frr(-.2, .2)).applyMatrix4(_M[2]); fxPart(_d4.x, _d4.y, _d4.z, frr(-.1, .1), frr(.15, .4), frr(-.1, .1), frr(.6, 1.2), .03, e[0] * .8, e[1] * .8, e[2] * .9, { drag: .8, wob: 1 }); }
+}
+// The Herald's end: the robe falls in on itself as black smoke, a cold flash where the face was, and the lantern
+// bursts: its stolen warm light streams up and away (motes rising, a warm flash, a soft ring on the ground).
+function heraldEnd(m, lp) {
+  const sc = m.scale || 1, k = sc / 2.5, x = m.x, y = m.y, z = m.z, w = HERALD.warm, e = HERALD.eye, lx = lp ? lp.x : x, ly = lp ? lp.y : y + 1.4 * sc, lz = lp ? lp.z : z;
+  fxTimed(5, x, y + 1.55 * sc, z, 4 * k, 4 * k, e[0], e[1], e[2], .9, .25);
+  fxTimed(5, lx, ly, lz, 5 * k, 5 * k, w[0] * 2.4, w[1] * 2, w[2] * 1.6, 1, .35); fxTimed(4, x, y + .1, z, 8 * k, 8 * k, w[0] * 1.4, w[1] * 1.1, w[2] * .8, .8, .7, { ground: true });
+  lightFlash(lx, ly + .5, lz, HERALD.light, 900, .7, 20);
+  for (let i = 0; i < 40; i++) { const a = frnd() * TAU, s = frr(.4, 2.2); fxPart(lx + Math.cos(a) * .2, ly + frr(-.2, .3), lz + Math.sin(a) * .2, Math.cos(a) * s, frr(1.5, 5), Math.sin(a) * s, frr(1.2, 2.6), frr(.04, .08), w[0] * frr(2, 3), w[1] * frr(1.6, 2.4), w[2] * 1.6, { drag: .7, wob: 1, rise: .6 }); }
+  for (let i = 0; i < 18; i++) { const a = frnd() * TAU, s = frr(.4, 1.6); fxSmoke(x + Math.cos(a) * .5, y + frr(.2, 3.2) * k, z + Math.sin(a) * .5, Math.cos(a) * s, frr(-.2, .8), Math.sin(a) * s, frr(1.6, 3), frr(.6, 1.1) * k, 1.6 * k, .02, .02, .035, .7, { drag: 1.3, rise: .2 }); }
+  for (let i = 0; i < 10; i++) { _gm.compose(_gp.set(lx + frr(-.2, .2), ly + frr(-.1, .2), lz + frr(-.2, .2)), _gq.set(frr(-1, 1), frr(-1, 1), frr(-1, 1), 1).normalize(), _gs.setScalar(frr(.5, .9))); addDebris(KIT.bit, _gm, [.18, .18, .2], frr(-3, 3), frr(2, 5), frr(-3, 3), frr(4, 10), frr(2.5, 4), { extra: 1 }); }
+  FX.decals.add(G.B.heightAt, x, z, 2.6 * k, .006, .006, .01, .75, 40, 40);
+}
+DEATH_FX.hollow = (m, kind, ix, iz, up) => { shatter(e => rigMonster(e), m, [ix, 1.4 * up, iz], { spread: 1.3, life: .8, up }); heraldEnd(m, null); };
+
 // ---- Boss portraits and the boss intro card -----------------------------------------------------------------------
 // bossPortrait(kind, size): a canvas (size x size) with a pixel-art bust of the boss MON[kind], painted in code on a
 // 32 x 32 grid and scaled up with hard pixels. Shaded shapes (lit from the upper left, 2x2 ordered dither between
@@ -5187,12 +5403,13 @@ const PORT_RAMP = {
   seaD: ['#061618', '#0e3234', '#1a4c48', '#2c6e66'],
   coral: ['#4a1a22', '#8a3040', '#d0606a', '#ffa8a0'],
   shade: ['#07080c', '#0f1118', '#191c26', '#252a38'],
+  robe: ['#0a0b12', '#161a28', '#262c42', '#3c4564'],
 };
-const PORT_GLOW = { giant: '#ff5a2a', ogre: '#ffb040', jotun: '#8fd8ff', queen: '#ff3a5a', colossus: '#ff8a2a', king: '#5ff0d8', leviathan: '#5ff0e0' };
+const PORT_GLOW = { giant: '#ff5a2a', ogre: '#ffb040', jotun: '#8fd8ff', queen: '#ff3a5a', colossus: '#ff8a2a', king: '#5ff0d8', leviathan: '#5ff0e0', herald: '#8aa4ff' };
 // Titles under the name on the card (a fallback for any other boss).
 const BOSS_TITLE = {
   giant: 'Lord of the Barrows', ogre: 'Eater of Keepers', jotun: 'The Winter That Walks', queen: 'Mother of the Dark Brood',
-  colossus: 'The Mountain\'s Fury', king: 'Sovereign of the Sands', leviathan: 'Tyrant of the Deep',
+  colossus: 'The Mountain\'s Fury', king: 'Sovereign of the Sands', leviathan: 'Tyrant of the Deep', herald: 'Thief of Lanterns',
 };
 const BAYER2 = [0, .5, .75, .25];
 
@@ -5337,6 +5554,23 @@ const PORT_ART = {
     P.put(15, 15, R.seaD[0]); P.put(17, 15, R.seaD[0]);
     for (let i = 0; i < 6; i++) { const x = 10 + i * 2.4, len = 6 + (i % 3) * 3; for (let k = 0; k < len; k++) P.put(Math.round(x + Math.sin(k * .7 + i) * 1.2), 18 + k, k < 2 ? R.sea[1] : R.seaD[2 - (k & 1)]); }
   },
+  herald(P, R) {
+    // A tall pointed hood over a ragged mantle; no face, just the dark and two cold pinpoints. Its cage lantern,
+    // full of stolen warm light, hangs on a chain at the lower left.
+    P.poly([[0, 32], [2, 25], [8, 21], [24, 21], [30, 25], [32, 32]], R.robe, { k: .9 });
+    for (let x = 3; x <= 29; x += 3) P.line(x, 23 + (x % 2), x + 1, 26 + (x % 3), R.robe[0]);
+    P.poly([[16, 0], [21, 6], [25, 15], [26, 23], [6, 23], [7, 15], [11, 6]], R.robe);
+    P.line(16, 0, 11, 6, R.robe[3]); P.line(11, 6, 7, 15, R.robe[2]);
+    P.ell(16, 15.5, 6.2, 7.5, R.shade, { k: .25 });
+    P.ell(16, 16, 4.6, 6, [R.shade[0]], {});
+    for (let a = 0; a < 20; a++) { const t = a / 20 * TAU; P.put(Math.round(16 + Math.cos(t) * 6.6), Math.round(15.5 + Math.sin(t) * 7.9), t > PI * .9 && t < PI * 1.6 ? '#56607e' : R.robe[1]); }
+    P.eye(13, 14, '#e8f0ff'); P.eye(19, 14, '#e8f0ff'); P.eye(13, 15, '#7f9cff', .5); P.eye(19, 15, '#7f9cff', .5);
+    // The lantern: a chain from the top edge, the cage, the warm core.
+    for (let y = 16; y < 24; y++) P.put(4, y, y & 1 ? R.iron[2] : R.iron[1]);
+    P.poly([[2, 24], [7, 24], [6, 26], [3, 26]], R.iron); P.poly([[2, 30], [7, 30], [6, 31], [3, 31]], R.iron);
+    for (let y = 26; y < 30; y++) { P.put(2, y, R.iron[1]); P.put(7, y, R.iron[1]); P.put(3, y, '#ff9a3c'); P.put(5, y, '#ffcf70'); P.put(6, y, '#ff9a3c'); P.put(4, y, R.iron[0]); }
+    P.eye(5, 27, '#fff0b8', .9); P.eye(5, 28, '#ffcf70', .7);
+  },
 };
 // A shape for any boss without a painting: horns and a shadowed head, with its own eye colour.
 function portSilhouette(P, R, kind) {
@@ -5408,7 +5642,10 @@ const BOSSCARD = {
     }
     if (ps < 2) { ps = 2; nameS = 2; }
     const ein = sat(t / .28), eout = sat((this.DUR - t) / .4), slide = (1 - ein * ein * (3 - 2 * ein)) * (w + 8 * s) + (1 - eout) * 14 * s;
-    const x = Math.round(x0 + 2 * s - slide), y = Math.round(y0 + 4 * s), a = Math.min(1, ein * 1.4) * eout;
+    // Under an Eclipse the black sun hangs in the sky at the top left (20-post.js), so the card comes in from the
+    // right instead and leaves the disc clear.
+    const right = (G.eclA || 0) > .05;
+    const x = right ? Math.round(Wr - 2 * s - w + slide) : Math.round(x0 + 2 * s - slide), y = Math.round(y0 + 4 * s), a = Math.min(1, ein * 1.4) * eout;
     c.save(); c.globalAlpha = a;
     // A dark strip with an ember edge, the portrait in a gold frame on its left.
     UI.plate(x, y, w, h, { bd: UI.COLR.ember, bg: 'rgba(12,8,10,0.9)', hi: 'rgba(255,138,60,0.22)' });
