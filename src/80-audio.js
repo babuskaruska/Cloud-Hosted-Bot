@@ -9,7 +9,7 @@ const AU = (function () {
 
   let ctx = null, sr = 44100;
   let nMaster = null, nMute = null, nSfx = null, nAmb = null, nMusic = null, nRevIn = null;
-  let nSting = null, nPad = null, nSeq = null, nMusDuck = null, nCrowd = null, nCrowdDuck = null, nPage = null, nUi = null, nLand = null, nEvt = null;
+  let nSting = null, nPad = null, nSeq = null, nMusDuck = null, nCrowd = null, nCrowdDuck = null, nPage = null, nUi = null, nLand = null, nEvt = null, nBeast = null;
   const PZ = { on: false, sfx: null, amb: null, crowd: null, pad: null, seq: null, rev: null, sting: null };
   let bufWhite = null, bufPink = null, bufBrown = null;
   let V = null;
@@ -852,13 +852,184 @@ const AU = (function () {
     for (let i = 0; i < 3; i++) { const cg = gn(lp); osc(i ? 'sine' : 'triangle', 660 * k * R[i], t + 0.42, 1.0, cg); ad(cg.gain, t + 0.42, 0.11 / (1 + i), 0.002, 0.8 / (1 + i * 0.6)); }
     const th = gn(d), to = osc('triangle', 180 * k, t + 0.42, 0.2, th); sw(to.frequency, t + 0.42, 220 * k, 120 * k, 0.1); ad(th.gain, t + 0.42, 0.25, 0.002, 0.12);
   };
+  // ---- Round 4: the siege ram, goblin shaman, harpy and hell hound. The beast watcher (beastTick, below) plays these
+  // on its own from G.mons; the game may also call ramHit, shamanWard, harpyScreech and houndHowl itself. ----
+  function knock(d, t, vel, f) { // a hollow wooden knock: a short low tone and a dry bark of noise
+    const g = gn(d), o = osc('sine', f, t, 0.12, g); sw(o.frequency, t, f * 1.15, f * 0.9, 0.04); ad(g.gain, t, vel, 0.001, 0.08);
+    const n = gn(d), nf = flt(n, 'bandpass', f * 2.2, 3); noi(t, 0.05, nf); ad(n.gain, t, vel * 0.6, 0.0008, 0.03);
+  }
+  function ironRing(d, t, f, vel, len) { // a dull iron band: inharmonic, short
+    const R = [1, 2.32, 3.86, 5.1];
+    for (let i = 0; i < 4; i++) { const g = gn(d); osc('sine', f * R[i] * rr(0.996, 1.004), t, len / (1 + i * 0.5) + 0.05, g); ad(g.gain, t, vel / (1 + i * 0.8), 0.001, len / (1 + i * 0.5)); }
+  }
+  // A formant voice: a saw (and an optional growl an octave down) through two vowel bands and a chest band.
+  // Returns { env, o, sub, f1, f2 }: the caller shapes the pitch, the vowels and the level.
+  function throat(d, t, dur, f0, growl) {
+    const env = gn(d), src = gn(null, 1), f1 = flt(env, 'bandpass', 500, 4), f2 = flt(gn(env, 0.55), 'bandpass', 1000, 6);
+    src.connect(f1); src.connect(f2); src.connect(flt(gn(env, 0.5), 'lowpass', 280));
+    const o = osc('sawtooth', f0, t, dur, src), sub = growl ? osc('square', f0 / 2, t, dur, gn(src, growl)) : null;
+    return { env: env, o: o, sub: sub, f1: f1, f2: f2 };
+  }
+  S.ramHit = (d, t) => { // the iron-capped log slams a footman aside: a deep thud, a wooden boom, a crack and a dull clank
+    const k = rr(0.9, 1.1), sh = shape(d, 2);
+    const g = gn(sh), o = osc('sine', 85 * k, t, 0.5, g); sw(o.frequency, t, 115 * k, 40 * k, 0.22); ad(g.gain, t, 0.75, 0.003, 0.35);
+    const b = gn(d), bo = osc('triangle', 190 * k, t, 0.3, flt(b, 'lowpass', 900)); sw(bo.frequency, t, 235 * k, 115 * k, 0.14); ad(b.gain, t, 0.75, 0.002, 0.2);
+    const m = gn(d), mf = flt(m, 'bandpass', 340 * k, 1.1); noi(t, 0.3, mf, bufPink); ad(m.gain, t, 2.0, 0.002, 0.17);
+    knock(d, t, 0.5, 300 * k);
+    const c = gn(d), cf = flt(c, 'bandpass', 1500 * k, 1.2); noi(t, 0.06, cf); ad(c.gain, t, 0.45, 0.0008, 0.035);
+    ironRing(flt(d, 'lowpass', 5000), t + 0.005, 410 * k, 0.07, 0.22);
+    grains(d, t + 0.03, 5, 0.25, 0.15, 0.01, 0.03, 500, 1800, 5, 1);
+  };
+  S.ramCreak = (d, t) => { // the frame groaning on its axles, and a wheel knocking over a stone
+    const D = rr(0.45, 1.0), g = gn(d), src = gn(null, 1), fb = rr(380, 620);
+    src.connect(flt(g, 'bandpass', fb, 6)); src.connect(flt(gn(g, 0.4), 'bandpass', fb * 1.7, 8));
+    const o = osc('sawtooth', 24, t, D + 0.05, src); o.frequency.setValueAtTime(rr(16, 22), t); o.frequency.linearRampToValueAtTime(rr(38, 60), t + D * 0.6); o.frequency.linearRampToValueAtTime(rr(20, 28), t + D);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.6, t + D * 0.3); g.gain.linearRampToValueAtTime(0.4, t + D * 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + D);
+    if (rnd() < 0.7) knock(d, t + rr(0.05, D), rr(0.25, 0.4), rr(170, 250));
+  };
+  S.ramDie = (d, t) => { // a splintering crash: the frame snaps, beams clatter down, an iron band rings, the dust settles
+    const sh = shape(d, 2);
+    const g = gn(sh), o = osc('sine', 78, t, 0.6, g); sw(o.frequency, t, 100, 30, 0.4); ad(g.gain, t, 0.9, 0.003, 0.5);
+    const b = gn(d), bf = flt(b, 'bandpass', 260, 0.9); noi(t, 0.6, bf, bufPink); ad(b.gain, t, 1.1, 0.003, 0.45);
+    for (let i = 0; i < 11; i++) { const ti = t + Math.pow(rnd(), 1.6) * 0.65, c = gn(d), cf = flt(c, 'bandpass', rr(700, 2600), rr(3, 8)); noi(ti, 0.08, cf); ad(c.gain, ti, rr(0.2, 0.45), 0.0008, rr(0.02, 0.06)); }
+    const cr = gn(d), cb = flt(cr, 'bandpass', 560, 6), co = osc('sawtooth', 30, t, 0.55, cb); sw(co.frequency, t, 34, 12, 0.5); ad(cr.gain, t, 0.45, 0.02, 0.45);
+    for (let i = 0; i < 9; i++) knock(d, t + 0.22 + i * rr(0.08, 0.14) + rr(0, 0.04), 0.4 * (1 - i * 0.08), rr(230, 650));
+    ironRing(flt(d, 'lowpass', 6000), t + 0.33, rr(360, 420), 0.09, 0.6);
+    const r = gn(d), rf = flt(r, 'lowpass', 170); noi(t + 0.05, 1.5, rf, bufBrown); ad(r.gain, t + 0.05, 0.5, 0.1, 1.2);
+  };
+  // Goblin shaman: a guttural chant on the land's tonic, and a shimmering ward on its scale.
+  S.shamanChant = (d, t) => {
+    const L = landNow(), base = L.tonic - 12, n = 4 + ((rnd() * 4) | 0), sd = rr(0.17, 0.23), hold = rnd() < 0.6 ? rr(0.35, 0.6) : 0;
+    const D = n * sd + hold + 0.25, v = throat(d, t, D + 0.1, mtof(base), 0.4);
+    osc('sine', rr(24, 32), t, D + 0.1, gn(v.o.frequency, mtof(base) * 0.035)); // rasp
+    const F1 = [400, 550, 700, 330], F2 = [800, 1100, 1250, 700], step = [0, 0, 0, 2, -1, 0, 1];
+    v.env.gain.setValueAtTime(0.0001, t);
+    for (let i = 0; i < n; i++) {
+      const ti = t + i * sd, last = i === n - 1, m = last && hold ? deg(L, -3) - 12 : deg(L, step[(rnd() * step.length) | 0]) - 12, vw = (rnd() * 4) | 0, a = rr(0.55, 1) * 0.3;
+      v.o.frequency.setTargetAtTime(mtof(m), ti, 0.02); if (v.sub) v.sub.frequency.setTargetAtTime(mtof(m) / 2, ti, 0.02);
+      v.f1.frequency.setTargetAtTime(F1[vw], ti, 0.02); v.f2.frequency.setTargetAtTime(F2[vw], ti, 0.02);
+      v.env.gain.setTargetAtTime(a, ti, 0.012);
+      if (last && hold) v.env.gain.setTargetAtTime(0.0001, ti + hold, 0.08); else v.env.gain.setTargetAtTime(a * 0.25, ti + sd * 0.7, 0.02);
+      if (rnd() < 0.5) { const c = gn(d), cf = flt(c, 'bandpass', rr(1800, 3200), 2); noi(ti, 0.03, cf); ad(c.gain, ti, 0.05, 0.001, 0.015); } // a k or a t
+    }
+    if (!hold) v.env.gain.setTargetAtTime(0.0001, t + n * sd, 0.04);
+  };
+  S.shamanWard = (d, t) => {
+    const L = landNow(), lp = flt(d, 'lowpass', 9000), up = [0, 2, 4, 7, 9, 11];
+    for (let i = 0; i < up.length; i++) belld(lp, t + i * 0.055, mtof(deg(L, up[i]) + 24), 0.04, 0.9);
+    const sg = gn(lp), tr = gn(sg, 0.5); osc('sine', 9, t, 1.5, gn(tr.gain, 0.5)); // a held chord that shimmers
+    [0, 2, 4].forEach((dg) => { const f = mtof(deg(L, dg) + 24); for (let s = 0; s < 2; s++) { const o = osc('sine', f, t + 0.1, 1.4, gn(tr, 0.12)); o.detune.value = s ? 8 : -8; } });
+    sg.gain.setValueAtTime(0.0001, t + 0.1); sg.gain.linearRampToValueAtTime(0.1, t + 0.35); sg.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    const w = gn(d), wf = flt(w, 'bandpass', 900, 2); noi(t, 0.8, wf, bufPink); sw(wf.frequency, t, 400, 2600, 0.6); ad(w.gain, t, 0.14, 0.3, 0.45);
+    const h = gn(d), ho = osc('triangle', mtof(L.tonic), t, 0.9, flt(h, 'lowpass', 900)); sw(ho.frequency, t, mtof(L.tonic - 5), mtof(L.tonic), 0.3); ad(h.gain, t, 0.16, 0.08, 0.7); // a hum a phone plays
+  };
+  S.shamanDie = (d, t) => { // a choked croak, and its ward magic escaping in a falling shimmer
+    const L = landNow(), v = throat(d, t, 0.5, mtof(L.tonic - 7), 0.5);
+    v.f1.frequency.value = 600; v.f2.frequency.value = 1150; sw(v.o.frequency, t, mtof(L.tonic - 7), mtof(L.tonic - 19), 0.4);
+    osc('sine', 30, t, 0.5, gn(v.o.frequency, 12)); ad(v.env.gain, t, 0.32, 0.02, 0.38);
+    const lp = flt(d, 'lowpass', 9000), dn = [11, 9, 7, 4, 2];
+    for (let i = 0; i < dn.length; i++) belld(lp, t + 0.08 + i * 0.05, mtof(deg(L, dn[i]) + 24), 0.03, 0.6);
+    const w = gn(d), wf = flt(w, 'bandpass', 2000, 1.5); noi(t + 0.05, 0.6, wf, bufPink); sw(wf.frequency, t + 0.05, 2800, 600, 0.5); ad(w.gain, t + 0.05, 0.1, 0.05, 0.45);
+  };
+  // Harpy: a shrill screech as it dives, heavy wing beats, a falling cry.
+  S.harpyScreech = (d, t) => {
+    const k = rr(0.92, 1.08), lp = flt(d, 'lowpass', 6500), g = gn(lp), src = gn(null, 1);
+    src.connect(flt(g, 'bandpass', 2300 * k, 3)); src.connect(flt(gn(g, 0.6), 'bandpass', 3600 * k, 5)); src.connect(flt(gn(g, 0.7), 'bandpass', 1100 * k, 2));
+    for (let i = 0; i < 2; i++) {
+      const o = osc('sawtooth', 1250 * k, t, 0.65, src), fr = o.frequency, b = (i ? 1.012 : 1) * k;
+      fr.setValueAtTime(900 * b, t); fr.exponentialRampToValueAtTime(1500 * b, t + 0.08); fr.linearRampToValueAtTime(1350 * b, t + 0.3); fr.exponentialRampToValueAtTime(950 * b, t + 0.58);
+      osc('sine', rr(34, 42), t, 0.65, gn(fr, 55 * k)); osc('sine', 7, t, 0.65, gn(o.detune, 30));
+    }
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.13, t + 0.04); g.gain.linearRampToValueAtTime(0.1, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.62);
+    const w = gn(d), wf = flt(w, 'bandpass', 700, 1.2); noi(t + 0.1, 0.7, wf, bufPink); sw(wf.frequency, t + 0.1, 500, 1900, 0.6); ad(w.gain, t + 0.1, 0.2, 0.4, 0.3); // the dive's rush of air
+  };
+  S.harpyWings = (d, t) => {
+    const n = 3 + (rnd() < 0.5 ? 1 : 0), per = rr(0.16, 0.22), k = rr(0.85, 1.15);
+    for (let i = 0; i < n; i++) {
+      const ti = t + i * per + rr(-0.01, 0.01), v = i === n - 1 ? 0.6 : 1;
+      const f = gn(d), ff = flt(f, 'bandpass', rr(450, 650) * k, 1.1); noi(ti, 0.18, ff, bufPink); ad(f.gain, ti, 0.8 * v, 0.03, 0.11);
+      const g = gn(d), o = osc('sine', 120 * k, ti, 0.12, g); sw(o.frequency, ti + 0.02, 125 * k, 70 * k, 0.08); ad(g.gain, ti + 0.02, 0.22 * v, 0.01, 0.08);
+    }
+    grains(d, t, 6, n * per, 0.06, 0.004, 0.015, 2200, 4800, 3, 0); // feathers
+  };
+  S.harpyDie = (d, t) => {
+    const k = rr(0.92, 1.08), lp = flt(d, 'lowpass', 6000), g = gn(lp), src = gn(null, 1);
+    src.connect(flt(g, 'bandpass', 2000 * k, 2.5)); src.connect(flt(gn(g, 0.7), 'bandpass', 1000 * k, 2));
+    const o = osc('sawtooth', 1800 * k, t, 0.85, src), fr = o.frequency;
+    fr.setValueAtTime(1700 * k, t); fr.exponentialRampToValueAtTime(2050 * k, t + 0.05); fr.exponentialRampToValueAtTime(560 * k, t + 0.75);
+    const vib = gn(o.detune, 0); osc('sine', 9, t, 0.85, vib); vib.gain.setValueAtTime(10, t); vib.gain.linearRampToValueAtTime(70, t + 0.7);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.17, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    grains(d, t + 0.05, 10, 0.6, 0.08, 0.004, 0.015, 1500, 4200, 3, 1);
+    for (let i = 0; i < 2; i++) { const ti = t + 0.15 + i * 0.2, f = gn(d), ff = flt(f, 'bandpass', 480, 1.3); noi(ti, 0.15, ff, bufPink); ad(f.gain, ti, 0.3 / (1 + i), 0.03, 0.1); }
+  };
+  // Hell hound: snarls, panting, a pack howl on the land's chord, a lick of fire, a yelp and a burst of embers.
+  S.houndSnarl = (d, t) => {
+    const k = rr(0.85, 1.15), D = rr(0.35, 0.6), v = throat(d, t, D + 0.05, 110 * k, 0);
+    v.f1.frequency.value = 650 * k; v.f2.frequency.value = 1400 * k;
+    const fr = v.o.frequency; fr.setValueAtTime(95 * k, t); fr.linearRampToValueAtTime(140 * k, t + 0.1); fr.linearRampToValueAtTime(100 * k, t + D);
+    osc('sine', rr(28, 38), t, D + 0.05, gn(fr, 45 * k)); // the rattle in its throat
+    v.env.gain.setValueAtTime(0.0001, t); v.env.gain.linearRampToValueAtTime(0.42, t + 0.05); v.env.gain.linearRampToValueAtTime(0.32, t + D * 0.7); v.env.gain.exponentialRampToValueAtTime(0.0001, t + D);
+    const b = gn(d), bf = flt(b, 'bandpass', 2200, 1.2); noi(t, D, bf, bufPink); ad(b.gain, t, 0.06, 0.04, D * 0.8);
+    grains(d, t + 0.05, 4, D, 0.06, 0.003, 0.01, 2500, 6000, 3, 0); // embers in its maw
+  };
+  S.houndPant = (d, t) => {
+    const k = rr(0.85, 1.15), n = 4 + ((rnd() * 3) | 0), per = rr(0.11, 0.14);
+    for (let i = 0; i < n; i++) {
+      const ti = t + i * per, out = i % 2 === 0, g = gn(d), f = flt(g, 'bandpass', (out ? 1700 : 1300) * k, 2); noi(ti, per, f, bufPink); ad(g.gain, ti, out ? 0.9 : 0.55, 0.015, per * 0.7);
+      if (out) { const h = gn(d), ho = osc('sawtooth', 150 * k, ti, per, flt(h, 'bandpass', 700 * k, 3)); ho.detune.value = rr(-30, 30); ad(h.gain, ti, 0.2, 0.01, per * 0.6); }
+    }
+  };
+  S.houndHowl = (d, t) => {
+    const L = landNow(), parts = [[0, 0], [0.35, 4], [0.7, 2]];
+    for (let j = 0; j < parts.length; j++) {
+      const t0 = t + parts[j][0] + rr(-0.03, 0.03), m = deg(L, parts[j][1]) + 12, f = mtof(m), D = 1.9 - j * 0.25, env = gn(d), lp = flt(env, 'lowpass', 2600);
+      const o = osc('sine', f, t0, D + 0.1, lp), e = osc('sawtooth', f, t0, D + 0.1, gn(flt(lp, 'bandpass', 950, 2), 0.25)), vib = gn(null, 0);
+      osc('sine', rr(5, 6), t0, D + 0.1, vib); vib.connect(o.detune); vib.connect(e.detune); vib.gain.setValueAtTime(0, t0); vib.gain.linearRampToValueAtTime(18, t0 + D * 0.7);
+      [o, e].forEach((x) => { x.frequency.setValueAtTime(f * 0.75, t0); x.frequency.exponentialRampToValueAtTime(f, t0 + 0.35); x.frequency.setValueAtTime(f, t0 + D * 0.7); x.frequency.exponentialRampToValueAtTime(f * 0.78, t0 + D); });
+      env.gain.setValueAtTime(0.0001, t0); env.gain.linearRampToValueAtTime(0.085, t0 + 0.3); env.gain.linearRampToValueAtTime(0.07, t0 + D * 0.7); env.gain.exponentialRampToValueAtTime(0.0001, t0 + D);
+    }
+    const r = gn(d), rf = flt(r, 'bandpass', 380, 0.8); noi(t, 2.2, rf, bufBrown); ad(r.gain, t, 0.25, 0.5, 1.6); // fire breathing under it
+  };
+  S.houndFire = (d, t) => { // the trail catching: a soft whoosh and a few sparks
+    const k = rr(0.85, 1.2), w = gn(d), wf = flt(w, 'bandpass', 500 * k, 0.9); noi(t, 0.35, wf); sw(wf.frequency, t, 350 * k, 1500 * k, 0.12);
+    w.gain.setValueAtTime(0.0001, t); w.gain.linearRampToValueAtTime(0.45, t + 0.05); w.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+    const g = gn(d), o = osc('sine', 80 * k, t, 0.22, g); sw(o.frequency, t, 70 * k, 115 * k, 0.1); ad(g.gain, t, 0.2, 0.02, 0.15);
+    grains(d, t + 0.04, 4, 0.25, 0.1, 0.003, 0.012, 2000, 5500, 3, 1);
+  };
+  S.houndDie = (d, t) => {
+    const k = rr(0.9, 1.12), g = gn(d), bp = flt(g, 'bandpass', 1200 * k, 2), o = osc('sawtooth', 900 * k, t, 0.28, bp), s = osc('sine', 900 * k, t, 0.28, gn(g, 0.5));
+    [o, s].forEach((x) => { x.frequency.setValueAtTime(950 * k, t); x.frequency.exponentialRampToValueAtTime(1350 * k, t + 0.03); x.frequency.exponentialRampToValueAtTime(480 * k, t + 0.24); });
+    ad(g.gain, t, 0.26, 0.006, 0.22);
+    whoomp(d, t + 0.05, 0.4, 0.45);
+    grains(d, t + 0.1, 8, 0.5, 0.12, 0.004, 0.02, 1800, 5000, 3, 1);
+  };
+  // The first time each new monster shows up: a short cue in the land's key, its own colour per kind
+  // (p: 0 ram, 1/3 shaman, 2/3 harpy, 1 hound).
+  S.newFoe = (d, t, p) => {
+    const L = landNow(), kind = Math.round(p * 3), T = L.tonic, lp = flt(d, 'lowpass', 9000);
+    if (kind === 0) { // ram: two heavy knocks, then a low brass fifth that leans on the minor sixth
+      timpHit(d, t, 0.4, mtof(T - 24)); knock(d, t, 0.4, 210); timpHit(d, t + 0.3, 0.5, mtof(T - 24)); knock(d, t + 0.3, 0.45, 190);
+      [T - 12, T - 5].forEach((n) => brassNote(d, t + 0.3, mtof(n), 0.9, 0.12, 0.85)); brassNote(d, t + 0.75, mtof(deg(L, 5) - 12), 0.5, 0.08, 0.9);
+    } else if (kind === 1) { // shaman: bells climbing the scale to a flat second that does not resolve, over a hum
+      [0, 2, 4, 7].forEach((dg, i) => belld(lp, t + i * 0.09, mtof(deg(L, dg) + 24), 0.05, 1.1)); belld(lp, t + 0.45, mtof(T + 25), 0.05, 1.3);
+      const h = gn(d), ho = osc('triangle', mtof(T - 12), t, 1.2, flt(h, 'lowpass', 800)); ad(h.gain, t, 0.14, 0.2, 0.9);
+    } else if (kind === 2) { // harpy: a reed leaps a minor sixth and slides away, a glint above it
+      reedTone(d, t, deg(L, 0) + 12, 0.22, 0.9); reedTone(d, t + 0.24, deg(L, 5) + 12, 0.6, 1);
+      belld(lp, t + 0.24, mtof(deg(L, 5) + 36), 0.03, 0.9);
+      const w = gn(d), wf = flt(w, 'bandpass', 1200, 1.2); noi(t + 0.2, 0.6, wf, bufPink); sw(wf.frequency, t + 0.2, 600, 2400, 0.5); ad(w.gain, t + 0.2, 0.06, 0.3, 0.3);
+    } else { // hound: a low brass growl steps down, a frame drum, fire under it
+      frameD(d, t, 0.45); frameD(d, t + 0.22, 0.3);
+      brassNote(d, t, mtof(T - 12), 0.35, 0.12, 0.9); brassNote(d, t + 0.4, mtof(deg(L, -1) - 12), 0.7, 0.13, 0.95);
+      const r = gn(d), rf = flt(r, 'bandpass', 420, 0.9); noi(t, 1.2, rf, bufBrown); ad(r.gain, t, 0.22, 0.25, 0.9);
+    }
+  };
   // Pad colours: oscillators, lowpass [start, open min, open max, end], Q, detune and vibrato ranges, levels [root, others], attack,
   // and extras: up (upper notes an octave higher), harm (extra sine partials), sub (an octave-down root), peak (a nasal formant).
   const PADV = {
     saw: { w: ['sawtooth'], lp: [380, 560, 700, 400], q: 0.5, det: [4, 8], vib: [2.5, 4], vhz: [4.4, 5.2], lv: [0.05, 0.036], att: 3.5 },
     glass: { w: ['triangle'], lp: [1100, 1700, 2300, 1100], q: 0.4, det: [2, 4], vib: [1, 2], vhz: [3.5, 4.5], lv: [0.045, 0.034], att: 4.5, up: 12, harm: [2, 0.2, 4.01, 0.05] },
     murk: { w: ['sawtooth'], lp: [240, 360, 440, 260], q: 1.6, det: [9, 15], vib: [5, 8], vhz: [2.2, 3.0], lv: [0.06, 0.042], att: 4 },
-    brass: { w: ['sawtooth', 'square'], lp: [300, 480, 600, 320], q: 1.3, det: [3, 6], vib: [2, 3], vhz: [4.8, 5.4], lv: [0.042, 0.028], att: 2.8, sub: 0.05 },
+    brass: { w: ['sawtooth', 'square'], lp: [330, 560, 720, 350], q: 1.3, det: [3, 6], vib: [2, 3], vhz: [4.8, 5.4], lv: [0.04, 0.027], att: 2.8, sub: 0.045, peak: [520, 1.3, 6] },
     nasal: { w: ['sawtooth'], lp: [520, 800, 950, 560], q: 0.7, det: [5, 9], vib: [3, 5], vhz: [5.5, 6.5], lv: [0.04, 0.03], att: 3, peak: [1050, 1.6, 6] },
   };
   // Hand and frame percussion, written to a destination node.
@@ -876,6 +1047,11 @@ const AU = (function () {
     const g = gn(d), o = osc('sine', 66, t, 0.6, g); sw(o.frequency, t, 84, 62, 0.08); ad(g.gain, t, vel, 0.004, 0.45);
     const b = gn(d), bo = osc('triangle', 150, t, 0.2, b); sw(bo.frequency, t, 180, 130, 0.06); ad(b.gain, t, vel * 0.4, 0.003, 0.14);
     const n = gn(d), nf = flt(n, 'bandpass', 240, 1); noi(t, 0.08, nf, bufPink); ad(n.gain, t, vel * 0.5, 0.002, 0.06);
+  }
+  function heavyD(d, t, vel) { // the ember war drum's skin and stick: the part of a big drum a phone speaker plays
+    const b = gn(d), bo = osc('triangle', 165, t, 0.22, flt(b, 'lowpass', 700)); sw(bo.frequency, t, 200, 112, 0.1); ad(b.gain, t, vel * 0.9, 0.002, 0.16);
+    const n = gn(d), nf = flt(n, 'bandpass', 320, 1.1); noi(t, 0.14, nf, bufPink); ad(n.gain, t, vel * 1.6, 0.002, 0.09);
+    const c = gn(d), cf = flt(c, 'bandpass', 1400, 1.4); noi(t, 0.04, cf); ad(c.gain, t, vel * 0.3, 0.0008, 0.02);
   }
   function woodD(d, t, vel) { // a hollow log tap
     const f = rr(560, 760), g = gn(d), o = osc('sine', f, t, 0.08, g); sw(o.frequency, t, f * 1.1, f, 0.02); ad(g.gain, t, vel, 0.001, 0.05);
@@ -943,21 +1119,37 @@ const AU = (function () {
     spellCancel: [S.spellCancel, 0.08, 0.1, 3, 0.3, 0.7, 1],
     mend: [S.mend, 0.5, 0.4, 2, 1.7, 0.7, 1],
     overcharge: [S.overcharge, 0.2, 0.35, 2, 1.4, 0.7, 2],
+    ramHit: [S.ramHit, 0.14, 0.35, 2, 0.6, 0.85, 2],
+    ramCreak: [S.ramCreak, 0.3, 0.25, 0, 1.1, 0.6, 2],
+    ramDie: [S.ramDie, 0.25, 0.45, 2, 1.9, 0.85, 2],
+    shamanChant: [S.shamanChant, 0.6, 0.35, 0, 2.6, 0.6, 2],
+    shamanWard: [S.shamanWard, 0.3, 0.55, 2, 1.6, 0.7, 2],
+    shamanDie: [S.shamanDie, 0.15, 0.4, 1, 0.8, 0.65, 2],
+    harpyScreech: [S.harpyScreech, 0.3, 0.4, 2, 0.8, 0.6, 2],
+    harpyWings: [S.harpyWings, 0.25, 0.2, 0, 0.9, 0.55, 2],
+    harpyDie: [S.harpyDie, 0.15, 0.35, 1, 0.9, 0.6, 2],
+    houndSnarl: [S.houndSnarl, 0.2, 0.25, 0, 0.65, 0.55, 2],
+    houndPant: [S.houndPant, 0.3, 0.15, 0, 0.9, 0.5, 1],
+    houndHowl: [S.houndHowl, 6, 0.6, 2, 2.6, 0.75, 1],
+    houndFire: [S.houndFire, 0.18, 0.25, 0, 0.5, 0.5, 2],
+    houndDie: [S.houndDie, 0.1, 0.3, 1, 0.8, 0.6, 2],
+    newFoe: [S.newFoe, 1.5, 0.5, 3, 1.8, 1.0, 1],
   });
   // Kinds that share a voice budget, and how hard a sound ducks the music and crowd.
-  const FAM = { cannon: 'boom', explode: 'boom', chainBoom: 'boom', burn: 'fire', ignite: 'fire', ratSqueal: 'die', boneRattle: 'die', squelch: 'die', batScreech: 'die' };
-  const FAMCAP = LOW ? { boom: 4, fire: 3, die: 5 } : { boom: 5, fire: 4, die: 7 };
+  const FAM = { cannon: 'boom', explode: 'boom', chainBoom: 'boom', burn: 'fire', ignite: 'fire', houndFire: 'fire', ratSqueal: 'die', boneRattle: 'die', squelch: 'die', batScreech: 'die', harpyDie: 'die', houndDie: 'die', shamanDie: 'die',
+    ramCreak: 'beast', shamanChant: 'beast', harpyWings: 'beast', houndSnarl: 'beast', houndPant: 'beast' };
+  const FAMCAP = LOW ? { boom: 4, fire: 3, die: 5, beast: 3 } : { boom: 5, fire: 4, die: 7, beast: 5 };
   const DUCK = { cannon: 0.3, explode: 0.4, chainBoom: 0.3, zap: 0.2, roar: 0.5, bossStep: 0.35, bossDie: 0.8, horn: 0.35, hornBoss: 0.5, horde: 0.6, crumble: 0.7, beaconOut: 0.8, rise: 0.5,
-    branch: 0.4, frostNova: 0.3, rally: 0.3, rockslide: 0.4, blizzard: 0.3, bogfog: 0.3, lavaSurge: 0.4, sandstorm: 0.3, bossSting: 0.6 };
+    branch: 0.4, frostNova: 0.3, rally: 0.3, rockslide: 0.4, blizzard: 0.3, bogfog: 0.3, lavaSurge: 0.4, sandstorm: 0.3, bossSting: 0.6, ramHit: 0.15, ramDie: 0.3, houndHowl: 0.25 };
   // Ducks that land later than the call (the meteor hits after its whistle).
   const DUCK_LATE = { meteor: [meteorFall, 0.8] };
   // Exact gaps, no jitter: these are one per event, and the gap is what stops a double start.
-  const NOJIT = { rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1, fanfare: 1, lament: 1, arrival: 1, waveClear: 1 };
+  const NOJIT = { rockslide: 1, blizzard: 1, bogfog: 1, lavaSurge: 1, sandstorm: 1, eventEnd: 1, bossSting: 1, spellReady: 1, fanfare: 1, lament: 1, arrival: 1, waveClear: 1, houndHowl: 1, newFoe: 1 };
   // UI sounds go to their own bus so they still play while the game is paused.
   const UIS = { uiHover: 1, uiClick: 1, uiDeny: 1, menuOpen: 1, uiPreview: 1, spellArm: 1, spellCancel: 1 };
   // Stingers are music: they go to their own bus (the music volume, not ducked), and they hold the music down while they play.
-  const STB = { fanfare: 1, lament: 1, arrival: 1, waveClear: 1 };
-  const HOLD = { fanfare: [3.6, 0.75], lament: [6.6, 0.8], arrival: [4.6, 0.55], waveClear: [1.3, 0.25] }, holds = [];
+  const STB = { fanfare: 1, lament: 1, arrival: 1, waveClear: 1, newFoe: 1 };
+  const HOLD = { fanfare: [3.6, 0.75], lament: [6.6, 0.8], arrival: [4.6, 0.55], waveClear: [1.3, 0.25], newFoe: [1.3, 0.3] }, holds = [];
   const lateDuck = [];
   // Total live voices allowed for each priority (a priority-3 sound may use all of them).
   // A sound that cuts off another (the horde alarm replaces the ordinary wave horn).
@@ -1284,7 +1476,7 @@ const AU = (function () {
           const v = P * (0.22 + 0.3 * I) * hv();
           if (kit === 'frame') kitHit(frameD, t, v * 1.1, rr(-0.1, 0.1), 0.25);
           else if (kit === 'glass') drum(t, v * 0.6, 62);
-          else if (kit === 'heavy') { drum(t, v * 1.1, 50); kitHit(frameD, t, v, 0, 0.3); }
+          else if (kit === 'heavy') { drum(t, v, 50); kitHit(frameD, t, v * 0.8, 0, 0.3); kitHit(heavyD, t, v, rr(-0.1, 0.1), 0.3); }
           else drum(t, v, 55);
         }
       }
@@ -1299,7 +1491,7 @@ const AU = (function () {
     if (L.bass && !SEQ.rest && (sp >= 1 || s % 4 === 0)) { const o = OST[SEQ.ost][s]; if (o !== null) pluck(t, r + o, (0.09 + 0.07 * I) * hv() * (s % 4 === 0 ? 1.15 : 1) * (kit === 'glass' ? 0.8 : 1), sd * (kit === 'glass' ? 2.4 : 1.6), kit === 'frame' ? 3.5 : kit === 'glass' ? 3 : 6); }
     if (L.war) {
       if (kit === 'hand') { const w = MAQW[s]; if (w) { if (w > 0) taiko(t, w * (0.25 + 0.3 * I) * hv(), 70); else kitHit(tekD, t, -w * (0.3 + 0.3 * I) * hv(), rr(-0.4, 0.4), 0.3); } }
-      else { const w = WAR[SEQ.pat][s]; if (w && (sp >= 1 || s % 4 === 0)) taiko(t, w * (0.25 + 0.3 * I) * hv() * (kit === 'glass' ? 0.7 : kit === 'heavy' ? 1.15 : 1), kit === 'heavy' ? 50 : kit === 'frame' ? 54 : kit === 'glass' ? 68 : 60); }
+      else { const w = WAR[SEQ.pat][s]; if (w && (sp >= 1 || s % 4 === 0)) { const tv = w * (0.25 + 0.3 * I) * hv() * (kit === 'glass' ? 0.7 : kit === 'heavy' ? 1.05 : 1); taiko(t, tv, kit === 'heavy' ? 50 : kit === 'frame' ? 54 : kit === 'glass' ? 68 : 60); if (kit === 'heavy') kitHit(heavyD, t, tv * 0.8, rr(-0.25, 0.25), 0.4); } }
       if (SEQ.bar === 7 && s >= 12) taiko(t + sd * 0.5, 0.18 * hv(), 78 + (s - 12) * 6);
       if (kit === 'heavy' && I > 0.7 && (s === 4 || s === 12) && !SEQ.boss) anvil(t, 0.06);
     }
@@ -1620,7 +1812,9 @@ const AU = (function () {
     let n = 0, ground = 0, near = 0, maxP = 0, wl = 0, wr = 0, big = 0, swarm = 0, boss = null;
     const P = CR.pick; P.length = 0;
     for (let i = 0; i < G.mons.length; i++) {
-      const m = G.mons[i]; if (m.dead || (!m.vis && !m.fly)) continue;
+      const m = G.mons[i]; if (m.dead) continue;
+      const bk = beastKey(m); if (bk) beastMark(m, bk);
+      if (!m.vis && !m.fly) continue;
       const d = m.def;
       if (m.elite && SEQ.heard && !SEQ.heard.has(m)) { SEQ.heard.add(m); if (live) playAt('elite', m.x, m.z, 1); }
       if (d.boss) { if (m.hp > 0 && !(m.dying > 0)) boss = m; else continue; }
@@ -1653,9 +1847,118 @@ const AU = (function () {
     const tot = wl + wr; CR.p = tot > 0 ? 0.7 * (wr - wl) / tot : 0;
     CR.big = ground ? big / ground : 0; CR.swarm = ground ? swarm / ground : 0;
   }
+  // ---- The round 4 monsters, heard from G.mons alone: each kind (m.type, or m.def.rig) gets a first-sighting cue,
+  // a loop or a run of small calls that grows with how many are near the camera, its moves (a ram's shove, a shaman's
+  // ward, a harpy's dive, a hound pack arriving) and its death. Every call goes through play(), so the voice limits hold. ----
+  const BEASTS = { ram: 0, shaman: 1 / 3, harpy: 2 / 3, hound: 1 };
+  // Calls per kind: [sound, calls a second for each nearby one, most calls a second, gain].
+  const BCALL = { ram: [['ramCreak', 0.4, 0.8, 0.8]], shaman: [['shamanChant', 0.35, 0.5, 0.9]], harpy: [['harpyWings', 0.45, 0.9, 0.8]],
+    hound: [['houndSnarl', 0.3, 0.7, 0.8], ['houndPant', 0.22, 0.4, 0.7], ['houndFire', 0.5, 1.0, 0.7]] };
+  const BDONE = {}, BT = { list: [], map: typeof WeakMap === 'function' ? new WeakMap() : null, men: typeof WeakMap === 'function' ? new WeakMap() : null, first: {}, queue: [], qAt: 0, at: 0, packs: [], howlAt: -99, howl: null, acc: {}, sum: {}, beds: {}, rams: 0 };
+  function beastKey(m) {
+    const t = m.type; if (typeof t === 'string' && hasOwn(BEASTS, t)) return t;
+    const r = m.def && m.def.rig; return typeof r === 'string' && hasOwn(BEASTS, r) ? r : null;
+  }
+  function beastMark(m, k) { // from scan(): note that it is still on the field, and start tracking it once it is in view
+    if (!BT.map) return;
+    const now = ctx.currentTime, e = BT.map.get(m);
+    if (e) { if (e !== BDONE) e.at = now; return; }
+    if ((!m.vis && !m.fly) || !(m.hp > 0)) return;
+    const n = { m: m, k: k, at: now, sw: +m.swoop || 0, ca: +m.cast || 0, sh: +m.shove || 0, st: !!m.struck };
+    BT.map.set(m, n); BT.list.push(n);
+    if (G.phase !== 'play') return;
+    if (!BT.first[k]) { BT.first[k] = 1; BT.queue.push(k); }
+    if (k === 'hound') { BT.packs.push(now); if (BT.packs.length > 8) BT.packs.shift(); }
+  }
+  function nearW(x, z) { const d = Math.hypot(x - CAM.x, z - CAM.z); return cl(1.15 - d / 34, 0, 1) * (0.72 + 0.28 * CAM.zoom); }
+  function beastTick(now) {
+    if (typeof G === 'undefined' || !G) return;
+    const live = G.phase === 'play', dt = cl(now - BT.at, 0, 0.5), half = (R.viewW || 40) * 0.5, cy = Math.cos(CAM.yaw), sy = Math.sin(CAM.yaw);
+    BT.at = now;
+    for (const k in BEASTS) { const s = BT.sum[k] || (BT.sum[k] = { w: 0, p: 0, n: 0, pick: [] }); s.w = s.p = s.n = 0; s.pick.length = 0; }
+    let rams = 0;
+    for (let i = BT.list.length - 1; i >= 0; i--) {
+      const e = BT.list[i], m = e.m, k = e.k;
+      if (m.hp <= 0) { if (live || G.phase === 'clear' || G.phase === 'defeat') playAt(k + 'Die', m.x, m.z, 1); }
+      else if (!m.dead && now - e.at < 2.5) {
+        if (live) {
+          const sw = +m.swoop || 0, ca = +m.cast || 0, sh = +m.shove || 0, st = !!m.struck;
+          if (k === 'harpy' && sw > 0 && e.sw <= 0) { playAt('harpyScreech', m.x, m.z, 1); playAt('harpyWings', m.x, m.z, 0.9); }
+          if (k === 'shaman' && ca > e.ca + 0.15) playAt('shamanWard', m.x, m.z, 1);
+          if (k === 'ram' && (sh > e.sh + 0.2 || (st && !e.st && m.foe))) playAt('ramHit', m.x, m.z, 1);
+          e.sw = sw; e.ca = ca; e.sh = sh; e.st = st;
+        }
+        if (k === 'ram') rams++;
+        const w = nearW(m.x, m.z), s = BT.sum[k];
+        s.n++; if (w > 0) { s.w += w; s.p += w * cl(((m.x - CAM.x) * cy - (m.z - CAM.z) * sy) / half, -1, 1); if (s.pick.length < 12) s.pick.push(m); }
+        continue;
+      }
+      BT.map.set(m, BDONE); BT.list[i] = BT.list[BT.list.length - 1]; BT.list.pop(); // dead, leaked or gone from the field: never tracked again
+    }
+    BT.rams = rams;
+    // A ram's shove, seen from the footman's side (f.shoveAt is set when a ram knocks him aside).
+    if (rams && G.men && BT.men) for (let i = 0; i < G.men.length; i++) {
+      const f = G.men[i], sa = f.shoveAt; if (typeof sa !== 'number' || sa === BT.men.get(f)) continue;
+      BT.men.set(f, sa); if (live && !(G.t - sa > 0.5)) playAt('ramHit', f.x, f.z, 1);
+    }
+    if (!live) { BT.queue.length = 0; BT.howl = null; return; }
+    // First sightings, one at a time.
+    if (BT.queue.length && now >= BT.qAt) { const k = BT.queue.shift(); play('newFoe', 0, 1, BEASTS[k]); BT.qAt = now + 1.7; }
+    // A pack of hounds comes into view (two or more within two seconds): they howl, after any first-sighting cue.
+    const P = BT.packs; while (P.length && now - P[0] > 2) P.shift();
+    if (P.length >= 2 && now - BT.howlAt > 12 && BT.sum.hound.pick.length) { BT.howlAt = now; BT.howl = [Math.max(now + 0.2, BT.qAt - 0.2), BT.sum.hound.pick[0]]; P.length = 0; }
+    if (BT.howl && now >= BT.howl[0]) { const m = BT.howl[1]; playAt('houndHowl', m.x, m.z, 1); BT.howl = null; }
+    // Small calls from the ones near the camera, more of them the more there are.
+    for (const k in BCALL) {
+      const s = BT.sum[k], C = BCALL[k]; if (!s.pick.length) continue;
+      for (let j = 0; j < C.length; j++) {
+        const c = C[j], key = k + j, rate = Math.min(c[2], c[1] * s.w);
+        BT.acc[key] = (BT.acc[key] || 0) + dt * rate;
+        if (BT.acc[key] >= 1) { BT.acc[key] -= rr(0.6, 1.4); const m = s.pick[(rnd() * s.pick.length) | 0]; playAt(c[0], m.x, m.z, c[3]); }
+      }
+    }
+  }
+  // Loops under the calls: the ram's rumble and rolling wheels, and the hounds' smouldering fire. Built only while needed.
+  const BBED = {
+    ram: { max: 0.34, k: 1.3, make: (o) => {
+      const am = gn(o, 0.6), sq = gn(o, 0);
+      return [loopSrc(bufBrown, flt(gn(o, 1.3), 'lowpass', 110, 0.7), 0.9), // the rumble
+        loopSrc(bufBrown, flt(flt(am, 'bandpass', 240, 1.4), 'highpass', 120), 1.0), // the rolling body, for small speakers
+        loopOsc('sine', 1.35, gn(am.gain, 0.45)), // wheels turning
+        loopSrc(bufPink, flt(sq, 'bandpass', 1250, 16), 1.0), loopOsc('sine', 0.21, gn(sq.gain, 0.04))]; // an axle squeal coming and going
+    } },
+    hound: { max: 0.2, k: 2, make: (o) => {
+      const fg = gn(o, 0.5);
+      return [loopSrc(bufBrown, flt(flt(fg, 'bandpass', 420, 0.9), 'highpass', 150), 1.0), loopOsc('sine', 6.1, gn(fg.gain, 0.2)), loopOsc('sine', 2.7, gn(fg.gain, 0.15)),
+        loopSrc(bufWhite, flt(flt(gn(o, 0.025), 'highpass', 2500), 'lowpass', 6000), 1.0)];
+    } },
+  };
+  function beastBeds(now, adt) {
+    if (!nBeast) return;
+    for (const k in BBED) {
+      const D = BBED[k], b = BT.beds[k] || (BT.beds[k] = { src: null, g: null, pan: null, lvl: 0, idle: 0, aL: -1, aP: -2 }), s = BT.sum[k];
+      const tl = s && G && G.phase === 'play' ? D.max * (1 - Math.exp(-s.w / D.k)) : 0, tp = s && s.w > 0 ? 0.8 * s.p / s.w : 0;
+      b.lvl += (tl - b.lvl) * (1 - Math.exp(-adt / 0.7));
+      if (tl > 0.005 && !b.src) {
+        b.pan = panNode(tp, nBeast); b.g = gn(b.pan, 0);
+        try { b.src = D.make(b.g); } catch (e) { b.src = []; if (!ST.err) ST.err = 'bed ' + k + ': ' + e.message; }
+        b.aL = b.aP = -2; b.idle = 0;
+      } else if (b.src && tl <= 0.005 && b.lvl < 0.003 && (b.idle += adt) > 2) {
+        const src = b.src, g = b.g, p = b.pan; b.src = null;
+        g.gain.setTargetAtTime(0, now, 0.02);
+        for (let i = 0; i < src.length; i++) src[i].stop(now + 0.15);
+        if (src.length) src[0].onended = () => { try { g.disconnect(); p.disconnect(); } catch (e) {} };
+      }
+      if (b.src) {
+        if (tl > 0.005) b.idle = 0;
+        if (Math.abs(b.lvl - b.aL) > 0.003) { b.aL = b.lvl; b.g.gain.setTargetAtTime(b.lvl, now, 0.2); }
+        if (b.pan.pan && Math.abs(tp - b.aP) > 0.03) { b.aP = tp; b.pan.pan.setTargetAtTime(tp, now, 0.4); }
+      }
+    }
+  }
   function stats() {
     const L = SEQ.lay;
-    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(','), land: LS.key, music: LM.key || '', event: LS.evKind, paused: PZ.on, hidden: hidden, state: ctx ? ctx.state : 'none' });
+    return Object.assign({}, ST, { voices: act.length, intensity: +SEQ.I.toFixed(3), crowdLvl: +CR.lvl.toFixed(3), bpm: Math.round(SEQ.bpm), boss: SEQ.bossKey, horde: +SEQ.horde.toFixed(2), low: +SEQ.low.toFixed(2), layers: Object.keys(L).filter((k) => L[k]).join(','), land: LS.key, music: LM.key || '', beasts: BT.list.length, beastBeds: Object.keys(BT.beds).filter((k) => BT.beds[k].src).join(','), event: LS.evKind, paused: PZ.on, hidden: hidden, state: ctx ? ctx.state : 'none' });
   }
 
   function softClip() {
@@ -1687,6 +1990,7 @@ const AU = (function () {
     PZ.pad = gn(nMusic, 1); PZ.seq = gn(nMusic, 1); nPad = gn(PZ.pad, 1); nSeq = gn(PZ.seq, 1.5);
     PZ.sting = gn(nMute, 1); nSting = gn(PZ.sting, STING_LVL * VOL.music);
     nCrowdDuck = gn(PZ.crowd, 1);
+    nBeast = gn(nCrowdDuck, VOL.crowd); // the new monsters' loops: crowd volume, ducked and paused with the crowd
     nLand = gn(nAmb, 1); nEvt = gn(nAmb, 1);
     makeBuffers();
     const conv = ctx.createConvolver(); conv.buffer = makeImpulse();
@@ -1751,7 +2055,7 @@ const AU = (function () {
     if (bus === 'sfx') nUi.gain.setTargetAtTime(VOL.sfx, now, 0.05);
     if (bus === 'music') nSting.gain.setTargetAtTime(STING_LVL * VOL.music, now, 0.05);
     const rv = { sfx: RV.sfx, music: RV.music, ambience: RV.amb, crowd: RV.crowd }[bus]; if (rv) rv.gain.setTargetAtTime(VOL[bus], now, 0.05);
-    if (bus === 'crowd') appM.crowd = -1;
+    if (bus === 'crowd') { appM.crowd = -1; if (nBeast) nBeast.gain.setTargetAtTime(VOL.crowd, now, 0.05); }
   }
   function setMuted(b) {
     api.muted = !!b;
@@ -1762,7 +2066,8 @@ const AU = (function () {
   function setM(key, param, v, now, tc) { if (Math.abs(v - appM[key]) > 0.005) { appM[key] = v; param.setTargetAtTime(v, now, tc); } }
   function reactive(now) {
     const adt = cl(now - SEQ.lastNow, 0, 0.25); SEQ.lastNow = now;
-    if (now >= SEQ.scanAt) { SEQ.scanAt = now + 0.125; scan(); }
+    if (now >= SEQ.scanAt) { SEQ.scanAt = now + 0.125; scan(); beastTick(now); }
+    beastBeds(now, adt);
     // Danger rises in a couple of seconds and settles slowly, so the music never flickers.
     SEQ.I += (SEQ.tI - SEQ.I) * (1 - Math.exp(-adt / (SEQ.tI > SEQ.I ? 1.6 : 5.5)));
     SEQ.horde += (SEQ.hordeT - SEQ.horde) * (1 - Math.exp(-adt / (SEQ.hordeT ? 1.0 : 3.0)));
