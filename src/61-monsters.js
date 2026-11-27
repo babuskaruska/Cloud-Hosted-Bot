@@ -38,6 +38,10 @@ const MON = {
   queen: { name: 'Brood Queen', tip: 'Keeps hatching spiders.', hp: 1150, spd: .85, rad: 1.1, mass: 40, bounty: 200, lives: 5, hitH: 1.0, top: 2.0, dmg: 40, atkT: 1.5, eye: [3.8, .3, .9], scale: 4.2, boss: true, summon: { type: 'spider', n: 2, every: 8, max: 99, hp: 1 }, death: 'bug', cat: 'armor', tint: [.85, .55, 1.0] },
   colossus: { name: 'Magma Colossus', tip: 'Speeds up when it is nearly dead.', hp: 1250, spd: .7, rad: 1.05, mass: 60, bounty: 200, lives: 5, hitH: 2.2, top: 4.3, dmg: 60, atkT: 2.0, eye: [4, 1.6, .3], scale: 3.0, boss: true, armor: .85, slowRes: .3, enrage: [.3, 1.25], death: 'rock', cat: 'armor', tint: [1.5, .5, .26] },
   king: { name: 'The Buried King', tip: 'Summons mummies to walk with him.', hp: 1250, spd: .86, rad: .92, mass: 40, bounty: 200, lives: 5, hitH: 2.2, top: 4.2, dmg: 46, atkT: 1.7, eye: [.6, 3.0, 2.6], scale: 2.7, boss: true, summon: { type: 'mummy', n: 1, every: 9, max: 99, hp: .7 }, death: 'bones', blade: true, cat: 'armor', tint: [1.2, 1.0, .55] },
+  // Round 11 (Long Night only, see NIGHT_BOSS in 62-game.js): the Hollowing's messenger. snuff: every few seconds its
+  // cage-lantern drinks the light of the towers within r (they go dark and stop for t seconds; heraldSnuff in 62-game.js);
+  // call: it calls n echo ghosts of the road's dead behind it. Model: RIGS.herald (Ash), else the stand-in below.
+  herald: { name: 'The Hollow Herald', tip: 'Snuffs the lights of towers near it and calls echo ghosts. Spread your towers and burn it fast.', hp: 1050, spd: .8, rad: .8, mass: 36, bounty: 200, lives: 5, hitH: 2.0, top: 4.3, dmg: 40, atkT: 1.6, eye: [2.6, 2.3, 1.2], scale: 2.5, boss: true, snuff: { every: 11, r: 4.2, t: 1.8 }, call: { every: 13, n: 2, hp: .3, max: 8 }, enrage: [.3, 1.15], death: 'bones', cat: 'armor', rig: 'herald', tint: [.62, .56, .86] },
   leviathan: { name: 'The Drowned King', tip: 'Raises the drowned and sweeps a tidal wave down the road. Freeze the wave to break it.', hp: 1250, spd: .8, rad: 1.0, mass: 50, bounty: 200, lives: 5, hitH: 2.1, top: 4.1, dmg: 50, atkT: 1.8, eye: [.4, 3.0, 2.6], scale: 2.75, boss: true, summon: { type: 'drowned', n: 2, every: 8.5, max: 99, hp: .55 }, tide: { every: 12, len: 7.5, dur: 1.5, push: 7, dmg: 16, haste: .4, hasteT: 3.5 }, enrage: [.3, 1.2], death: 'flesh', blade: true, cat: 'armor', rig: 'leviathan' },
 };
 
@@ -48,7 +52,7 @@ function spawnMonster(type, o = {}) {
     x: 0, y: 0, z: 0, yaw: 0, ph: rnd() * 6, mv: 1, vf: def.spd, spdNow: def.spd, spdMul: rr(.93, 1.07) * (o.spdMul || 1), slowT: 0, slowF: 0,
     flash: 0, flinch: 0, atk: -1, cd: rr(.1, .5), foe: null, prog: 0, vis: false, dead: false, dying: 0, ks: 0, kl: 0, hop: rnd(), rad: def.rad * (o.radMul || 1), mass: def.mass,
     hitH: def.hitH, scale: def.scale * rr(.95, 1.05), fly: !!def.fly, torch: false, flame: null, tint: (bt && bt[type]) || def.tint || null, men: 0, struck: false, step: 0, alive: true, lI: 0, lx: 0, ly: 0, lz: 0, lseed: rnd() * 9, vx: 0, vz: 0, pop: o.pop || 0,
-    haste: 0, hitAt: -9, beat: rnd() * 6, eth: false, gT: rnd() * 4, cast: 0, sumN: 0, sumT: def.summon ? def.summon.every * rr(.45, .7) : 0, stT: def.stomp ? def.stomp.every * .6 : 0, rage: false, tdT: def.tide ? def.tide.every * .5 : 0, tideT: 0, tideH: 0,
+    haste: 0, hitAt: -9, beat: rnd() * 6, eth: false, gT: rnd() * 4, cast: 0, sumN: 0, sumT: def.summon ? def.summon.every * rr(.45, .7) : 0, stT: def.stomp ? def.stomp.every * .6 : 0, snT: def.snuff ? def.snuff.every * .5 : 0, clT: def.call ? def.call.every * .35 : 0, stolen: 0, rage: false, tdT: def.tide ? def.tide.every * .5 : 0, tideT: 0, tideH: 0,
     // Round 4 state (Ash's rigs may read these): shove 0-1 after a ram hit; swoop 0 cruise / 1 dive / 2 carrying, carry = the footman held,
     // low = near the ground; wardT = time to the next ward cast; trailT = time to the next fire patch.
     shove: 0, swoop: 0, swT: def.swoop ? rr(2, 4) : 0, carry: null, prey: null, low: false, wardT: def.wardCast ? def.wardCast.every * rr(.3, .55) : 0, trailT: def.trail ? rr(.1, .4) : 0,
@@ -179,9 +183,11 @@ const RIG_STANDIN = {
   harpy: m => standIn(m, [1.3, .95, .7], e => rigBat(e, KIT.garg, .1, .06)),
   hound: m => standIn(m, [1.25, .42, .3], rigWolf),
   // Round 6 stand-in until RIGS.leviathan lands: a sea-green ogre with a pike for a trident.
+  // Round 11 stand-in until RIGS.herald lands: a tall hooded, robed figure on the giant's frame with a long staff.
+  herald: m => standIn(m, [.5, .46, .72], e => { e.weapon = KIT.item.staff; e.wScale = 1.6; e.staff = true; e.hood = true; e.robe = true; return rigHuman(KIT.giant, SPEC.skel, e); }),
   leviathan: m => standIn(m, [.34, .66, .7], e => { e.weapon = KIT.item.pike; e.wScale = 1.5; e.heavy = true; e.crown = true; return rigHuman(KIT.ogre, SPEC.ogre, e); }),
 };
-const EYE_STANDIN = { ram: 'golem', shaman: 'ghoul', harpy: 'gargoyle', hound: 'wolf', leviathan: 'ogre' };
+const EYE_STANDIN = { ram: 'golem', shaman: 'ghoul', harpy: 'gargoyle', hound: 'wolf', leviathan: 'ogre', herald: 'giant' };
 const EYES = {
   skel: SKEL_EYE, knight: SKEL_EYE, giant: [.058, .185, .152, .075], ogre: OGRE_EYE, rat: [.05, .03, .42, .05], bat: [.04, .03, .16, .05], slime: [.13, .2, .44, .08], slimelet: [.13, .2, .44, .08],
   ghoul: OGRE_EYE, brute: OGRE_EYE, jotun: OGRE_EYE, golem: [.04, .1, .17, .05], colossus: [.04, .1, .17, .05], necro: SKEL_EYE, drummer: SKEL_EYE, bomber: SKEL_EYE, mummy: SKEL_EYE, king: [.058, .185, .152, .075],
@@ -206,7 +212,7 @@ function drawMonster(m, t) {
   }
   if (ty === 'wisp') { const k = m.tint || [1, 1, 1]; FX.add.push(m.x, m.y, m.z, .26, .26, 0, 0, k[0] * 2.2, k[1] * 2.2, k[2] * 2.2, tw, 0, 0, 0, 0); FX.add.push(m.x, m.y, m.z, 1.5, 1.5, 0, 0, k[0] * .5, k[1] * .5, k[2] * .5, .5 * tw, 2, 0, 0, 0); m.lx = m.x; m.ly = m.y; m.lz = m.z; if (rnd() < .3) fxPart(m.x + rr(-.05, .05), m.y + rr(-.05, .05), m.z + rr(-.05, .05), -m.vx * .2, rr(-.2, .2), -m.vz * .2, rr(.3, .6), .05, k[0] * 1.6, k[1] * 1.6, k[2] * 1.6, { drag: 1 }); }
   else if (ty === 'wraith') { const a = m.eth ? .5 + .2 * Math.sin(t * 23) : .16; FX.add.push(m.x, m.y + .75 * sc, m.z, 2.3 * sc, 2.6 * sc, 0, 0, .25, .55, 1.2, a, 2, 0, 0, 0); if (m.eth && rnd() < .3) fxPart(m.x + rr(-.25, .25), m.y + rr(.1, 1.3), m.z + rr(-.25, .25), 0, rr(.3, .9), 0, rr(.3, .6), .05, .5, 1.0, 2.0, { drag: .5 }); }
-  else if (ty === 'necro' || ty === 'queen' || ty === 'king' || ty === 'leviathan') { if (m.cast > 0) { const g = ty === 'necro' ? [.4, 1.6, .6] : ty === 'queen' ? [1.2, .5, 1.6] : ty === 'leviathan' ? [.3, 1.3, 1.5] : [.4, 1.5, 1.3]; FX.add.push(m.x, m.y + m.hitH * 1.6, m.z, 3.2 * m.cast * sc, 3.2 * m.cast * sc, 0, 0, g[0], g[1], g[2], .28 * m.cast, 2, 0, 0, 0); } }
+  else if (ty === 'necro' || ty === 'queen' || ty === 'king' || ty === 'leviathan' || ty === 'herald') { if (m.cast > 0) { const g = ty === 'necro' ? [.4, 1.6, .6] : ty === 'queen' ? [1.2, .5, 1.6] : ty === 'leviathan' ? [.3, 1.3, 1.5] : ty === 'herald' ? [1.5, 1.25, .6] : [.4, 1.5, 1.3]; FX.add.push(m.x, m.y + m.hitH * 1.6, m.z, 3.2 * m.cast * sc, 3.2 * m.cast * sc, 0, 0, g[0], g[1], g[2], .28 * m.cast, 2, 0, 0, 0); } }
   else if (ty === 'ram' || ty === 'shaman' || ty === 'harpy' || ty === 'hound') drawMonster4(m, t, ty, M, tw, sc);
   else if (ty === 'colossus' && rnd() < (m.rage ? .5 : .12)) fxPart(m.x + rr(-.7, .7), m.y + rr(.6, 3), m.z + rr(-.7, .7), rr(-.3, .3), rr(.6, 1.8), rr(-.3, .3), rr(.6, 1.2), rr(.05, .08), 2.6, .9, .15, { drag: .3, wob: 1, rise: .3 });
   // A shaman's ward (not the shielded elite's, which has its own aura): a soft green-blue shell that pulses when cast.
@@ -389,6 +395,9 @@ function updateUnits(dt) {
         for (const tw of G.towers) if (tw.alive && tw.state === 'active' && dist2(tw.x, tw.z, m.x, m.z) < sp.r * sp.r) { tw.stun = sp.stun; fxTimed(5, tw.x, tw.y + 2, tw.z, 3, 3, .6, 1.2, 2.4, .9, .3); }
       }
     }
+    // The Hollow Herald's lantern and its call (62-game.js).
+    if (def.snuff && m.vis && !m.dying) heraldSnuff(m, dt);
+    if (def.call && m.vis && !m.dying) heraldCall(m, dt);
     // The Drowned King's tidal wave (startTide / updateTides in 62-game.js), more often once it is enraged.
     if (def.tide && m.vis && m.s > B.cave.s + 3) { m.tdT -= dt; if (m.tdT <= 0) { m.tdT = def.tide.every * (m.rage ? .65 : 1); startTide(m); } }
     if (def.wardCast && m.vis && !m.dying) shamanWard(m, dt);

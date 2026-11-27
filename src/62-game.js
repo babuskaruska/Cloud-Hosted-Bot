@@ -39,7 +39,41 @@ function waveMenu(k, level) {
   }
   return menu;
 }
-function bossType() { const b = G.B.bio.boss; return b[Math.floor(G.level / BIOMES.length) % b.length]; }
+// Long Night bosses of their own, which no hand-made land sends: NIGHT_BOSS[type] = { every, at } makes it the boss of
+// the generated lands at night index d = G.level - 6 where d >= at and (d - at) % every === 0 (the Herald: the third night
+// land, then every fourth). procBiome's own bio.boss list stays as Ash made it; this is the one hook.
+const NIGHT_BOSS = { herald: { every: 4, at: 2 } };
+function nightBoss(level) { if (level < BIOMES.length) return null; const d = level - BIOMES.length; for (const k in NIGHT_BOSS) { const nb = NIGHT_BOSS[k]; if (MON[k] && d >= nb.at && (d - nb.at) % nb.every === 0) return k; } return null; }
+function bossType() { const b = G.B.bio.boss; return (G.B.bio.key === 'proc' && nightBoss(G.level)) || b[Math.floor(G.level / BIOMES.length) % b.length]; }
+// The Hollow Herald (MON.herald). Its cage-lantern drinks the light of the towers near it: they go dark and stop for a
+// moment (tower.snuff, seconds; Ash may read it, m.stolen counts the lights it holds for the lantern's glow). Enraged, it
+// does so more often. Sounds for Echo: 'heraldSnuff' (x, z of the Herald) and 'heraldCall'.
+function heraldSnuff(m, dt) {
+  const sp = m.def.snuff; m.snT -= dt * (m.rage ? 1.45 : 1); if (m.snT > 0) return;
+  m.snT = sp.every; m.cast = 1; let n = 0; const hy = m.y + m.def.top * m.scale / m.def.scale * .8;
+  for (const tw of G.towers) {
+    if (!tw.alive || tw.state !== 'active' || dist2(tw.x, tw.z, m.x, m.z) > sp.r * sp.r) continue;
+    tw.snuff = Math.max(tw.snuff || 0, sp.t); n++;
+    fxBolt([tw.x, tw.y + 2.2, tw.z], [m.x, hy, m.z], .35, [1.5, 1.15, .5], .05);
+    fxTimed(5, tw.x, tw.y + 2, tw.z, 2.6, 2.6, .9, .75, .45, .7, .35);
+  }
+  m.stolen = Math.min(8, (m.stolen || 0) + n);
+  fxTimed(4, m.x, m.y + .08, m.z, sp.r * 2, sp.r * 2, .5, .42, .7, .55, .8, { ground: true });
+  sfx('heraldSnuff', m.x, m.z, 1.1);
+}
+// It calls echo ghosts (pale, half bounty, as the Echoes mutator's) of the road's common dead behind it.
+function heraldCall(m, dt) {
+  const cl = m.def.call; m.clT -= dt; if (m.clT > 0) return;
+  m.clT = cl.every; if (G.mons.length >= MAX_ALIVE * .8 || m.sumN >= cl.max) return; m.sumN++;
+  const menu = waveMenu(G.wavesPerLand, G.level).filter(e => ROSTER[e[0]][0] < 13 && !MON[e[0]].fly); if (!menu.length) return;
+  m.cast = 1; sfx('heraldCall', m.x, m.z, 1);
+  for (let i = 0; i < cl.n; i++) {
+    const ty = menu[Math.floor(rnd() * menu.length)][0], g = spawnMonster(ty, { s: Math.max(.5, m.s - 1.4 - .5 * i), lat: clamp(m.lat + rr(-.6, .6), -.9, .9), hpMul: (m.maxHp / m.def.hp) * cl.hp, pop: .5 });
+    g.echo = true; g.bmul = .5; g.tint = [.62, .78, 1];
+    G.mix.echo = (G.mix.echo || 0) + 1; G.mix[ty] = (G.mix[ty] || 0) + 1;
+    if (G.spdMul !== 1) g.spdMul *= G.spdMul;
+  }
+}
 
 // Elites: tougher, richer monsters with one twist each. m.elite is the key; Ash draws the aura from it.
 const ELITE = {
@@ -451,7 +485,7 @@ function aiSpells() {
     for (const m of M) {
       if (m.dead || m.fly || !m.vis || m.hp <= 0 || m.dying) continue; if (++n > 90 && (n & 1)) continue;
       // The Drowned King is worth a meteor sooner: its summons crowd round it and every wave it sweeps costs footmen.
-      let sc = m.def.boss ? 6 + 8 * m.prog + (m.def.tide ? 4 : 0) : 0;
+      let sc = m.def.boss ? 6 + 8 * m.prog + (m.def.tide || m.def.snuff ? 4 : 0) : 0; // the Herald too: every second it lives, towers go dark
       for (const o of M) if (!o.dead && !o.fly && o.vis && !o.def.boss && dist2(o.x, o.z, m.x, m.z) < 8) sc += (o.elite ? 1.8 : 1) * (.6 + Math.min(1.4, o.maxHp / 250)) * (.7 + .6 * o.prog) + (o.def.wardCast ? 2.5 : 0);
       if (sc > bs) { bs = sc; best = m; }
     }
@@ -506,6 +540,8 @@ function aiThink(dt) {
   // Anti-air: scout what flies this land (sent so far, the next wave's roster and what is in the air now) and weigh it
   // against the board's air power. Gargoyles shrug off arrows, so a shortfall against them asks for spires first.
   const AA = aiAir(towers);
+  // A Herald land: its ghosts want crowd-killers, and its lantern snuffs towers in a circle, so spread the board out.
+  const herald = G.B.bio.key === 'proc' && nightBoss(G.level) === 'herald', snR2 = herald ? MON.herald.snuff.r * MON.herald.snuff.r : 0; if (herald) swarm += 1.5;
   const gatePress = sat(G.leaks / 8);
   const opts = [];
   for (const kind of TOWER_KINDS) {
@@ -520,7 +556,7 @@ function aiThink(dt) {
       if (N < 2) sc *= 1 - Math.abs(rel - .42) * .9;
       sc *= 1 + gatePress * (rel - .5) * .8;
       let syn = 0;
-      for (const t of towers) { const d = Math.hypot(t.x - pad.x, t.z - pad.z); if (kind === 'guard' && t.kind !== 'guard' && d < t.range + 1.5) syn += .16; if (kind !== 'guard' && t.kind === 'guard' && d < def.range[0] + 1) syn += .2; if (t.kind === kind && d < 6) syn -= .12; }
+      for (const t of towers) { const d = Math.hypot(t.x - pad.x, t.z - pad.z); if (kind === 'guard' && t.kind !== 'guard' && d < t.range + 1.5) syn += .16; if (kind !== 'guard' && t.kind === 'guard' && d < def.range[0] + 1) syn += .2; if (t.kind === kind && d < 6) syn -= .12; if (d * d < snR2) syn -= .04; }
       if (kind === 'guard') { sc *= .8 + .5 * rel; for (const t of towers) if (t.kind === 'guard' && Math.abs(t.pad.s - pad.s) < 9) syn -= .5; }
       sc *= 1 + syn;
       opts.push({ sc, cost: G.freeTowers > 0 ? 0 : def.cost[0], act: 'build', kind, pad }); // Founding Stone: the first towers are free

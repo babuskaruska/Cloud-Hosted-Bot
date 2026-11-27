@@ -13,7 +13,7 @@ const SPEAKERS = {
   hollow: { name: 'The Hollowing', col: '#c8a8ff' },
   giant: { name: 'Bone Giant', col: '#efe4cd' }, ogre: { name: 'Ogre', col: '#c8d890' }, jotun: { name: 'Frost Jotun', col: '#9fd4ff' },
   queen: { name: 'Brood Queen', col: '#e0a0e8' }, colossus: { name: 'Magma Colossus', col: '#ffa060' }, king: { name: 'The Buried King', col: '#f0d890' },
-  leviathan: { name: 'The Drowned King', col: '#90e8d8' },
+  leviathan: { name: 'The Drowned King', col: '#90e8d8' }, herald: { name: 'The Hollow Herald', col: '#e8d8a0' },
 };
 // Each beat: a title (for the Codex) and its lines as [speaker, text].
 const BEATS = {
@@ -53,6 +53,16 @@ const BEATS = {
   'boss:colossus': { title: 'The Magma Colossus', lines: [['colossus', 'I was fire before your kind learned to fear it.']] },
   'boss:king': { title: 'The Buried King', lines: [['king', 'Kneel, torch-bearer. The dead are owed their tribute.']] },
   'boss:leviathan': { title: 'The Drowned King', lines: [['leviathan', 'The sea took every keeper before you. The sea is patient.']] },
+  'boss:herald': { title: 'The Hollow Herald', lines: [
+    ['herald', 'Hush, little flame. I carry a hundred beacons in this cage. Yours will make a hundred and one.'],
+    ['ghost', 'That light in its lantern was ours once. Break the cage, Keeper.'],
+  ] },
+  // The Long Night: the first land where the Herald walks (STORY.landStart, nightBoss in 62-game.js).
+  herald: { title: 'The Herald', lines: [
+    ['ghost', 'Something walks ahead of the dark tonight. A tall thing, carrying a lantern that does not burn.'],
+    ['ghost', 'The Hollowing\'s herald. It steals light. Do not crowd your towers where it walks.'],
+    ['keeper', 'Then it can try to steal mine.'],
+  ] },
   ending: { title: 'Six Fires', lines: [
     ['ghost', 'Six fires burn again. I could rest now, Keeper... almost.'],
     ['ghost', 'But the Hollowing has no bottom. Past the last beacon the night goes on, and the lands change shape in it.'],
@@ -101,7 +111,7 @@ const BEATS = {
   ] },
 };
 const NIGHT_POOL = Object.keys(BEATS).filter(k => /^night:\d+$/.test(k));
-const BEAT_ORDER = ['intro', 'land:ashen', 'boss:giant', 'clear:first', 'land:frost', 'boss:jotun', 'land:fen', 'boss:queen', 'halfway', 'land:ember', 'boss:colossus', 'land:dunes', 'boss:king', 'land:storm', 'boss:leviathan', 'ending', 'boss:ogre', 'return', 'heat', 'night:enter', 'daily'].concat(NIGHT_POOL);
+const BEAT_ORDER = ['intro', 'land:ashen', 'boss:giant', 'clear:first', 'land:frost', 'boss:jotun', 'land:fen', 'boss:queen', 'halfway', 'land:ember', 'boss:colossus', 'land:dunes', 'boss:king', 'land:storm', 'boss:leviathan', 'ending', 'herald', 'boss:herald', 'boss:ogre', 'return', 'heat', 'night:enter', 'daily'].concat(NIGHT_POOL);
 
 // Portraits, 16x16, drawn in code. One letter per pixel; '.' is clear.
 const PORTRAIT_PAL = {
@@ -273,6 +283,24 @@ const PORTRAITS = {
     '.....oooooo.....',
     '................',
   ],
+  herald: [
+    '.....oooooo.....',
+    '....okkkkkko....',
+    '...okkKKKKkko...',
+    '..okkKooooKkko..',
+    '..okKoKKKKoKko..',
+    '..okKoYKKYoKko..',
+    '..okKoKKKKoKko..',
+    '..okkKoKKoKkko..',
+    '.okkkKKooKKkkko.',
+    '.okSkkKKKKkkSko.',
+    'okSSkkkKKkkkSSko',
+    'okSoGGokkkkkSSko',
+    'oSSoYEoSkkkSSSSo',
+    'oSSoGGoSSkSSSSSo',
+    'oSSSooSSSSSSSSSo',
+    'oooooooooooooooo',
+  ],
   leviathan: [
     '..G..G.GG.G..G..',
     '..GooGoGGoGooG..',
@@ -354,6 +382,7 @@ const STORY = {
     if (restoring || !inRun()) return;
     if (G.level < CAMPAIGN_LANDS) this.play('land:' + G.B.bio.key);
     else {
+      if (nightBoss(G.level) === 'herald') this.play('herald'); // once per keeper, the first land the Herald walks
       const d = nightDepth(), first = META.run && META.run.level0 === G.level;
       if (first && G.mode === 'daily') this.play('daily');
       else if (first && G.mode === 'night') this.play('night:enter');

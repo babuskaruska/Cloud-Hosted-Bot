@@ -270,6 +270,8 @@ function startRun(mode, heat) {
   // A run starts with the lifetime sightings, so "New:" tips only show for monsters this keeper has not met in a run.
   G.seen = {}; for (const k in META.seen) G.seen[k] = 1;
   META.run = { mode: G.mode, heat: G.heat, level0: G.level, banked: false, ending: false, t: 0, notes: [], ach: [], day: G.mode === 'daily' ? dailyDate() : '' };
+  // For Echo's daily sting: true only for a daily started fresh from the menu, never for one continued from a save.
+  G.dailyFresh = G.mode === 'daily';
   applyMeta(); G.mana = 30; G.rerolls = upVal('reroll');
   TUT.maybeStart();
   if (TUT.active()) UI.everManual = true; // the tutorial replaces the first "You command" help line
@@ -281,7 +283,7 @@ function startRun(mode, heat) {
 // Back to the AI demo behind the main menu: a fresh random land, the commander in charge, every number back to 1.
 function startDemo() {
   STORY.clear(); TUT.stop(); SAVE.hold = false;
-  G.mode = 'demo'; G.heat = 0; META.run = null; G.holdClear = false; MENU.victory = null; applyMeta(); G.maxLives = 20;
+  G.mode = 'demo'; G.heat = 0; META.run = null; G.dailyFresh = false; G.holdClear = false; MENU.victory = null; applyMeta(); G.maxLives = 20;
   BIOME.start = Math.floor(Math.random() * BIOMES.length) - G.boardIndex;
   G.level = 0; G.advance = false; G.newRun = true; G.evLevel = -1; G.run++; G.press = 1; G.speed = 1; G.paused = false; G.modLevel = -1; setMods([]);
   UI.setManual(false); camReset();
@@ -295,7 +297,7 @@ function abandonRun(how) {
 }
 // Continue: the saved run's mode and Heat come back with it (restoreRun calls this before rebuilding the board).
 function metaRestore(S) {
-  SAVE.hold = false;
+  SAVE.hold = false; G.dailyFresh = false;
   G.mode = S.mode === 'night' || S.mode === 'daily' || S.mode === 'demo' ? S.mode : 'campaign'; G.holdClear = false; MENU.victory = null;
   G.heat = _int(S.heat, 0, HEAT_MAX) ? S.heat : 0; G.runSeed = _int(S.runSeed, 0, 2e9) ? S.runSeed : S.seed;
   G.rerolls = _int(S.rerolls, 0, 9) ? S.rerolls : upVal('reroll');
