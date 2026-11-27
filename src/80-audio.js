@@ -730,6 +730,15 @@ const AU = (function () {
       hornNote(d, t + 0.2, mtof(33), 1.8, 0.14, 0.7);
       const lp = flt(d, 'lowpass', 5000); belld(lp, t + 0.9, mtof(69), 0.06, 2.4); belld(lp, t + 1.9, mtof(69), 0.04, 2.2);
     },
+    herald: (d, t) => { // Round 11, the Hollow Herald: three lights snuffed one by one, a breath drawn in, then a hollow call on a
+      // tritone (low voices D and G#, a low horn under them) that the dark answers twice, softer and farther each time
+      for (let i = 0; i < 3; i++) S.snuff(d, t + i * 0.2);
+      const tc = t + 0.8, w = gn(d), wf = flt(w, 'bandpass', 900, 2); noi(t + 0.25, 0.6, wf, bufPink); sw(wf.frequency, t + 0.25, 2400, 700, 0.55);
+      w.gain.setValueAtTime(0.0001, t + 0.25); w.gain.exponentialRampToValueAtTime(0.14, tc); w.gain.exponentialRampToValueAtTime(0.0001, tc + 0.08);
+      [[38, 0.3], [44, 0.22], [50, 0.15]].forEach((n) => choirTone(d, tc, n[0], 1.5, n[1]));
+      hornNote(d, tc, mtof(26), 1.3, 0.15, 0.6); stingHit(d, tc, 0.85);
+      for (let e = 1; e <= 2; e++) { const te = tc + e * 0.55, lp = flt(d, 'lowpass', 2600 / e); glassTone(lp, te, 74, 1.1 / e); glassTone(lp, te, 80, 0.8 / e); choirTone(lp, te, 50, 0.8, 0.07 / e); }
+    },
   };
   let stingKey = 'giant';
   S.bossSting = (d, t) => { (STING[stingKey] || STING.giant)(d, t); };
@@ -1385,6 +1394,48 @@ const AU = (function () {
     timpHit(d, t0, 0.25, mtof(38));
     const s = gn(d), sf = flt(s, 'bandpass', 1600, 1); noi(t, 0.5, sf, bufPink); sw(sf.frequency, t, 600, 3600, 0.4); ad(s.gain, t, 0.03, 0.3, 0.2);
   };
+  // ---- Round 11: the Hollow Herald (Mira's Long Night boss: it snuffs tower lights and calls echo ghosts). ----
+  // Snuff (Mira calls sfx('snuff', x, z) where a light goes out): a lantern blown out. A short breath falling from
+  // 3 kHz to 700 Hz, the wick's soft "thup", the glass chimney ringing down a semitone as the light dies, and a thread
+  // of smoke hissing after. Under a second, so several in a row stay small.
+  S.snuff = (d, t) => {
+    const k = rr(0.95, 1.05);
+    const b = gn(d), bf = flt(b, 'bandpass', 2800, 1.6); noi(t, 0.45, bf, bufPink); sw(bf.frequency, t, 3200 * k, 700 * k, 0.35);
+    b.gain.setValueAtTime(0.0001, t); b.gain.linearRampToValueAtTime(0.32, t + 0.03); b.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+    const th = gn(d), o = osc('sine', 200 * k, t + 0.02, 0.25, th); sw(o.frequency, t + 0.02, 220 * k, 90 * k, 0.15); ad(th.gain, t + 0.02, 0.35, 0.003, 0.18);
+    const gl = gn(d);
+    for (let i = 0; i < 2; i++) { const f = (i ? 3951 : 2637) * k, go = osc('sine', f, t + 0.04, 0.85, gn(gl, i ? 0.35 : 1)); go.frequency.setValueAtTime(f, t + 0.1); go.frequency.exponentialRampToValueAtTime(f * 0.944, t + 0.8); }
+    ad(gl.gain, t + 0.04, 0.05, 0.004, 0.7);
+    const sm = gn(d), sf = flt(sm, 'highpass', 5000); noi(t + 0.12, 0.6, sf); ad(sm.gain, t + 0.12, 0.025, 0.15, 0.4);
+  };
+  // The Herald falls: its hollow call breaks into a wail that sags and shudders, a heavy blow, and then every light it
+  // snuffed comes back: an ignition whoosh, the lantern motif climbing, and a warm open chord with a bell over it.
+  S.heraldDie = (d, t) => {
+    const D = 1.1, env = gn(d), f1 = flt(env, 'bandpass', 520, 5), f2 = flt(gn(env, 0.5), 'bandpass', 900, 6), src = gn(null, 1);
+    src.connect(f1); src.connect(f2); src.connect(flt(gn(env, 0.5), 'lowpass', 300));
+    const trem = gn(env.gain, 0); osc('sine', 7, t, D + 0.3, trem); trem.gain.setValueAtTime(0, t); trem.gain.linearRampToValueAtTime(0.25, t + D);
+    for (let i = 0; i < 3; i++) { const f = mtof(50 + (i === 2 ? 6 : 0)), o = osc('sawtooth', f, t, D + 0.3, gn(src, 0.3)); o.detune.value = (i - 1) * 12; sw(o.frequency, t + 0.1, f, f * 0.7, D); }
+    env.gain.setValueAtTime(0.0001, t); env.gain.linearRampToValueAtTime(0.45, t + 0.1); env.gain.linearRampToValueAtTime(0.35, t + D * 0.8); env.gain.exponentialRampToValueAtTime(0.0001, t + D + 0.2);
+    const tc = t + D, sh = shape(d, 2);
+    const g = gn(sh), o = osc('sine', 72, tc, 0.9, g); sw(o.frequency, tc, 80, 30, 0.5); ad(g.gain, tc, 0.6, 0.004, 0.55);
+    const n = gn(sh), nf = flt(n, 'lowpass', 1600, 0.7); noi(tc, 0.8, nf); sw(nf.frequency, tc, 2000, 140, 0.55); ad(n.gain, tc, 0.6, 0.003, 0.55);
+    const m = gn(d), mf = flt(m, 'bandpass', 340, 1); noi(tc, 0.7, mf, bufPink); ad(m.gain, tc, 0.5, 0.003, 0.5);
+    grains(d, tc + 0.1, 12, 0.9, 0.22, 0.02, 0.06, 300, 1800, 5, 1);
+    const tl = tc + 0.45, w = gn(d), wf = flt(w, 'bandpass', 600, 1.2); noi(tl - 0.25, 0.6, wf, bufPink); sw(wf.frequency, tl - 0.25, 400, 4200, 0.35);
+    w.gain.setValueAtTime(0.0001, tl - 0.25); w.gain.exponentialRampToValueAtTime(0.18, tl); w.gain.exponentialRampToValueAtTime(0.0001, tl + 0.3);
+    [62, 69, 74, 78, 81].forEach((mm, i) => lanternTone(d, tl + i * 0.09, mm, i === 4 ? 0.9 : 0.6));
+    softChord(d, tl, [50, 57, 62, 66], 1.6, 0.06);
+    belld(flt(d, 'lowpass', 8000), tl + 0.45, mtof(86), 0.03, 1.6);
+  };
+  // Which boss is falling: finishBoss calls sfx('bossDie') while the boss is still in G.mons with no health left.
+  function fallingBoss() {
+    if (typeof G === 'undefined' || !G || !Array.isArray(G.mons)) return '';
+    for (let i = 0; i < G.mons.length; i++) { const m = G.mons[i]; if (m && m.def && m.def.boss && !m.dead && !(m.hp > 0)) return bossKeyOf(m); }
+    return '';
+  }
+  function bossKeyOf(m) { const r = m.def && m.def.rig; return typeof m.type === 'string' && hasOwn(STING, m.type) ? m.type : typeof r === 'string' && hasOwn(STING, r) ? r : m.type; }
+  const bossDieBase = S.bossDie;
+  S.bossDie = (d, t, p) => { if (fallingBoss() === 'herald') S.heraldDie(d, t, p); else bossDieBase(d, t, p); };
   const DEF = Object.assign(Object.create(null), {
     bow: [S.bow, 0.05, 0.18, 1, 0.3, 0.55, 4],
     arrowHit: [S.arrowHit, 0.045, 0.12, 0, 0.15, 0.5, 4],
@@ -1478,6 +1529,7 @@ const AU = (function () {
     echoRise: [S.echoRise, 0.35, 0.45, 1, 1.3, 0.7, 2],
     siegeHorn: [S.siegeHorn, 4, 0.6, 3, 3.0, 0.75, 1],
     dailySting: [S.dailySting, 5, 0.5, 3, 2.8, 1.2, 1],
+    snuff: [S.snuff, 0.12, 0.4, 2, 0.9, 0.7, 3],
   });
   // Kinds that share a voice budget, and how hard a sound ducks the music and crowd.
   const FAM = { cannon: 'boom', explode: 'boom', chainBoom: 'boom', burn: 'fire', ignite: 'fire', houndFire: 'fire', ratSqueal: 'die', boneRattle: 'die', squelch: 'die', batScreech: 'die', harpyDie: 'die', houndDie: 'die', shamanDie: 'die',
@@ -1704,6 +1756,7 @@ const AU = (function () {
     colossus: { perc: 'anvil', lead: 'dist', bpm: 0, m: [[0, 26, 8], [8, 26, 4], [12, 29, 4], [16, 32, 8], [24, 31, 8]] },
     king: { perc: 'ritual', lead: 'reed', bpm: -4, m: [[0, 62, 4], [4, 63, 4], [8, 65, 6], [14, 63, 2], [16, 62, 6], [22, 60, 2], [24, 62, 8]] },
     leviathan: { perc: 'tide', lead: 'choir', bpm: -8, m: [[0, 57, 8], [8, 60, 8], [16, 59, 6], [22, 55, 2], [24, 57, 4], [28, 58, 4]] }, // A C B G A Bb: a drowned choir
+    herald: { perc: 'hollow', lead: 'hollow', bpm: -12, m: [[0, 62, 6], [6, 63, 2], [8, 68, 8], [16, 67, 4], [20, 62, 4], [24, 56, 8]] }, // D Eb G# G D G#: a tritone that never resolves
   };
   const SEQ = { next: 0, step: 0, bar: 0, phrase: 0, bpm: 80, I: 0, tI: 0, lay: {}, pat: 0, ost: 0, motif: -1, rest: false, boss: null, bossKey: null, rage: false, horde: 0, hordeT: 0, hordeWas: false, seenBoss: typeof WeakSet === 'function' ? new WeakSet() : null, stingTill: 0, low: 0, lastNow: 0, scanAt: 0, choir: null };
 
@@ -1816,6 +1869,9 @@ const AU = (function () {
       const v = sv(rr(-0.2, 0.2), 0.6); choirTone(v.out, t, mi, dur * 0.95, 0.5); choirTone(v.out, t, mi - 12, dur * 0.95, 0.35);
       const g = gn(v.out); osc('sine', mtof(mi - 24), t, dur + 0.3, g); ad(g.gain, t, 0.12, Math.min(0.4, dur * 0.3), dur);
       finishVoice(v);
+    } else if (ln === 'hollow') { // the Herald: a hollow voice with glass over it, and the dark answering a dotted beat later
+      const v = sv(rr(-0.25, 0.25), 0.7); choirTone(v.out, t, mi - 12, dur * 0.9, 0.2); glassTone(v.out, t, mi + 12, 0.9); finishVoice(v);
+      const e = sv(rr(-0.8, 0.8), 0.9); glassTone(flt(e.out, 'lowpass', 1800), t + sd * 6, mi + 12, 0.4); finishVoice(e);
     }
   }
   function swellS(t, len) { // a wave rising over two bars and breaking on the next downbeat
@@ -1839,6 +1895,10 @@ const AU = (function () {
       if (s === 0) timpS(t, SEQ.bar & 1 ? 0.3 : 0.42); else if (s === 10 && SEQ.bar & 1) timpS(t, 0.22);
       if (s === 0 && (SEQ.bar & 1) === 0) swellS(t, sd * 32);
       if (s === 8 && SEQ.bar % 4 === 2) bell(t, 69, 0.03, rr(-0.6, 0.6));
+    } else if (pc === 'hollow') { // a slow muffled heartbeat (lub-dub), a candle tick now and then, a far bell on the tritone
+      if (s === 0) drum(t, 0.3, 46); else if (s === 3) drum(t, 0.18, 42);
+      if (s === 8 && SEQ.bar % 4 === 1) bell(t, 80, 0.03, rr(-0.7, 0.7));
+      if (rnd() < 0.06) click(t, 0.08, rr(2200, 3400), rr(-0.7, 0.7));
     }
   }
   function playStep(t) {
@@ -2702,14 +2762,14 @@ const AU = (function () {
     if (G.event) I += 0.08;
     // A boss's first appearance: its sting, and its theme waits for the sting to finish.
     const now = ctx.currentTime;
-    if (boss && live && SEQ.seenBoss && !SEQ.seenBoss.has(boss)) { SEQ.seenBoss.add(boss); stingKey = boss.type; playAt('bossSting', boss.x, boss.z, 1.1); SEQ.stingTill = now + 1.9; }
+    if (boss && live && SEQ.seenBoss && !SEQ.seenBoss.has(boss)) { SEQ.seenBoss.add(boss); stingKey = bossKeyOf(boss); playAt('bossSting', boss.x, boss.z, 1.1); SEQ.stingTill = now + 1.9; }
     const horde = live && G.horde === true;
     if (horde && !SEQ.hordeWas && G.B && G.B.cave) playAt('horde', G.B.cave.x, G.B.cave.z, 1.1);
     SEQ.hordeWas = horde;
     if (horde) I = Math.max(I, 0.8);
     I = Math.max(I, cur.tension * 0.6);
     SEQ.tI = live ? cl(I, 0, 1) : 0;
-    SEQ.low = low; SEQ.bossKey = live && boss && now >= SEQ.stingTill ? boss.type : null; SEQ.rage = !!(boss && boss.rage); SEQ.hordeT = horde ? 1 : 0;
+    SEQ.low = low; SEQ.bossKey = live && boss && now >= SEQ.stingTill ? bossKeyOf(boss) : null; SEQ.rage = !!(boss && boss.rage); SEQ.hordeT = horde ? 1 : 0;
     CR.tl = live || G.phase === 'defeat' ? cl(Math.sqrt(ground / 110), 0, 1) * (horde ? 1.25 : 1) : 0;
     const tot = wl + wr; CR.p = tot > 0 ? 0.7 * (wr - wl) / tot : 0;
     CR.big = ground ? big / ground : 0; CR.swarm = ground ? swarm / ground : 0;
@@ -3095,7 +3155,7 @@ const AU = (function () {
   // in the land's key: a hollow fifth that beats slowly against itself, a sub for headphones and a thin cold whistle of
   // air high above. The mix goes colder with it: the music's warm body (around 350 Hz) is scooped and the fire bed thins.
   // Built only while the eclipse is up; stopped two seconds after it has faded out.
-  const EC = { src: null, g: null, tilt: null, a: 0, aL: -1, tl: 0, idle: 0, semi: 0, os: [] };
+  const EC = { src: null, g: null, sg: null, sL: -1, tilt: null, a: 0, aL: -1, tl: 0, idle: 0, semi: 0, os: [] };
   function eclA() { const v = typeof G !== 'undefined' && G ? +G.eclA : 0; return v > 0 && v <= 1.5 ? Math.min(1, v) : 0; } // a missing or bad value is no eclipse
   function eclTick(now, dt) {
     const a = eclA(); EC.a = a;
@@ -3112,19 +3172,32 @@ const AU = (function () {
         const air = gn(g, 0), af = flt(air, 'bandpass', 2900 * r, 9); const an = loopSrc(bufPink, af, 1.0); const alfo = loopOsc('sine', 0.07, gn(air.gain, 0.8));
         air.gain.value = 1.6; // with the LFO: 0.8..2.4
         const swell = gn(lp.frequency, 160); const sl = loopOsc('sine', 0.05, swell); // the drone opens and closes, very slowly
-        EC.src = [wob, an, alfo, sl].concat(os.map((x) => x[0]));
+        // Round 11: a faint glassy shimmer high above, so the dark sounds eerie rather than muffled. Six high tones in
+        // the key (a tritone among them, and one pair a few cents apart so it beats), each fading in and out on its own
+        // slow tremolo, like light catching on glass that isn't there.
+        // Its own level (EC.sg), rising with the dark rather than after it, and a wide reverb send for the glass.
+        const sg = gn(nAmb, 0); sg.connect(gn(RV.amb, 0.7)); EC.sg = sg; EC.sL = -1;
+        const shm = flt(sg, 'highpass', 1500, 0.6), lfos = [];
+        [[2349, 0.16, 0.11], [2353, 0.12, 0.17], [3322, 0.09, 0.07], [3520, 0.11, 0.13], [4699, 0.07, 0.21], [7040, 0.06, 0.09]].forEach((e, i) => {
+          const a = gn(shm, e[1] * 0.5); lfos.push(loopOsc('sine', e[2], gn(a.gain, e[1] * 0.5))); // the tremolo: 0..e[1]
+          const o = loopOsc(i === 5 ? 'triangle' : 'sine', e[0] * r, a); os.push([o, e[0]]);
+        });
+        EC.src = [wob, an, alfo, sl].concat(lfos, os.map((x) => x[0]));
       } catch (e) { EC.src = os.map((x) => x[0]); if (!ST.err) ST.err = 'eclipse: ' + e.message; }
       EC.g = g; EC.os = os; EC.semi = semi; EC.aL = -1; EC.idle = 0;
     } else if (EC.src && a <= 0.01 && (EC.idle += dt) > 2) {
       const src = EC.src, g = EC.g; EC.src = null; EC.os = [];
-      g.gain.cancelScheduledValues(now); g.gain.setTargetAtTime(0, now, 0.05);
+      const sg = EC.sg; EC.sg = null;
+      g.gain.cancelScheduledValues(now); g.gain.setTargetAtTime(0, now, 0.05); if (sg) { sg.gain.cancelScheduledValues(now); sg.gain.setTargetAtTime(0, now, 0.05); }
       for (let i = 0; i < src.length; i++) { try { src[i].stop(now + 0.3); } catch (e) {} }
-      if (src.length) src[0].onended = () => { try { g.disconnect(); } catch (e) {} };
+      if (src.length) src[0].onended = () => { try { g.disconnect(); if (sg) sg.disconnect(); } catch (e) {} };
     }
     if (EC.src) {
       if (a > 0.01) EC.idle = 0;
       const lv = 0.065 * a * a; // eases in: the drone arrives after the dark does (round 10 meter: under the battle, not over it)
       if (Math.abs(lv - EC.aL) > 0.002) { EC.aL = lv; EC.g.gain.setTargetAtTime(lv, now, 0.5); }
+      const sl = 0.12 * a; // the shimmer (round 11): each tone peaks about 20 dB under the mix
+      if (EC.sg && Math.abs(sl - EC.sL) > 0.0005) { EC.sL = sl; EC.sg.gain.setTargetAtTime(sl, now, 0.6); }
       const semi = LM.def && isFinite(LM.def.semi) ? LM.def.semi : 0;
       if (semi !== EC.semi) { EC.semi = semi; const r = Math.pow(2, semi / 12); for (let i = 0; i < EC.os.length; i++) EC.os[i][0].frequency.setTargetAtTime(EC.os[i][1] * r, now, 1.5); }
     }
@@ -3132,7 +3205,9 @@ const AU = (function () {
   // ---- Round 10: watched moments for the new mutators and the daily. An Echo ghost rising (G.mons, m.echo === true,
   // each heard once, at most one a scan), the Siege war horn a beat after the wave horn when G.mods has 'siege', and
   // the daily's sting when a Daily Long Night begins (a new META.run with G.mode === 'daily'), once the menu is gone.
-  const MW = { ghosts: typeof WeakSet === 'function' ? new WeakSet() : null, siegeAt: 0, siegeK: -1, run: undefined, dailyAt: 0, dailyBy: 0 };
+  // Round 11: Mira's G.dailyFresh is true only on a fresh daily start, so a continued daily gets no sting. A game
+  // without the flag (undefined) keeps the round 10 rule; true seen at any moment of the wait counts.
+  const MW = { ghosts: typeof WeakSet === 'function' ? new WeakSet() : null, siegeAt: 0, siegeK: -1, run: undefined, dailyAt: 0, dailyBy: 0, fresh: false };
   function ghostSeen(m) {
     if (!MW.ghosts || MW.ghosts.has(m)) return false;
     MW.ghosts.add(m); return m.hp > 0;
@@ -3148,11 +3223,12 @@ const AU = (function () {
     } else { MW.siegeK = -1; MW.siegeAt = 0; }
     const run = typeof META !== 'undefined' && META ? META.run || null : null;
     if (run !== MW.run) {
-      if (run && G.mode === 'daily' && (MW.run !== undefined || !(run.t > 5))) { MW.dailyAt = now + 0.35; MW.dailyBy = now + 10; }
+      if (run && G.mode === 'daily' && (MW.run !== undefined || !(run.t > 5))) { MW.dailyAt = now + 0.35; MW.dailyBy = now + 10; MW.fresh = false; }
       MW.run = run;
     }
+    if (MW.dailyAt && G.dailyFresh === true) MW.fresh = true;
     if (MW.dailyAt && now >= MW.dailyAt) {
-      if (G.mode !== 'daily' || now > MW.dailyBy) MW.dailyAt = 0;
+      if (G.mode !== 'daily' || now > MW.dailyBy || (G.dailyFresh === false && !MW.fresh)) MW.dailyAt = 0;
       else if (SC.cur !== 'menu' && SC.cur !== 'results') { MW.dailyAt = 0; play('dailySting', 0, 1, 0); }
     }
   }
