@@ -25,7 +25,7 @@ async function run(name) {
   const touch = name === 'phone';
   const step = msg => { log.push(msg); console.log(`[${name}] ${msg}`); };
   const shot = async n => { await page.screenshot({ path: path.join(SHOTS, `menuqa-${name}-${n}.png`) }); };
-  const state = () => page.evaluate(() => { const w = window.__cw; if (!w) return null; return { scr: w.UI.scr, story: w.STORY.on(), mode: w.G.mode, phase: w.G.phase, cine: typeof CINE !== 'undefined' && CINE.on ? CINE.on() : false, btns: w.UI.btns.map(b => b.id) }; });
+  const state = () => page.evaluate(() => { const w = window.__cw; if (!w) return null; return { scr: w.UI.scr, story: w.STORY.on(), mode: w.G.mode, phase: w.G.phase, cine: !!(w.CINE && w.CINE.on && w.CINE.on()), btns: w.UI.btns.concat(w.UI.hud || []).map(b => b.id) }; });
   async function waitFor(fn, what, ms = 20000) {
     const t0 = Date.now();
     while (Date.now() - t0 < ms) { const s = await state(); if (s && fn(s)) return s; await sleep(150); }
@@ -33,7 +33,7 @@ async function run(name) {
   }
   async function press(id) {
     const s = await waitFor(s => s.btns.includes(id), 'button ' + id);
-    const p = await page.evaluate(id => { const w = window.__cw, d = w.R.dpr || 1, b = w.UI.btns.find(b => b.id === id); return b && [(b.x + b.w / 2) / d, (b.y + b.h / 2) / d]; }, id);
+    const p = await page.evaluate(id => { const w = window.__cw, d = w.R.dpr || 1, b = w.UI.btns.concat(w.UI.hud || []).find(b => b.id === id); return b && [(b.x + b.w / 2) / d, (b.y + b.h / 2) / d]; }, id);
     if (!p) throw new Error('button vanished: ' + id + ' ' + JSON.stringify(s));
     if (touch) await page.touchscreen.tap(p[0], p[1]); else await page.mouse.click(p[0], p[1]);
     step(`press ${id} at ${p.map(Math.round)}`);
@@ -61,7 +61,7 @@ async function run(name) {
     // The demo board crumbles and the campaign land rises; story or the arrival card can show on the way.
     for (let i = 0; i < 6; i++) {
       const s = await waitFor(s => s.mode === 'campaign' && (s.phase === 'play' || s.story || s.scr === 'arrival'), 'campaign play', 120000);
-      if (s.story) await clearStory(); else if (s.scr === 'arrival') await press('abegin'); else if (!s.scr) return;
+      if (s.story) await clearStory(); else if (s.scr === 'arrival') await press('abegin'); else if (!s.scr) { await sleep(600); if ((await state()).btns.includes('tutskip')) { await press('tutskip'); await clearStory(); } return; }
     }
     throw new Error('never reached the campaign board');
   }
