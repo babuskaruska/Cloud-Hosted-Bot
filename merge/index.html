@@ -6539,7 +6539,7 @@ const UI = (() => {
         openModal({ kind: 'dialog', lines: d.t.story, title: d.t.name }, true);
         if (d.newArea) openModal({ kind: 'dialog', lines: d.newArea.intro, title: 'Uus koht: ' + d.newArea.name, onDone: () => boardMusic() }, true);
         if (d.ended) openModal({ kind: 'dialog', lines: [['mina', STORY.ending]], title: 'Lõpp ja uus algus' }, true);
-        if (d.island) openModal({ kind: 'dialog', lines: d.island.intro, title: (d.ended ? 'Saareringreis: ' : 'Uus saar: ') + d.island.name, onShow: () => snd2('islandNew', 'taskDone'), onDone: () => boardMusic() }, true);
+        if (d.island) islandIntro(d.ended);
         break;
       }
       case 'style': snd2('styleSwap', 'tap'); flash = { t0: tn() - 0.45 }; keep(0.5); break;
@@ -6608,6 +6608,11 @@ const UI = (() => {
     idleT = tn(); dirty = true;
   }
   const modalActive = () => !!modal || onTitle;
+  // The intro of a tour island, shown once (old saves that already finished the story see it on their next visit).
+  function islandIntro(first) {
+    const isl = TOUR.cur(), key = 't' + isl.i; if (S.areaSeen[key]) return; S.areaSeen[key] = 1; saveSoon();
+    openModal({ kind: 'dialog', lines: isl.intro, title: (first || isl.i === 0 ? 'Saareringreis: ' : 'Uus saar: ') + isl.name, onShow: () => snd2('islandNew', 'taskDone'), onDone: () => boardMusic() }, true);
+  }
   // Close the open modal (quietly) and open another in its place.
   function closeThen(m) { closeModal(true); openModal(m); }
 
@@ -6732,6 +6737,7 @@ const UI = (() => {
       openModal({ kind: 'dialog', lines: AREAS[0].intro, title: 'Kiri vanaemalt', onDone: () => { S.tut = 1; S.nextOrderAt = 0; saveSoon(); } });
     } else if (S.tut >= 5) {
       Game.ensureDaily(); if (!S.daily.gift) openModal({ kind: 'daily' });
+      if (S.ended) islandIntro(false);
     }
   }
 
@@ -6742,7 +6748,7 @@ const UI = (() => {
   }
   function goScreen(s) {
     const was = scr; scr = s; sel = -1; drag = null; hint = null; dirty = true; idleT = tn();
-    if (s === 'board') { boardMusic(); if (was !== 'board' && S.tut === 0) openModal({ kind: 'dialog', lines: AREAS[0].intro, title: 'Kiri vanaemalt', onDone: () => { S.tut = 1; S.nextOrderAt = 0; saveSoon(); } }); }
+    if (s === 'board') { boardMusic(); if (S.ended && S.tut >= 5) islandIntro(false); if (was !== 'board' && S.tut === 0) openModal({ kind: 'dialog', lines: AREAS[0].intro, title: 'Kiri vanaemalt', onDone: () => { S.tut = 1; S.nextOrderAt = 0; saveSoon(); } }); }
     ADV.entered(s, was);
   }
 

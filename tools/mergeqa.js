@@ -63,7 +63,7 @@ async function run(name) {
     const old = await p.evaluate(() => { const d = JSON.parse(localStorage.getItem('saarepagar.save')); d.v = 2; for (const k of ['tour', 'style', 'pass', 'week', 'look', 'pets', 'petOn', 'owned', 'lookKnown', 'lookSeen']) delete d[k]; delete d.set.rest; localStorage.setItem('saarepagar.save', JSON.stringify(d)); Storage.prototype.setItem = () => {}; return d.coins; });
     await p.goto('file://' + ROOT + '/merge/index.html?nosave=1'); await p.waitForFunction(() => window.__mg, null, { timeout: 30000 }); await sleep(900);
     const mig = await p.evaluate(() => { const S = window.__mg.S; return { v: S.v, tour: S.tour, pass: !!S.pass && !!S.pass.got, week: !!S.week, look: S.look && S.look.outfit, rest: S.set.rest, coins: S.coins }; });
-    if (mig.v !== 3 || mig.tour !== 0 || !mig.pass || !mig.week || mig.look !== 'casual' || mig.rest !== true || mig.coins !== old) errs.push('SAVE v2->v3: ' + JSON.stringify(mig));
+    if (mig.v !== 3 || mig.tour !== 1 /* island 0 was done, so the tour moves on to island 1 */ || !mig.pass || !mig.week || mig.look !== 'casual' || mig.rest !== true || mig.coins !== old) errs.push('SAVE v2->v3: ' + JSON.stringify(mig));
     console.log(`[${name}] phase B ${JSON.stringify(pb)} style ${picked} migrated ${JSON.stringify(mig)}`);
   } catch (e) { errs.push('FLOW: ' + e.message); }
   await b.close();
