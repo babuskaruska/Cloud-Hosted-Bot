@@ -54,7 +54,11 @@ function newState() {
     disc: {}, gensOwned: {},
     album: {}, albumDone: {}, event: { id: '', pts: 0, got: 0 }, freeEnAt: 0,
     tut: 0, title: true,
-    daily: { day: '', gift: false, streak: 0, lastGift: '', tasks: [], bonus: false },
+    daily: { day: '', gift: false, streak: 0, lastGift: '', tasks: [], bonus: false, d30: 0, c30: 0 },
+    // version 3: adventure levels, lucky wheel, piggy bank
+    adv: { top: 1, stars: {}, hearts: 5, heartT: t, streak: 0, best: 0, boost: { wand: 1, scissors: 1, shuffle: 1, moves: 1 }, plays: 0, wins: 0, tips: {}, seen: 0 },
+    wheel: { free: '', extra: 0, n: 0 },
+    piggy: { coins: 0, day: '' },
     stats: { merges: 0, orders: 0, taps: 0, tasks: 0, lucky: 0, merge5: 0, combo: 0, mbox: 0 },
     set: { music: 0.7, sfx: 0.9, muted: false },
   };
@@ -77,6 +81,8 @@ function load() {
     for (const k in base) if (!(k in d)) d[k] = base[k];
     for (const k in base.daily) if (!(k in d.daily)) d.daily[k] = base.daily[k];
     for (const k in base.stats) if (!(k in d.stats)) d.stats[k] = base.stats[k];
+    for (const o of ['adv', 'wheel', 'piggy']) { if (!d[o] || typeof d[o] !== 'object') d[o] = base[o]; for (const k in base[o]) if (!(k in d[o])) d[o][k] = base[o][k]; }
+    for (const k in base.adv.boost) if (typeof d.adv.boost[k] !== 'number') d.adv.boost[k] = 0;
     if (!d.event || typeof d.event !== 'object') d.event = base.event;
     // v1 -> v2: the album starts empty, so earlier discoveries wait there as rewards to collect.
     d.v = SAVE_VER;

@@ -297,3 +297,84 @@ const EVENT_TRACK = [
   { need: 400, r: { genUp: true, stars: 5 } },
 ];
 const EVENT_PTS = { merge: 1, mergeHi: 2, order: 5, lucky: 3, merge5: 4 };
+
+// ---- version 3: adventure levels ("Seiklus"), lucky wheel, daily calendar, piggy bank ----
+// Keys: a small chain that only the adventure levels use. Drop a key on a locked chest of the same level or lower.
+CHAINS.key = { kind: 'key', name: 'Võtmed', color: '#d8a227', names: ['Väike võti', 'Võti', 'Kuldvõti'] };
+
+// A new chapter every 50 levels; each has its own favourite chains (the chapters repeat with a number after 8).
+const CHAPTERS = [
+  { name: 'Rannaküla', chains: ['bread', 'berry', 'fish', 'dairy', 'tea'] },
+  { name: 'Õunaaed', chains: ['apple', 'flower', 'berry', 'bread', 'tea'] },
+  { name: 'Kalasadam', chains: ['fish', 'sea', 'wood', 'bread', 'wool'] },
+  { name: 'Tuuleveski', chains: ['bread', 'wood', 'dairy', 'apple', 'wool'] },
+  { name: 'Majakas', chains: ['sea', 'tea', 'wool', 'fish', 'wood'] },
+  { name: 'Sõnajalamets', chains: ['flower', 'berry', 'tea', 'apple', 'wool'] },
+  { name: 'Talvine saar', chains: ['wool', 'tea', 'bread', 'dairy', 'berry'] },
+  { name: 'Suvepidu', chains: ['flower', 'apple', 'dairy', 'sea', 'bread'] },
+];
+const chapterTitle = c => CHAPTERS[c % CHAPTERS.length].name + (c >= CHAPTERS.length ? ' ' + (Math.floor(c / CHAPTERS.length) + 1) : '');
+const chapterName = c => (c + 1) + '. peatükk: ' + chapterTitle(c);
+
+// Boosters. price: coins when bought inside a level.
+const BOOSTERS = {
+  wand: { name: 'Võlukepp', desc: 'Teeb ühe asja taseme võrra paremaks.', price: 80, target: true, prompt: 'Toksa asja, mida võluda.' },
+  scissors: { name: 'Käärid', desc: 'Lõikab asja kaheks väiksemaks.', price: 50, target: true, prompt: 'Toksa asja, mida pooleks lõigata.' },
+  shuffle: { name: 'Segamine', desc: 'Annab üksikutele asjadele paarilised.', price: 40 },
+  moves: { name: '+5 käiku', desc: 'Annab viis lisakäiku.', price: 60 },
+};
+const BOOST_KEYS = ['wand', 'scissors', 'shuffle', 'moves'];
+
+// Lives: generous, 5 with one back every 15 minutes. Only a lost level costs a life.
+const HEART_MAX = 5, HEART_MS = 15 * 60000, HEART_REFILL_PRICE = 50;
+// +5 moves after running out: the price grows within one try.
+const MORE_MOVES_PRICE = [30, 60, 90];
+
+// Tips, shown the first time each goal or obstacle appears.
+const ADV_TIPS = {
+  make: 'Lohista kaks ühesugust asja kokku. Iga ühendamine on üks käik. Tõstmine ja vahetamine on tasuta!',
+  ice: 'Jää! Ühenda asju jää peal, siis see praguneb ja puruneb.',
+  box: 'Kastid! Ühenda midagi kasti kõrval, siis kast avaneb.',
+  order: 'Külalised ootavad! Tee tellitud asjad valmis, need lähevad ise teele.',
+  web: 'Ämblikuvõrk hoiab asja kinni. Ühenda selle kõrval, siis võrk kaob.',
+  sand: 'Liivale uusi asju ei tule. Sinna võib ise asju tõsta.',
+  crate: 'Lukus kirst avaneb võtmega. Ühenda võtmed ja lohista võti kirstule.',
+  bubble: 'Mullid levivad! Ühenda nende kõrval, siis need lõhkevad.',
+  boss: 'Suur tellimus! Seekord ootab terve küla. Võta aega ja mõtle enne.',
+};
+const OBST_NAME = { ice: 'Jää', box: 'Kast', web: 'Ämblikuvõrk', sand: 'Liiv', crate: 'Lukus kirst', bubble: 'Mullid' };
+
+// Lucky wheel (Õnneratas): 8 slices, w = weight. One free spin a day; more from levels and the calendar.
+const WHEEL = [
+  { r: { coins: 25 }, w: 20, color: '#ffd23f', label: '25' },
+  { r: { boost: 'wand' }, w: 10, color: '#b07cff', label: 'Võlukepp' },
+  { r: { energy: 20 }, w: 18, color: '#5ad1ff', label: '+20' },
+  { r: { boost: 'scissors' }, w: 10, color: '#ff8ab8', label: 'Käärid' },
+  { r: { coins: 60 }, w: 12, color: '#ffb02e', label: '60' },
+  { r: { boost: 'shuffle' }, w: 12, color: '#6fe0a0', label: 'Segamine' },
+  { r: { item: ['chest', 1], boost: 'moves' }, w: 14, color: '#ff9a6b', label: 'Kirst' },
+  { r: { coins: 300, item: ['mbox', 1], boost: 'wand', spins: 1 }, w: 3, color: '#ff4f9a', label: 'Suur auhind', big: true },
+];
+
+// Daily calendar: a 7-day streak with growing prizes (day 7 is the big one), and a 30-day track that counts
+// every day you come by (a missed day does not reset it).
+const CAL7 = [
+  { coins: 20, energy: 10 },
+  { coins: 30, energy: 15 },
+  { coins: 30, boost: 'shuffle' },
+  { coins: 40, energy: 20 },
+  { coins: 40, boost: 'scissors', spins: 1 },
+  { coins: 60, energy: 25, chest: 1 },
+  { coins: 100, boost: 'wand', chest: 2, spins: 1 },
+];
+const CAL30 = [
+  { day: 3, r: { spins: 1, coins: 30 } },
+  { day: 7, r: { chest: 2, coins: 60 } },
+  { day: 14, r: { boost: 'wand', spins: 1, coins: 80 } },
+  { day: 21, r: { item: ['mbox', 1], boost: 'moves', coins: 100 } },
+  { day: 30, r: { coins: 300, spins: 2, chest: 3, boost: 'wand' } },
+];
+
+// Piggy bank (Hoiupõrsas): fills from play, opens free once a day.
+const PIGGY_MAX = 300, PIGGY_MIN = 10;
+const PIGGY_ADD = { merge: 1, order: 4, level: 12 };

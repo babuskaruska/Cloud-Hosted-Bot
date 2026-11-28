@@ -20,6 +20,9 @@ const UI = (() => {
   let hits = [], mhits = [], cardRects = [], pressed = null, spring = null;
   const anim = new Map(), ghosts = [], floaters = [], toasts = [], banners = [], newq = [];
   let modal = null; const mq = [];
+  // scr: which screen is under the modals once the title is gone: 'board' (the café), 'map' or 'level' (Seiklus, 55-map.js).
+  let scr = 'board';
+  const onBoard = () => !onTitle && scr === 'board';
   let onTitle = true, audioUnlocked = false, progressSet = new Set(), progressN = -1, flash = null;
   let combo = null, lastMerge = null, idleT = 0, hint = null, hintAt = 0, needSet = new Set();
   const disp = { en: null, coins: null, stars: null }, bump = {};
@@ -232,6 +235,12 @@ const UI = (() => {
       case 'lock': x.strokeStyle = '#7a6a5a'; x.lineWidth = s * 0.1; x.beginPath(); x.arc(cx, cy - r * 0.15, r * 0.42, Math.PI, 0); x.stroke(); x.fillStyle = '#b8a48c'; x.fillRect(cx - r * 0.65, cy - r * 0.15, r * 1.3, r * 1.0); break;
       case 'album': case 'book': x.fillStyle = '#5aa0d8'; x.strokeStyle = '#2b5a8a'; x.fillRect(cx - r * 0.8, cy - r * 0.9, r * 1.6, r * 1.8); x.strokeRect(cx - r * 0.8, cy - r * 0.9, r * 1.6, r * 1.8); star(r * 0.45, '#ffd34a'); break;
       case 'tasks': x.fillStyle = '#fff6e6'; x.strokeStyle = '#7a4a26'; x.fillRect(cx - r * 0.7, cy - r * 0.9, r * 1.4, r * 1.8); x.strokeRect(cx - r * 0.7, cy - r * 0.9, r * 1.4, r * 1.8); x.lineWidth = s * 0.06; for (let j = 0; j < 3; j++) { x.beginPath(); x.moveTo(cx - r * 0.4, cy - r * 0.45 + j * r * 0.45); x.lineTo(cx + r * 0.4, cy - r * 0.45 + j * r * 0.45); x.stroke(); } break;
+      case 'heart': x.beginPath(); x.moveTo(cx, cy + r * 0.85); x.bezierCurveTo(cx - r * 1.5, cy - r * 0.1, cx - r * 0.7, cy - r * 1.2, cx, cy - r * 0.45); x.bezierCurveTo(cx + r * 0.7, cy - r * 1.2, cx + r * 1.5, cy - r * 0.1, cx, cy + r * 0.85); x.closePath(); x.fillStyle = '#ff4f7a'; x.fill(); x.strokeStyle = '#b8204a'; x.stroke(); x.fillStyle = 'rgba(255,255,255,0.6)'; x.beginPath(); x.ellipse(cx - r * 0.42, cy - r * 0.35, r * 0.18, r * 0.11, -0.6, 0, 7); x.fill(); break;
+      case 'wheel': { const cols = ['#ffd23f', '#b07cff', '#5ad1ff', '#ff8ab8', '#ffb02e', '#6fe0a0', '#ff9a6b', '#ff4f9a']; for (let j = 0; j < 8; j++) { x.beginPath(); x.moveTo(cx, cy); x.arc(cx, cy, r, j * Math.PI / 4, (j + 1) * Math.PI / 4); x.closePath(); x.fillStyle = cols[j]; x.fill(); } x.beginPath(); x.arc(cx, cy, r, 0, 7); x.strokeStyle = '#7a3ac8'; x.stroke(); circ(r * 0.22, '#fff', '#7a3ac8'); break; }
+      case 'piggy': x.fillStyle = '#ff9cc0'; x.strokeStyle = '#c0457a'; x.beginPath(); x.ellipse(cx, cy + r * 0.1, r * 0.95, r * 0.72, 0, 0, 7); x.fill(); x.stroke(); x.beginPath(); x.ellipse(cx + r * 0.85, cy + r * 0.05, r * 0.2, r * 0.26, 0, 0, 7); x.fill(); x.stroke(); x.beginPath(); x.moveTo(cx - r * 0.45, cy - r * 0.5); x.lineTo(cx - r * 0.25, cy - r * 0.95); x.lineTo(cx - r * 0.05, cy - r * 0.55); x.fill(); x.stroke(); x.fillStyle = '#33285c'; x.beginPath(); x.arc(cx + r * 0.42, cy - r * 0.15, r * 0.08, 0, 7); x.fill(); x.fillStyle = '#c0457a'; x.fillRect(cx - r * 0.3, cy - r * 0.62, r * 0.4, r * 0.08); break;
+      case 'calendar': x.fillStyle = '#fff'; x.strokeStyle = '#7a4a26'; x.fillRect(cx - r * 0.85, cy - r * 0.7, r * 1.7, r * 1.6); x.strokeRect(cx - r * 0.85, cy - r * 0.7, r * 1.7, r * 1.6); x.fillStyle = '#ff4f7a'; x.fillRect(cx - r * 0.85, cy - r * 0.7, r * 1.7, r * 0.45); x.fillStyle = '#33285c'; x.font = '900 ' + Math.round(r * 0.9) + 'px ' + FONT; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('7', cx, cy + r * 0.38); break;
+      case 'map': x.fillStyle = '#ffe9b8'; x.strokeStyle = '#a06a2a'; x.beginPath(); x.moveTo(cx - r, cy - r * 0.7); x.lineTo(cx - r * 0.33, cy - r * 0.9); x.lineTo(cx + r * 0.33, cy - r * 0.7); x.lineTo(cx + r, cy - r * 0.9); x.lineTo(cx + r, cy + r * 0.7); x.lineTo(cx + r * 0.33, cy + r * 0.9); x.lineTo(cx - r * 0.33, cy + r * 0.7); x.lineTo(cx - r, cy + r * 0.9); x.closePath(); x.fill(); x.stroke(); x.setLineDash([s * 0.06, s * 0.05]); x.strokeStyle = '#e0457a'; x.beginPath(); x.moveTo(cx - r * 0.7, cy + r * 0.5); x.quadraticCurveTo(cx - r * 0.1, cy - r * 0.4, cx + r * 0.5, cy - r * 0.3); x.stroke(); x.setLineDash([]); x.fillStyle = '#e0457a'; x.beginPath(); x.arc(cx + r * 0.55, cy - r * 0.35, r * 0.17, 0, 7); x.fill(); break;
+      case 'moves': circ(r, '#5ac0ff', '#1a6fd0'); x.strokeStyle = '#fff'; x.lineWidth = s * 0.09; x.beginPath(); x.arc(cx, cy, r * 0.5, -0.4, Math.PI * 1.4); x.stroke(); break;
       default: circ(r, '#ccc');
     }
     return c;
@@ -302,7 +311,8 @@ const UI = (() => {
     ['energy', 'coins', 'stars'].forEach((n, j) => { L.hud[n] = { x: sx + 50 + j * (pw + 6), y: hy + 4, w: pw, h: 36 }; });
     L.hud.gift = { x: sx + sw - 92, y: hy + 50, w: 44, h: 44 };
     L.hud.settings = { x: sx + sw - 44, y: hy + 50, w: 44, h: 44 };
-    L.hud.area = { x: sx, y: hy + 52, w: Math.min(230, sw - 104), h: 40 };
+    L.hud.area = { x: sx, y: hy + 52, w: Math.min(200, sw - 104 - 128), h: 40 };
+    L.hud.adv = { x: sx + L.hud.area.w + 8, y: hy + 50, w: Math.min(140, sw - 104 - L.hud.area.w - 14), h: 44 };
     // bottom tabs
     const names = ['tasks', 'album', 'event', 'shop', 'bag'], bw = L.bar.w / names.length;
     L.btn = {}; names.forEach((n, j) => { L.btn[n] = { x: L.bar.x + j * bw, y: L.bar.y, w: bw, h: L.bar.h }; });
@@ -315,6 +325,7 @@ const UI = (() => {
   }
   function cellCenter(i) { return { x: L.bx + (i % COLS + 0.5) * L.cs, y: L.by + (Math.floor(i / COLS) + 0.5) * L.cs }; }
   function hudPos(name) {
+    if (!onTitle && scr !== 'board') { const p = ADV.hudPos(name); if (p) return p; }
     const h = L.hud && L.hud[name];
     if (h) return { x: h.x + 18, y: h.y + h.h / 2 };
     if (name === 'xp' && L.hud) return { x: L.hud.lvl.x + 22, y: L.hud.lvl.y + 22 };
@@ -345,6 +356,9 @@ const UI = (() => {
     if (r.item) out.push({ item: r.item, t: CHAINS[r.item[0]].kind === 'mystery' ? 'Üllatus' : CHAINS[r.item[0]].kind === 'chest' ? 'Kirst' : nm(r.item[0], r.item[1]) });
     if (r.gen) out.push({ item: [r.gen, 1], t: 'Generaator' });
     if (r.genUp) out.push({ item: ['oven', 2], t: 'Generaator' });
+    if (r.boost) { const b = typeof r.boost === 'string' ? { [r.boost]: 1 } : r.boost; for (const k in b) out.push({ boost: k, t: BOOSTERS[k].name }); }
+    if (r.spins) out.push({ icon: 'wheel', t: r.spins > 1 ? r.spins + ' keerutust' : 'Keerutus' });
+    if (r.hearts) out.push({ icon: 'heart', t: '+' + r.hearts });
     return out;
   }
 
@@ -429,7 +443,7 @@ const UI = (() => {
         const V = VILLAGERS[d.o.who]; toast(WHO[d.o.who].name + ': ' + pick(V.thanks), 3.4);
         break;
       }
-      case 'newOrder': d.o._t = tn(); keep(0.5); if (!onTitle) snd('order'); break;
+      case 'newOrder': d.o._t = tn(); keep(0.5); if (onBoard()) snd('order'); break;
       case 'levelUp':
         snd('levelUp'); fx('confetti', 1);
         d.cells.forEach(c => setAnim(c, { unlock: 1, dur: 0.8 }));
@@ -443,7 +457,7 @@ const UI = (() => {
         break;
       }
       case 'reward': if (!d.silent) rewardFx(d, W / 2, H * 0.45); break;
-      case 'gift': if (cell >= 0) { setAnim(cell, { pop: 1, dur: 0.5 }); if (!d.silent) snd('drop'); } if (d.daily) snd('daily'); break;
+      case 'gift': if (cell >= 0 && onBoard()) { setAnim(cell, { pop: 1, dur: 0.5 }); if (!d.silent) snd('drop'); } if (d.daily) { snd2('calendar', 'daily'); const p = modal && modal.tap || { x: W / 2, y: H * 0.4 }; rewardFx(Object.assign({}, d.g.r, d.g.m30 ? { coins: (d.g.r.coins || 0) + (d.g.m30.coins || 0) } : {}), p.x, p.y); fx('confetti', 0.5, p.x, p.y); } break;
       case 'toBag': toast('Laud oli täis, kingitus läks kotti.'); break;
       case 'deny':
         snd('deny');
@@ -460,10 +474,11 @@ const UI = (() => {
       case 'tut': if (d.to === 5) toast(STORY.tutDone, 3.5); break;
       case 'albumClaim': { const p = modal && modal.tap || { x: W / 2, y: H / 2 }; rewardFx(d.r, p.x, p.y); snd2('claim', 'coins'); break; }
       case 'albumChain': { fx('confetti', 0.8); banner({ text: 'Kogu ahel!', sub: CHAINS[d.k].name, x: W / 2, y: H * 0.4, color: GOLD, size: 40, rays: 1, dur: 1.8 }); rewardFx(d.r, W / 2, H * 0.45); snd2('claim', 'taskDone'); break; }
-      case 'eventPts': if (cell >= 0 && !onTitle) floater(C.x + L.cs * 0.25, C.y - L.cs * 0.35, '+' + d.n, PINK, 'event'); if (d.ready) { toast('Festivali auhind ootab! Vajuta „Festival“.'); bump.event = tn(); } break;
+      case 'eventPts': if (cell >= 0 && onBoard()) floater(C.x + L.cs * 0.25, C.y - L.cs * 0.35, '+' + d.n, PINK, 'event'); if (d.ready && onBoard()) { toast('Festivali auhind ootab! Vajuta „Festival“.'); bump.event = tn(); } break;
       case 'eventClaim': { const p = modal && modal.tap || { x: W / 2, y: H / 2 }; fx('confetti', 0.4, p.x, p.y); snd2('claim', 'daily'); break; }
-      case 'eventStart': if (!onTitle) toast(d.e.name + ' algas! Kogu märke ja võida auhindu.', 3.4); break;
+      case 'eventStart': if (onBoard()) toast(d.e.name + ' algas! Kogu märke ja võida auhindu.', 3.4); break;
       case 'freeEnergy': rewardFx({ energy: d.n }, W / 2, H * 0.45); snd('daily'); break;
+      case 'piggy': case 'wheel': ADV.gameEv(kind, d); break;
     }
   }
 
@@ -480,7 +495,7 @@ const UI = (() => {
     if (m && m.onDone) m.onDone();
     if (!silent && m && m.kind !== 'dialog') snd('close');
     if (mq.length && !modal) { modal = mq.shift(); modal.t0 = tn(); modal.i = 0; if (modal.kind === 'dialog') storyMusic(); }
-    if (m && m.kind === 'dialog' && m.title && !(modal && modal.kind === 'dialog') && !onTitle) boardMusic();
+    if (m && m.kind === 'dialog' && m.title && !(modal && modal.kind === 'dialog') && onBoard()) boardMusic();
     idleT = tn(); dirty = true;
   }
   const modalActive = () => !!modal || onTitle;
@@ -502,6 +517,7 @@ const UI = (() => {
     ptr = { id: e.pointerId, x0: p.x, y0: p.y, x: p.x, y: p.y, t0: performance.now(), moved: false, touch: e.pointerType !== 'mouse' };
     try { cv.setPointerCapture(e.pointerId); } catch (er) {}
     if (modalActive()) { ptr.zone = 'modal'; const h = hitAt(mhits, p); if (h && h.fn) { pressed = pressKey(h); dirty = true; } if (modal) modal.tap = p; return; }
+    if (scr !== 'board') { ptr.zone = 'adv'; const h = hitAt(hits, p); if (h && h.fn) { pressed = pressKey(h); dirty = true; } else ADV.down(p, ptr); return; }
     if (newq.length && newq[0].rect && inR(p, newq[0].rect)) { ptr.zone = 'popup'; return; }
     const c = cellAt(p.x, p.y);
     if (c >= 0 && S.board[c] && Game.isOpen(c)) {
@@ -520,6 +536,7 @@ const UI = (() => {
       else ptr.zone = 'done';
     }
     if (drag) { drag.x = p.x; drag.y = p.y; dirty = true; }
+    if (ptr.zone === 'adv' && !pressed) { ADV.move(p, ptr); dirty = true; }
     if (ptr.zone === 'orders' && ptr.moved) { ordScroll = clamp(ptr.s0 - (p.x - ptr.x0), 0, ordMax); dirty = true; }
   });
   function dragTarget() {
@@ -550,6 +567,7 @@ const UI = (() => {
     const p = ptr, wasPressed = pressed; ptr = null; pressed = null; dirty = true;
     if (wasPressed) { spring = { x: wasPressed.x, y: wasPressed.y, t0: tn() }; keep(0.5); }
     if (drag) { endDrag(cancel); return; }
+    if (p.zone === 'adv') { if (!wasPressed && ADV.up({ x: p.x, y: p.y }, p, cancel)) return; if (cancel || p.moved) return; const h = hitAt(hits, { x: p.x, y: p.y }); if (h && h.fn) h.fn(); return; }
     if (cancel || p.moved && p.zone !== 'modal' || p.zone === 'done') return;
     const q = { x: p.x, y: p.y };
     if (p.zone === 'modal') { if (p.moved && Math.hypot(p.x - p.x0, p.y - p.y0) > 30) return; return modalTap(q); }
@@ -577,7 +595,7 @@ const UI = (() => {
     const h = hitAt(mhits, q);
     if (h) { if (h.fn) h.fn(); return; }
     if (m.kind === 'dialog') return dialogNext();
-    if (m.panel && !inR(q, m.panel) && m.kind !== 'levelup') closeModal();
+    if (m.panel && !inR(q, m.panel) && m.kind !== 'levelup' && !m.sticky) closeModal();
   }
   function dialogNext() {
     const m = modal, line = m.lines[m.i], shown = (tn() - m.t0) * 48;
@@ -596,13 +614,24 @@ const UI = (() => {
   // ---- screens: start ----
   function start() {
     if (!onTitle) return;
-    onTitle = false; S.title = false; dirty = true; snd('tap'); idleT = tn();
+    onTitle = false; S.title = false; dirty = true; snd('tap'); idleT = tn(); scr = 'board';
     boardMusic();
     if (S.tut === 0) {
       openModal({ kind: 'dialog', lines: AREAS[0].intro, title: 'Kiri vanaemalt', onDone: () => { S.tut = 1; S.nextOrderAt = 0; saveSoon(); } });
     } else if (S.tut >= 5) {
       Game.ensureDaily(); if (!S.daily.gift) openModal({ kind: 'daily' });
     }
+  }
+
+  // Seiklus (the level map) from the title or the café; back to the café from the map.
+  function startAdv() {
+    onTitle = false; S.title = false; dirty = true; snd('tap'); idleT = tn();
+    goScreen('map');
+  }
+  function goScreen(s) {
+    const was = scr; scr = s; sel = -1; drag = null; hint = null; dirty = true; idleT = tn();
+    if (s === 'board') { boardMusic(); if (was !== 'board' && S.tut === 0) openModal({ kind: 'dialog', lines: AREAS[0].intro, title: 'Kiri vanaemalt', onDone: () => { S.tut = 1; S.nextOrderAt = 0; saveSoon(); } }); }
+    ADV.entered(s, was);
   }
 
   // ---- drawing: HUD (over the top of the scene) ----
@@ -648,6 +677,9 @@ const UI = (() => {
     drawIcon('settings', st.x + 7, st.y + 7, 30);
     if (giftOn && S.tut >= 5) dot(gr.x + 38, gr.y + 6);
     hits.push({ x: gr.x - 2, y: gr.y - 2, w: 48, h: 48, hud: 1, fn: () => openModal({ kind: 'daily' }) });
+    const av = H2.adv; button(av.x, av.y, av.w, av.h, 'Seiklus', () => goScreen('map'), { style: 'buttonPink', icon: 'map', isz: 28, size: 17 });
+    hits[hits.length - 1].hud = 1;
+    if (ADV.attention()) dot(av.x + av.w - 4, av.y + 4);
     hits.push({ x: st.x - 2, y: st.y - 2, w: 48, h: 48, hud: 1, fn: () => openModal({ kind: 'settings' }) });
   }
   function dot(x, y, n) {
@@ -746,7 +778,7 @@ const UI = (() => {
     if (S.en > 0) for (let i = 0; i < NCELL; i++) { const it = S.board[i]; if (it && !it.b && CHAINS[it.k].kind === 'gen' && it.ch > 0) return [i]; }
     return null;
   }
-  function hintActive() { return !modal && !onTitle && !drag && !ptr && S.tut >= 5 && tn() - idleT > 4; }
+  function hintActive() { return !modal && onBoard() && !drag && !ptr && S.tut >= 5 && tn() - idleT > 4; }
 
   // ---- drawing: board ----
   function itemDrawState(i, t) {
@@ -956,7 +988,7 @@ const UI = (() => {
     }
   }
   function drawPopup(t) {
-    if (!newq.length || modal || onTitle) return;
+    if (!newq.length || modal || !onBoard()) return;
     const it = newq[0]; if (!it.t0) it.t0 = tn();
     const k = (tn() - it.t0) / 2.0; if (k >= 1) { newq.shift(); dirty = true; return; }
     const w = Math.min(260, L.board.w - 20), h = 74, x = L.board.x + (L.board.w - w) / 2;
@@ -985,7 +1017,7 @@ const UI = (() => {
     g.restore();
   }
   function drawTutorial(t) {
-    if (modal || onTitle || drag) return;
+    if (modal || !onBoard() || drag) return;
     const find = (k, l) => { const out = []; S.board.forEach((it, i) => { if (it && !it.b && it.k === k && it.l === l) out.push(i); }); return out; };
     if (S.tut === 1) { const o = find('oven', 1).concat(find('oven', 2)); if (o.length) { const C = cellCenter(o[0]); drawHand(C.x + 6, C.y + 8, t, true); } }
     else if (S.tut === 2) {
@@ -1024,7 +1056,7 @@ const UI = (() => {
     let xx = x; size = size || 26;
     for (const d of describe(r)) {
       if (xx - x > maxW - size) break;
-      if (d.icon) drawIcon(d.icon, xx, y - size / 2, size); else drawItem(d.item[0], d.item[1], xx + size / 2, y, size);
+      if (d.boost) ADV.drawBoost(d.boost, xx, y - size / 2, size); else if (d.icon) drawIcon(d.icon, xx, y - size / 2, size); else drawItem(d.item[0], d.item[1], xx + size / 2, y, size);
       xx += size + 2;
       g.font = font(16, 900); const [tt] = fit(d.t, 16, 900, Math.max(40, maxW - (xx - x))); text(tt, xx, y + 1, 16, INK, 'left', 900); xx += g.measureText(tt).width + 12;
     }
@@ -1080,25 +1112,56 @@ const UI = (() => {
       text('Toksa asja, et see lauale tagasi tuua.', P.x + P.w / 2, P.y + P.h - 26, 15, INK2, 'center', 700, P.w - 20);
     } else if (m.kind === 'daily') {
       Game.ensureDaily();
-      const D = S.daily, P = modalPanel(m, 440, 470, 'Tänane');
-      const gr = Game.giftReward();
-      g.fillStyle = 'rgba(255,200,100,0.3)'; rr(P.x + 10, P.y + 36, P.w - 20, 96, 16); g.fill();
-      drawIcon('gift', P.x + 20, P.y + 52, 60);
-      text('Päeva kingitus', P.x + 92, P.y + 62, 18, INK, 'left', 900, P.w - 210);
-      const gl = D.gift ? ['Homme ootab uus!'] : [gr.streak + '. päev järjest', gr.coins + ' münti, ' + gr.energy + ' energiat' + (gr.chest ? ', kirst' : '')];
-      gl.forEach((s, j) => text(s, P.x + 92, P.y + 88 + j * 20, 15, INK2, 'left', 700, P.w - (D.gift ? 110 : 210)));
-      if (!D.gift) button(P.x + P.w - 112, P.y + 60, 96, 50, 'Võta!', () => Game.claimGift(), Object.assign({ hot: true, pulse: 1 }, B));
-      text('Päevaülesanded', P.x + P.w / 2, P.y + 156, 18, INK, 'center', 900);
+      const D = S.daily, P = modalPanel(m, 440, 664, 'Päevakalender'), gr = Game.giftReward();
+      // 7-day row: past days ticked, today glowing, the big 7th day with a crown of rays
+      const n7 = 7, gap = 5, tw = Math.floor((P.w - 20 - gap * (n7 - 1)) / n7), th = 92, ty = P.y + 40;
+      const today = gr.day7, startX = P.x + (P.w - (tw * n7 + gap * (n7 - 1))) / 2;
+      for (let j = 0; j < n7; j++) {
+        const x = startX + j * (tw + gap), past = j < today || (j === today && D.gift), now7 = j === today && !D.gift, big = j === 6;
+        const pu = now7 ? 1 + Math.sin(t * 5) * 0.04 : 1;
+        g.save(); g.translate(x + tw / 2, ty + th / 2); g.scale(pu, pu); g.translate(-x - tw / 2, -ty - th / 2);
+        if (now7) { const gg = g.createLinearGradient(0, ty, 0, ty + th); gg.addColorStop(0, '#fff6b0'); gg.addColorStop(1, '#ffc93f'); g.fillStyle = gg; }
+        else g.fillStyle = past ? 'rgba(47,213,154,0.2)' : big ? 'rgba(255,79,154,0.14)' : SOFT;
+        rr(x, ty, tw, th, 14); g.fill();
+        if (now7 || big) { g.lineWidth = 2.5; g.strokeStyle = now7 ? '#fff' : 'rgba(255,79,154,0.5)'; g.stroke(); }
+        text((j + 1) + '.', x + tw / 2, ty + 14, 15, past ? GOOD : INK2, 'center', 900);
+        calIcon(CAL7[j], x + tw / 2, ty + 46, Math.min(tw - 8, big ? 40 : 34));
+        const lab = CAL7[j].coins ? '+' + CAL7[j].coins : '';
+        text(lab, x + tw / 2, ty + th - 14, 15, INK, 'center', 900, tw - 2);
+        if (past) drawIcon('check', x + tw - 20, ty - 4, 24);
+        g.restore();
+      }
+      const cy = ty + th + 12;
+      text(D.gift ? 'Tänane auhind on käes. Homme ootab uus!' : gr.streak > 1 ? gr.streak + '. päev järjest!' : 'Tere tulemast tagasi!', P.x + 20, cy + 16, 17, INK, 'left', 900, P.w - (D.gift ? 40 : 160));
+      text(D.gift ? '7. päeval ootab suur auhind.' : 'Tule iga päev, auhinnad kasvavad.', P.x + 20, cy + 40, 15, INK2, 'left', 700, P.w - (D.gift ? 40 : 160));
+      if (!D.gift) button(P.x + P.w - 128, cy + 4, 112, 52, 'Võta!', () => { m.tap = { x: startX + today * (tw + gap) + tw / 2, y: ty + th / 2 }; Game.claimGift(); }, Object.assign({ hot: true, pulse: 1, size: 20 }, B));
+      // 30-day track
+      const ry = cy + 70, bx = P.x + 22, bw = P.w - 44, d30 = D.gift ? D.d30 : Math.max(0, gr.d30 - 1);
+      g.fillStyle = 'rgba(124,92,255,0.08)'; rr(P.x + 10, ry, P.w - 20, 92, 16); g.fill();
+      text('30 päeva rada: ' + d30 + '/30', P.x + 22, ry + 18, 16, INK, 'left', 900, P.w - 140);
+      const nx = CAL30.find(x => x.day > d30) || CAL30[0];
+      text('Vahele jäänud päev ei nulli seda.', P.x + P.w - 22, ry + 18, 15, INK2, 'right', 700, Math.max(60, P.w - 230));
+      bar(bx, ry + 44, bw, 12, d30 / 30, GRAPE);
+      for (const c of CAL30) {
+        const x = bx + bw * c.day / 30, got = d30 >= c.day, nextOne = c === nx && !got;
+        g.fillStyle = got ? GOOD : nextOne ? GOLD : '#fff'; g.beginPath(); g.arc(x - 2, ry + 50, 13, 0, 7); g.fill(); g.lineWidth = 2.5; g.strokeStyle = got ? '#fff' : 'rgba(124,92,255,0.5)'; g.stroke();
+        text(String(c.day), x - 2, ry + 51, 15, got ? '#fff' : INK, 'center', 900);
+      }
+      text(nx.day > d30 ? 'Järgmine: ' + nx.day + '. päeval' : 'Uus ring algab!', P.x + 22, ry + 76, 15, INK2, 'left', 800, 150);
+      rewardRow(nx.r, P.x + 170, ry + 76, P.w - 190, 22);
+      // daily tasks
+      const ty2 = ry + 104;
+      text('Päevaülesanded', P.x + P.w / 2, ty2 + 10, 18, INK, 'center', 900);
       D.tasks.forEach((tk, j) => {
-        const y = P.y + 176 + j * 70, def = DAILY_POOL.find(x => x.id === tk.id);
-        g.fillStyle = SOFT; rr(P.x + 10, y, P.w - 20, 62, 14); g.fill();
-        text(def.text.replace('{n}', tk.goal), P.x + 22, y + 19, 16, INK, 'left', 900, P.w - 150);
-        const bw = P.w - 190; bar(P.x + 22, y + 36, bw, 14, tk.n / tk.goal, '#5fc24a');
-        text(tk.n + '/' + tk.goal, P.x + 22 + bw + 6, y + 43, 15, INK2, 'left', 800, 52);
-        if (tk.claimed) drawIcon('check', P.x + P.w - 58, y + 14, 34);
-        else button(P.x + P.w - 104, y + 7, 88, 48, '+' + DAILY_REWARD.coins, () => Game.claimDaily(j), Object.assign({ icon: 'coin', hot: tk.n >= tk.goal, pulse: tk.n >= tk.goal, off: tk.n < tk.goal, offFn: () => { snd('deny'); toast('Veel ' + (tk.goal - tk.n) + ' jäänud.'); }, size: 17 }, B));
+        const y = ty2 + 26 + j * 64, def = DAILY_POOL.find(x => x.id === tk.id);
+        g.fillStyle = SOFT; rr(P.x + 10, y, P.w - 20, 58, 14); g.fill();
+        text(def.text.replace('{n}', tk.goal), P.x + 22, y + 17, 16, INK, 'left', 900, P.w - 150);
+        const bw2 = P.w - 190; bar(P.x + 22, y + 34, bw2, 13, tk.n / tk.goal, '#5fc24a');
+        text(tk.n + '/' + tk.goal, P.x + 22 + bw2 + 6, y + 41, 15, INK2, 'left', 800, 52);
+        if (tk.claimed) drawIcon('check', P.x + P.w - 58, y + 12, 34);
+        else button(P.x + P.w - 104, y + 5, 88, 48, '+' + DAILY_REWARD.coins, () => Game.claimDaily(j), Object.assign({ icon: 'coin', hot: tk.n >= tk.goal, pulse: tk.n >= tk.goal, off: tk.n < tk.goal, offFn: () => { snd('deny'); toast('Veel ' + (tk.goal - tk.n) + ' jäänud.'); }, size: 17 }, B));
       });
-      const allC = D.tasks.length && D.tasks.every(x => x.claimed), by = P.y + P.h - 64;
+      const allC = D.tasks.length && D.tasks.every(x => x.claimed), by = P.y + P.h - 60;
       if (D.bonus) text('Kõik tänased tehtud. Tubli!', P.x + P.w / 2, by + 24, 16, GOOD, 'center', 900, P.w - 20);
       else button(P.x + 24, by, P.w - 48, 50, 'Kõik 3: +' + DAILY_BONUS.stars + ' tähte ja kirst', () => Game.claimBonus(), Object.assign({ hot: allC, off: !allC, offFn: () => { snd('deny'); toast('Tee enne kõik kolm ülesannet.'); }, size: 17 }, B));
     } else if (m.kind === 'settings') {
@@ -1145,7 +1208,17 @@ const UI = (() => {
       text('Vihje: ühenda kohvioad ja toksa neid.', P.x + P.w / 2, P.y + P.h - 26, 15, INK2, 'center', 700, P.w - 24);
     } else if (m.kind === 'album') drawAlbum(m, t, B);
     else if (m.kind === 'event') drawEvent(m, t, B);
+    else if (m.kind.startsWith('adv')) ADV.drawModal(m, t, B);
     g.restore();
+  }
+
+  // The main prize of a calendar day as one picture: a booster, a wheel spin, a chest, or coins.
+  function calIcon(r, cx, cy, s) {
+    if (r.boost) ADV.drawBoost(typeof r.boost === 'string' ? r.boost : Object.keys(r.boost)[0], cx - s / 2, cy - s / 2, s);
+    else if (r.chest) drawItem('chest', Math.min(3, r.chest), cx, cy, s);
+    else if (r.spins) drawIcon('wheel', cx - s / 2, cy - s / 2, s);
+    else if (r.energy) { drawIcon('coin', cx - s / 2 - 2, cy - s / 2 + 2, s * 0.8); drawIcon('energy', cx - s / 2 + s * 0.35, cy - s / 2 - 2, s * 0.7); }
+    else drawIcon('coin', cx - s / 2, cy - s / 2, s);
   }
 
   // Level-up: rays, a big bouncing number and reward tiles that pop in one by one.
@@ -1293,21 +1366,24 @@ const UI = (() => {
     if (artOn('logo')) { try { ART.logo(g, cx - lw / 2, ly - lw * 0.2, lw, t); logo = true; } catch (e) {} }
     if (!logo) textO('Saarepagar', cx, ly + Math.sin(t * 1.5) * 3, Math.round(lw / 6.2), GOLD, GRAPE, 8);
     text('Vanaema vana maja. Sinu uus kohvik.', cx, ly + lw * 0.32, 18, INK, 'center', 800, W - 40);
-    const bw = Math.min(260, W - 80), by = H * 0.6;
+    const bw = Math.min(280, W - 80), by = Math.min(H * 0.56, H - 260);
     const s = 1 + Math.sin(t * 3) * 0.04;
     g.save(); g.translate(cx, by + 32); g.scale(s, s); g.translate(-cx, -by - 32);
     button(cx - bw / 2, by, bw, 64, S.tut === 0 ? 'Alusta!' : 'Mängi!', () => start(), { hot: true, modal: true, size: 26 });
     g.restore();
-    if (S.tut > 0) text('Tase ' + S.lvl + ' · ' + Game.curArea().name, cx, by + 96, 17, INK, 'center', 800);
-    const e = Game.eventInfo(); if (e.on) { g.fillStyle = PINK; g.font = font(16, 900); const tw = g.measureText(e.name + ' käib!').width + 30; rr(cx - tw / 2, by + 122, tw, 34, 17); g.fill(); text(e.name + ' käib!', cx, by + 140, 16, '#fff', 'center', 900); }
+    button(cx - bw / 2, by + 78, bw, 60, 'Seiklus · tase ' + S.adv.top, () => startAdv(), { style: 'buttonPink', modal: true, size: 21, icon: 'map', isz: 34 });
+    if (ADV.attention()) dot(cx + bw / 2 - 6, by + 82);
+    if (S.tut > 0) text('Tase ' + S.lvl + ' · ' + Game.curArea().name, cx, by + 166, 17, INK, 'center', 800);
+    const e = Game.eventInfo(); if (e.on) { g.fillStyle = PINK; g.font = font(16, 900); const tw = g.measureText(e.name + ' käib!').width + 30; rr(cx - tw / 2, by + 190, tw, 34, 17); g.fill(); text(e.name + ' käib!', cx, by + 208, 16, '#fff', 'center', 900); }
   }
 
   function drawToasts(t) {
     for (let j = toasts.length - 1; j >= 0; j--) if (t - toasts[j].t0 > toasts[j].dur) toasts.splice(j, 1);
     toasts.forEach(o => {
       const k = t - o.t0, a = Math.min(1, k / 0.15, (o.dur - k) / 0.3);
-      const w = Math.min(L.board.w - 8, 460), ls = wrap(o.s, w - 28, 16, 800), h = 20 + ls.length * 21;
-      const x = L.board.x + (L.board.w - w) / 2, y = L.board.y + L.board.h - h - 10 + (1 - Math.min(1, k / 0.15)) * 14;
+      const TB = scr === 'board' || onTitle ? L.board : ADV.toastRect();
+      const w = Math.min(TB.w - 8, 460), ls = wrap(o.s, w - 28, 16, 800), h = 20 + ls.length * 21;
+      const x = TB.x + (TB.w - w) / 2, y = TB.y + TB.h - h - 10 + (1 - Math.min(1, k / 0.15)) * 14;
       g.globalAlpha = clamp(a, 0, 1);
       g.fillStyle = DARK; rr(x, y, w, h, 18); g.fill();
       ls.forEach((s, q) => text(s, x + w / 2, y + 20 + q * 21, 16, '#ffffff', 'center', 800));
@@ -1337,10 +1413,11 @@ const UI = (() => {
     const t0 = performance.now();
     while (warm.length && performance.now() - t0 < 6) { const [k, l] = warm.shift(); const b = itemBox(k, l), full = L.cs * FILL * clamp(1 / b.s, 1, 1.7); itemImg(k, l, Math.ceil(full * DPR / 8) * 8); }
   }
-  function update(dt) { if (fxOn('update')) { try { FX.update(dt); } catch (e) {} } if (S) { tickDisp(dt); if (onTitle && (!warm || warm.length)) prewarm(); } }
+  function update(dt) { if (fxOn('update')) { try { FX.update(dt); } catch (e) {} } if (S) { tickDisp(dt); if (onTitle && (!warm || warm.length)) prewarm(); if (!onTitle && scr !== 'board') ADV.update(dt); } }
   function needsDraw(ms) {
     if (dirty || drag || ms < animUntil || fxActive()) return true;
     if (modal && (modal.kind === 'dialog' || modal.kind === 'levelup')) return ms - lastDraw > 33;
+    if (!onTitle && scr !== 'board') return ms - lastDraw > (ADV.busy() ? 15 : 33);
     if (combo || banners.length || newq.length || (hintActive() && hint)) return ms - lastDraw > 33;
     const pulsing = onTitle || sel >= 0 || (S.tut >= 1 && S.tut <= 4) || S.orders.some(o => Game.orderStatus(o).ready) || S.board.some(it => it && it.b) || artOn('scene') || !!modal || hintActive();
     return ms - lastDraw > (pulsing ? 50 : 1000);
@@ -1353,6 +1430,13 @@ const UI = (() => {
     else { const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, TH.bgTop || '#7fd3ff'); gr.addColorStop(1, TH.bgBottom || '#fff1dc'); g.fillStyle = gr; g.fillRect(0, 0, W, H); }
     if (disp.en === null) tickDisp(1);
     if (onTitle) { drawTitle(t); if (fxOn('draw')) { try { FX.draw(g); } catch (e) {} } return; }
+    if (scr !== 'board') {
+      if (scr === 'map') ADV.drawMap(t); else ADV.drawLevel(t);
+      if (fxOn('draw') && !(modal && modal.fxTop)) { try { FX.draw(g); } catch (e) {} }
+      drawBanners(t); drawToasts(t); drawModal(t);
+      if (modal && modal.fxTop && fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
+      return;
+    }
     if (sel >= 0 && !S.board[sel]) sel = -1;
     drawScene(t); drawBoard(t); drawOrders(t); drawInfo(t); drawBar(t);
     if (drag) {
@@ -1379,10 +1463,19 @@ const UI = (() => {
   }
 
   function markDirty() { dirty = true; }
-  function resetView() { sel = -1; anim.clear(); ghosts.length = 0; banners.length = 0; newq.length = 0; combo = null; modal = null; mq.length = 0; drag = null; disp.en = null; dirty = true; }
+  function resetView() { scr = 'board'; sel = -1; anim.clear(); ghosts.length = 0; banners.length = 0; newq.length = 0; combo = null; modal = null; mq.length = 0; drag = null; disp.en = null; dirty = true; }
 
   return {
     layout, draw, update, needsDraw, ev, hudPos, hudPulse, cellCenter, cellAt, start, openModal, closeModal, toast, markDirty, resetView, itemImg, openAlbum,
+    startAdv, goScreen, get scr() { return scr; },
+    // Drawing and sound helpers for the adventure screens (55-map.js).
+    H: {
+      get g() { return g; }, get W() { return W; }, get H() { return H; }, get DPR() { return DPR; }, get L() { return L; }, get modal() { return modal; },
+      C: { INK, INK2, CARD, EDGE, GOOD, GOLD, PINK, GRAPE, MINT, SHADOW, DARK, SOFT, OUTL, MINF },
+      rr, shade, font, fit, text, textO, wrap, bar, panel, pressScale, button, drawItem, itemImg, itemBox, drawSilhouette, drawIcon, iconImg, drawPortrait, dot, dim, modalPanel, rewardRow, describe,
+      snd, snd2, music, fx, artOn, fxOn, keep, tn, toast, banner, floater, rewardFx, inR, insets, disp, bump, boardMusic,
+      openModal, closeModal, addHit: (h, modal) => (modal ? mhits : hits).push(h), fmtLong,
+    },
     get L() { return L; }, get modal() { return modal; }, get sel() { return sel; }, set sel(v) { sel = v; dirty = true; },
     get onTitle() { return onTitle; }, get cards() { return cardRects; }, get hits() { return hits; }, get mhits() { return mhits; },
     dialogNext: () => { if (modal && modal.kind === 'dialog') { modal.t0 = -1e9; dialogNext(); } },

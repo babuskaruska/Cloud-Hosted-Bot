@@ -156,6 +156,9 @@ const Game = (() => {
     if (r.chest) giveItem('chest', r.chest);
     if (r.item) giveItem(r.item[0], r.item[1]);
     if (r.genUp) { const k = spareGen(); if (k) giveItem(k, 2); }
+    if (r.boost) { const b = typeof r.boost === 'string' ? { [r.boost]: 1 } : r.boost; for (const k in b) if (k in S.adv.boost) S.adv.boost[k] += b[k]; }
+    if (r.spins) S.wheel.extra += r.spins;
+    if (r.hearts) S.adv.hearts = Math.max(S.adv.hearts, Math.min(HEART_MAX, S.adv.hearts + r.hearts));
     ev('reward', -1, r);
   }
 
@@ -188,7 +191,7 @@ const Game = (() => {
   }
   // Shared bookkeeping for a merge that made n items at cell b: stats, daily, XP, combo, festival points, events.
   function afterMerge(b, res, n, from, extra) {
-    S.stats.merges += n; daily('merge', n);
+    S.stats.merges += n; daily('merge', n); piggyAdd(PIGGY_ADD.merge * n);
     const kind = ch(res.k).kind;
     if (kind === 'item' && res.l >= 5) daily('hi', n);
     ev('merge', b, Object.assign({ from, k: res.k, l: res.l, max: res.l === maxL(res.k) }, extra || {}));
@@ -444,7 +447,7 @@ const Game = (() => {
     cells.forEach(c => { S.board[c] = null; });
     S.orders.splice(oi, 1);
     addCoins(o.coins); S.stars += o.stars;
-    S.stats.orders++; S.ordersDone++; daily('order', 1);
+    S.stats.orders++; S.ordersDone++; daily('order', 1); piggyAdd(PIGGY_ADD.order);
     S.nextOrderAt = now() + 1400;
     ev('order', -1, { oi, o, cells, taken });
     eventPts(EVENT_PTS.order);
@@ -493,13 +496,41 @@ const Game = (() => {
   function daily(id, n) {
     for (const t of S.daily.tasks) if (t.id === id && t.n < t.goal) { t.n = Math.min(t.goal, t.n + n); if (t.n >= t.goal) ev('dailyReady', -1, { t }); }
   }
-  const giftReward = () => { const s = S.daily.lastGift === dayKey(now() - 86400000) ? Math.min(7, S.daily.streak + 1) : 1; return { streak: s, coins: 15 + 10 * s, energy: 15, chest: s >= 7 ? 2 : s >= 3 ? 1 : 0 }; };
+  // Daily calendar: the 7-day streak (day 7 is the big prize, then it starts a new week) and the 30-day track
+  // (counts every visit; a missed day does not reset it). Before today's claim it shows what today will give.
+  function giftReward() {
+    const D = S.daily, claimed = D.gift;
+    const s = claimed ? D.streak : D.lastGift === dayKey(now() - 86400000) ? D.streak + 1 : 1;
+    const d30 = claimed ? Math.max(1, D.d30) : (D.d30 >= 30 ? 1 : D.d30 + 1), day7 = (Math.max(1, s) - 1) % 7;
+    const m = CAL30.find(x => x.day === d30);
+    return { streak: s, day7, r: CAL7[day7], d30, m30: m ? m.r : null, claimed };
+  }
   function claimGift() {
     ensureDaily(); if (S.daily.gift) return false;
     const g = giftReward();
-    S.daily.gift = true; S.daily.streak = g.streak; S.daily.lastGift = S.daily.day;
-    give({ coins: g.coins, energy: g.energy, chest: g.chest || 0 });
+    S.daily.gift = true; S.daily.streak = g.streak; S.daily.lastGift = S.daily.day; S.daily.d30 = g.d30;
+    give(Object.assign({ silent: true }, g.r));
+    if (g.m30) { S.daily.c30 = g.d30; give(Object.assign({ silent: true }, g.m30)); }
     ev('gift', -1, { daily: true, g }); after(); return true;
+  }
+  // ---- piggy bank: fills from play, opens free once a day ----
+  function piggyAdd(n) { if (S.piggy.coins < PIGGY_MAX) S.piggy.coins = Math.min(PIGGY_MAX, S.piggy.coins + n); }
+  const piggyReady = () => S.piggy.day !== dayKey() && S.piggy.coins >= PIGGY_MIN;
+  function openPiggy() {
+    if (!piggyReady()) return false;
+    const n = S.piggy.coins; S.piggy.coins = 0; S.piggy.day = dayKey(); addCoins(n);
+    ev('piggy', -1, { n }); after(); return true;
+  }
+  // ---- lucky wheel: one free spin a day, plus spins won in play ----
+  const wheelFree = () => S.wheel.free !== dayKey();
+  const wheelSpins = () => (wheelFree() ? 1 : 0) + S.wheel.extra;
+  function spinWheel(force) {
+    if (!wheelSpins() && force === undefined) return -1;
+    if (wheelFree()) S.wheel.free = dayKey(); else if (S.wheel.extra > 0) S.wheel.extra--;
+    const i = force !== undefined ? force : WHEEL.indexOf(wpick(WHEEL, x => x.w));
+    S.wheel.n++;
+    give(Object.assign({ silent: true }, WHEEL[i].r));
+    ev('wheel', -1, { i }); after(); return i;
   }
   function claimDaily(ti) {
     const t = S.daily.tasks[ti]; if (!t || t.claimed || t.n < t.goal) return false;
@@ -574,5 +605,6 @@ const Game = (() => {
     ensureDaily, claimGift, claimDaily, claimBonus, giftReward, shopList, buy, tutCheck, tick, newGame, addXp, give, refreshGen,
     group, merge5, openMystery, albumHas, albumPending, albumCount, chainFull, claimAlbum, claimChain,
     eventInfo, ensureEvent, claimEvent, eventReady, freeEnIn, claimFreeEnergy, orderNeeds,
+    piggyAdd, piggyReady, openPiggy, wheelFree, wheelSpins, spinWheel, addCoins,
   };
 })();
