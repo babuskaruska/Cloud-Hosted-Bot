@@ -279,7 +279,7 @@ const UI = (() => {
   const slotFor = cs => Math.round(clamp(cs * 0.95, 46, 62));
   const ordHFor = cs => slotFor(cs) + 52;
   function layout() {
-    DPR = Math.min(window.devicePixelRatio || 1, 3);
+    DPR = Math.min(window.devicePixelRatio || 1, (typeof ART !== 'undefined' && ART.perf) ? ART.perf.maxDpr() : 3); // ART.perf caps it on weak phones
     W = window.innerWidth; H = window.innerHeight;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     const si = insets(), gap = 6, top = si.t + 6, bot = H - si.b - 4, left = si.l, right = W - si.r;
@@ -1513,13 +1513,28 @@ const UI = (() => {
     if (!onTitle && scr !== 'board') return ms - lastDraw > (ADV.busy() ? 15 : 33);
     if (combo || banners.length || newq.length || (hintActive() && hint)) return ms - lastDraw > 33;
     const pulsing = onTitle || sel >= 0 || (S.tut >= 1 && S.tut <= 4) || S.orders.some(o => Game.orderStatus(o).ready) || S.board.some(it => it && it.b) || artOn('scene') || !!modal || hintActive();
-    return ms - lastDraw > (pulsing ? 50 : 1000);
+    // battery (phase C, Ash): with no touch for 20 s the gentle loops (scene, pulses) drop to 10 fps, after 90 s to 4 fps
+    const idle = onTitle ? 0 : tn() - idleT;
+    return ms - lastDraw > (pulsing ? (idle > 90 ? 250 : idle > 20 ? 100 : 50) : 1000);
   }
+  // Phase C (Ash): while a modal (not a dialog or level-up) sits over the board, the board layers under its dim come
+  // from a snapshot refreshed every 1.5 s instead of being redrawn every frame (the modal and the effects stay live).
+  // Input under a modal only uses mhits, so the board hits are not needed then.
+  const back = { c: null, at: -1e9, key: '' };
   function draw(ms) {
     lastDraw = ms; dirty = false; const t = tn();
     g.setTransform(DPR, 0, 0, DPR, 0, 0);
     hits = [];
-    if (artOn('bg')) { try { ART.bg(g, W, H, t); } catch (e) { g.fillStyle = TH.bgBottom || '#fff1dc'; g.fillRect(0, 0, W, H); } }
+    const fz = !onTitle && scr === 'board' && modal && modal.kind !== 'dialog' && modal.kind !== 'levelup' && !drag && t - (modal.t0 || 0) > 0.35;
+    const bkey = fz ? cv.width + 'x' + cv.height + '|' + modal.kind : '';
+    if (fz && back.c && back.key === bkey && t - back.at < 1.5) {
+      g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(back.c, 0, 0); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+      drawCombo(t); if (fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
+      drawBanners(t); drawPopup(t); drawToasts(t); drawTutorial(t); drawModal(t);
+      return;
+    }
+    if (!fz) back.key = '';
+    if (artOn('bg') && !(scr === 'level' && !onTitle && artOn('levelBg'))) { try { ART.bg(g, W, H, t); } catch (e) { g.fillStyle = TH.bgBottom || '#fff1dc'; g.fillRect(0, 0, W, H); } }
     else { const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, TH.bgTop || '#7fd3ff'); gr.addColorStop(1, TH.bgBottom || '#fff1dc'); g.fillStyle = gr; g.fillRect(0, 0, W, H); }
     if (disp.en === null) tickDisp(1);
     if (onTitle) { drawTitle(t); if (fxOn('draw')) { try { FX.draw(g); } catch (e) {} } return; }
@@ -1533,6 +1548,11 @@ const UI = (() => {
     }
     if (sel >= 0 && !S.board[sel]) sel = -1;
     drawScene(t); drawBoard(t); drawOrders(t); drawInfo(t); drawBar(t);
+    if (fz) { // keep a copy of the board layers for the next frames under the modal
+      if (!back.c) back.c = document.createElement('canvas');
+      if (back.c.width !== cv.width || back.c.height !== cv.height) { back.c.width = cv.width; back.c.height = cv.height; }
+      const bg2 = back.c.getContext('2d'); bg2.clearRect(0, 0, cv.width, cv.height); bg2.drawImage(cv, 0, 0); back.key = bkey; back.at = t;
+    }
     if (drag) {
       const tg = dragTarget(), x = drag.x, y = drag.y - drag.lift, s = L.cs * 1.1;
       g.fillStyle = 'rgba(60,35,15,0.22)'; g.beginPath(); g.ellipse(x, y + s * 0.45 + drag.lift * 0.3, s * 0.34, s * 0.12, 0, 0, 7); g.fill();

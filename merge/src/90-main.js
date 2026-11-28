@@ -8,20 +8,25 @@
   Game.tickEnergy(); Game.ensureDaily();
   const leftLevel = LV.leftOpen();
   const cap = (navigator.hardwareConcurrency || 8) <= 4 ? 30 : 60;
-  try { if (typeof FX !== 'undefined' && FX && FX.quality === undefined) FX.quality = cap === 30 ? 1 : 2; } catch (e) {}
+  // FX.quality comes from ART.perf (1 on weak devices, lowered further after slow frames)
   UI.layout();
   addEventListener('resize', () => UI.layout());
   addEventListener('orientationchange', () => setTimeout(() => UI.layout(), 120));
 
-  let raf = 0, last = 0, running = false;
+  let raf = 0, last = 0, running = false, drew = false, jsMs = 0;
+  // ART.perf (Ash) watches drawn frames and lowers the canvas resolution / effect quality on slow phones.
+  const perf = typeof ART !== 'undefined' && ART.perf ? ART.perf : null;
+  if (perf) perf.onChange = (lv, dprChanged) => { if (dprChanged) UI.layout(); UI.markDirty(); };
   function frame(ms) {
     raf = requestAnimationFrame(frame);
+    if (perf) perf.frame(ms, drew, jsMs); drew = false;
     if (ms - last < 1000 / cap - 2) return;
     const dt = Math.min(0.1, (ms - last) / 1000); last = ms;
     try {
+      const t0 = performance.now();
       Game.tick();
       UI.update(dt);
-      if (UI.needsDraw(ms)) UI.draw(ms);
+      if (UI.needsDraw(ms)) { UI.draw(ms); drew = true; jsMs = performance.now() - t0; }
     } catch (e) { console.error(e); }
   }
   function run() { if (running) return; running = true; last = performance.now(); raf = requestAnimationFrame(frame); UI.markDirty(); }

@@ -641,7 +641,52 @@ const ART = (function () {
 
   function scaleOf(ctx) { try { const m = ctx.getTransform(); return Math.max(.5, Math.min(4, Math.hypot(m.a, m.b))); } catch (e) { return A.dpr || 1; } }
   A.scaleOf = scaleOf;
-  A.dpr = Math.min(3, window.devicePixelRatio || 1);
+  // ---- device budget (version 3 phase C): ART.perf ----
+  // Cheap Androids (Poco M7 Pro class) choke on a 1080x2400 canvas redrawn 20-60 times a second, so the backing
+  // resolution and the effect quality follow the device and the measured frames:
+  //   ART.perf.maxDpr()     cap for the canvas backing scale (UI.layout uses it): 3 normally, 2 on weak devices
+  //                         (<= 4 cores or <= 4 GB), lower after slow frames. URL flag dpr=<n> forces a cap.
+  //   ART.perf.level        0 = full; 1 = backing <= 2; 2 = + FX.quality 1; 3 = backing <= 1.5, FX.quality 0.
+  //   ART.perf.frame(ms, drew, jsMs)  called by the frame loop on every rAF (ms = rAF time; drew = UI.draw ran in the
+  //                         previous callback; jsMs = its tick + draw time). Slow drawn frames (median gap > 42 ms, > 55 ms for level 3, or JS
+  //                         > 14 ms over 36 frames) step one level down, at most every 2.5 s; the level is saved for a week.
+  //   ART.perf.onChange     fn(level) set by the UI (relayout when the backing cap changed). URL flag perf=0 = no auto.
+  A.perf = (function () {
+    const nav = navigator, cores = nav.hardwareConcurrency || 8, mem = nav.deviceMemory || 8;
+    // iPhones and iPads are never 'weak' by these numbers (Safari reports few cores and no memory); slow frames still count
+    const ios = /iPhone|iPad|iPod/.test(nav.userAgent || '') || (/Macintosh/.test(nav.userAgent || '') && nav.maxTouchPoints > 1);
+    const weak = !ios && (cores <= 4 || mem <= 4);
+    let qs = {}; try { new URLSearchParams(location.search + '&' + location.hash.slice(1)).forEach((v, k) => { qs[k] = v; }); } catch (e) { }
+    const KEY = 'saarepagar.perf', P = { weak, level: 0, onChange: null, auto: qs.perf !== '0' && !window.__mgPerfNoAuto };
+    try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && P.auto && Date.now() - s.at < 7 * 864e5) P.level = Math.max(0, Math.min(3, s.level | 0)); } catch (e) { }
+    if (qs.perf && /^[0-3]$/.test(qs.perf) && qs.perf !== '0') P.level = +qs.perf;
+    const forced = qs.dpr ? Math.max(1, Math.min(3, parseFloat(qs.dpr) || 3)) : 0;
+    P.maxDpr = () => forced || Math.min(weak ? 2 : 3, P.level >= 3 ? 1.5 : P.level >= 1 ? 2 : 3);
+    P.fxQuality = () => Math.min(weak ? 1 : 2, P.level >= 3 ? 0 : P.level >= 2 ? 1 : 2);
+    const gaps = [], js = []; let last = 0, wasDraw = false, hold = 0;
+    const med = a => { const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
+    P.apply = function () { try { if (typeof FX !== 'undefined' && FX) FX.quality = P.fxQuality(); } catch (e) { } A.quality = P.level >= 3 ? 1 : 2; };
+    P.set = function (lv, save) {
+      lv = Math.max(0, Math.min(3, lv | 0)); if (lv === P.level) return;
+      const d0 = P.maxDpr(); P.level = lv; P.apply(); gaps.length = js.length = 0; hold = performance.now() + 2500;
+      if (save) try { localStorage.setItem(KEY, JSON.stringify({ level: lv, at: Date.now() })); } catch (e) { }
+      if (P.onChange) try { P.onChange(lv, P.maxDpr() !== d0); } catch (e) { }
+    };
+    P.frame = function (ms, drew, jsMs) {
+      if (wasDraw && last && !document.hidden) {
+        const gap = ms - last;
+        if (gap > 0 && gap < 400) { gaps.push(gap); if (jsMs != null) js.push(jsMs); if (gaps.length > 36) gaps.shift(); if (js.length > 36) js.shift(); }
+      }
+      wasDraw = !!drew; last = ms;
+      if (!P.auto || P.level >= 3 || gaps.length < 36 || ms < hold) return;
+      let n = P.level + 1; if (n === 1 && Math.min(weak ? 2 : 3, window.devicePixelRatio || 1) <= 2) n = 2; // the cap to 2 would change nothing
+      const lim = n >= 3 ? 55 : 42; // the last step (blurrier canvas) only below ~18 fps
+      if (med(gaps) > lim || (js.length >= 36 && med(js) > 14)) P.set(n, true);
+    };
+    P.stats = () => ({ level: P.level, weak, maxDpr: P.maxDpr(), fx: P.fxQuality(), gap: gaps.length ? +med(gaps).toFixed(1) : null, js: js.length ? +med(js).toFixed(1) : null });
+    return P;
+  })();
+  Object.defineProperty(A, 'dpr', { get: () => Math.min(A.perf.maxDpr(), window.devicePixelRatio || 1), enumerable: true });
 
   // ---- pixel helpers ----
   // vibrance: push weak colours toward saturation (the candy look), leave greys a little cooler
@@ -2904,8 +2949,61 @@ const ART = (function () {
     gr.addColorStop(0, 'rgba(255,236,170,.95)'); gr.addColorStop(.35, 'rgba(255,200,120,.45)'); gr.addColorStop(1, 'rgba(255,190,110,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
     return c;
   }
-  let _animC = null;
-  function scratchAnim(w, h) { if (!_animC) _animC = mk(w, h); if (_animC.width !== w || _animC.height !== h) { _animC.width = w; _animC.height = h; } return _animC; }
+  // ---- tinted drawing for the animated layer (phase C) ----
+  // tinted(ctx, over) returns a stand-in for ctx whose colours (fillStyle, strokeStyle, gradient stops, shadowColor) are
+  // mixed toward `over` (an rgba string) and whose drawImage uses a cached pre-tinted copy of the canvas: the same result
+  // as painting the layer offscreen and filling it 'source-atop', without the offscreen canvas and its full-rect
+  // composite every frame (that cost 4-7 ms per frame at DPR 3 on a throttled phone). Colour results are cached.
+  const _norm = (() => { let c = null; return v => { if (!c) c = mk(1, 1).getContext('2d'); c.fillStyle = '#000'; c.fillStyle = v; return c.fillStyle; }; })();
+  function parseCol(v) {
+    let m;
+    if (v[0] === '#') {
+      const h = v.length === 4 || v.length === 5 ? v.slice(1).split('').map(x => x + x).join('') : v.slice(1);
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16), h.length >= 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1];
+    }
+    if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)$/i.exec(v))) return [+m[1], +m[2], +m[3], m[4] == null ? 1 : m[4].endsWith('%') ? parseFloat(m[4]) / 100 : +m[4]];
+    return null;
+  }
+  const _tintCache = new Map();
+  function tintCol(v, over) {
+    if (typeof v !== 'string') return v;
+    let tc = _tintCache.get(over); if (!tc) { tc = { o: parseCol(over), m: new Map() }; _tintCache.set(over, tc); }
+    let r = tc.m.get(v); if (r !== undefined) return r;
+    let c = parseCol(v); if (!c) { const n = _norm(v); c = parseCol(n); }
+    const o = tc.o;
+    if (!c || !o) r = v;
+    else { const a = o[3], f = x => Math.round(x); r = 'rgba(' + f(c[0] * (1 - a) + o[0] * a) + ',' + f(c[1] * (1 - a) + o[1] * a) + ',' + f(c[2] * (1 - a) + o[2] * a) + ',' + +c[3].toFixed(3) + ')'; }
+    if (tc.m.size > 800) tc.m.clear();
+    tc.m.set(v, r); return r;
+  }
+  const _imgTint = new WeakMap();
+  function tintImg(img, over) {
+    if (!(img instanceof HTMLCanvasElement)) return img;
+    let e = _imgTint.get(img); if (e && e.over === over && e.w === img.width) return e.c;
+    const c = mk(img.width, img.height), g = c.getContext('2d');
+    g.drawImage(img, 0, 0); g.globalCompositeOperation = 'source-atop'; g.fillStyle = over; g.fillRect(0, 0, c.width, c.height);
+    _imgTint.set(img, { over, w: img.width, c }); return c;
+  }
+  const TintProto = (() => {
+    const P = {}, CP = CanvasRenderingContext2D.prototype, special = { fillStyle: 1, strokeStyle: 1, shadowColor: 1 };
+    for (const k of Object.getOwnPropertyNames(CP)) {
+      if (k === 'constructor') continue;
+      const d = Object.getOwnPropertyDescriptor(CP, k);
+      if (typeof d.value === 'function') P[k] = function () { return this._c[k].apply(this._c, arguments); };
+      else if (d.get) Object.defineProperty(P, k, special[k]
+        ? { get() { return this._c[k]; }, set(v) { this._c[k] = v && v._g ? v._g : tintCol(v, this._o); } }
+        : { get() { return this._c[k]; }, set(v) { this._c[k] = v; } });
+    }
+    const grad = (self, gr) => ({ _g: gr, addColorStop(o, c) { gr.addColorStop(o, tintCol(c, self._o)); } });
+    P.createLinearGradient = function () { return grad(this, this._c.createLinearGradient.apply(this._c, arguments)); };
+    P.createRadialGradient = function () { return grad(this, this._c.createRadialGradient.apply(this._c, arguments)); };
+    if (CP.createConicGradient) P.createConicGradient = function () { return grad(this, this._c.createConicGradient.apply(this._c, arguments)); };
+    P.drawImage = function (img) { const a = Array.prototype.slice.call(arguments); a[0] = tintImg(img, this._o); return this._c.drawImage.apply(this._c, a); };
+    return P;
+  })();
+  const _tinted = new WeakMap();
+  function tinted(ctx, over) { let t = _tinted.get(ctx); if (!t) { t = Object.create(TintProto); t._c = ctx; _tinted.set(ctx, t); } t._o = over; return t; }
+  A.tinted = tinted;
   A._renderScene = function (ctx, id, def, on, frac, x, y, w, h, t, opts, sty) {
     if (w < 4 || h < 4) return;
     opts = opts || {}; t = t || 0;
@@ -2913,7 +3011,9 @@ const ART = (function () {
     // fit the height, but on a short wide strip zoom in (crop some sky and ground) so details stay readable
     const s = Math.max(h / DH, Math.min(w / 520, h / 150)), ox = (w - DW * s) / 2, oy = Math.max(h - DH * s, Math.min(0, h - 204 * s)), L = -ox / s, Rr = DW + ox / s, sc = A.scaleOf(ctx);
     const own = !!def.ownSky, styKey = sty ? Object.keys(sty).sort().map(k => k + '=' + sty[k][0]).join(',') : '';
-    const ck = id + '|' + styKey + '|' + (plain ? 'plain' : env.key) + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
+    const q = (typeof FX !== 'undefined' && FX) ? FX.quality | 0 : 2, hz = Math.max(.3, Math.min(.95, (oy + 132 * s) / h));
+    const bake = !plain && !own && q < 2; // lower quality: the sky (still clouds) is baked into the cached layer, one blit a frame
+    const ck = id + '|' + styKey + '|' + (plain ? 'plain' : env.key) + (bake ? '|b' + Math.round(env.tod * 96) : '') + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
     let c = cache.get(ck);
     if (!c) {
       c = mk(w * sc, h * sc); const g = c.getContext('2d');
@@ -2937,25 +3037,22 @@ const ART = (function () {
       }
       if (hole) { g.globalCompositeOperation = 'destination-in'; g.drawImage(cp, 0, 0); } // keep the transparent sky hole
       g.globalCompositeOperation = 'source-over';
+      if (bake) {
+        const c2 = mk(w * sc, h * sc), g2 = c2.getContext('2d'); g2.scale(sc, sc);
+        A.sky(g2, 0, 0, w, h, 0, Object.assign({}, env, { horizon: hz })); g2.setTransform(1, 0, 0, 1, 0, 0); g2.drawImage(c, 0, 0); c = c2;
+      }
       if (cache.size > 8) cache.delete(cache.keys().next().value);
       cache.set(ck, c);
     }
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    if (!plain && !own) A.sky(ctx, x, y, w, h, t, Object.assign({}, env, { horizon: Math.max(.3, Math.min(.95, (oy + 132 * s) / h)) }));
+    if (!plain && !own && !bake) A.sky(ctx, x, y, w, h, t, Object.assign({}, env, { horizon: hz }));
     ctx.drawImage(c, x, y, w, h);
     const over = plain ? null : (env.weather === 'rain' && !OVER[env.phase] ? 'rgba(80,90,130,.18)' : OVER[env.phase]);
-    const q = (typeof FX !== 'undefined' && FX) ? FX.quality | 0 : 2;
     SKYOFF = !plain && !own;
-    if (over && q > 1) { // tint the animated layer the same way (offscreen at a capped resolution, one fill; top quality only)
-      const asc = Math.min(sc, 2), aw = Math.ceil(w * asc), ah = Math.ceil(h * asc), ac = scratchAnim(aw, ah), ag = ac.getContext('2d');
-      ag.setTransform(1, 0, 0, 1, 0, 0); ag.globalCompositeOperation = 'source-over'; ag.globalAlpha = 1; ag.clearRect(0, 0, aw, ah);
-      ag.scale(asc, asc); ag.translate(ox, oy); ag.scale(s, s);
-      try { def.anim(ag, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
-      ag.setTransform(1, 0, 0, 1, 0, 0); ag.globalCompositeOperation = 'source-atop'; ag.fillStyle = over; ag.fillRect(0, 0, aw, ah); ag.globalCompositeOperation = 'source-over';
-      ctx.drawImage(ac, 0, 0, aw, ah, x, y, w, h);
-    } else {
+    { // the animated layer, tinted for the hour like the still (colour-mixed drawing, no offscreen pass; every quality)
+      const ac = over ? tinted(ctx, over) : ctx;
       ctx.save(); ctx.translate(x + ox, y + oy); ctx.scale(s, s);
-      try { def.anim(ctx, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
+      try { def.anim(ac, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
       ctx.restore();
     }
     SKYOFF = false;
@@ -3160,6 +3257,7 @@ const ART = (function () {
 //   ART.mapTheme(chapter)   -> { key, name, path, accent, ink } (chapter themes cycle forever; each cycle reshuffles the decor)
 //   ART.mapBg(ctx, chapter, x, y, w, h, t, scroll)  fills the rect with the chapter's scenery. scroll = world y (CSS px) of the rect's
 //       top edge: the picture moves up as scroll grows and repeats seamlessly. Cached tile + a light animated layer (QUALITY-scaled).
+//   ART.levelBg(ctx, chapter, x, y, w, h, t, cols, alpha)  the level screen backdrop (gradient + faded scenery), one cached blit
 //   ART.mapDivider(ctx, chapter, x, y, w, t)  a soft mist band with a ribbon "Peatükk n · Name", centred on y (hides the seam between chapters)
 //   ART.mapPath(ctx, points, t, opts)  winding candy path through points ([{x,y}] or [[x,y]] or flat); opts { done: float index of the
 //       last finished point (dots before it are candy coloured, after it pale), width }
@@ -3438,7 +3536,7 @@ const ART = (function () {
   const tiles = new Map();
   function tileFor(ch, w, sc) {
     const T = THEMES[((ch | 0) % THEMES.length + THEMES.length) % THEMES.length], cyc = Math.floor((ch | 0) / THEMES.length);
-    const rs = Math.min(sc, Q() >= 2 ? 2.5 : 2), Ht = Math.round(w * 2.2), key = ch % 60 + '|' + w + '|' + rs;
+    const rs = Math.min(sc, 3), Ht = Math.round(w * 2.2), key = ch % 60 + '|' + w + '|' + rs;
     let t = tiles.get(key); if (t) return t;
     if (tiles.size >= 2) tiles.delete(tiles.keys().next().value);
     const c = mk(w * rs, Ht * rs), g = c.getContext('2d'); g.scale(rs, rs);
@@ -3517,9 +3615,30 @@ const ART = (function () {
     const sc = A.scaleOf(ctx), tl = tileFor(ch | 0, Math.round(w), sc), H = tl.H;
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
     const off = ((scroll % H) + H) % H;
-    for (let yy = y - off; yy < y + h; yy += H) ctx.drawImage(tl.c, x, yy, w, H);
-    // animated layer
-    const T = tl.T, q = Q(), n = [8, 16, 26][q];
+    // 1:1 with the backing pixels (tile made at the canvas scale, y snapped to device pixels): no filtering per frame
+    for (let yy = y - off; yy < y + h; yy += H) ctx.drawImage(tl.c, x, Math.round(yy * sc) / sc, w, H);
+    animBits(ctx, tl, x, y, w, h, t, off);
+    ctx.restore();
+  };
+  // ART.levelBg(ctx, chapter, x, y, w, h, t, cols, alpha): the level screen backdrop in one cached blit: a vertical
+  // gradient cols [top, bottom] with the chapter scenery over it at `alpha` (default .55), plus the animated bits.
+  let _lvl = null;
+  A.levelBg = function (ctx, ch, x, y, w, h, t, cols, alpha) {
+    t = t == null ? now() : t; alpha = alpha == null ? .55 : alpha; cols = cols || ['#bfeaff', '#fff0f6'];
+    const sc = A.scaleOf(ctx), tl = tileFor(ch | 0, Math.round(w), sc), key = (ch | 0) + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc + '|' + cols.join() + '|' + alpha;
+    if (!_lvl || _lvl.key !== key) {
+      const c = mk(w * sc, h * sc), g = c.getContext('2d'); g.scale(sc, sc);
+      const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, cols[0]); gr.addColorStop(1, cols[1]); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      g.globalAlpha = alpha; for (let yy = 0; yy < h; yy += tl.H) g.drawImage(tl.c, 0, yy, w, tl.H);
+      _lvl = { key, c };
+    }
+    ctx.drawImage(_lvl.c, x, Math.round(y * sc) / sc, w, h);
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.globalAlpha *= alpha;
+    animBits(ctx, tl, x, y, w, h, t, 0);
+    ctx.restore();
+  };
+  function animBits(ctx, tl, x, y, w, h, t, off) {
+    const H = tl.H, T = tl.T, q = Q(), n = [8, 16, 26][q];
     for (let i = 0; i < n && i < tl.bits.length; i++) {
       const b = tl.bits[i];
       if (T.anim === 'snow') { // falls in screen space
@@ -3535,7 +3654,7 @@ const ART = (function () {
         const gx = x + ((b.x + t * 18 * b.s) % (w + 40)) - 20, gy = sy + Math.sin(t + b.p) * 6, f = Math.sin(t * 6 + b.p) * 4;
         ctx.beginPath(); ctx.moveTo(gx - 8, gy - f); ctx.quadraticCurveTo(gx - 4, gy - 4, gx, gy); ctx.quadraticCurveTo(gx + 4, gy - 4, gx + 8, gy - f); stroke(ctx, '#ffffff', 2.4);
       } else if (T.anim === 'butterfly' || T.anim === 'bee') {
-        const bx = x + b.x + Math.sin(t * .7 + b.p) * 26, byy = sy + Math.sin(t * 1.1 + b.p * 2) * 14, fl = Math.abs(Math.sin(t * 12 + b.p));
+        const bx = x + b.x + Math.sin(t * .7 + b.p) * 26, byy = sy + Math.sin(t * 1.1 + b.p * 2) * 14, fl = .35 + .65 * Math.abs(Math.sin(t * 9 + b.p)); // wings never fold flat (a bare body read as an 'I')
         if (T.anim === 'bee') {
           E(ctx, bx - 2, byy - 4, 3, 4 * fl + 1); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fill(); E(ctx, bx + 2, byy - 4, 3, 4 * fl + 1); ctx.fill();
           E(ctx, bx, byy, 4.5, 3.2); ctx.fillStyle = '#ffc83d'; ctx.fill(); ctx.fillStyle = '#33285c'; ctx.fillRect(bx - .8, byy - 3, 1.6, 6);
@@ -3543,7 +3662,8 @@ const ART = (function () {
           const c = ['#ff6fae', '#ffd23f', '#8fdcff', '#b79cff'][i % 4];
           E(ctx, bx - 4 * fl, byy - 2, 4.5 * fl + .8, 5); ctx.fillStyle = c; ctx.fill(); E(ctx, bx + 4 * fl, byy - 2, 4.5 * fl + .8, 5); ctx.fill();
           E(ctx, bx - 3 * fl, byy + 3, 3 * fl + .6, 3); ctx.fill(); E(ctx, bx + 3 * fl, byy + 3, 3 * fl + .6, 3); ctx.fill();
-          ctx.fillStyle = '#33285c'; ctx.fillRect(bx - .8, byy - 4, 1.6, 9);
+          E(ctx, bx, byy + .5, 1.3, 4); ctx.fillStyle = '#33285c'; ctx.fill();
+          ctx.beginPath(); ctx.moveTo(bx - .5, byy - 3.5); ctx.lineTo(bx - 2.5, byy - 7); ctx.moveTo(bx + .5, byy - 3.5); ctx.lineTo(bx + 2.5, byy - 7); ctx.lineWidth = .9; ctx.strokeStyle = '#33285c'; ctx.stroke();
         }
       } else if (T.anim === 'firefly') {
         const a = .5 + .5 * Math.sin(t * 2.6 + b.p), fx = x + b.x + Math.sin(t * .5 + b.p) * 18, fy = sy + Math.cos(t * .6 + b.p) * 12;
@@ -3551,8 +3671,7 @@ const ART = (function () {
         ctx.fillStyle = gg; ctx.fillRect(fx - 9, fy - 9, 18, 18); dot(ctx, fx, fy, 1.6, 'rgba(255,255,230,' + a.toFixed(2) + ')');
       }
     }
-    ctx.restore();
-  };
+  }
 
   A.mapDivider = function (ctx, ch, x, y, w, t) {
     const T = A.mapTheme(ch), hh = 120;
@@ -5312,57 +5431,73 @@ const ART = (function () {
   I.cur_beach = g => token(g, '#3db8ff', g => { g.beginPath(); g.moveTo(50, 70); g.bezierCurveTo(28, 62, 28, 34, 50, 30); g.bezierCurveTo(72, 34, 72, 62, 50, 70); g.closePath(); paint(g, '#ffe0c8', 50, 46, 22, 0); for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(50, 68); g.quadraticCurveTo(50 + i * 6, 50, 50 + i * 7, 33 + Math.abs(i) * 2); stroke(g, '#ff9a6a', 1.6); } });
   // ---------- postcard (photo mode) ----------
   function fmtDate(d) { const M = ['jaanuar', 'veebruar', 'märts', 'aprill', 'mai', 'juuni', 'juuli', 'august', 'september', 'oktoober', 'november', 'detsember']; return d.getDate() + '. ' + M[d.getMonth()] + ' ' + d.getFullYear(); }
+  // Cached in two layers per size and caption (phase C): the backdrop and card under the photo, and the stamp, postmark,
+  // tape and caption over it, both with the tilt baked in. Per frame only the photo (rendered unrotated offscreen, then
+  // one rotated blit) and three sparkles are drawn.
+  let _pc = null, _pcOff = null;
   A.postcard = function (ctx, w, h, drawScene, opts) {
-    opts = opts || {}; const t = opts.t || 0, FONT = A.theme.font;
-    ctx.save();
-    // backdrop: soft sky gradient with bokeh
-    const bg = ctx.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#ffd6e8'); bg.addColorStop(.5, '#e6e0ff'); bg.addColorStop(1, '#cdeeff'); ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
-    const r0 = srnd(5); for (let i = 0; i < 16; i++) { const x = r0() * w, y = r0() * h, rr = 8 + r0() * 30; ctx.fillStyle = 'rgba(255,255,255,' + (.12 + r0() * .2) + ')'; ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill(); }
-    // card geometry: a landscape photo with a caption band, as big as fits
+    opts = opts || {}; const t = opts.t || 0, FONT = A.theme.font, sc = Math.min(4, Math.ceil(A.scaleOf(ctx) * 2 - .05) / 2); // half steps: the opening zoom does not rebuild every frame
     const m = Math.max(14, Math.min(w, h) * .05), cw = Math.min(w - m * 2, (h - m * 2) * 1.25), pad = Math.max(8, cw * .035);
     const pw = cw - pad * 2, ph = Math.min(pw * .68, h - m * 2 - pad * 2 - cw * .2), capH = Math.max(54, cw * .2), ch = pad * 2 + ph + capH;
-    const cx = (w - cw) / 2, cy = (h - ch) / 2, tilt = opts.tilt != null ? opts.tilt : -.02;
-    ctx.translate(w / 2, h / 2); ctx.rotate(tilt); ctx.translate(-w / 2, -h / 2);
-    R(ctx, cx + 3, cy + 8, cw, ch, 10); ctx.fillStyle = 'rgba(60,40,120,.22)'; ctx.fill();
-    R(ctx, cx, cy, cw, ch, 10); const cg = ctx.createLinearGradient(0, cy, 0, cy + ch); cg.addColorStop(0, '#ffffff'); cg.addColorStop(1, '#fbf6ff'); ctx.fillStyle = cg; ctx.fill();
-    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(124,92,255,.18)'; ctx.stroke();
-    const px = cx + pad, py = cy + pad;
-    ctx.save(); R(ctx, px, py, pw, ph, 6); ctx.clip(); ctx.fillStyle = '#bfeaff'; ctx.fillRect(px, py, pw, ph);
-    try { drawScene && drawScene(ctx, px, py, pw, ph); } catch (e) { console.error('ART.postcard scene', e); }
-    // a soft vignette and a glossy corner sheen
-    const vg = ctx.createRadialGradient(px + pw / 2, py + ph / 2, Math.min(pw, ph) * .4, px + pw / 2, py + ph / 2, Math.max(pw, ph) * .75); vg.addColorStop(0, 'rgba(255,255,255,0)'); vg.addColorStop(1, 'rgba(80,40,120,.18)'); ctx.fillStyle = vg; ctx.fillRect(px, py, pw, ph);
-    ctx.restore();
-    R(ctx, px, py, pw, ph, 6); ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(60,40,120,.25)'; ctx.stroke();
-    // stamp (top right of the photo): scalloped edge, a kringel and a heart
-    const ss = Math.max(34, pw * .15), sx = px + pw - ss - pad * .6, sy = py + pad * .6;
-    ctx.save(); ctx.translate(sx + ss / 2, sy + ss * .6); ctx.rotate(.08); ctx.translate(-ss / 2, -ss * .6);
-    ctx.fillStyle = 'rgba(60,40,120,.2)'; R(ctx, 2, 3, ss, ss * 1.2, 2); ctx.fill();
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); const sc = ss / 10;
-    for (let i = 0; i <= 10; i++) { ctx.moveTo(i * sc + sc * .35, 0); ctx.arc(i * sc, 0, sc * .35, 0, TAU); ctx.moveTo(i * sc + sc * .35, ss * 1.2); ctx.arc(i * sc, ss * 1.2, sc * .35, 0, TAU); }
-    ctx.rect(0, 0, ss, ss * 1.2); ctx.fill();
-    R(ctx, sc * .6, sc * .6, ss - sc * 1.2, ss * 1.2 - sc * 1.2, 2); const sg = ctx.createLinearGradient(0, 0, 0, ss * 1.2); sg.addColorStop(0, '#ffe0ee'); sg.addColorStop(1, '#ffb0cc'); ctx.fillStyle = sg; ctx.fill();
-    ctx.drawImage(A.item('bread', 7, Math.round(ss * .7 * A.scaleOf(ctx))), ss * .15, ss * .2, ss * .7, ss * .7);
-    ctx.font = '900 ' + (ss * .16) + 'px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#c0306a'; ctx.fillText('EESTI', ss / 2, ss * 1.02);
-    ctx.restore();
-    // postmark rings
-    ctx.save(); ctx.globalAlpha = .45; ctx.strokeStyle = '#7a5aa8'; ctx.lineWidth = 1.4; const pmx = sx - ss * .2, pmy = sy + ss * .9;
-    ctx.beginPath(); ctx.arc(pmx, pmy, ss * .42, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.arc(pmx, pmy, ss * .32, 0, TAU); ctx.stroke();
-    for (let i = 0; i < 3; i++) { ctx.beginPath(); for (let x = 0; x <= ss * 1.2; x += 4) { const yy = pmy - ss * .2 + i * ss * .2 + Math.sin(x * .25) * 2; x ? ctx.lineTo(pmx + ss * .5 + x, yy) : ctx.moveTo(pmx + ss * .5, yy); } ctx.stroke(); }
-    ctx.restore();
-    // washi tape on two corners
-    for (const [tx, ty, a, col] of [[cx + cw * .12, cy, -.5, 'rgba(255,170,200,.82)'], [cx + cw * .9, cy + ch, -.5, 'rgba(160,220,255,.82)']]) {
-      ctx.save(); ctx.translate(tx, ty); ctx.rotate(a); const tw = Math.max(46, cw * .18), th = tw * .32; ctx.fillStyle = col; ctx.fillRect(-tw / 2, -th / 2, tw, th);
-      ctx.fillStyle = 'rgba(255,255,255,.45)'; for (let i = -tw / 2 + 4; i < tw / 2; i += 9) { ctx.beginPath(); ctx.arc(i, 0, th * .16, 0, TAU); ctx.fill(); } ctx.restore();
-    }
-    // caption
-    const capY = py + ph + capH * .42, fs = Math.max(15, Math.min(30, cw * .062));
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 ' + fs + 'px ' + FONT; ctx.lineJoin = 'round';
+    const cx = (w - cw) / 2, cy = (h - ch) / 2, tilt = opts.tilt != null ? opts.tilt : -.02, px = cx + pad, py = cy + pad;
     const cap = opts.caption || 'Tervitused Saarepagarist!';
-    ctx.lineWidth = fs * .22; ctx.strokeStyle = '#ffffff'; ctx.strokeText(cap, cx + cw / 2, capY);
-    const tg = ctx.createLinearGradient(cx, 0, cx + cw, 0); tg.addColorStop(0, '#ff7a6b'); tg.addColorStop(.5, '#ff4f9a'); tg.addColorStop(1, '#7c5cff'); ctx.fillStyle = tg; ctx.fillText(cap, cx + cw / 2, capY);
     const sub = [opts.sub, opts.date === false ? null : (opts.date instanceof Date ? fmtDate(opts.date) : opts.date || fmtDate(new Date()))].filter(Boolean).join(' · ');
-    if (sub) { ctx.font = '800 ' + Math.max(11, fs * .5) + 'px ' + FONT; ctx.fillStyle = A.theme.ink2; ctx.fillText(sub, cx + cw / 2, capY + fs * .95); }
-    for (const s of [-1, 1]) { const hx = cx + cw / 2 + s * (ctx.measureText(sub || '').width / 2 + fs * .6), hy = capY + fs * .95; if (sub) { heart(ctx, hx, hy + fs * .1, fs * .32); ctx.fillStyle = '#ff8fb0'; ctx.fill(); } }
+    const fs = Math.max(15, Math.min(30, cw * .062)), capY = py + ph + capH * .42;
+    const key = Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2) + '|' + tilt + '|' + cap + '|' + sub;
+    if (!_pc || _pc.key !== key) {
+      const mkL = () => { const c = mk(w * sc, h * sc), g = c.getContext('2d'); g.scale(sc, sc); g.translate(w / 2, h / 2); g.rotate(tilt); g.translate(-w / 2, -h / 2); return [c, g]; };
+      const [uc, u] = mkL(), [oc, o] = mkL();
+      // under: backdrop (unrotated) with bokeh, the card shadow and the card
+      u.save(); u.setTransform(sc, 0, 0, sc, 0, 0);
+      const bg = u.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#ffd6e8'); bg.addColorStop(.5, '#e6e0ff'); bg.addColorStop(1, '#cdeeff'); u.fillStyle = bg; u.fillRect(0, 0, w, h);
+      const r0 = srnd(5); for (let i = 0; i < 16; i++) { const x = r0() * w, y = r0() * h, rr = 8 + r0() * 30; u.fillStyle = 'rgba(255,255,255,' + (.12 + r0() * .2) + ')'; u.beginPath(); u.arc(x, y, rr, 0, TAU); u.fill(); }
+      u.restore();
+      R(u, cx + 3, cy + 8, cw, ch, 10); u.fillStyle = 'rgba(60,40,120,.22)'; u.fill();
+      R(u, cx, cy, cw, ch, 10); const cg = u.createLinearGradient(0, cy, 0, cy + ch); cg.addColorStop(0, '#ffffff'); cg.addColorStop(1, '#fbf6ff'); u.fillStyle = cg; u.fill();
+      u.lineWidth = 1.5; u.strokeStyle = 'rgba(124,92,255,.18)'; u.stroke();
+      R(u, px, py, pw, ph, 6); u.fillStyle = '#bfeaff'; u.fill();
+      // over: vignette and frame line of the photo, stamp, postmark, washi tape, caption
+      o.save(); R(o, px, py, pw, ph, 6); o.clip();
+      const vg = o.createRadialGradient(px + pw / 2, py + ph / 2, Math.min(pw, ph) * .4, px + pw / 2, py + ph / 2, Math.max(pw, ph) * .75); vg.addColorStop(0, 'rgba(255,255,255,0)'); vg.addColorStop(1, 'rgba(80,40,120,.18)'); o.fillStyle = vg; o.fillRect(px, py, pw, ph);
+      o.restore();
+      R(o, px, py, pw, ph, 6); o.lineWidth = 1.2; o.strokeStyle = 'rgba(60,40,120,.25)'; o.stroke();
+      const ss = Math.max(34, pw * .15), sx = px + pw - ss - pad * .6, sy = py + pad * .6;
+      o.save(); o.translate(sx + ss / 2, sy + ss * .6); o.rotate(.08); o.translate(-ss / 2, -ss * .6);
+      o.fillStyle = 'rgba(60,40,120,.2)'; R(o, 2, 3, ss, ss * 1.2, 2); o.fill();
+      o.fillStyle = '#ffffff'; o.beginPath(); const sq = ss / 10;
+      for (let i = 0; i <= 10; i++) { o.moveTo(i * sq + sq * .35, 0); o.arc(i * sq, 0, sq * .35, 0, TAU); o.moveTo(i * sq + sq * .35, ss * 1.2); o.arc(i * sq, ss * 1.2, sq * .35, 0, TAU); }
+      o.rect(0, 0, ss, ss * 1.2); o.fill();
+      R(o, sq * .6, sq * .6, ss - sq * 1.2, ss * 1.2 - sq * 1.2, 2); const sg = o.createLinearGradient(0, 0, 0, ss * 1.2); sg.addColorStop(0, '#ffe0ee'); sg.addColorStop(1, '#ffb0cc'); o.fillStyle = sg; o.fill();
+      o.drawImage(A.item('bread', 7, Math.round(ss * .7 * sc)), ss * .15, ss * .2, ss * .7, ss * .7);
+      o.font = '900 ' + (ss * .16) + 'px ' + FONT; o.textAlign = 'center'; o.textBaseline = 'middle'; o.fillStyle = '#c0306a'; o.fillText('EESTI', ss / 2, ss * 1.02);
+      o.restore();
+      o.save(); o.globalAlpha = .45; o.strokeStyle = '#7a5aa8'; o.lineWidth = 1.4; const pmx = sx - ss * .2, pmy = sy + ss * .9;
+      o.beginPath(); o.arc(pmx, pmy, ss * .42, 0, TAU); o.stroke(); o.beginPath(); o.arc(pmx, pmy, ss * .32, 0, TAU); o.stroke();
+      for (let i = 0; i < 3; i++) { o.beginPath(); for (let x = 0; x <= ss * 1.2; x += 4) { const yy = pmy - ss * .2 + i * ss * .2 + Math.sin(x * .25) * 2; x ? o.lineTo(pmx + ss * .5 + x, yy) : o.moveTo(pmx + ss * .5, yy); } o.stroke(); }
+      o.restore();
+      for (const [tx, ty, a, col] of [[cx + cw * .12, cy, -.5, 'rgba(255,170,200,.82)'], [cx + cw * .9, cy + ch, -.5, 'rgba(160,220,255,.82)']]) {
+        o.save(); o.translate(tx, ty); o.rotate(a); const tw = Math.max(46, cw * .18), th = tw * .32; o.fillStyle = col; o.fillRect(-tw / 2, -th / 2, tw, th);
+        o.fillStyle = 'rgba(255,255,255,.45)'; for (let i = -tw / 2 + 4; i < tw / 2; i += 9) { o.beginPath(); o.arc(i, 0, th * .16, 0, TAU); o.fill(); } o.restore();
+      }
+      o.textAlign = 'center'; o.textBaseline = 'middle'; o.font = '900 ' + fs + 'px ' + FONT; o.lineJoin = 'round';
+      o.lineWidth = fs * .22; o.strokeStyle = '#ffffff'; o.strokeText(cap, cx + cw / 2, capY);
+      const tg = o.createLinearGradient(cx, 0, cx + cw, 0); tg.addColorStop(0, '#ff7a6b'); tg.addColorStop(.5, '#ff4f9a'); tg.addColorStop(1, '#7c5cff'); o.fillStyle = tg; o.fillText(cap, cx + cw / 2, capY);
+      if (sub) { o.font = '800 ' + Math.max(11, fs * .5) + 'px ' + FONT; o.fillStyle = A.theme.ink2; o.fillText(sub, cx + cw / 2, capY + fs * .95); }
+      for (const s of [-1, 1]) { const hx = cx + cw / 2 + s * (o.measureText(sub || '').width / 2 + fs * .6), hy = capY + fs * .95; if (sub) { heart(o, hx, hy + fs * .1, fs * .32); o.fillStyle = '#ff8fb0'; o.fill(); } }
+      _pc = { key, uc, oc };
+    }
+    ctx.drawImage(_pc.uc, 0, 0, w, h);
+    // the photo: drawn unrotated offscreen at the backing scale, then one rotated blit under the rounded clip
+    const ow = Math.ceil(pw * sc), oh = Math.ceil(ph * sc);
+    if (!_pcOff) _pcOff = mk(ow, oh); if (_pcOff.width !== ow || _pcOff.height !== oh) { _pcOff.width = ow; _pcOff.height = oh; }
+    const og = _pcOff.getContext('2d'); og.setTransform(1, 0, 0, 1, 0, 0); og.clearRect(0, 0, ow, oh); og.fillStyle = '#bfeaff'; og.fillRect(0, 0, ow, oh);
+    og.setTransform(sc, 0, 0, sc, -px * sc, -py * sc);
+    try { drawScene && drawScene(og, px, py, pw, ph); } catch (e) { console.error('ART.postcard scene', e); }
+    ctx.save(); ctx.translate(w / 2, h / 2); ctx.rotate(tilt); ctx.translate(-w / 2, -h / 2);
+    ctx.save(); R(ctx, px, py, pw, ph, 6); ctx.clip(); ctx.drawImage(_pcOff, px, py, pw, ph); ctx.restore();
+    ctx.restore();
+    ctx.drawImage(_pc.oc, 0, 0, w, h);
+    ctx.save(); ctx.translate(w / 2, h / 2); ctx.rotate(tilt); ctx.translate(-w / 2, -h / 2);
     for (let i = 0; i < 3; i++) { const a = (t * .6 + i / 3) % 1; A.sparkAt(ctx, cx + cw * (.15 + i * .35), cy + ch - capH * .15 - (i % 2) * 6, Math.max(.1, fs * .3 * Math.sin(a * PI)), '#ffd23f'); }
     ctx.restore();
     // the photo rect in unrotated screen space (approximately; the tilt is small)
@@ -7031,7 +7166,7 @@ const REST_MIN = 45;   // minutes of active play before a gentle "take a break?"
 //   FX.update(dt)  FX.draw(ctx)  FX.clear()  FX.count()  FX.active()  FX.busy()  FX.quality = 0 | 1 | 2  FX.onArrive = fn(name)
 const FX = (function () {
   const F = { quality: 2, onArrive: null, spawnDur: 0.42 };
-  const CAP = [110, 260, 480];
+  const CAP = [100, 220, 360]; // phase C: a little lower at the top (a long chain no longer floods weak GPUs)
   const P = [], pool = [], pops = [], flights = [], texts = [], hints = [], shows = [], rockets = [], stamps = [], links = [];
   function get() { return pool.pop() || {}; }
   function add(o) { if (P.length >= CAP[F.quality | 0]) { pool.push(o); return null; } P.push(o); return o; }
@@ -7066,6 +7201,8 @@ const FX = (function () {
         const gr = g.createLinearGradient(0, 0, 0, -128); gr.addColorStop(0, 'rgba(255,255,255,.95)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fill();
       }
     }
+    // round sprites look the same at any angle: they skip the rotated draw (cheaper on weak GPUs)
+    c._sym = name.indexOf('flash') === 0 || name.indexOf('dot') === 0 || name === 'puff' || name === 'cloud';
     return (spr[name] = c);
   }
   function sparkCol(chain) {
@@ -7076,7 +7213,7 @@ const FX = (function () {
   // particle kinds: 0 sprite, 1 ring, 2 confetti, 3 flyer (icon to HUD), 4 rays
   function part(kind, x, y, vx, vy, life, size, img, col) {
     const o = get(); o.k = kind; o.x = x; o.y = y; o.vx = vx; o.vy = vy; o.life = life; o.t = 0; o.size = size; o.img = img; o.col = col;
-    o.rot = Math.random() * 6.28; o.vr = (Math.random() - .5) * 8; o.g = 0; o.drag = 0; o.grow = 0; o.alpha = 1; o.w = 0; o.delay = 0; return add(o);
+    o.rot = Math.random() * 6.28; o.vr = img && img._sym ? 0 : (Math.random() - .5) * 8; o.g = 0; o.drag = 0; o.grow = 0; o.alpha = 1; o.w = 0; o.delay = 0; return add(o);
   }
   function ring(x, y, r0, r1, life, col, w, delay) { const o = part(1, x, y, 0, 0, life, r0, null, col); if (o) { o.grow = r1 - r0; o.w = w || 7; o.delay = delay || 0; } return o; }
   function burst(x, y, n, sp, kinds, size, life, g) {
@@ -7480,6 +7617,8 @@ const FX = (function () {
   window.__fx = F;
   return F;
 })();
+try { ART.perf.apply(); } catch (e) { } // effect quality for this device (ART.perf in 20-art.js)
+try { window.__mgArt = { ART, FX }; } catch (e) { } // test hook for tools/mergeperf.js and tools/artgallery.js
 
 // Saarepagar UI (Mira): layout (portrait first, landscape side by side), drawing, input (drag, tap, long press),
 // screens (board, orders, tasks, story, shop, bag, daily, settings, chain, album, festival, level-up), hints,
@@ -7762,7 +7901,7 @@ const UI = (() => {
   const slotFor = cs => Math.round(clamp(cs * 0.95, 46, 62));
   const ordHFor = cs => slotFor(cs) + 52;
   function layout() {
-    DPR = Math.min(window.devicePixelRatio || 1, 3);
+    DPR = Math.min(window.devicePixelRatio || 1, (typeof ART !== 'undefined' && ART.perf) ? ART.perf.maxDpr() : 3); // ART.perf caps it on weak phones
     W = window.innerWidth; H = window.innerHeight;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     const si = insets(), gap = 6, top = si.t + 6, bot = H - si.b - 4, left = si.l, right = W - si.r;
@@ -8996,13 +9135,28 @@ const UI = (() => {
     if (!onTitle && scr !== 'board') return ms - lastDraw > (ADV.busy() ? 15 : 33);
     if (combo || banners.length || newq.length || (hintActive() && hint)) return ms - lastDraw > 33;
     const pulsing = onTitle || sel >= 0 || (S.tut >= 1 && S.tut <= 4) || S.orders.some(o => Game.orderStatus(o).ready) || S.board.some(it => it && it.b) || artOn('scene') || !!modal || hintActive();
-    return ms - lastDraw > (pulsing ? 50 : 1000);
+    // battery (phase C, Ash): with no touch for 20 s the gentle loops (scene, pulses) drop to 10 fps, after 90 s to 4 fps
+    const idle = onTitle ? 0 : tn() - idleT;
+    return ms - lastDraw > (pulsing ? (idle > 90 ? 250 : idle > 20 ? 100 : 50) : 1000);
   }
+  // Phase C (Ash): while a modal (not a dialog or level-up) sits over the board, the board layers under its dim come
+  // from a snapshot refreshed every 1.5 s instead of being redrawn every frame (the modal and the effects stay live).
+  // Input under a modal only uses mhits, so the board hits are not needed then.
+  const back = { c: null, at: -1e9, key: '' };
   function draw(ms) {
     lastDraw = ms; dirty = false; const t = tn();
     g.setTransform(DPR, 0, 0, DPR, 0, 0);
     hits = [];
-    if (artOn('bg')) { try { ART.bg(g, W, H, t); } catch (e) { g.fillStyle = TH.bgBottom || '#fff1dc'; g.fillRect(0, 0, W, H); } }
+    const fz = !onTitle && scr === 'board' && modal && modal.kind !== 'dialog' && modal.kind !== 'levelup' && !drag && t - (modal.t0 || 0) > 0.35;
+    const bkey = fz ? cv.width + 'x' + cv.height + '|' + modal.kind : '';
+    if (fz && back.c && back.key === bkey && t - back.at < 1.5) {
+      g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(back.c, 0, 0); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+      drawCombo(t); if (fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
+      drawBanners(t); drawPopup(t); drawToasts(t); drawTutorial(t); drawModal(t);
+      return;
+    }
+    if (!fz) back.key = '';
+    if (artOn('bg') && !(scr === 'level' && !onTitle && artOn('levelBg'))) { try { ART.bg(g, W, H, t); } catch (e) { g.fillStyle = TH.bgBottom || '#fff1dc'; g.fillRect(0, 0, W, H); } }
     else { const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, TH.bgTop || '#7fd3ff'); gr.addColorStop(1, TH.bgBottom || '#fff1dc'); g.fillStyle = gr; g.fillRect(0, 0, W, H); }
     if (disp.en === null) tickDisp(1);
     if (onTitle) { drawTitle(t); if (fxOn('draw')) { try { FX.draw(g); } catch (e) {} } return; }
@@ -9016,6 +9170,11 @@ const UI = (() => {
     }
     if (sel >= 0 && !S.board[sel]) sel = -1;
     drawScene(t); drawBoard(t); drawOrders(t); drawInfo(t); drawBar(t);
+    if (fz) { // keep a copy of the board layers for the next frames under the modal
+      if (!back.c) back.c = document.createElement('canvas');
+      if (back.c.width !== cv.width || back.c.height !== cv.height) { back.c.width = cv.width; back.c.height = cv.height; }
+      const bg2 = back.c.getContext('2d'); bg2.clearRect(0, 0, cv.width, cv.height); bg2.drawImage(cv, 0, 0); back.key = bkey; back.at = t;
+    }
     if (drag) {
       const tg = dragTarget(), x = drag.x, y = drag.y - drag.lift, s = L.cs * 1.1;
       g.fillStyle = 'rgba(60,35,15,0.22)'; g.beginPath(); g.ellipse(x, y + s * 0.45 + drag.lift * 0.3, s * 0.34, s * 0.12, 0, 0, 7); g.fill();
@@ -9409,8 +9568,10 @@ const ADV = (() => {
     W = H.W; Hh = H.H; V.G = levelGeo();
     const G = V.G, r = V.r, def = r.def;
     // background: the chapter's colours, softly
-    const col = CH_COL[def.chapter % CH_COL.length], gr = g.createLinearGradient(0, 0, 0, Hh); gr.addColorStop(0, col[0]); gr.addColorStop(1, col[1]); g.fillStyle = gr; g.fillRect(0, 0, W, Hh);
-    if (artOn('mapBg')) { try { g.save(); g.globalAlpha = 0.55; ART.mapBg(g, def.chapter, 0, 0, W, Hh, t); g.restore(); } catch (e) { g.restore(); } }
+    const col = CH_COL[def.chapter % CH_COL.length];
+    if (artOn('levelBg')) { try { ART.levelBg(g, def.chapter, 0, 0, W, Hh, t, col, 0.55); } catch (e) {} } // one cached blit (Ash, phase C)
+    else { const gr = g.createLinearGradient(0, 0, 0, Hh); gr.addColorStop(0, col[0]); gr.addColorStop(1, col[1]); g.fillStyle = gr; g.fillRect(0, 0, W, Hh); }
+    if (!artOn('levelBg') && artOn('mapBg')) { try { g.save(); g.globalAlpha = 0.55; ART.mapBg(g, def.chapter, 0, 0, W, Hh, t); g.restore(); } catch (e) { g.restore(); } }
     drawGoalBar(t, G, r);
     if (G.orders) drawLevelOrders(t, G, r);
     drawLevelBoard(t, G, r);
@@ -11559,20 +11720,25 @@ try { window.__saAudio = AU; window.__saMusic = MUSIC; } catch (e) {}
   Game.tickEnergy(); Game.ensureDaily();
   const leftLevel = LV.leftOpen();
   const cap = (navigator.hardwareConcurrency || 8) <= 4 ? 30 : 60;
-  try { if (typeof FX !== 'undefined' && FX && FX.quality === undefined) FX.quality = cap === 30 ? 1 : 2; } catch (e) {}
+  // FX.quality comes from ART.perf (1 on weak devices, lowered further after slow frames)
   UI.layout();
   addEventListener('resize', () => UI.layout());
   addEventListener('orientationchange', () => setTimeout(() => UI.layout(), 120));
 
-  let raf = 0, last = 0, running = false;
+  let raf = 0, last = 0, running = false, drew = false, jsMs = 0;
+  // ART.perf (Ash) watches drawn frames and lowers the canvas resolution / effect quality on slow phones.
+  const perf = typeof ART !== 'undefined' && ART.perf ? ART.perf : null;
+  if (perf) perf.onChange = (lv, dprChanged) => { if (dprChanged) UI.layout(); UI.markDirty(); };
   function frame(ms) {
     raf = requestAnimationFrame(frame);
+    if (perf) perf.frame(ms, drew, jsMs); drew = false;
     if (ms - last < 1000 / cap - 2) return;
     const dt = Math.min(0.1, (ms - last) / 1000); last = ms;
     try {
+      const t0 = performance.now();
       Game.tick();
       UI.update(dt);
-      if (UI.needsDraw(ms)) UI.draw(ms);
+      if (UI.needsDraw(ms)) { UI.draw(ms); drew = true; jsMs = performance.now() - t0; }
     } catch (e) { console.error(e); }
   }
   function run() { if (running) return; running = true; last = performance.now(); raf = requestAnimationFrame(frame); UI.markDirty(); }
