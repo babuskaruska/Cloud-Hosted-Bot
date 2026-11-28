@@ -1,14 +1,14 @@
 {
   "name": "Saarepagar",
   "short_name": "Saarepagar",
-  "description": "Ühenda asju, täida tellimusi ja ehita väike saarepagariäri uuesti üles.",
+  "description": "Ühenda asju, täida tellimusi ja tee vanaema majast saare kõige mõnusam kohvik.",
   "lang": "et",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#fbe9d0",
-  "theme_color": "#fbe9d0",
+  "background_color": "#7fd3ff",
+  "theme_color": "#7fd3ff",
   "icons": [
     {
       "src": "icon-192.png",
