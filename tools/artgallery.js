@@ -8,7 +8,7 @@ const files = fs.readdirSync(SRC).filter(f => /^(2\d|40)-.*\.js$/.test(f)).sort(
 const code = files.map(f => fs.readFileSync(path.join(SRC, f), 'utf8')).join('\n');
 const gallery = `
 const cv = document.getElementById('cv'), d = window.devicePixelRatio || 1, mode = location.hash.slice(1) || 'items';
-const W = innerWidth, Hh = { items: 1500, gens: 900, scenes: 1700, people: 520, ui: 900, fx: 700, env: 1580, sky: 920, tour: 1720, styles: 1300, wardrobe: 1100, events: 640, postcard: 860 }[mode] || 956;
+const W = innerWidth, Hh = { items: 1500, gens: 900, scenes: 1700, people: 520, ui: 900, fx: 700, env: 1580, sky: 920, tour: 1720, styles: 1300, wardrobe: 1100, events: 860, postcard: 860 }[mode] || 956;
 cv.width = W * d; cv.height = Hh * d; cv.style.width = W + 'px'; cv.style.height = Hh + 'px';
 document.body.style.height = Hh + 'px';
 const g = cv.getContext('2d'); g.scale(d, d);
@@ -115,6 +115,21 @@ if (mode === 'items') {
   ART.tourThemes.slice(k0).concat(ART.tourThemes.slice(0, k0)).forEach((th, j) => { const k = ART.tourThemes.indexOf(th), isl = ART.tourDemo(c * 8 + k, n), y = 4 + j * (hh + 8);
     if (qs.get('style')) { o.style = {}; isl.tasks.forEach(tk => o.style[tk.id] = qs.get('style')); }
     ART.tourScene(g, isl, p, 0, y, W, hh, 1.7 + k, o); label(th + ' i' + isl.i + ' ' + p + '/' + n + (o.style ? ' ' + qs.get('style') : ''), 8, y + 14); });
+} else if (mode === 'wardrobe') {
+  const K = ART.heroineKeys, s = 96;
+  K.outfit.forEach((o, i) => { const x = 6 + (i % 4) * 102, y = 6 + Math.floor(i / 4) * 118; ART.cell(g, x, y, s + 4, 'empty'); g.drawImage(ART.heroine(s * d, { outfit: o, hair: K.hair[i % 4], acc: 'none' }), x + 2, y + 2, s, s); label(o + '/' + K.hair[i % 4], x, y + s + 14); });
+  K.acc.forEach((a, i) => { const x = 6 + (i % 4) * 102, y = 250 + Math.floor(i / 4) * 118; ART.cell(g, x, y, s + 4, 'empty'); g.drawImage(ART.heroine(s * d, { outfit: K.outfit[(i + 2) % 6], hair: K.hair[(i + 1) % 4], acc: a }), x + 2, y + 2, s, s); label(a, x, y + s + 14); });
+  K.hair.forEach((h, i) => { const x = 6 + i * 102, y = 490; g.drawImage(ART.heroine(48 * d, { outfit: 'casual', hair: h, acc: 'none' }), x, y, 48, 48); g.drawImage(ART.heroine(48 * d, { outfit: 'gala', hair: h, acc: 'flower' }), x + 50, y, 48, 48); });
+  ART.petKinds.forEach((k, j) => ART.petAccs.forEach((a, i) => { const x = 6 + i * 102, y = 560 + j * 112; ART.cell(g, x, y, s + 4, 'empty'); g.drawImage(ART.pet(k, s * d, a), x + 2, y + 2, s, s); label(k + ' ' + a, x, y + s + 12); }));
+  ['boho', 'minimal', 'romantic'].forEach((k, i) => { g.drawImage(ART.styleSwatch(k, 60 * d), 214 + i * 66, 130, 60, 60); g.drawImage(ART.styleSwatch(k, 32 * d), 228 + i * 66, 200, 32, 32); g.font = '9px system-ui'; label(ART.styleNames[k], 214 + i * 66, 246); g.font = '700 12px system-ui'; });
+} else if (mode === 'events') {
+  const s = 58; let y = 6;
+  for (const ch of ART.eventChains) { label(ch, 8, y + 10); for (let i = 1; i <= 6; i++) { const x = 6 + (i - 1) * (s + 10); ART.cell(g, x, y + 14, s + 6, 'empty'); g.drawImage(ART.item(ch, i, s * d), x + 3, y + 17, s, s); g.font = '9px system-ui'; label(ART.labels[ch][i - 1], x, y + s + 30); g.font = '700 12px system-ui'; } y += s + 40; }
+  ['pass', 'wardrobe', 'camera', 'palette', 'island', 'event', 'party', 'paw', 'cur_garden', 'cur_fashion', 'cur_wedding', 'cur_beach'].forEach((n, i) => { const x = 6 + (i % 6) * 66, yy = y + 4 + Math.floor(i / 6) * 76; g.drawImage(ART.icon(n, 52 * d), x, yy, 52, 52); g.font = '9px system-ui'; label(n, x, yy + 64); g.font = '700 12px system-ui'; });
+  g.drawImage(ART.icon('camera', 24 * d), 6, y + 160, 24, 24); g.drawImage(ART.icon('pass', 24 * d), 36, y + 160, 24, 24); g.drawImage(ART.icon('island', 24 * d), 66, y + 160, 24, 24); g.drawImage(ART.icon('cur_beach', 24 * d), 96, y + 160, 24, 24);
+} else if (mode === 'postcard') {
+  const qs = new URLSearchParams(location.search), isl = ART.tourDemo(+(qs.get('i') || 4));
+  ART.postcard(g, W, Hh, (c, x, y, w, h) => ART.tourScene(c, isl, 8, x, y, w, h, 2, { tod: +(qs.get('tod') || .76), weather: qs.get('weather') || 'petals' }), { sub: ART.tourNames[isl.theme], date: new Date(2026, 10, 28), t: 1.2 });
 } else if (mode === 'sky') {
   const ws = ['clear', 'rain', 'snow', 'petals'], tods = [.1, .24, .5, .74, .8, .87];
   tods.forEach((td, i) => ws.forEach((wt, j) => { const x = j * (W / 4), y = 6 + i * 150, w = W / 4 - 4; ART.sky(g, x, y, w, 140, 3 + i, { tod: td, weather: wt, fg: true }); label(td + ' ' + wt, x + 4, y + 12); }));
@@ -126,7 +141,7 @@ const page = path.join(OUT, 'artgallery.html'); fs.writeFileSync(page, html);
 const modes = (process.argv[2] || 'items') === 'all' ? ['items', 'gens', 'scenes', 'people', 'ui', 'fx', 'map', 'themes', 'obst', 'wheel', 'win'] : [process.argv[2] || 'items'];
 const dpr = process.argv[3] || '1', extra = process.argv[4] || '';
 for (const m of modes) {
-  const H = { items: 1500, gens: 900, scenes: 1700, people: 520, ui: 900, fx: 700, env: 1580, sky: 920, tour: 1720, styles: 1300, wardrobe: 1100, events: 640, postcard: 860 }[m] || 956;
+  const H = { items: 1500, gens: 900, scenes: 1700, people: 520, ui: 900, fx: 700, env: 1580, sky: 920, tour: 1720, styles: 1300, wardrobe: 1100, events: 860, postcard: 860 }[m] || 956;
   const out = execFileSync('node', [path.join(__dirname, 'cdp.js'), '', (process.env.GW || '420') + ',' + H, 'wait:700', 'shot:art-' + m + extra + '-' + dpr + 'x'], { env: Object.assign({}, process.env, { DPR: dpr, PAGE: 'file://' + page + (extra ? '?' + extra : '') + '#' + m }) }).toString();
   process.stdout.write(out);
 }
