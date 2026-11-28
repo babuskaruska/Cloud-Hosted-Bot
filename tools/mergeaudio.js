@@ -1,0 +1,64 @@
+// Saarepagar audio mix table: loads merge/index.html in headless Chrome, plays a scene and measures the master output
+// with AU.meter (merge/src/80-audio.js): integrated loudness (approx. LUFS), loudest 400 ms block, true peak, and the
+// share of energy in five bands (sub < 150 Hz, low, mid, presence, air > 6 kHz). Also the Web Audio nodes made per
+// second (n/s, a CPU proxy for weak phones), dropped sounds and the music's section.
+//   node tools/mergeaudio.js                 every scene (SECS each, default 20)
+//   node tools/mergeaudio.js sfx mix aed     only these scenes
+//   SECS=10 / LITE=1 / PHONE=1               shorter, the lite mode, a phone page (steeper low cut)
+// Fails (exit 1) on a page error, an audio error in AU.stats().err, or a true peak above -1 dBFS.
+const { chromium } = require('playwright');
+const path = require('path');
+const chrome = require('./chrome.js');
+const ROOT = path.dirname(__dirname);
+const only = process.argv.slice(2).filter(a => !a.startsWith('--'));
+const SECS = +(process.env.SECS || 20);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Every sound in a loop (the sound bank alone), and a busy play session (rapid merges over the music).
+const ALL = `const L=[['pick'],['drop'],['swap'],['merge',{level:1}],['merge',{level:4}],['merge',{level:8}],['mergeMax',{level:10}],['spawn'],['noEnergy'],['bubble'],['bubblePop'],['chest'],['order'],['orderDone'],['coins',{n:4}],['stars',{n:5}],['taskDone'],['levelUp'],['daily'],['tap'],['open'],['close'],['sell'],['deny'],['talk',{who:'maali',ch:'a'}],['talk',{who:'muri',ch:'i'}],['talk',{who:'ants',ch:'o'}]];let i=0;setInterval(()=>{const x=L[i++%L.length];AU.sfx(x[0],x[1])},700);`;
+const PLAY = `let k=0;setInterval(()=>{k++;AU.sfx('pick');setTimeout(()=>AU.sfx(k%3?'merge':'drop',{level:1+k%9}),250);if(k%4==0)setTimeout(()=>AU.sfx('spawn'),500);if(k%9==0)setTimeout(()=>AU.sfx('orderDone'),600);if(k%13==0)setTimeout(()=>AU.sfx('coins',{n:5}),900)},900);`;
+const RAPID = `setInterval(()=>{for(let j=0;j<12;j++)setTimeout(()=>AU.sfx('merge',{level:1+j}),j*25);AU.sfx('mergeMax');AU.sfx('levelUp');AU.sfx('coins',{n:6})},1500);`;
+const TALK = `const s='Tere, kullake! Kas sa aitad mul pagariäri korda teha?';let i=0,w=['maali','ants','muri','liisa','peeter','mina'];setInterval(()=>{const c=s[i%s.length];AU.sfx('talk',{who:w[Math.floor(i/s.length)%6],ch:c});i++},45);`;
+const SCENES = {
+  title: { music: ['title'] },
+  pagariari: { music: ['board', { area: 'pagariari' }] },
+  aed: { music: ['board', { area: 'aed' }] },
+  sadam: { music: ['board', { area: 'sadam' }] },
+  tuuleveski: { music: ['board', { area: 'tuuleveski' }] },
+  majakas: { music: ['board', { area: 'majakas' }] },
+  saladus: { music: ['board', { area: 'saladus' }] },
+  story: { music: ['story'] },
+  sfx: { music: [null], js: ALL },
+  mix: { music: ['board', { area: 'pagariari' }], js: PLAY },
+  rapid: { music: ['board', { area: 'aed' }], js: RAPID },
+  talk: { music: ['story'], js: TALK },
+};
+const f1 = v => v === undefined || v === null ? '    -' : (v >= 0 ? ' ' : '') + v.toFixed(1).padStart(5);
+(async () => {
+  const browser = await chromium.launch({ executablePath: chrome.path, args: [...chrome.gl, '--autoplay-policy=no-user-gesture-required'] });
+  const names = only.length ? only : Object.keys(SCENES), bad = [];
+  console.log('scene         LUFS   mMax     TP  sub low mid pres air |  n/s drop | section / notes');
+  for (const name of names) {
+    const S = SCENES[name]; if (!S) { console.log('unknown scene', name); bad.push(name); continue; }
+    const ctx = await browser.newContext(process.env.PHONE ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : { viewport: { width: 400, height: 700 } });
+    const page = await ctx.newPage(), errs = [];
+    page.on('pageerror', e => errs.push(String(e).slice(0, 200)));
+    await page.goto('file://' + ROOT + '/merge/index.html');
+    await sleep(500);
+    await page.evaluate(l => { const AU = window.__saAudio; if (l) AU.setLite(l === '1'); AU.unlock(); }, process.env.LITE || '');
+    await page.evaluate(m => window.__saMusic.scene(m[0], m[1]), S.music);
+    if (S.js) await page.evaluate('(()=>{const AU=window.__saAudio;' + S.js + '})()');
+    await sleep(2500);
+    await page.evaluate(() => window.__saAudio.meter(true));
+    await sleep((S.secs || SECS) * 1000);
+    const r = await page.evaluate(() => window.__saAudio.stats());
+    const m = r.meter || {}, b = m.bands || {};
+    const peakBad = m.tp > -1;
+    if (r.err || errs.length || peakBad || !r.ready) bad.push(name);
+    console.log(name.padEnd(11), f1(m.lufs), f1(m.mMax), f1(m.tp), ['sub', 'low', 'mid', 'pres', 'air'].map(k => String(b[k] === undefined ? '-' : b[k]).padStart(k.length > 3 ? 4 : 3)).join(' '), '|',
+      String(r.nodeRate).padStart(4), String(r.dropped).padStart(4), '|', (r.section || '-') + (r.lite ? ' [lite]' : '') + (r.ready ? '' : ' NOT READY ' + r.state) + (peakBad ? ' PEAK > -1 dBFS' : '') + (r.err ? ' | AUDIO ERR ' + r.err : '') + (errs.length ? ' | PAGE ERR ' + errs.join('; ') : ''));
+    await ctx.close();
+  }
+  await browser.close();
+  console.log(bad.length ? 'FAIL: ' + bad.join(', ') : 'PASS');
+  process.exit(bad.length ? 1 : 0);
+})();
