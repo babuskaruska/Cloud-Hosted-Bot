@@ -11116,7 +11116,7 @@ const AU = (function () {
     const f1 = F(g, 'bandpass', pts[0][2], q || 5), f2 = LITE ? null : F(g, 'bandpass', pts[0][3], (q || 5) * 1.5);
     o.connect(f1); if (f2) o.connect(f2);
     for (let i = 1; i < pts.length; i++) { const tt = t + pts[i][0]; o.frequency.linearRampToValueAtTime(pts[i][1], tt); f1.frequency.linearRampToValueAtTime(pts[i][2], tt); if (f2) f2.frequency.linearRampToValueAtTime(pts[i][3], tt); }
-    const dur = end - t;
+    const dur = end - t; if (LITE) v *= 1.3; // lite: one formant band instead of two (about 2.5 LU less without this)
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + Math.min(0.04, dur * 0.2)); g.gain.setValueAtTime(v * 0.85, t + dur * 0.6); g.gain.linearRampToValueAtTime(0, end);
     fin(o, t, end + 0.02, g);
     return end;
@@ -11778,7 +11778,8 @@ const AU = (function () {
     if (sleepWhy || ctx.state !== 'running') return;
     let busy = false; const t = ctx.currentTime; for (const a of act) if (a.end > t) { busy = true; break; }
     if (now - lastInput > IDLE) goSleep('idle', 4);
-    else if ((!MU.key || VOL.music <= 0) && !busy && now - lastSound > 15000) goSleep('quiet', 0.3);
+    // quiet: also wait for every tail to end (a tail frozen by the suspend would play on at the next wake), at most 60 s
+    else if ((!MU.key || VOL.music <= 0) && !busy && now - lastSound > 15000 && (ST.live <= 0 || now - lastSound > 60000)) goSleep('quiet', 0.3);
   }
   function setHidden(h) {
     hidden = !!h; if (!ctx || !B.page) return;

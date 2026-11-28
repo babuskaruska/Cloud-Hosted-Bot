@@ -232,10 +232,13 @@ async function phaseC(chromium, chrome, ROOT) {
     // Stop: back to the title (the game itself makes no more sounds there), the music off; then every source must end.
     await sleep(2000);
     await page.evaluate(() => { clearInterval(window.__soak); clearInterval(window.__drv); const M = window.__mg; while (M.UI.modal) M.UI.closeModal(true); M.levels.map(); window.__saAudio.setHidden(false); window.__saAudio.setMuted(false); window.__saAudio.setVolume('music', 1); window.__names0 = window.__saAudio.stats().names; setTimeout(() => window.__saMusic.stop(), 100); });
-    await sleep(8000);
+    // Every source must end: wait up to 20 s (the longest tail is a few seconds; a leak would never drain).
+    let live8 = 0; for (let i = 0; i < 20; i++) { await sleep(1000); const l = await page.evaluate(() => window.__saAudio.stats().live); if (i === 7) live8 = l; if (i >= 7 && l <= 0) break; }
+    // Fell asleep (15 s of quiet) with a tail still pending on the frozen clock: wake it (as a touch would) and let it end.
+    if (await page.evaluate(() => window.__saAudio.stats().live > 0 && window.__saAudio.context.state === 'suspended')) { await page.evaluate(() => window.__saAudio.poke()); await sleep(5000); }
     const end = await page.evaluate(() => { const s = window.__saAudio.stats(), n0 = window.__names0, d = Object.keys(s.names).filter(k => s.names[k] !== n0[k]).map(k => k + ' x' + (s.names[k] - (n0[k] || 0))); return { live: s.live, err: s.err, nan: window.__nan, state: s.state, music: s.music, after: d.join(' ') }; }), h1 = await heap();
     const h1m = rows.length ? rows[0][3] : h0, grow = h1 - h1m;
-    console.log(`after stop: live ${end.live} (${end.state}, music '${end.music}'${end.after ? ', game sounds since: ' + end.after : ''}), heap ${h0} at start, ${h1m} after 1 min -> ${h1} MB (${grow >= 0 ? '+' : ''}${grow.toFixed(1)})${end.err ? ' AUDIO ERR ' + end.err : ''}${end.nan ? ' NaN x' + end.nan : ''}${errs.length ? ' PAGE ERR ' + errs.join('; ') : ''}`);
+    console.log(`after stop: live ${live8} after 8 s, ${end.live} at the end (${end.state}, music '${end.music}'${end.after ? ', game sounds since: ' + end.after : ''}), heap ${h0} at start, ${h1m} after 1 min -> ${h1} MB (${grow >= 0 ? '+' : ''}${grow.toFixed(1)})${end.err ? ' AUDIO ERR ' + end.err : ''}${end.nan ? ' NaN x' + end.nan : ''}${errs.length ? ' PAGE ERR ' + errs.join('; ') : ''}`);
     if (end.live > 2 || grow > 3 || end.err || end.nan || errs.length) bad.push('soak');
     await ctx.close();
   } else if (PHASEC === '--life') {
