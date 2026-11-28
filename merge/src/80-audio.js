@@ -63,11 +63,15 @@ const AU = (function () {
   function fin(src, t0, t1, last) { lateChk(t0); src.start(t0); src.stop(t1); const on = !OFF; if (on) ST.live++; src.onended = () => { if (on) ST.live--; try { last.disconnect(); } catch (e) {} }; }
   function wave(h) { const re = new Float32Array(h.length), im = new Float32Array(h.length); for (let i = 1; i < h.length; i++) im[i] = h[i]; return ctx.createPeriodicWave(re, im); }
   // Optional stereo spread for sparkles (headphones); skipped in lite.
+  // A mono voice into a stereo bus plays at full level on both sides; a StereoPanner (equal power) gives cos/sin, about
+  // -3 dB of power. Lite skips the panner, so panned voices get panK (0.707) to stay as loud as in full mode (before this
+  // fix lite was up to 3 dB louder on panned parts, so songs without an arpeggio sounded 1.5 dB quieter in lite than the rest).
+  const panK = (p) => (p && (LITE || !ctx.createStereoPanner) ? 0.7071 : 1);
   function panTo(dest, p) { if (!p || LITE || !ctx.createStereoPanner) return dest; const s = ctx.createStereoPanner(); s.pan.value = cl(p, -1, 1); s.connect(dest); ST.made++; return s; }
 
   // One voice: oscillator (glide optional) -> optional low-pass (sweep optional) -> envelope. Returns the end time.
   function tone0(t, o) {
-    const a = o.a !== undefined ? o.a : 0.005, d = o.d !== undefined ? o.d : 0.2, h = o.h || 0, v = o.v || 0.1;
+    const a = o.a !== undefined ? o.a : 0.005, d = o.d !== undefined ? o.d : 0.2, h = o.h || 0, v = (o.v || 0.1) * panK(o.pan);
     const g = G(panTo(o.dest || B.sfxIn, o.pan), 0); let n = g;
     if (o.lp) { const f = F(g, 'lowpass', o.lp, o.q || 0.7); if (o.lp2) { f.frequency.setValueAtTime(o.lp, t); f.frequency.exponentialRampToValueAtTime(o.lp2, t + a + h + d * 0.7); } n = f; }
     const os = O(o.w || 'sine', o.f, t);
@@ -80,7 +84,7 @@ const AU = (function () {
   }
   // Filtered noise burst (a slice of a shared noise buffer).
   function noise0(t, o) {
-    const a = o.a !== undefined ? o.a : 0.003, d = o.d !== undefined ? o.d : 0.08, v = o.v || 0.05;
+    const a = o.a !== undefined ? o.a : 0.003, d = o.d !== undefined ? o.d : 0.08, v = (o.v || 0.05) * panK(o.pan);
     const g = G(panTo(o.dest || B.sfxIn, o.pan), 0), f = F(g, o.type || 'bandpass', o.f || 1000, o.q || 1);
     if (o.f2) { f.frequency.setValueAtTime(o.f, t); f.frequency.exponentialRampToValueAtTime(o.f2, t + a + d); }
     const s = ctx.createBufferSource(); ST.made++; s.buffer = NB; s.connect(f);
@@ -116,6 +120,7 @@ const AU = (function () {
     },
     // Plucky synth: soft saw through a fast-closing resonant low-pass. 3 nodes.
     pluck(t, m, dur, v, dest, p) {
+      v *= panK(p);
       const f = mtof(m), g = G(panTo(dest, p), 0), top = Math.min(f * 7, 5200), lp = F(g, 'lowpass', top, 2.2), d = 0.16 + Math.min(dur, 0.5) * 0.6;
       lp.frequency.setValueAtTime(top, t); lp.frequency.exponentialRampToValueAtTime(Math.max(f * 1.3, 300), t + 0.16);
       const o = O(WV.saw, f, t); o.connect(lp);
@@ -848,15 +853,15 @@ const AU = (function () {
       v: [[C(5, 'maj9')], [C(7, 'sus')], [C(4, 'm7')], [C(9, 'm9')]], c: [[C(5, 'maj7')], [C(7, 'M')], [C(4, 'm7'), C(9, 'm7')], [C(2, 'm9'), C(7, 'sus')]] },
     pagariari: { root: 63, mode: 'major', bpm: 84, swing: 0.24, groove: 'lofi', keys: 'ep', compV: 'lofi', compC: 'lofi', lead: 'ep', lead2: 'vox', arp: null, pad: 0.6, pump: 0.15, tone: 3200, crackle: true, hook: 'cafe', vol: 0.925, pres: -1,
       v: [[C(2, 'm9')], [C(7, 'd7')], [C(0, 'maj9')], [C(9, 'm7')]], c: [[C(5, 'maj9')], [C(4, 'm7'), C(9, 'm7')], [C(2, 'm9')], [C(7, 'sus'), C(7, 'd7')]] },
-    aed: { root: 67, mode: 'major', bpm: 104, swing: 0.06, groove: 'pop', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'mallet', lead2: 'vox', arp: 'pluck', pad: 0.7, pump: 0.35, tone: 9000, hook: 'garden', vol: 1.117, mud: -6, pres: 6,
+    aed: { root: 67, mode: 'major', bpm: 104, swing: 0.06, groove: 'pop', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'mallet', lead2: 'vox', arp: 'pluck', pad: 0.7, pump: 0.35, tone: 9000, hook: 'garden', vol: 1.031, liteV: 1.059, mud: -6, pres: 6,
       v: [[C(0, 'add9')], [C(7, 'M')], [C(9, 'm7')], [C(5, 'maj7')]], c: [[C(5, 'maj7')], [C(0, 'add9')], [C(7, 'sus'), C(7, 'M')], [C(9, 'm7')]] },
     sadam: { root: 57, mode: 'aeolian', bpm: 110, swing: 0, groove: 'tropical', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'vox', lead2: 'mallet', arp: null, pad: 1, pump: 0.6, tone: 9000, hook: 'harbour', vol: 1.075, pres: -0.4, bassV: 0.75,
       v: [[C(0, 'm7')], [C(8, 'maj7')], [C(3, 'add9')], [C(10, 'M')]], c: [[C(5, 'm7')], [C(8, 'maj7')], [C(3, 'add9')], [C(10, 'sus'), C(10, 'M')]] },
-    tuuleveski: { root: 62, mode: 'mixo', bpm: 96, swing: 0.1, groove: 'bouncy', keys: 'ep', compV: 'pop', compC: 'pop', lead: 'pluck', lead2: 'vox', arp: 'mallet', pad: 0.6, pump: 0.3, tone: 8000, hook: 'mill', vol: 0.937,
+    tuuleveski: { root: 62, mode: 'mixo', bpm: 96, swing: 0.1, groove: 'bouncy', keys: 'ep', compV: 'pop', compC: 'pop', lead: 'pluck', lead2: 'vox', arp: 'mallet', pad: 0.6, pump: 0.3, tone: 8000, hook: 'mill', vol: 0.937, liteV: 1.035,
       v: [[C(0, 'M')], [C(10, 'add9')], [C(5, 'maj7')], [C(0, 'add9')]], c: [[C(5, 'maj7')], [C(7, 'm7')], [C(10, 'M')], [C(0, 'add9'), C(7, 'm7')]] },
-    majakas: { root: 58, mode: 'major', bpm: 78, swing: 0.08, groove: 'half', keys: 'ep', compV: 'whole', compC: 'halves', lead: 'bell', lead2: 'vox', arp: 'mallet', pad: 1, pump: 0.25, tone: 6000, hook: 'light', vol: 1.024,
+    majakas: { root: 58, mode: 'major', bpm: 78, swing: 0.08, groove: 'half', keys: 'ep', compV: 'whole', compC: 'halves', lead: 'bell', lead2: 'vox', arp: 'mallet', pad: 1, pump: 0.25, tone: 6000, hook: 'light', vol: 0.956, liteV: 1.047,
       v: [[C(0, 'maj9')], [C(5, 'maj9')], [C(9, 'm9')], [C(7, 'sus')]], c: [[C(5, 'maj7')], [C(7, 'add9')], [C(4, 'm7')], [C(9, 'm9')]] },
-    saladus: { root: 62, mode: 'aeolian', bpm: 76, swing: 0.18, groove: 'lofi', keys: 'ep', compV: 'lofi', compC: 'halves', lead: 'vox', lead2: 'bell', arp: 'mallet', pad: 1, pump: 0.2, tone: 2600, crackle: true, hook: 'secret', vol: 0.915, pres: -1,
+    saladus: { root: 62, mode: 'aeolian', bpm: 76, swing: 0.18, groove: 'lofi', keys: 'ep', compV: 'lofi', compC: 'halves', lead: 'vox', lead2: 'bell', arp: 'mallet', pad: 1, pump: 0.2, tone: 2600, crackle: true, hook: 'secret', vol: 0.915, liteV: 1.035, pres: -1,
       v: [[C(0, 'm9')], [C(8, 'maj7')], [C(5, 'maj7')], [C(7, 'sus'), C(7, 'm7')]], c: [[C(8, 'maj7')], [C(10, 'add9')], [C(0, 'm9')], [C(7, 'sus')]] },
     story: { root: 60, mode: 'major', bpm: 72, swing: 0.06, groove: 'none', keys: 'ep', compV: 'whole', compC: 'halves', lead: 'bell', lead2: 'ep', arp: 'mallet', pad: 1, pump: 0, tone: 5000, hook: 'story', vol: 1.1, story: true,
       v: [[C(0, 'maj9')], [C(9, 'm9')], [C(5, 'maj9')], [C(7, 'sus')]], c: [[C(5, 'maj7')], [C(4, 'm7')], [C(9, 'm9')], [C(7, 'sus'), C(7, 'M')]] },
@@ -864,15 +869,15 @@ const AU = (function () {
     map: { root: 64, mode: 'major', bpm: 110, swing: 0.03, groove: 'pop', keys: 'ep', compV: 'pop', compC: 'pop', lead: 'vox', lead2: 'mallet', arp: 'pluck', pad: 0.8, pump: 0.45, tone: 9500, hook: 'map', vol: 0.724,
       v: [[C(0, 'add9')], [C(7, 'M')], [C(9, 'm7')], [C(5, 'maj7')]], c: [[C(9, 'm7')], [C(5, 'maj9')], [C(0, 'add9')], [C(7, 'sus'), C(7, 'M')]] },
     // v3 level chapters: energetic but not stressful puzzle music, one per map chapter (they cycle).
-    candy: { root: 62, mode: 'major', bpm: 114, swing: 0, groove: 'tropical', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'mallet', lead2: 'vox', arp: null, pad: 0.9, pump: 0.5, tone: 9000, hook: 'candy', vol: 1.241, bassV: 0.75, level: true,
+    candy: { root: 62, mode: 'major', bpm: 114, swing: 0, groove: 'tropical', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'mallet', lead2: 'vox', arp: null, pad: 0.9, pump: 0.5, tone: 9000, hook: 'candy', vol: 1.132, liteV: 1.161, bassV: 0.75, level: true,
       v: [[C(0, 'add9')], [C(9, 'm7')], [C(5, 'maj7')], [C(7, 'M')]], c: [[C(5, 'maj7')], [C(7, 'M')], [C(4, 'm7'), C(9, 'm7')], [C(2, 'm7'), C(7, 'sus')]] },
     meadow: { root: 65, mode: 'major', bpm: 106, swing: 0.05, groove: 'pop', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'vox', lead2: 'pluck', arp: 'mallet', pad: 0.7, pump: 0.35, tone: 9000, hook: 'meadow', vol: 0.8, level: true,
       v: [[C(0, 'maj9')], [C(2, 'm7')], [C(5, 'maj7')], [C(7, 'sus'), C(7, 'M')]], c: [[C(5, 'maj9')], [C(7, 'add9')], [C(9, 'm7')], [C(0, 'add9')]] },
-    berry: { root: 60, mode: 'mixo', bpm: 102, swing: 0.12, groove: 'bouncy', keys: 'ep', compV: 'pop', compC: 'pop', lead: 'pluck', lead2: 'vox', arp: 'mallet', pad: 0.6, pump: 0.3, tone: 8000, hook: 'berry', vol: 0.965, pres: 2.3, level: true,
+    berry: { root: 60, mode: 'mixo', bpm: 102, swing: 0.12, groove: 'bouncy', keys: 'ep', compV: 'pop', compC: 'pop', lead: 'pluck', lead2: 'vox', arp: 'mallet', pad: 0.6, pump: 0.3, tone: 8000, hook: 'berry', vol: 0.965, liteV: 1.035, pres: 2.3, level: true,
       v: [[C(0, 'M')], [C(10, 'add9')], [C(5, 'M')], [C(0, 'add9')]], c: [[C(5, 'maj7')], [C(10, 'M')], [C(0, 'add9')], [C(7, 'm7'), C(10, 'M')]] },
     cliffs: { root: 57, mode: 'dorian', bpm: 108, swing: 0, groove: 'pop', keys: 'ep', compV: 'offbeat', compC: 'pop', lead: 'vox', lead2: 'mallet', arp: 'pluck', pad: 1, pump: 0.55, tone: 9000, hook: 'cliffs', vol: 0.793, pres: 2.2, level: true,
       v: [[C(0, 'm9')], [C(5, 'add9')], [C(10, 'M')], [C(0, 'm7')]], c: [[C(3, 'maj7')], [C(10, 'add9')], [C(5, 'M')], [C(7, 'm7'), C(5, 'M')]] },
-    winter: { root: 67, mode: 'major', bpm: 100, swing: 0.08, groove: 'bouncy', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'bell', lead2: 'mallet', arp: 'mallet', pad: 0.9, pump: 0.3, tone: 7500, hook: 'winter', vol: 1.264, mud: -6, pres: 6, jingle: true, level: true,
+    winter: { root: 67, mode: 'major', bpm: 100, swing: 0.08, groove: 'bouncy', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'bell', lead2: 'mallet', arp: 'mallet', pad: 0.9, pump: 0.3, tone: 7500, hook: 'winter', bassV: 0.8, vol: 1.324, mud: -6, pres: 6, jingle: true, level: true,
       v: [[C(0, 'maj7')], [C(4, 'm7')], [C(5, 'maj9')], [C(7, 'sus')]], c: [[C(5, 'maj7')], [C(7, 'M')], [C(9, 'm7')], [C(2, 'm7'), C(7, 'd7')]] },
     lavender: { root: 63, mode: 'major', bpm: 96, swing: 0.16, groove: 'pop', keys: 'ep', compV: 'lofi', compC: 'pop', lead: 'vox', lead2: 'ep', arp: 'pluck', pad: 0.9, pump: 0.3, tone: 6500, hook: 'lavender', vol: 0.779, pres: -1, level: true,
       v: [[C(0, 'maj9')], [C(9, 'm9')], [C(2, 'm7')], [C(7, 'sus')]], c: [[C(5, 'maj9')], [C(4, 'm7'), C(9, 'm7')], [C(2, 'm9')], [C(7, 'sus'), C(7, 'd7')]] },
@@ -881,19 +886,19 @@ const AU = (function () {
     t_flower: { root: 65, mode: 'major', bpm: 102, swing: 0.05, groove: 'pop', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'mallet', lead2: 'vox', arp: 'pluck', pad: 0.7, pump: 0.35, tone: 8500, hook: 't_flower', vol: 0.894,
       v: [[C(0, 'add9')], [C(9, 'm7')], [C(5, 'maj7')], [C(7, 'sus'), C(7, 'M')]], c: [[C(5, 'maj9')], [C(7, 'M')], [C(4, 'm7'), C(9, 'm7')], [C(0, 'add9')]] },
     // Spa: slow, dreamy C lydian, bells and a soft pad, barely-there drums.
-    t_spa: { root: 60, mode: 'lydian', bpm: 70, swing: 0.06, groove: 'half', keys: 'ep', compV: 'whole', compC: 'halves', lead: 'bell', lead2: 'ep', arp: 'mallet', pad: 1, pump: 0.15, tone: 4200, hook: 't_spa', vol: 1.03,
+    t_spa: { root: 60, mode: 'lydian', bpm: 70, swing: 0.06, groove: 'half', keys: 'ep', compV: 'whole', compC: 'halves', lead: 'bell', lead2: 'ep', arp: 'mallet', pad: 1, pump: 0.15, tone: 4200, hook: 't_spa', vol: 1.07, pres: 4, liteV: 0.966,
       v: [[C(0, 'maj9')], [C(2, 'add9')], [C(0, 'maj7')], [C(2, 'M')]], c: [[C(9, 'm9')], [C(2, 'add9')], [C(4, 'm7')], [C(0, 'maj9')]] },
     // Ice cream kiosk: bouncy D major, offbeat plucks, playful mallet hook.
-    t_icecream: { root: 62, mode: 'major', bpm: 112, swing: 0, groove: 'bouncy', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'mallet', lead2: 'vox', arp: null, pad: 0.8, pump: 0.45, tone: 8500, hook: 't_icecream', vol: 1.227, bassV: 0.8,
+    t_icecream: { root: 62, mode: 'major', bpm: 112, swing: 0, groove: 'bouncy', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'mallet', lead2: 'vox', arp: null, pad: 0.8, pump: 0.45, tone: 8500, hook: 't_icecream', vol: 1.119, liteV: 1.161, bassV: 0.8,
       v: [[C(0, 'M')], [C(7, 'M')], [C(9, 'm7')], [C(5, 'add9')]], c: [[C(5, 'maj7')], [C(7, 'add9')], [C(4, 'm7'), C(9, 'm7')], [C(2, 'm7'), C(7, 'sus')]] },
     // Fashion boutique: chic A dorian groove, vocal-chop hook.
     t_fashion: { root: 57, mode: 'dorian', bpm: 106, swing: 0.04, groove: 'pop', keys: 'ep', compV: 'offbeat', compC: 'pop', lead: 'vox', lead2: 'pluck', arp: 'pluck', pad: 0.9, pump: 0.5, tone: 8500, hook: 't_fashion', vol: 0.791, pres: 4.4,
       v: [[C(0, 'm9')], [C(5, 'd7')], [C(0, 'm7')], [C(5, 'add9')]], c: [[C(3, 'maj7')], [C(10, 'add9')], [C(5, 'M')], [C(7, 'm7'), C(10, 'M')]] },
     // Wedding garden: a tender Bb major ballad, bell melody over warm ninths.
-    t_wedding: { root: 58, mode: 'major', bpm: 78, swing: 0.06, groove: 'half', keys: 'ep', compV: 'whole', compC: 'halves', lead: 'bell', lead2: 'vox', arp: 'mallet', pad: 1, pump: 0.25, tone: 5500, hook: 't_wedding', vol: 1.033,
+    t_wedding: { root: 58, mode: 'major', bpm: 78, swing: 0.06, groove: 'half', keys: 'ep', compV: 'whole', compC: 'halves', lead: 'bell', lead2: 'vox', arp: 'mallet', pad: 1, pump: 0.25, tone: 5500, hook: 't_wedding', vol: 0.921, liteV: 1.109,
       v: [[C(0, 'maj9')], [C(4, 'm7')], [C(5, 'maj9')], [C(7, 'sus'), C(7, 'M')]], c: [[C(5, 'maj7')], [C(7, 'add9')], [C(9, 'm9')], [C(2, 'm7'), C(7, 'd7')]] },
     // Beach club: laid-back G mixolydian, steel pan hook, offbeat plucks.
-    t_beach: { root: 55, mode: 'mixo', bpm: 98, swing: 0.08, groove: 'tropical', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'steel', lead2: 'vox', arp: null, pad: 0.9, pump: 0.5, tone: 8000, hook: 't_beach', vol: 1.242, bassV: 0.75,
+    t_beach: { root: 55, mode: 'mixo', bpm: 98, swing: 0.08, groove: 'tropical', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'steel', lead2: 'vox', arp: null, pad: 0.9, pump: 0.5, tone: 8000, hook: 't_beach', vol: 1.242, liteV: 1.096, bassV: 0.75,
       v: [[C(0, 'M')], [C(10, 'add9')], [C(5, 'maj7')], [C(0, 'add9')]], c: [[C(5, 'add9')], [C(10, 'M')], [C(9, 'm7')], [C(7, 'm7'), C(10, 'M')]] },
     // Christmas market: cozy swung A major with bells and sleigh bells.
     t_xmas: { root: 57, mode: 'major', bpm: 96, swing: 0.14, groove: 'bouncy', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'bell', lead2: 'mallet', arp: 'mallet', pad: 0.9, pump: 0.3, tone: 7000, hook: 't_xmas', vol: 1.112, mud: -4, pres: 6, jingle: true,
@@ -902,13 +907,13 @@ const AU = (function () {
     t_orchard: { root: 64, mode: 'dorian', bpm: 82, swing: 0.2, groove: 'lofi', keys: 'ep', compV: 'lofi', compC: 'halves', lead: 'mallet', lead2: 'vox', arp: 'pluck', pad: 0.8, pump: 0.2, tone: 3400, crackle: true, hook: 't_orchard', vol: 0.95,
       v: [[C(0, 'm9')], [C(5, 'add9')], [C(3, 'maj7')], [C(10, 'add9')]], c: [[C(3, 'maj9')], [C(10, 'M')], [C(0, 'm7')], [C(5, 'M'), C(7, 'm7')]] },
     // ---- v3 phase B: weekly events (festival energy, still easy to listen to for a long time) ----
-    ev_garden: { root: 57, mode: 'major', bpm: 112, swing: 0.06, groove: 'bouncy', keys: 'ep', compV: 'pop', compC: 'pop', lead: 'pluck', lead2: 'vox', arp: 'mallet', pad: 0.7, pump: 0.35, tone: 8500, hook: 'ev_garden', vol: 0.915, mud: -3, pres: 6, event: true,
+    ev_garden: { root: 57, mode: 'major', bpm: 112, swing: 0.06, groove: 'bouncy', keys: 'ep', compV: 'pop', compC: 'pop', lead: 'pluck', lead2: 'vox', arp: 'mallet', pad: 0.7, pump: 0.35, tone: 8500, hook: 'ev_garden', vol: 0.915, liteV: 1.047, mud: -3, pres: 6, event: true,
       v: [[C(0, 'add9')], [C(5, 'M')], [C(9, 'm7')], [C(7, 'M')]], c: [[C(5, 'maj7')], [C(7, 'M')], [C(0, 'add9')], [C(9, 'm7'), C(7, 'sus')]] },
     ev_fashion: { root: 54, mode: 'aeolian', bpm: 120, swing: 0, groove: 'house', keys: 'ep', compV: 'offbeat', compC: 'offbeat', lead: 'vox', lead2: 'pluck', arp: 'pluck', pad: 1, pump: 0.6, tone: 8500, hook: 'ev_fashion', vol: 0.92, event: true, bassV: 0.8,
       v: [[C(0, 'm7')], [C(8, 'maj7')], [C(3, 'add9')], [C(10, 'M')]], c: [[C(8, 'maj9')], [C(10, 'add9')], [C(0, 'm9')], [C(5, 'm7'), C(7, 'sus')]] },
     ev_wedding: { root: 62, mode: 'major', bpm: 104, swing: 0.04, groove: 'pop', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'bell', lead2: 'vox', arp: 'mallet', pad: 1, pump: 0.4, tone: 7500, hook: 'ev_wedding', vol: 0.86, event: true,
       v: [[C(0, 'add9')], [C(7, 'M')], [C(9, 'm7')], [C(5, 'maj7')]], c: [[C(5, 'maj9')], [C(7, 'add9')], [C(4, 'm7'), C(9, 'm7')], [C(2, 'm7'), C(7, 'M')]] },
-    ev_beach: { root: 60, mode: 'mixo', bpm: 116, swing: 0, groove: 'tropical', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'steel', lead2: 'vox', arp: 'mallet', pad: 0.9, pump: 0.55, tone: 8500, hook: 'ev_beach', vol: 1.199, event: true, bassV: 0.75,
+    ev_beach: { root: 60, mode: 'mixo', bpm: 116, swing: 0, groove: 'tropical', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'steel', lead2: 'vox', arp: 'mallet', pad: 0.9, pump: 0.55, tone: 8500, hook: 'ev_beach', vol: 1.069, liteV: 1.202, event: true, bassV: 0.75,
       v: [[C(0, 'M')], [C(10, 'M')], [C(5, 'add9')], [C(0, 'add9')]], c: [[C(5, 'maj7')], [C(10, 'add9')], [C(9, 'm7')], [C(7, 'm7'), C(10, 'M')]] },
   };
   const CHAPTERS = ['candy', 'meadow', 'berry', 'cliffs', 'winter', 'lavender'];
@@ -967,6 +972,8 @@ const AU = (function () {
   // vol, mud and pres per song were calibrated with tools/mergeaudio.js (--mix) so every song sits within about 1 LU of
   // -23.6 LUFS full range and -26.9 through a phone-speaker model (spread before: 3.3 and 5.5 LU).
   const LEADV = { vox: 0.3, pluck: 0.085, mallet: 0.11, bell: 0.075, ep: 0.1, steel: 0.09 };
+  // liteV: lite has no reverb, and songs of short plucked notes lose more of their loudness without it (up to 1.6 LU).
+  const songVol = (c) => c.vol * (LITE && c.liteV ? c.liteV : 1);
   const MU = { E: null, olds: [], want: null, key: '', sinceRest: 0, restAt: 190, tense: false, season: dateSeason(), seasonAuto: true };
   try { const q = W.location && /[?&#]season=([a-z]+)/i.exec(W.location.search + W.location.hash); const s = q && normSeason(q[1]); if (s) { MU.season = s; MU.seasonAuto = false; } } catch (e) {}
   const toneOf = (c) => Math.min(10000, c.tone * SEAS[MU.season].tone);
@@ -1050,7 +1057,7 @@ const AU = (function () {
     const lo = F(bus, 'peaking', 320, 0.8), pr = F(lo, 'peaking', 2300, 0.8); lo.gain.value = c.mud !== undefined ? c.mud : -2; pr.gain.value = c.pres !== undefined ? c.pres : 1.5;
     const lp = F(pr, 'lowpass', toneOf(c), 0.7), inn = G(lp, 1);
     const E = { c: c, name: name, e16: e16, bar: 16 * e16, bus: bus, lp: lp, in: inn, pump: G(inn, 1), tempo: 1, t: now + (old ? 0.5 : 0.15), q: [], qi: 0, form: null, si: 0, bi: 0, S: null, cycle: 0, prev: 4, bars: 0 };
-    E.bus.gain.setValueAtTime(0.0001, now); E.bus.gain.linearRampToValueAtTime(c.vol, now + (cut ? 3 : old ? 2.2 : 0.8));
+    E.bus.gain.setValueAtTime(0.0001, now); E.bus.gain.linearRampToValueAtTime(songVol(c), now + (cut ? 3 : old ? 2.2 : 0.8));
     E.form = form(E); MU.E = E; MU.sinceRest = 0; MU.restAt = 170 + rnd() * 70;
   }
   function nextSection(E) {
@@ -1394,7 +1401,7 @@ const AU = (function () {
     if (ctx && B.mute && !OFF) { rampTo(B.mute.gain, muted ? 0 : 1); lifeTick(PNOW()); }
     return muted;
   }
-  function setLite(b) { LITE = !!b; if (ctx && !OFF) { revSet(!LITE); rampTo(B.music.gain, VOL.music > 0 ? musicGain() : 0); TM.look = 0; } return LITE; }
+  function setLite(b) { LITE = !!b; if (ctx && !OFF) { revSet(!LITE); rampTo(B.music.gain, VOL.music > 0 ? musicGain() : 0); if (MU.E && !MU.E.dead) rampTo(MU.E.bus.gain, songVol(MU.E.c)); TM.look = 0; } return LITE; }
 
   // ---------- meter for tests (built only when AU.meter(true) is called): peak, approx. LUFS, band shares ----------
   const MT = { an: null, buf: null, sp: null, on: false, max: 0, t0: 0, sub: [], blk: [], acc: 0, accN: 0, band: [0, 0, 0, 0, 0], smp: 0, sPk: 0, n: 0 };
