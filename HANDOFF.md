@@ -207,7 +207,20 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
 
 The owner asked for a merge-style game for his girlfriend. It is original (no copying of any existing game), fully Estonian and phone first. Design and team contracts are in **`merge/DESIGN.md`**. Build with `python3 tools/build-merge.py` (writes `merge/index.html` and icons). It is live at `https://babuskaruska.github.io/Cloud-Hosted-Bot/merge/` and installable on its own (`merge/manifest.webmanifest`, `merge/sw.js`). The same team works on it: Mira (game, UI, story), Ash (art, effects), Echo (audio) and Forge (QA, merges).
 
-**Status (version 1, live):**
+**Version 2 (live), after the girlfriend's feedback** ("too old-fashioned, not addictive, icons too small" on an iPhone 16 Pro Max):
+- **Ash:** modern glossy restyle (sky gradient, frosted tiles, pill buttons, `ART.theme`, new `FX` effects `combo`, `lucky`, `discover`, `levelUp`, `hint`, `text`).
+- **Mira:** items fill 92% of a cell, bigger UI, tabs Remont/Album/Festival/Pood/Kott.
+  - Merge 5→2, lucky merge, combo, album, mystery box, weekend festival (`?event=1`), free energy, hints, order badges.
+  - Save v2 (v1 migrates).
+- **Echo:** modern chill-pop and lo-fi music, plus new sounds `combo`, `merge5`, `lucky`, `discover`, `mystery`, `claim`, `event`, `hint`, `album`.
+- **QA:** `tools/mergeqa.js` has a `promax` profile (440×956 DPR 3); all three profiles pass.
+- **Known:**
+  - The scene strip is short on a real Pro Max.
+  - Coins may be too generous.
+  - Energy can exceed 100.
+  - Nobody has listened to the music on a phone yet.
+
+**Status (version 1):**
 - **Mira:** the full loop.
   - 7×9 board; 10 chains (bread, berry, flower, wood, fish, tea, dairy, apple, wool, sea) plus coffee (energy), coin and chest; 7 generators (oven, basket, teapot, bed, toolbox, net, wheel) with 4 levels each.
   - Orders; 36 tasks (b1–s4) over 6 areas (bakery, garden, harbour, windmill, lighthouse, secret); story and an ending.
