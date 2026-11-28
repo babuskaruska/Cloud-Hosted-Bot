@@ -610,6 +610,7 @@ const UI = (() => {
     const b = bump[name] ? clamp(1 - (tn() - bump[name]) / 0.35, 0, 1) : 0, s = 1 + 0.25 * Math.sin(b * Math.PI);
     g.fillStyle = DARK; rr(r.x + 8, r.y, r.w - 8, r.h, r.h / 2); g.fill();
     g.lineWidth = 2; g.strokeStyle = 'rgba(255,255,255,0.25)'; g.stroke();
+    if (r.w < 104) plus = false; // narrow phones: the whole pill is the button
     const is = 34 * s; drawIcon(icon, r.x + 4 + (34 - is) / 2, r.y + r.h / 2 - is / 2, is);
     const tw = r.w - 44 - (plus ? 26 : 4);
     text(value, r.x + 40 + tw / 2, r.y + r.h / 2 + 1, 19, '#fff', 'center', 900, tw);
@@ -1025,7 +1026,7 @@ const UI = (() => {
       if (xx - x > maxW - size) break;
       if (d.icon) drawIcon(d.icon, xx, y - size / 2, size); else drawItem(d.item[0], d.item[1], xx + size / 2, y, size);
       xx += size + 2;
-      if (d.icon) { g.font = font(16, 900); text(d.t, xx, y + 1, 16, INK, 'left', 900); xx += g.measureText(d.t).width + 10; } else xx += 6;
+      g.font = font(16, 900); const [tt] = fit(d.t, 16, 900, Math.max(40, maxW - (xx - x))); text(tt, xx, y + 1, 16, INK, 'left', 900); xx += g.measureText(tt).width + 12;
     }
     return xx - x;
   }
@@ -1255,7 +1256,7 @@ const UI = (() => {
       if (done) {} else if (ready) button(P.x + P.w - 112, y + 4, 96, rowH - 14, 'Võta!', () => { m.tap = { x: P.x + P.w - 64, y: y + 24 }; Game.claimEvent(); }, Object.assign({ hot: true, pulse: 1, size: 18 }, B));
       else if (locked) { g.globalAlpha = 0.5; drawIcon('lock', P.x + P.w - 54, y + 14, 28); g.globalAlpha = 1; }
     }
-    text('Märke annavad ühendamised, tellimused ja õnnehetked.', P.x + P.w / 2, P.y + P.h - 22, 15, INK2, 'center', 700, P.w - 24);
+    text('Märke saad ühendamisest ja tellimustest.', P.x + P.w / 2, P.y + P.h - 22, 15, INK2, 'center', 700, P.w - 24);
   }
 
   function drawDialog(m, t) {
