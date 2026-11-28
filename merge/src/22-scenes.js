@@ -97,8 +97,13 @@
   function F(g, col, lw, olc) { g.fillStyle = col; g.fill(); if (lw !== 0) { g.lineWidth = lw || 1.6; g.strokeStyle = olc || dk(col, .6); g.lineJoin = 'round'; g.lineCap = 'round'; g.stroke(); } }
   function VG(g, col, y0, y1, lw) { const gr = g.createLinearGradient(0, y0, 0, y1); gr.addColorStop(0, lt(col, .25)); gr.addColorStop(1, dk(col, .12)); g.fillStyle = gr; g.fill(); if (lw !== 0) { g.lineWidth = lw || 1.6; g.strokeStyle = dk(col, .6); g.lineJoin = 'round'; g.stroke(); } }
   function ln(g, pts, col, w, a) { PL(g, pts, true); g.lineWidth = w; g.strokeStyle = a != null ? rgba(col, a) : col; g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke(); }
-  function sky(g, L, Rr, top, bot, y1) { const gr = g.createLinearGradient(0, 0, 0, y1); gr.addColorStop(0, top); gr.addColorStop(1, bot); g.fillStyle = gr; g.fillRect(L, -2, Rr - L, y1 + 2); }
+  // SKYOFF: while a still is drawn for a non-default hour or weather, the sky, sun and still clouds are left out (ART.sky draws
+  // them live behind the scene). STY: feature -> style key of the still being drawn (design choices).
+  let SKYOFF = false, STY = null;
+  const sty = f => (STY && STY[f]) || null;
+  function sky(g, L, Rr, top, bot, y1) { if (SKYOFF) return; const gr = g.createLinearGradient(0, 0, 0, y1); gr.addColorStop(0, top); gr.addColorStop(1, bot); g.fillStyle = gr; g.fillRect(L, -2, Rr - L, y1 + 2); }
   function sun(g, x, y, r, col) {
+    if (SKYOFF) return;
     const gr = g.createRadialGradient(x, y, r * .3, x, y, r * 3.4); gr.addColorStop(0, rgba(col || '#fff3a8', .95)); gr.addColorStop(1, rgba(col || '#fff3a8', 0));
     g.fillStyle = gr; g.beginPath(); g.arc(x, y, r * 3.4, 0, TAU); g.fill();
     g.save(); g.translate(x, y); g.fillStyle = 'rgba(255,240,160,.35)';
@@ -107,6 +112,7 @@
     g.beginPath(); g.arc(x, y, r, 0, TAU); const sg = g.createLinearGradient(0, y - r, 0, y + r); sg.addColorStop(0, '#fffbe0'); sg.addColorStop(1, col || '#ffd84a'); g.fillStyle = sg; g.fill();
   }
   function cloud(g, x, y, s, a) {
+    if (SKYOFF) return;
     a = a == null ? .9 : a;
     g.fillStyle = 'rgba(190,215,255,' + a * .6 + ')';
     E(g, x, y + 2 * s, 19 * s, 7 * s); g.fill();
@@ -266,6 +272,7 @@
     dot(g, x - 2 * s, y - 22 * s, 1.4 * s, '#ffd23f'); dot(g, x + 4 * s, y - 17 * s, 1.4 * s, '#ff8fb8');
   }
   S.pagariari = {
+    glows: f => [].concat(f.has('aknad') ? [[146, 158, 22], [254, 158, 22], [200, 162, 14]] : [], f.has('laternad') ? [[108, 170, 12], [160, 130, 7], [240, 130, 7]] : []),
     still(g, f, L, Rr) {
       sky(g, L, Rr, '#5ec8ff', '#ffe9f0', 128); sun(g, 330, 38, 13);
       cloud(g, 70, 36, 1.1, .9);
@@ -377,6 +384,7 @@
     }
   };
   S.sadam = {
+    glows: f => f.has('laternad') ? [[144, 132, 12], [246, 132, 12], [340, 132, 12]] : [],
     still(g, f, L, Rr) {
       sky(g, L, Rr, '#55c2ff', '#ffeef4', 120); sun(g, 300, 34, 12); cloud(g, 120, 38, 1.1, .7);
       PL(g, [Rr, 104, 340, 98, 300, 102, 270, 110, Rr, 110]); g.closePath(); F(g, '#8fb8a0', 0);
@@ -430,6 +438,7 @@
     }
   };
   S.tuuleveski = {
+    glows: f => f.has('veskimaja') ? [[205, 91, 12]] : [],
     still(g, f, L, Rr) {
       sky(g, L, Rr, '#62caff', '#fff0e6', 150); sun(g, 60, 40, 12); cloud(g, 300, 30, 1, .7);
       hill(g, L, Rr, [L, 130, 100, 120, 220, 126, 320, 118, Rr, 126], '#a8e88a', 220);
@@ -473,6 +482,7 @@
     }
   };
   S.majakas = {
+    glows: f => [].concat(f.has('tuli') ? [[296, 50, 34]] : [], f.has('maja') ? [[345, 116, 10]] : []),
     still(g, f, L, Rr) {
       sky(g, L, Rr, '#58c4ff', '#ffe6f0', 130); sun(g, 110, 46, 12); cloud(g, 40, 30, .9, .7);
       seaBand(g, L, Rr, 120, 220, '#7fe0ff', '#1a9fd8');
@@ -517,6 +527,7 @@
     }
   };
   S.saladus = {
+    ownSky: true,
     still(g, f, L, Rr) {
       const sk = f.has('taevas');
       sky(g, L, Rr, sk ? '#2a2f8a' : '#3a3f72', sk ? '#ff8ac0' : '#9a7aa8', 150);
@@ -585,33 +596,105 @@
   }
 
   // ---------- public ----------
+  // Shared renderer for ART.scene and ART.tourScene: a cached still layer (tinted for the hour and the weather, with the sky
+  // drawn live behind it by ART.sky), the animated layer on top, warm window glows after dark and the weather in front.
+  //   def: { still(g, on, L, R), anim(g, on, t, L, R), glows?(on) -> [[x, y, r], ...] (design space), ownSky?: true }
+  //   opts (last argument of ART.scene / ART.tourScene): { tod, weather, style: {taskId: 'boho'|'minimal'|'romantic'},
+  //   noWeather, noEnv }. Without tod / weather the local clock and today's weather are used (ART.env).
   const cache = A._sceneCache = new Map();
-  A.scene = function (ctx, area, progress, x, y, w, h, t) {
+  const OVER = { night: 'rgba(28,34,104,.42)', dusk: 'rgba(84,60,150,.26)', sunset: 'rgba(255,130,90,.14)', golden: 'rgba(255,170,90,.08)', dawn: 'rgba(255,150,190,.12)', day: null };
+  let _glowSpr = null;
+  function glowSprite() {
+    if (_glowSpr) return _glowSpr;
+    const c = _glowSpr = mk(64, 64), g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,236,170,.95)'); gr.addColorStop(.35, 'rgba(255,200,120,.45)'); gr.addColorStop(1, 'rgba(255,190,110,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    return c;
+  }
+  let _animC = null;
+  function scratchAnim(w, h) { if (!_animC) _animC = mk(w, h); if (_animC.width !== w || _animC.height !== h) { _animC.width = w; _animC.height = h; } return _animC; }
+  A._renderScene = function (ctx, id, def, on, frac, x, y, w, h, t, opts, sty) {
     if (w < 4 || h < 4) return;
-    const key = areaKey(area), on = featureSet(key, progress), def = S[key];
+    opts = opts || {}; t = t || 0;
+    const env = opts.env || A.env(opts), look = A.skyLook(env), plain = !!(look.plain || opts.noEnv);
     // fit the height, but on a short wide strip zoom in (crop some sky and ground) so details stay readable
     const s = Math.max(h / DH, Math.min(w / 520, h / 150)), ox = (w - DW * s) / 2, oy = Math.max(h - DH * s, Math.min(0, h - 204 * s)), L = -ox / s, Rr = DW + ox / s, sc = A.scaleOf(ctx);
-    const ck = key + '|' + A.sceneFeatures[key].map(f => on.has(f) ? 1 : 0).join('') + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
+    const own = !!def.ownSky, styKey = sty ? Object.keys(sty).sort().map(k => k + '=' + sty[k][0]).join(',') : '';
+    const ck = id + '|' + styKey + '|' + (plain ? 'plain' : env.key) + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
     let c = cache.get(ck);
     if (!c) {
       c = mk(w * sc, h * sc); const g = c.getContext('2d');
       g.scale(sc, sc); g.translate(ox, oy); g.scale(s, s);
-      try { def.still(g, on, L, Rr); } catch (e) { console.error('ART.scene', key, e); }
+      SKYOFF = !plain && !own; STY = sty || null;
+      try { def.still(g, on, L, Rr); } catch (e) { console.error('ART.scene', id, e); }
+      SKYOFF = false; STY = null;
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      const hole = !plain && !own; let cp = null;
+      if (hole) { cp = A.fx.scratch('sceneCopy', c.width, c.height); cp.getContext('2d').drawImage(c, 0, 0); }
+      if (A.vibrance && c.width * c.height < 4.5e6) A.vibrance(g, c.width, c.height, .38);
       // a dusty, faded look that clears as the area is restored
-      const frac = on.size / A.sceneFeatures[key].length, fade = (1 - frac) * .3;
-      if (A.vibrance && c.width * c.height < 4.5e6) { g.setTransform(1, 0, 0, 1, 0, 0); A.vibrance(g, c.width, c.height, .38); }
+      const fade = (1 - frac) * .3;
       if (fade > .01) {
-        g.setTransform(1, 0, 0, 1, 0, 0);
         g.globalCompositeOperation = 'saturation'; g.fillStyle = 'rgba(128,128,128,' + fade + ')'; g.fillRect(0, 0, c.width, c.height);
         g.globalCompositeOperation = 'source-over'; g.fillStyle = 'rgba(120,100,80,' + fade * .18 + ')'; g.fillRect(0, 0, c.width, c.height);
       }
-      if (cache.size > 6) cache.delete(cache.keys().next().value);
+      if (!plain && look.tint) { g.globalCompositeOperation = 'multiply'; g.fillStyle = look.tint; g.fillRect(0, 0, c.width, c.height); }
+      if (!plain && look.haze) { // snow: a cold white haze over the ground
+        g.globalCompositeOperation = 'source-over'; const hg = g.createLinearGradient(0, c.height * .55, 0, c.height); hg.addColorStop(0, 'rgba(255,255,255,0)'); hg.addColorStop(1, 'rgba(255,255,255,' + look.haze + ')'); g.fillStyle = hg; g.fillRect(0, 0, c.width, c.height);
+      }
+      if (hole) { g.globalCompositeOperation = 'destination-in'; g.drawImage(cp, 0, 0); } // keep the transparent sky hole
+      g.globalCompositeOperation = 'source-over';
+      if (cache.size > 8) cache.delete(cache.keys().next().value);
       cache.set(ck, c);
     }
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    if (!plain && !own) A.sky(ctx, x, y, w, h, t, Object.assign({}, env, { horizon: Math.max(.3, Math.min(.95, (oy + 132 * s) / h)) }));
     ctx.drawImage(c, x, y, w, h);
-    ctx.translate(x + ox, y + oy); ctx.scale(s, s);
-    try { def.anim(ctx, on, t || 0, L, Rr); } catch (e) { console.error('ART.scene anim', key, e); }
+    const over = plain ? null : (env.weather === 'rain' && !OVER[env.phase] ? 'rgba(80,90,130,.18)' : OVER[env.phase]);
+    const q = (typeof FX !== 'undefined' && FX) ? FX.quality | 0 : 2;
+    SKYOFF = !plain && !own;
+    if (over && q > 0) { // tint the animated layer the same way (offscreen, one fill)
+      const aw = Math.ceil(w * sc), ah = Math.ceil(h * sc), ac = scratchAnim(aw, ah), ag = ac.getContext('2d');
+      ag.setTransform(1, 0, 0, 1, 0, 0); ag.globalCompositeOperation = 'source-over'; ag.globalAlpha = 1; ag.clearRect(0, 0, aw, ah);
+      ag.scale(sc, sc); ag.translate(ox, oy); ag.scale(s, s);
+      try { def.anim(ag, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
+      ag.setTransform(1, 0, 0, 1, 0, 0); ag.globalCompositeOperation = 'source-atop'; ag.fillStyle = over; ag.fillRect(0, 0, aw, ah); ag.globalCompositeOperation = 'source-over';
+      ctx.drawImage(ac, 0, 0, aw, ah, x, y, w, h);
+    } else {
+      ctx.save(); ctx.translate(x + ox, y + oy); ctx.scale(s, s);
+      try { def.anim(ctx, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
+      ctx.restore();
+    }
+    SKYOFF = false;
+    if (!plain && look.dark && def.glows) { // warm windows and lamps after dark
+      let pts = null; try { pts = def.glows(on); } catch (e) { }
+      if (pts && pts.length) {
+        const spr = glowSprite(); ctx.save(); ctx.translate(x + ox, y + oy); ctx.scale(s, s);
+        for (const p of pts) { const r = p[2] * (1 + .06 * Math.sin(t * 2.3 + p[0])); ctx.globalAlpha = look.dark * (.75 + .25 * Math.sin(t * 1.7 + p[1])); ctx.drawImage(spr, p[0] - r, p[1] - r, r * 2, r * 2); }
+        ctx.restore();
+      }
+    }
+    if (!opts.noWeather) A.weatherFx(ctx, x, y, w, h, t, env.weather);
     ctx.restore();
   };
+  const STYLE_KEYS = { boho: 1, minimal: 1, romantic: 1 };
+  A.styleKeys = ['boho', 'minimal', 'romantic'];
+  // which features of an area the player's style choices control: { feature: styleKey }
+  function styleMap(key, style) {
+    if (!style) return null; const out = {}; let n = 0;
+    for (const id in style) {
+      const m = A.sceneMap[id], sk = style[id]; if (!STYLE_KEYS[sk]) continue;
+      if (m) { if (areaKey(m[0]) === key) for (let i = 1; i < m.length; i++) { out[m[i]] = sk; n++; } continue; }
+      const low = String(id).toLowerCase(), f = A.sceneFeatures[key].find(f => low === f || low.endsWith('_' + f));
+      if (f) { out[f] = sk; n++; }
+    }
+    return n ? out : null;
+  }
+  A.scene = function (ctx, area, progress, x, y, w, h, t, opts) {
+    if (w < 4 || h < 4) return;
+    const key = areaKey(area), on = featureSet(key, progress), def = S[key];
+    const id = key + '|' + A.sceneFeatures[key].map(f => on.has(f) ? 1 : 0).join('');
+    A._renderScene(ctx, id, def, on, on.size / A.sceneFeatures[key].length, x, y, w, h, t, opts, styleMap(key, opts && opts.style));
+  };
+  // drawing helpers for the other scene modules (26-tour.js)
+  A.SH = { F, VG, ln, sky, sun, cloud, seaBand, hill, tuft, grass, weeds, flowers, bush, tree, fence, stoneWall, lantern, bench, barrel, crate, junk, sheep, cat, bird, window_, flowerBox, awning, parasol, plant, glow, smoke, lights, seaSparkle, wallBoards, thatch, chimney, DW, DH, setStyle: m => { STY = m; }, styleOf: f => (STY && STY[f]) || null };
 })();

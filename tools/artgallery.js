@@ -8,7 +8,7 @@ const files = fs.readdirSync(SRC).filter(f => /^(2\d|40)-.*\.js$/.test(f)).sort(
 const code = files.map(f => fs.readFileSync(path.join(SRC, f), 'utf8')).join('\n');
 const gallery = `
 const cv = document.getElementById('cv'), d = window.devicePixelRatio || 1, mode = location.hash.slice(1) || 'items';
-const W = innerWidth, Hh = { items: 1500, gens: 900, scenes: 1700, people: 520, ui: 900, fx: 700 }[mode] || 956;
+const W = innerWidth, Hh = { items: 1500, gens: 900, scenes: 1700, people: 520, ui: 900, fx: 700, env: 1580, sky: 920, tour: 1720, styles: 1300, wardrobe: 1100, events: 640, postcard: 860 }[mode] || 956;
 cv.width = W * d; cv.height = Hh * d; cv.style.width = W + 'px'; cv.style.height = Hh + 'px';
 document.body.style.height = Hh + 'px';
 const g = cv.getContext('2d'); g.scale(d, d);
@@ -99,6 +99,25 @@ if (mode === 'items') {
   ART.mapBg(g, 1, 0, 0, W, Hh, 1, 0);
   if (mode === 'fx2') for (let i = 0; i < 5; i++) { const x = 40 + i * 80, y = 450; ART.cell(g, x - 32, y - 32, 64, 'empty'); const tf = ART.itemIdle(i, 1 + i * .3); g.save(); g.translate(x, y + 30); g.rotate(tf.rot); g.scale(tf.sx, tf.sy); g.drawImage(img, -30, -60 + tf.dy, 60, 60); g.restore(); FX.idle(g, x, y, 60, i, 2.3 + i * 1.7); }
   FX.draw(g); label('live ' + FX.count() + ' f' + NF, 8, Hh - 10);
+} else if (mode === 'env') {
+  // one area (a=<area or tour theme>) at six hours and four weathers; q=<FX quality>
+  const qs = new URLSearchParams(location.search), a = qs.get('a') || 'pagariari', hh = +(qs.get('h') || 150); window.FX && (FX.quality = +(qs.get('q') || 2));
+  const rows = [[.12, 'clear'], [.24, 'clear'], [.5, 'clear'], [.74, 'clear'], [.8, 'clear'], [.87, 'clear'], [.5, 'rain'], [.5, 'snow'], [.5, 'petals'], [.95, 'snow']];
+  const isTour = ART.tourThemes && ART.tourThemes.indexOf(a) >= 0;
+  rows.forEach((r, i) => { const o = { tod: r[0], weather: r[1] }, y = 6 + i * (hh + 6);
+    if (isTour) ART.tourScene(g, ART.tourDemo(ART.tourThemes.indexOf(a)), 99, 0, y, W, hh, 2.1 + i, o); else ART.scene(g, a, 99, 0, y, W, hh, 2.1 + i, o);
+    label(a + ' tod ' + r[0] + ' ' + r[1] + ' ' + ART.env(o).phase, 8, y + 14); });
+} else if (mode === 'tour') {
+  // all 8 island themes; p=<tasks done of n> (default all), n=<tasks per island>, c=<cycle>, tod=, weather=, style=<key for every task>
+  const qs = new URLSearchParams(location.search), n = +(qs.get('n') || 8), p = qs.get('p') != null ? +qs.get('p') : n, c = +(qs.get('c') || 0), hh = +(qs.get('h') || 206);
+  const o = { tod: qs.get('tod') != null ? +qs.get('tod') : .5, weather: qs.get('weather') || 'clear' };
+  const k0 = +(qs.get('from') || 0);
+  ART.tourThemes.slice(k0).concat(ART.tourThemes.slice(0, k0)).forEach((th, j) => { const k = ART.tourThemes.indexOf(th), isl = ART.tourDemo(c * 8 + k, n), y = 4 + j * (hh + 8);
+    if (qs.get('style')) { o.style = {}; isl.tasks.forEach(tk => o.style[tk.id] = qs.get('style')); }
+    ART.tourScene(g, isl, p, 0, y, W, hh, 1.7 + k, o); label(th + ' i' + isl.i + ' ' + p + '/' + n + (o.style ? ' ' + qs.get('style') : ''), 8, y + 14); });
+} else if (mode === 'sky') {
+  const ws = ['clear', 'rain', 'snow', 'petals'], tods = [.1, .24, .5, .74, .8, .87];
+  tods.forEach((td, i) => ws.forEach((wt, j) => { const x = j * (W / 4), y = 6 + i * 150, w = W / 4 - 4; ART.sky(g, x, y, w, 140, 3 + i, { tod: td, weather: wt, fg: true }); label(td + ' ' + wt, x + 4, y + 12); }));
 }
 window.__done = true;
 `;
@@ -107,7 +126,7 @@ const page = path.join(OUT, 'artgallery.html'); fs.writeFileSync(page, html);
 const modes = (process.argv[2] || 'items') === 'all' ? ['items', 'gens', 'scenes', 'people', 'ui', 'fx', 'map', 'themes', 'obst', 'wheel', 'win'] : [process.argv[2] || 'items'];
 const dpr = process.argv[3] || '1', extra = process.argv[4] || '';
 for (const m of modes) {
-  const H = { items: 1500, gens: 900, scenes: 1700, people: 520, ui: 900, fx: 700 }[m] || 956;
+  const H = { items: 1500, gens: 900, scenes: 1700, people: 520, ui: 900, fx: 700, env: 1580, sky: 920, tour: 1720, styles: 1300, wardrobe: 1100, events: 640, postcard: 860 }[m] || 956;
   const out = execFileSync('node', [path.join(__dirname, 'cdp.js'), '', (process.env.GW || '420') + ',' + H, 'wait:700', 'shot:art-' + m + extra + '-' + dpr + 'x'], { env: Object.assign({}, process.env, { DPR: dpr, PAGE: 'file://' + page + (extra ? '?' + extra : '') + '#' + m }) }).toString();
   process.stdout.write(out);
 }
