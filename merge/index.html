@@ -7899,7 +7899,10 @@ const UI = (() => {
     const cs = getComputedStyle(el); return { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
   }
   const slotFor = cs => Math.round(clamp(cs * 0.95, 46, 62));
-  const ordHFor = cs => slotFor(cs) + 52;
+  // Order cards: two rows (portrait and reward over the items) where there is room; on short phones one row
+// (portrait, items, reward) so the scene strip above keeps a visible picture under the HUD.
+let rowOrders = false;
+const ordHFor = cs => slotFor(cs) + (rowOrders ? 14 : 52);
   function layout() {
     DPR = Math.min(window.devicePixelRatio || 1, (typeof ART !== 'undefined' && ART.perf) ? ART.perf.maxDpr() : 3); // ART.perf caps it on weak phones
     W = window.innerWidth; H = window.innerHeight;
@@ -7908,6 +7911,7 @@ const UI = (() => {
     // Short screens (a 360 x 800 Android, an iPhone with its notch and home bar) get a slightly lower tab bar and info bar.
     const compact = bot - top < 760, barH = compact ? 70 : 78, infoH = compact ? 56 : 62, OVER = 22;
     L.landscape = (right - left) >= 700 && (right - left) > (bot - top) * 1.15;
+    rowOrders = false;
     if (L.landscape) {
       const availB = bot - top - infoH - barH - gap * 2;
       const cs = Math.max(40, Math.min(80, Math.floor(availB / ROWS), Math.floor((right - left) * 0.5 / COLS)));
@@ -7925,6 +7929,7 @@ const UI = (() => {
       const avail = bot - top - barH - infoH - gap * 3;
       // The scene strip (village picture plus the HUD over it) gets about a quarter of the height: the board shrinks
       // a little on short phones rather than the picture vanishing under the HUD. Cells stay 44 px or more if they can.
+      rowOrders = avail < 700;
       const need = c => c * ROWS + ordHFor(c) - OVER, want = clamp(Math.round(avail * 0.25), 150, 210);
       let cs = Math.floor((cw - 8) / COLS);
       while (cs > 44 && need(cs) + want > avail) cs--;
@@ -7954,8 +7959,11 @@ const UI = (() => {
     L.hud.adv = { x: sx + sw - 142 - advW, y: hy + 50, w: advW, h: 44 };
     L.hud.area = { x: sx, y: hy + 50, w: Math.min(230, L.hud.adv.x - 6 - sx), h: 44 };
     // bottom tabs
-    const names = ['tasks', 'album', 'week', 'pass', 'shop', 'bag'], bw = L.bar.w / names.length;
-    L.btn = {}; names.forEach((n, j) => { L.btn[n] = { x: L.bar.x + j * bw, y: L.bar.y, w: bw, h: L.bar.h }; });
+    // Each tab gets its label's width plus an equal share of the rest, inside the glass panel, so "Remont" no longer
+    // touches the edge on a 360 px phone.
+    const names = ['tasks', 'album', 'week', 'pass', 'shop', 'bag'], labs = ['Remont', 'Album', 'Nädal', 'Rada', 'Pood', 'Kott'];
+    g.font = font(15, 900); const lw = labs.map(s => g.measureText(s).width), inner = L.bar.w - 12, spare = Math.max(0, inner - lw.reduce((a, b) => a + b, 0));
+    L.btn = {}; let bx = L.bar.x + 6; names.forEach((n, j) => { const w = lw[j] + spare / names.length; L.btn[n] = { x: bx, y: L.bar.y, w, h: L.bar.h }; bx += w; });
     dirty = true;
   }
   const inR = (p, r) => r && p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
@@ -8413,7 +8421,7 @@ const UI = (() => {
   }
 
   // ---- drawing: orders ----
-  function cardW(o) { const sl = L.slot; return Math.max(16 + o.items.length * sl + (o.items.length - 1) * 6, 140); }
+  function cardW(o) { const sl = L.slot; return rowOrders ? 50 + o.items.length * (sl + 6) + 58 : Math.max(16 + o.items.length * sl + (o.items.length - 1) * 6, 140); }
   function drawOrders(t) {
     const r = L.orders, sl = L.slot; cardRects = [];
     let total = 0; for (const o of S.orders) total += cardW(o) + 8;
@@ -8432,6 +8440,15 @@ const UI = (() => {
       if (st.ready) { const gg = g.createLinearGradient(0, yy, 0, yy + h); gg.addColorStop(0, '#6ff0b8'); gg.addColorStop(1, '#19c37f'); g.fillStyle = gg; }
       else g.fillStyle = CARD;
       rr(x, yy, w, h, 18); g.fill(); g.lineWidth = 2.5; g.strokeStyle = st.ready ? '#ffffff' : EDGE; g.stroke();
+      if (rowOrders) {
+        g.save(); rr(x, yy, w, h, 18); g.clip(); drawPortrait(o.who, x + 6, yy + h / 2 - 19, 38); g.restore();
+        const rx = x + w - 58;
+        if (st.ready) { g.fillStyle = '#fff'; rr(rx, yy + h / 2 - 17, 52, 34, 17); g.fill(); text('Anna!', rx + 26, yy + h / 2 + 1, 16, '#0b8a58', 'center', 900, 48); }
+        else {
+          drawIcon('star', rx + 2, yy + h / 2 - 22, 20); text(String(o.stars), rx + 26, yy + h / 2 - 11, 15, INK, 'left', 900);
+          drawIcon('coin', rx + 2, yy + h / 2 + 2, 20); text(String(o.coins), rx + 26, yy + h / 2 + 12, 15, INK, 'left', 900, 30);
+        }
+      } else {
       g.save(); rr(x, yy, w, h, 18); g.clip(); drawPortrait(o.who, x + 6, yy + 5, 38); g.restore();
       if (st.ready) {
         const bw = w - 54, bx = x + 48, byy = yy + 7;
@@ -8442,8 +8459,9 @@ const UI = (() => {
         const rs = String(o.coins); text(rs, rx, yy + 23, 16, INK, 'right', 900); rx -= g.measureText(rs).width + 22; drawIcon('coin', rx, yy + 12, 21);
         if (o.stars) { rx -= 4; const ss = String(o.stars); g.font = font(16, 900); text(ss, rx, yy + 23, 16, INK, 'right', 900); rx -= g.measureText(ss).width + 22; drawIcon('star', rx, yy + 11, 22); }
       }
+      }
       o.items.forEach(([k, l], j) => {
-        const ix = x + 8 + j * (sl + 6), iy = yy + h - sl - 6;
+        const ix = rowOrders ? x + 50 + j * (sl + 6) : x + 8 + j * (sl + 6), iy = rowOrders ? yy + (h - sl) / 2 : yy + h - sl - 6;
         g.fillStyle = st.ready ? 'rgba(255,255,255,0.55)' : st.have[j] ? 'rgba(47,213,154,0.22)' : SOFT; rr(ix, iy, sl, sl, 12); g.fill();
         drawItem(k, l, ix + sl / 2, iy + sl / 2, sl * 0.9);
         if (st.have[j]) drawIcon('check', ix + sl - 20, iy - 4, 24);
@@ -8661,7 +8679,7 @@ const UI = (() => {
       const b = L.btn[id], cx = b.x + b.w / 2, ps = pressScale(b.x, b.y);
       if (id === 'bag' && dragBag) { g.fillStyle = 'rgba(255,200,90,0.55)'; rr(b.x + 6, b.y + 4, b.w - 12, b.h - 8, 16); g.fill(); }
       const bounce = hot ? Math.abs(Math.sin(t * 4)) * 4 : 0, pu = bump[id] ? Math.sin(clamp(1 - (tn() - bump[id]) / 0.35, 0, 1) * Math.PI) * 0.25 : 0;
-      const isz = Math.min(40, b.w - 18) * ps * (1 + pu);
+      const isz = Math.min(40, b.w - 10) * ps * (1 + pu);
       g.save(); if (id === 'week' && !wOpen) g.globalAlpha = 0.55;
       drawIcon(ic, cx - isz / 2, b.y + 4 - bounce + (40 - isz) / 2, isz);
       if (id === 'week' && wOpen) drawIcon('cur_' + WEEK.info().key, cx + 4, b.y + 22 - bounce, 20);
