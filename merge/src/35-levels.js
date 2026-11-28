@@ -488,7 +488,7 @@ const LV = (() => {
   function winReward(r, first, stars) {
     const n = r.n, rew = {};
     if (first) {
-      rew.coins = 10 + Math.min(25, Math.floor(n / 6)) + 3 * stars + Math.min(12, r.moves) + 2 * Math.min(5, S.adv.streak);
+      rew.coins = 8 + Math.min(16, Math.floor(n / 10)) + 2 * stars + Math.min(6, Math.ceil(r.moves / 2)) + Math.min(5, S.adv.streak);
       if (n % 5 === 0) rew.spins = 1;
       if (r.def.kind === 'boss') rew.boost = BOOST_KEYS[(n / 10) % 4 | 0];
       if (n % 3 === 0) rew.energy = 10;

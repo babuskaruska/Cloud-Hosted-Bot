@@ -246,9 +246,10 @@ const TOUR = (() => {
 // ---------------------------------------------------------------- season pass "Hooaja rada"
 const PASS_STEPS = 30;
 const PASS_PTS = { merge: 1, order: 3, task: 6, level: 5, daily: 4, island: 15, week: 2 };
+const PASS_MERGES = 3;  // one pass point per 3 merges (merges are by far the most common action)
 const MONTHS = ['jaanuar', 'veebruar', 'märts', 'aprill', 'mai', 'juuni', 'juuli', 'august', 'september', 'oktoober', 'november', 'detsember'];
 const PASS = (() => {
-  const need = s => 15 + 3 * s;                // points for step s (1-based)
+  const need = s => 30 + 4 * s;                // points for step s (1-based); 2760 for all 30 (about 3 weeks at 25 min a day)
   const cum = s => { let t = 0; for (let j = 1; j <= s; j++) t += need(j); return t; };
   const CUM = []; for (let s = 0; s <= PASS_STEPS; s++) CUM.push(cum(s));
   // Wardrobe pieces on the track: unlocked for good the first time the step is claimed.
@@ -285,6 +286,7 @@ const PASS = (() => {
   function add(n, cell) {
     if (!S || !n) return;
     ensure();
+    if (n === 'merge') { S.pass.mc = (S.pass.mc | 0) + 1; if (S.pass.mc < PASS_MERGES) return; S.pass.mc = 0; n = PASS_PTS.merge; }
     const before = reached(); S.pass.pts += n;
     const after = reached();
     if (after > before) xev('passStep', cell, { s: after });
@@ -309,8 +311,8 @@ const WEEK_EVENTS = {
 const WEEK_KEYS = ['garden', 'fashion', 'wedding', 'beach'];
 for (const k of WEEK_KEYS) CHAINS['ev_' + k] = { kind: 'item', ev: k, name: WEEK_EVENTS[k].name, color: WEEK_EVENTS[k].color, names: WEEK_EVENTS[k].chain.slice() };
 const WEEK_MIN_LVL = 3;        // the event opens at XP level 3 (the first minutes stay simple)
-const WEEK_SPAWN_P = 0.09;     // share of generator taps that give an event item instead
-const WEEK_CUR = { merge: l => 2 * l, top: 30, order: 2, level: 4 };
+const WEEK_SPAWN_P = 0.06;     // share of generator taps that give an event item instead
+const WEEK_CUR = { merge: l => 2 * l, top: 30, order: 1, level: 3 };  // about 5 days for the full track at 25 min a day
 // Each event's track; the 8th prize is a wardrobe piece of its own.
 const WEEK_TRACK = [
   { need: 10, r: { coins: 30 } },

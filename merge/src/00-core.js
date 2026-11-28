@@ -2,7 +2,20 @@
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
 const now = () => Date.now();
-const QS = (() => { const o = {}; try { new URLSearchParams(location.search).forEach((v, k) => { o[k] = v; }); } catch (e) {} return o; })();
+// URL flags come from the query (?fresh=1) or the hash (#fresh=1). Hash flags are read once and then removed from
+// the address bar at the end of boot (90-main.js, after every module read them), so a reload (or the home-screen app reopening) does not wipe the save again.
+const QS = (() => {
+  const o = {};
+  try { new URLSearchParams(location.search).forEach((v, k) => { o[k] = v; }); } catch (e) {}
+  try {
+    const h = (location.hash || '').replace(/^#/, '');
+    if (h && h.includes('=')) {
+      new URLSearchParams(h).forEach((v, k) => { if (!(k in o)) o[k] = v; });
+      o._hash = 1;
+    }
+  } catch (e) {}
+  return o;
+})();
 
 function mulberry(seed) {
   return function () {
@@ -35,7 +48,8 @@ function fmtNum(n) { n = Math.floor(n); return n >= 10000 ? (n / 1000).toFixed(n
 
 // Board geometry
 const COLS = 7, ROWS = 9, NCELL = COLS * ROWS;
-const MAXEN = 100, EN_MS = 60000;  // +1 energy every minute (generous)
+const MAXEN = 100, EN_MS = 60000;  // +1 energy every minute up to 100 (generous)
+const EN_CAP = 150;  // gifts, coffee and the shop may fill energy past 100, but never past this
 const FREE_EN = 30, FREE_EN_MS = 4 * 3600000;  // free energy every 4 hours
 
 // Global state. Keys starting with "_" are view-only and never saved.

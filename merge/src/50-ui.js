@@ -504,6 +504,7 @@ const UI = (() => {
         else if (d.order !== undefined) toast('Kõik asjad pole veel laual.');
         else toast('Seda ei saa müüa.');
         break;
+      case 'enFull': snd('deny'); toast(cell >= 0 ? 'Energiat on juba ' + EN_CAP + '. Jäta kohv hilisemaks!' : 'Energiat on juba palju. Kasuta enne natuke ära!'); break;
       case 'bagFull': toast('Kott on täis. Poest saab kotti suuremaks osta.'); snd('deny'); break;
       case 'rush': snd('coins'); setAnim(cell, { pop: 1, dur: 0.3 }); break;
       case 'dailyReady': toast('Päevaülesanne tehtud! Auhind ootab kingituse all.'); snd('daily'); break;
@@ -1286,8 +1287,8 @@ const UI = (() => {
       const P = modalPanel(m, 380, 372, 'Energia'), free = Game.freeEnIn();
       drawIcon('energy', P.x + P.w / 2 - 30, P.y + 34, 60);
       text(S.en < 1 ? 'Energia sai otsa!' : 'Energiat on ' + S.en + '.', P.x + P.w / 2, P.y + 112, 20, INK, 'center', 900);
-      text(S.en < MAXEN ? '+1 iga minut · järgmine ' + fmtTime(Game.enNext()) : 'Täis! Uuel tasemel saad jälle täis paagi.', P.x + P.w / 2, P.y + 140, 15, INK2, 'center', 700, P.w - 24);
-      button(P.x + 24, P.y + 166, P.w - 48, 56, free > 0 ? 'Tasuta: ' + fmtTime(free) : 'Tasuta +' + FREE_EN + '!', () => { if (Game.claimFreeEnergy()) closeModal(true); }, Object.assign({ icon: 'freeEnergy', hot: free <= 0, pulse: free <= 0, off: free > 0, offFn: () => { snd('deny'); toast('Tasuta energia tuleb ' + fmtTime(free) + ' pärast.'); }, size: 19, isz: 30 }, B));
+      text(S.en < MAXEN ? '+1 iga minut · järgmine ' + fmtTime(Game.enNext()) : S.en >= EN_CAP ? 'Täis! Rohkem kui ' + EN_CAP + ' ei mahu.' : 'Täis! Kingitused mahuvad kuni ' + EN_CAP + '-ni.', P.x + P.w / 2, P.y + 140, 15, INK2, 'center', 700, P.w - 24);
+      button(P.x + 24, P.y + 166, P.w - 48, 56, free > 0 ? 'Tasuta: ' + fmtTime(free) : 'Tasuta +' + FREE_EN + '!', () => { if (Game.claimFreeEnergy()) closeModal(true); else if (S.en >= EN_CAP) { snd('deny'); toast('Energiat on juba ' + EN_CAP + '. Kasuta enne natuke ära!'); } }, Object.assign({ icon: 'freeEnergy', hot: free <= 0, pulse: free <= 0, off: free > 0, offFn: () => { snd('deny'); toast('Tasuta energia tuleb ' + fmtTime(free) + ' pärast.'); }, size: 19, isz: 30 }, B));
       const x = SHOP[0];
       button(P.x + 24, P.y + 234, P.w - 48, 52, x.name + ' +25 · ' + x.price, () => { if (Game.buy(x.id)) closeModal(); }, Object.assign({ icon: 'coin', off: S.coins < x.price, offFn: () => Game.buy(x.id), size: 17 }, B));
       text('Vihje: ühenda kohvioad ja toksa neid.', P.x + P.w / 2, P.y + P.h - 26, 15, INK2, 'center', 700, P.w - 24);

@@ -2,6 +2,8 @@
 // redraw only when needed, paused while hidden), saving on hide, and the test hook window.__mg.
 (function () {
   S = load() || Game.newGame();
+  // Hash flags (#fresh=1 ...) have been read by every module now; drop them so a reload keeps the save.
+  try { if (QS._hash && history.replaceState) history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
   S.title = true;
   Game.tickEnergy(); Game.ensureDaily();
   const cap = (navigator.hardwareConcurrency || 8) <= 4 ? 30 : 60;

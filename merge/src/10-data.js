@@ -169,22 +169,22 @@ const AREAS = [
       ['peeter', 'Kui veski jälle käib, on saarel oma jahu. Ja oma jahust saab... kõike.'],
     ],
     tasks: [
-      { id: 'w1', name: 'Korista veski ära', cost: 6, reward: { coins: 90 }, story: [
+      { id: 'w1', name: 'Korista veski ära', cost: 7, reward: { coins: 90 }, story: [
         ['muri', 'Mrr. (Helmut elab nüüd siin. Ma tulin ainult külla. Taga ei ajanud. Natuke ainult.)'] ] },
-      { id: 'w2', name: 'Paranda tiivad', cost: 7, reward: { energy: 30 }, story: [
+      { id: 'w2', name: 'Paranda tiivad', cost: 8, reward: { energy: 30 }, story: [
         ['ants', 'Vanasti aitasin Maalil tiibu parandada. Ta ütles, et ma olen hea redel.'],
         ['mina', 'Redel?'],
         ['ants', 'Ma olin pikk. Ja ma ei rääkinud palju.'] ] },
-      { id: 'w3', name: 'Õlita veskikivid', cost: 7, reward: { gen: 'net' }, story: [
+      { id: 'w3', name: 'Õlita veskikivid', cost: 8, reward: { gen: 'net' }, story: [
         ['peeter', 'Kuula! Kivid laulavad. Madalalt, nagu vana kannel. Salvestan selle podcasti jaoks.'],
         ['peeter', 'Võta minu teine võrk. Merepõhjast leiab muudki kui kala.'] ] },
-      { id: 'w4', name: 'Jahvata esimene jahu', cost: 8, reward: { coins: 120 }, story: [
+      { id: 'w4', name: 'Jahvata esimene jahu', cost: 9, reward: { coins: 120 }, story: [
         ['liisa', 'Saare oma jahu! Ma teen sellest kringli. Või kaks. Või kõik.'],
         ['mina', 'Kohalik, käsitöö, meretuulega. Turistid lähevad hulluks.'] ] },
-      { id: 'w5', name: 'Riputa tiibadele tulukesed', cost: 8, reward: { energy: 40 }, story: [
+      { id: 'w5', name: 'Riputa tiibadele tulukesed', cost: 9, reward: { energy: 40 }, story: [
         ['mina', 'Õhtul helendab veski nagu suur tähekaart. Ilusam kui ükski filter.'],
         ['peeter', 'Majakast on see ilus vaade. Nüüd on mul kaks tuld, mida vaadata.'] ] },
-      { id: 'w6', name: 'Tõsta vana veskikivi', cost: 9, reward: { gen: 'toolbox', chest: 2 }, story: [
+      { id: 'w6', name: 'Tõsta vana veskikivi', cost: 10, reward: { gen: 'toolbox', chest: 2 }, story: [
         ['maali', '(Kivi all on kiri.) Kolmas vihje: retseptiraamatut valvab see, kes kunagi ei maga.'],
         ['peeter', 'See olen mina. Ma ei maga kunagi. Noh, päeval natuke.'],
         ['mina', 'Majakas!'] ] },
@@ -194,16 +194,16 @@ const AREAS = [
       ['peeter', 'Tere tulemast minu majakasse. Sada kaksteist astet. Olen neid mitu korda lugenud. Iga kord tuleb isesugune arv.'],
     ],
     tasks: [
-      { id: 'l1', name: 'Paranda keerdtrepp', cost: 8, reward: { coins: 120 }, story: [
+      { id: 'l1', name: 'Paranda keerdtrepp', cost: 10, reward: { coins: 120 }, story: [
         ['mina', 'Trepp kriuksub igal astmel ise noodis.'],
         ['peeter', 'Ma kutsun seda trepilauluks. Nüüd laulab ta puhtamalt.'] ] },
-      { id: 'l2', name: 'Nühi lääts särama', cost: 9, reward: { energy: 40 }, story: [
+      { id: 'l2', name: 'Nühi lääts särama', cost: 11, reward: { energy: 40 }, story: [
         ['peeter', 'Läbi läätse paistab saar nagu mänguasi. Vaata, Liisa räägib kellegagi. Muidugi räägib.'] ] },
-      { id: 'l3', name: 'Paranda vana lamp', cost: 9, reward: { gen: 'wheel' }, story: [
+      { id: 'l3', name: 'Paranda vana lamp', cost: 11, reward: { gen: 'wheel' }, story: [
         ['liisa', 'Tõin sulle teise voki! See seisis mu poes nii kaua, et kliendid pidasid seda mööbliks.'] ] },
-      { id: 'l4', name: 'Värvi majakale triibud', cost: 10, reward: { coins: 150 }, story: [
+      { id: 'l4', name: 'Värvi majakale triibud', cost: 12, reward: { coins: 150 }, story: [
         ['ants', 'Punane ja valge. Nagu õngekork. Väga hea majakas.'] ] },
-      { id: 'l5', name: 'Pane majakatuli põlema', cost: 12, reward: { chest: 3 }, story: [
+      { id: 'l5', name: 'Pane majakatuli põlema', cost: 14, reward: { chest: 3 }, story: [
         ['peeter', 'Maali palus mul hoida ühte kirstu. Ta ütles: anna see sellele, kes saare jälle valgeks teeb.'],
         ['peeter', 'See oled sina.'],
         ['mina', 'Retseptiraamat?!'],
@@ -216,13 +216,13 @@ const AREAS = [
       ['mina', 'Vanaema... sa oled päriselt kõige parem. Okei, korjame lehed kokku!'],
     ],
     tasks: [
-      { id: 's1', name: 'Korja retseptilehed kokku', cost: 10, reward: { coins: 150 }, story: [
+      { id: 's1', name: 'Korja retseptilehed kokku', cost: 12, reward: { coins: 150 }, story: [
         ['ants', 'Leidsin võrgust ühe lehe. „Lisa näpuotsaga soola ja natuke naeru.“ Hm.'] ] },
-      { id: 's2', name: 'Köida raamat kokku', cost: 12, reward: { energy: 50 }, story: [
+      { id: 's2', name: 'Köida raamat kokku', cost: 14, reward: { energy: 50 }, story: [
         ['liisa', 'Üks leht oli mu kassaaparaadi all! Kakskümmend aastat! Ma oleksin pidanud koristama.'] ] },
-      { id: 's3', name: 'Küpseta vanaema kringel', cost: 14, reward: { coins: 200 }, story: [
+      { id: 's3', name: 'Küpseta vanaema kringel', cost: 17, reward: { coins: 200 }, story: [
         ['muri', 'Mjäu. (See lõhnab nagu Maali. Ma istun siin ja ootan. Mitte kringlit. Lihtsalt istun.)'] ] },
-      { id: 's4', name: 'Suur saarepidu', cost: 15, reward: { coins: 500, chest: 3 }, story: [
+      { id: 's4', name: 'Suur saarepidu', cost: 18, reward: { coins: 500, chest: 3 }, story: [
         ['liisa', 'Terve saar on siin! Muusika, kringel ja tants! Teen otseülekande!'],
         ['ants', 'Ma ei tantsi. ... Hea küll, ühe korra.'],
         ['peeter', 'Majakas paistab täna ainult meile.'],
@@ -243,8 +243,8 @@ const STORY = {
 
 // Coins shop. Generator offers are added for every generator kind you have owned.
 const SHOP = [
-  { id: 'en25', name: 'Kohvitass', desc: '+25 energiat', price: 50, give: { energy: 25 }, icon: ['coffee', 2] },
-  { id: 'en60', name: 'Kohvikann', desc: '+60 energiat', price: 110, give: { energy: 60 }, icon: ['coffee', 3] },
+  { id: 'en25', name: 'Kohvitass', desc: '+25 energiat', price: 60, give: { energy: 25 }, icon: ['coffee', 2] },
+  { id: 'en60', name: 'Kohvikann', desc: '+60 energiat', price: 140, give: { energy: 60 }, icon: ['coffee', 3] },
   { id: 'mbox', name: 'Üllatuskast', desc: '1 üllatus', price: 35, give: { item: ['mbox', 1] }, icon: ['mbox', 1] },
   { id: 'chest1', name: 'Väike kirst', desc: '3 asja', price: 45, give: { item: ['chest', 1] }, icon: ['chest', 1] },
   { id: 'chest2', name: 'Kirst', desc: '5 asja', price: 110, give: { item: ['chest', 2] }, icon: ['chest', 2] },
@@ -259,26 +259,29 @@ const DAILY_POOL = [
   { id: 'coins', text: 'Teeni {n} münti', goals: [60, 100, 150] },
   { id: 'hi', text: 'Valmista {n} asja 5. või kõrgemal tasemel', goals: [1, 2, 3] },
 ];
-const DAILY_REWARD = { coins: 25, energy: 10 }, DAILY_BONUS = { stars: 2, chest: 1 };
+const DAILY_REWARD = { coins: 15, energy: 10 }, DAILY_BONUS = { stars: 2, chest: 1 };
 
 // ---- reward loops ----
 // Combo: merges less than COMBO_MS apart build a combo. Every merge from x3 on pays a coin; milestones pay more.
 const COMBO_MS = 2600;
-const comboReward = n => n % 5 === 0 ? { coins: 5 + n, energy: 3 } : n >= 3 ? { coins: 1 } : null;
+// The milestone pay is capped (fast players used to earn more per merge the longer they kept the combo going).
+const comboReward = n => n % 5 === 0 ? { coins: 4 + 2 * Math.min(4, n / 5), energy: n <= 10 ? 2 : 1 } : n >= 3 && n <= 20 ? { coins: 1 } : null;
 // Lucky merge chance (the 6th merge of a new game is always lucky, so she meets it early).
 const LUCKY_P = 0.06;
 // Mystery box drop chance on merges (result level 3+), and every Nth order pays one.
 const MBOX_P = 0.035, MBOX_ORDER_EVERY = 5;
 // Level-up rewards: coins, a full energy refill, a chest, now and then a mystery box or a spare generator.
-const xpNeed = L => L <= 1 ? 8 : 8 + (L - 1) * 10;
+// XP comes from merges (1 each) and orders, so it tracks energy spent (about 1.8 XP per energy). From level 4 on a
+// level costs more energy than the refill it pays, so level-ups are a treat, not an endless energy loop.
+const xpNeed = L => L <= 1 ? 10 : L === 2 ? 25 : L === 3 ? 45 : Math.round(40 + 30 * (L - 3) + 4 * (L - 3) * (L - 3));
 function levelReward(L) {
-  const r = { coins: 15 + 5 * L, refill: true, chest: L % 5 === 0 ? 2 : 1 };
+  const r = { coins: 10 + 4 * L, refill: true, chest: L % 5 === 0 ? 2 : 1 };
   if (L === 2 || L % 4 === 0) r.mbox = 1;
   if (L % 3 === 0) r.genCopy = true;
   return r;
 }
 // Collection album: each discovered item pays once when collected; a full chain pays a bonus.
-const albumReward = l => ({ coins: 3 + l * 3 });
+const albumReward = l => ({ coins: 2 + l * 2 });
 const ALBUM_CHAIN = { stars: 2, chest: 2 };
 const ALBUM_CHAINS = Object.keys(CHAINS).filter(k => CHAINS[k].kind === 'item');
 
@@ -329,26 +332,26 @@ const OBST_NAME = { ice: 'Jää', box: 'Kast', web: 'Ämblikuvõrk', sand: 'Liiv
 
 // Lucky wheel (Õnneratas): 8 slices, w = weight. One free spin a day; more from levels and the calendar.
 const WHEEL = [
-  { r: { coins: 25 }, w: 20, color: '#ffd23f', label: '25' },
+  { r: { coins: 15 }, w: 20, color: '#ffd23f', label: '15' },
   { r: { boost: 'wand' }, w: 10, color: '#b07cff', label: 'Võlukepp' },
   { r: { energy: 20 }, w: 18, color: '#5ad1ff', label: '+20' },
   { r: { boost: 'scissors' }, w: 10, color: '#ff8ab8', label: 'Käärid' },
-  { r: { coins: 60 }, w: 12, color: '#ffb02e', label: '60' },
+  { r: { coins: 40 }, w: 12, color: '#ffb02e', label: '40' },
   { r: { boost: 'shuffle' }, w: 12, color: '#6fe0a0', label: 'Segamine' },
   { r: { item: ['chest', 1], boost: 'moves' }, w: 14, color: '#ff9a6b', label: 'Kirst' },
-  { r: { coins: 300, item: ['mbox', 1], boost: 'wand', spins: 1 }, w: 3, color: '#ff4f9a', label: 'Suur auhind', big: true },
+  { r: { coins: 150, item: ['mbox', 1], boost: 'wand', spins: 1 }, w: 3, color: '#ff4f9a', label: 'Suur auhind', big: true },
 ];
 
 // Daily calendar: a 7-day streak with growing prizes (day 7 is the big one), and a 30-day track that counts
 // every day you come by (a missed day does not reset it).
 const CAL7 = [
-  { coins: 20, energy: 10 },
-  { coins: 30, energy: 15 },
-  { coins: 30, boost: 'shuffle' },
-  { coins: 40, energy: 20 },
-  { coins: 40, boost: 'scissors', spins: 1 },
-  { coins: 60, energy: 25, chest: 1 },
-  { coins: 100, boost: 'wand', chest: 2, spins: 1 },
+  { coins: 10, energy: 10 },
+  { coins: 15, energy: 15 },
+  { coins: 15, boost: 'shuffle' },
+  { coins: 20, energy: 20 },
+  { coins: 20, boost: 'scissors', spins: 1 },
+  { coins: 30, energy: 25, chest: 1 },
+  { coins: 60, boost: 'wand', chest: 2, spins: 1 },
 ];
 const CAL30 = [
   { day: 3, r: { spins: 1, coins: 30 } },
@@ -359,5 +362,5 @@ const CAL30 = [
 ];
 
 // Piggy bank (Hoiupõrsas): fills from play, opens free once a day.
-const PIGGY_MAX = 300, PIGGY_MIN = 10;
+const PIGGY_MAX = 60, PIGGY_MIN = 10;
 const PIGGY_ADD = { merge: 1, order: 4, level: 12 };
