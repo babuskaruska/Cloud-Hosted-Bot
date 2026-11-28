@@ -120,6 +120,15 @@ async function phaseC(chromium, chrome, ROOT) {
   const openPage = async (opts, url) => {
     const ctx = await browser.newContext(opts || { viewport: { width: 400, height: 700 } });
     await ctx.addInitScript(() => { window.__nan = 0; const P = AudioParam.prototype; for (const fn of ['setValueAtTime', 'linearRampToValueAtTime', 'exponentialRampToValueAtTime', 'setTargetAtTime']) { const o = P[fn]; P[fn] = function (v, t, c) { if (!isFinite(v) || !isFinite(t) || (c !== undefined && !isFinite(c))) window.__nan++; return o.apply(this, arguments); }; } });
+    if (process.env.DBG) await ctx.addInitScript(() => { // DBG=1: track every started source (where it was made) to find ones that never end
+      window.__L = new Map(); let id = 0; const P = AudioScheduledSourceNode.prototype, st = P.start, sp = P.stop, BP = AudioBufferSourceNode.prototype, bst = BP.start;
+      BP.start = function (t, off, dur) { const k = ++id; this.__k = k; window.__L.set(k, { t0: t, dur: dur, s: new Error().stack.split('\n').slice(2, 7).map(x => x.trim().replace(/\(?file:.*index.html:/, '@')).join(' < '), c: this.context }); this.addEventListener('ended', () => window.__L.delete(k)); return bst.apply(this, arguments); };
+      P.start = function (t) { const k = ++id; this.__k = k; window.__L.set(k, { t0: t, s: new Error().stack.split('\n').slice(2, 7).map(x => x.trim().replace(/\(?file:.*index.html:/, '@')).join(' < '), c: this.context }); this.addEventListener('ended', () => { window.__L.delete(k); if (!(this.context instanceof OfflineAudioContext)) window.__E = (window.__E || 0) + 1; }); if (!(this.context instanceof OfflineAudioContext)) window.__S = (window.__S || 0) + 1; return st.apply(this, arguments); };
+      const D = Object.getOwnPropertyDescriptor(P, 'onended'); window.__H = 0; window.__HS = 0;
+      Object.defineProperty(P, 'onended', { configurable: true, get() { return D.get.call(this); }, set(f) { window.__HS++; const k = window.__HS, ac = this.context; if (!(ac instanceof OfflineAudioContext)) window.__HL.set(k, new Error().stack.split('\n').slice(2, 6).map(x => x.trim().replace(/\(?file:.*index.html:/, '@')).join(' < ') + ' t=' + ac.currentTime.toFixed(2)); D.set.call(this, f ? function (ev) { window.__H++; window.__HL.delete(k); return f.call(this, ev); } : f); } });
+      window.__HL = new Map();
+      P.stop = function (t) { const e = window.__L.get(this.__k); if (e) e.t1 = t; return sp.apply(this, arguments); };
+    });
     const page = await ctx.newPage(), errs = [];
     page.on('pageerror', e => errs.push(String(e).slice(0, 200)));
     await page.goto('file://' + ROOT + '/merge/index.html' + (url || '?nosave=1'));
@@ -237,6 +246,7 @@ async function phaseC(chromium, chrome, ROOT) {
     // Fell asleep (15 s of quiet) with a tail still pending on the frozen clock: wake it (as a touch would) and let it end.
     if (await page.evaluate(() => window.__saAudio.stats().live > 0 && window.__saAudio.context.state === 'suspended')) { await page.evaluate(() => window.__saAudio.poke()); await sleep(5000); }
     const end = await page.evaluate(() => { const s = window.__saAudio.stats(), n0 = window.__names0, d = Object.keys(s.names).filter(k => s.names[k] !== n0[k]).map(k => k + ' x' + (s.names[k] - (n0[k] || 0))); return { live: s.live, err: s.err, nan: window.__nan, state: s.state, music: s.music, after: d.join(' ') }; }), h1 = await heap();
+    if (process.env.DBG) console.log(await page.evaluate(() => { const ac = window.__saAudio.context; return 'now ' + ac.currentTime.toFixed(2) + ' started ' + window.__S + ' ended ' + window.__E + ' AU live ' + window.__saAudio.stats().live + ' handlers set ' + window.__HS + ' run ' + window.__H + '\n' + [...window.__HL.values()].slice(0, 12).join('\n') + '\n' + [...window.__L.values()].filter(e => e.c === ac).map(e => `  t0 ${e.t0 && e.t0.toFixed(2)} dur ${e.dur} t1 ${e.t1 && e.t1.toFixed(2)} ${e.s}`).join('\n'); }));
     const h1m = rows.length ? rows[0][3] : h0, grow = h1 - h1m;
     console.log(`after stop: live ${live8} after 8 s, ${end.live} at the end (${end.state}, music '${end.music}'${end.after ? ', game sounds since: ' + end.after : ''}), heap ${h0} at start, ${h1m} after 1 min -> ${h1} MB (${grow >= 0 ? '+' : ''}${grow.toFixed(1)})${end.err ? ' AUDIO ERR ' + end.err : ''}${end.nan ? ' NaN x' + end.nan : ''}${errs.length ? ' PAGE ERR ' + errs.join('; ') : ''}`);
     if (end.live > 2 || grow > 3 || end.err || end.nan || errs.length) bad.push('soak');

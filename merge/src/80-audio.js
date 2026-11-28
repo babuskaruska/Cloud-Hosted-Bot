@@ -89,7 +89,7 @@ const AU = (function () {
     if (o.f2) { f.frequency.setValueAtTime(o.f, t); f.frequency.exponentialRampToValueAtTime(o.f2, t + a + d); }
     const s = ctx.createBufferSource(); ST.made++; s.buffer = NB; s.connect(f);
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + a); g.gain.exponentialRampToValueAtTime(0.0003, t + a + d);
-    const len = a + d + 0.03; lateChk(t); if (len > NB.duration - 0.05) { s.loop = true; s.start(t, 0); s.stop(t + len); } else s.start(t, rnd() * (NB.duration - len - 0.01), len); const on = !OFF; if (on) ST.live++; s.onended = () => { if (on) ST.live--; try { g.disconnect(); } catch (e) {} };
+    const len = a + d + 0.03; lateChk(t); if (len > NB.duration - 0.05) { s.loop = true; s.start(t, 0); s.stop(t + len); } else { s.start(t, rnd() * (NB.duration - len - 0.01)); s.stop(t + len); } // start + stop, not start(t, off, duration): Chrome sometimes never ends those (no 'ended': about 1 in 3000 around a suspend) const on = !OFF; if (on) ST.live++; s.onended = () => { if (on) ST.live--; try { g.disconnect(); } catch (e) {} };
     return t + len;
   }
 
@@ -743,6 +743,14 @@ const AU = (function () {
     deny: 0.6, heart: 0.78, mystery: 0.85, boxBreak: 0.85, calendar: 0.75, wheelWin: (o) => (o.big ? 0.42 : 1), passStep: (o) => ((+o.n || +o.step || 1) >= 30 ? 0.55 : 1) };
   const PRI = { mergeMax: 1, taskDone: 1, levelUp: 1, orderDone: 1, daily: 1, chest: 1, lucky: 1, discover: 1, mystery: 1, event: 1, album: 1, combo: 1, claim: 1, booster: 1, wheelWin: 1, levelWin: 1, levelFail: 1, star: 1, piggy: 1, calendar: 1, heart: 1, passStep: 1, styleSwap: 1, wardrobe: 1, pet: 1, photo: 1, islandNew: 1 };
   const lastAt = {};
+  // Nodes to disconnect once the audio clock passes a time: [time, node]. On the audio clock, not setTimeout: while the
+  // context is suspended (hidden, muted, asleep) wall time runs on, and cutting a chain whose sources have not ended yet
+  // orphaned them (Chrome then collects them without an 'ended' event: the live count crept up and the quiet sleep waited).
+  const GQ = [];
+  function reap(now) {
+    for (let i = GQ.length - 1; i >= 0; i--) if (now >= GQ[i][0]) { try { GQ[i][1].disconnect(); } catch (e) {} GQ.splice(i, 1); }
+    for (let i = MU.olds.length - 1; i >= 0; i--) { const o = MU.olds[i]; if (now >= o.kill) { try { o.bus.disconnect(); } catch (e) {} MU.olds.splice(i, 1); } }
+  }
   function sfx(name, opts) {
     if (typeof name !== 'string' || !hasOwn(SFX, name)) return false;
     ST.names[name] = (ST.names[name] || 0) + 1;
@@ -775,7 +783,7 @@ const AU = (function () {
         if (k < tmp.length) { for (; k < tmp.length; k++) { tmp[k][3] = B.sfxIn; FXQ.push(tmp[k]); } FXQ.sort((a, b) => a[0] - b[0]); }
       } finally {
         DQ = null;
-        if (B.sfxIn !== bus0) { const gn = B.sfxIn; B.sfxIn = bus0; setTimeout(() => { try { gn.disconnect(); } catch (e) {} }, ((end || now + 1) - now + 1) * 1000); }
+        if (B.sfxIn !== bus0) { let last = end || now + 1; for (const x of FXQ) if (x[3] === B.sfxIn && x[0] > last) last = x[0]; GQ.push([last + 5, B.sfxIn]); B.sfxIn = bus0; } // after its last voice (and tail)
       }
       act.push({ name: name, end: end || now + 0.3 });
       cpuAdd(c0, 1);
@@ -969,8 +977,9 @@ const AU = (function () {
   function dateSeason(d) { const m = (d || new Date()).getMonth(); return m === 11 || m <= 1 ? 'winter' : m <= 4 ? 'spring' : m <= 7 ? 'summer' : 'autumn'; }
   function normSeason(v) { let s = slug(v); if (SEASON_ALIAS[s]) s = SEASON_ALIAS[s]; return SEASONS.indexOf(s) >= 0 ? s : ''; }
   const LITE_MU = 1.0; // lite make-up gain on the music bus (no reverb return, single-oscillator voices)
-  // vol, mud and pres per song were calibrated with tools/mergeaudio.js (--mix) so every song sits within about 1 LU of
-  // -23.6 LUFS full range and -26.9 through a phone-speaker model (spread before: 3.3 and 5.5 LU).
+  // vol, mud, pres and liteV per song were calibrated with tools/mergeaudio.js (--mix, 150 s) so every song sits within
+  // about 1 LU of -23.4 LUFS full range and -26.4 through a phone-speaker model, lite within 0.8 LU of full (phase C:
+  // spread 1.8 / 2.4 / 1.6 LU; before: 2.2 / 3.4 / 2.2 and lite down to -1.6 LU on the beach and ice cream songs).
   const LEADV = { vox: 0.3, pluck: 0.085, mallet: 0.11, bell: 0.075, ep: 0.1, steel: 0.09 };
   // liteV: lite has no reverb, and songs of short plucked notes lose more of their loudness without it (up to 1.6 LU).
   const songVol = (c) => c.vol * (LITE && c.liteV ? c.liteV : 1);
@@ -1047,7 +1056,7 @@ const AU = (function () {
     const now = ctx.currentTime, old = MU.E;
     if (old) {
       old.dead = true; const g = old.bus.gain; old.fade = [now, g.value]; g.cancelScheduledValues(now); g.setValueAtTime(cut ? 0 : g.value, now); g.setTargetAtTime(0, now, 0.45); g.setValueAtTime(0, now + 4); if (cut) old.fade[1] = 0;
-      if (!OFF) { MU.olds.push(old); setTimeout(() => { try { old.bus.disconnect(); } catch (e) {} const i = MU.olds.indexOf(old); if (i >= 0) MU.olds.splice(i, 1); }, 6000); }
+      if (!OFF) { old.kill = now + 8; MU.olds.push(old); } // disconnected by tick() on the audio clock (see reap)
     }
     if (!key) { MU.E = null; return; }
     const name = hasOwn(CFG, cfgName(key)) ? cfgName(key) : 'pagariari', c = CFG[name];
@@ -1380,7 +1389,7 @@ const AU = (function () {
       if (gap > TM.updMax) TM.updMax = gap;
       const base = lookBase(); if (!TM.look) TM.look = base;
       TM.look = gap > TM.look * 0.6 ? Math.min(2, Math.max(TM.look, gap * 1.6)) : Math.max(base, TM.look * 0.997);
-      musicTick(); flushFx(ctx.currentTime + TM.look); meterTick();
+      musicTick(); flushFx(ctx.currentTime + TM.look); meterTick(); reap(ctx.currentTime);
       cpuAdd(c0);
     } else TM.last = 0;
     lifeTick(c0);
