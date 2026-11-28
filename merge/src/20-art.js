@@ -519,7 +519,7 @@ const ART = (function () {
   // ---- background: sunny sea-sky gradient with soft bokeh bubbles and a light wave pattern (cached) ----
   let _bg = null, _bgKey = '';
   A.bg = function (ctx, w, h, t) {
-    const sc = scaleOf(ctx), key = w + 'x' + h + '@' + sc;
+    const sc = scaleOf(ctx), ph = A.env ? A.env().phase : 'day', key = w + 'x' + h + '@' + sc + ph;
     if (key !== _bgKey) {
       _bgKey = key; _bg = mk(w * sc, h * sc); const g = _bg.getContext('2d'); g.scale(sc, sc);
       const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#7fd3ff'); gr.addColorStop(.38, '#bfe9ff'); gr.addColorStop(.72, '#e8f6ff'); gr.addColorStop(1, '#fff0de');
@@ -546,6 +546,9 @@ const ART = (function () {
         g.fillStyle = bg; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
       }
       for (let i = 0; i < 18; i++) sparkAt(g, rr() * w, rr() * h, 2 + rr() * 4, 'rgba(255,255,255,.75)');
+      // a gentle wash for the hour (ART.env): lilac after dark, peach at sunset; light enough to keep the board readable
+      const wash = { night: ['rgba(60,50,150,.34)', 'rgba(120,90,190,.12)'], dusk: ['rgba(120,80,190,.24)', 'rgba(255,150,170,.1)'], sunset: ['rgba(255,140,120,.2)', 'rgba(255,190,140,.1)'], golden: ['rgba(255,190,110,.12)', 'rgba(255,220,160,.06)'], dawn: ['rgba(255,160,200,.16)', 'rgba(255,220,180,.08)'] }[ph];
+      if (wash) { const wg = g.createLinearGradient(0, 0, 0, h); wg.addColorStop(0, wash[0]); wg.addColorStop(1, wash[1]); g.fillStyle = wg; g.fillRect(0, 0, w, h); }
     }
     ctx.drawImage(_bg, 0, 0, w, h);
   };

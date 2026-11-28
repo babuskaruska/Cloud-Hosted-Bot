@@ -8,7 +8,7 @@
 //   A task's area comes from TASKS (if defined, field area/ala/piirkond) or from an id prefix like 'aed_…'.
 // The still layer is cached per (area, features, size); smoke, waves, sails, birds and lights animate on top.
 (function () {
-  const A = ART, { E, R, rrp, PL, SM, HL, dot, spark, star, srnd, lt, dk, mix, rgba, mk } = A.H;
+  const A = ART, { E, R, rrp, PL, SM, HL, dot, spark, star, heart, srnd, lt, dk, mix, rgba, mk } = A.H;
   const PI = Math.PI, TAU = PI * 2, DW = 400, DH = 220;
   A.areas = ['pagariari', 'aed', 'sadam', 'tuuleveski', 'majakas', 'saladus'];
   A.areaNames = { pagariari: 'Pagariäri', aed: 'Aed', sadam: 'Sadam', tuuleveski: 'Tuuleveski', majakas: 'Majakas', saladus: 'Vanaema saladus' };
@@ -97,8 +97,13 @@
   function F(g, col, lw, olc) { g.fillStyle = col; g.fill(); if (lw !== 0) { g.lineWidth = lw || 1.6; g.strokeStyle = olc || dk(col, .6); g.lineJoin = 'round'; g.lineCap = 'round'; g.stroke(); } }
   function VG(g, col, y0, y1, lw) { const gr = g.createLinearGradient(0, y0, 0, y1); gr.addColorStop(0, lt(col, .25)); gr.addColorStop(1, dk(col, .12)); g.fillStyle = gr; g.fill(); if (lw !== 0) { g.lineWidth = lw || 1.6; g.strokeStyle = dk(col, .6); g.lineJoin = 'round'; g.stroke(); } }
   function ln(g, pts, col, w, a) { PL(g, pts, true); g.lineWidth = w; g.strokeStyle = a != null ? rgba(col, a) : col; g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke(); }
-  function sky(g, L, Rr, top, bot, y1) { const gr = g.createLinearGradient(0, 0, 0, y1); gr.addColorStop(0, top); gr.addColorStop(1, bot); g.fillStyle = gr; g.fillRect(L, -2, Rr - L, y1 + 2); }
+  // SKYOFF: while a still is drawn for a non-default hour or weather, the sky, sun and still clouds are left out (ART.sky draws
+  // them live behind the scene). STY: feature -> style key of the still being drawn (design choices).
+  let SKYOFF = false, STY = null;
+  const sty = f => (STY && STY[f]) || null;
+  function sky(g, L, Rr, top, bot, y1) { if (SKYOFF) return; const gr = g.createLinearGradient(0, 0, 0, y1); gr.addColorStop(0, top); gr.addColorStop(1, bot); g.fillStyle = gr; g.fillRect(L, -2, Rr - L, y1 + 2); }
   function sun(g, x, y, r, col) {
+    if (SKYOFF) return;
     const gr = g.createRadialGradient(x, y, r * .3, x, y, r * 3.4); gr.addColorStop(0, rgba(col || '#fff3a8', .95)); gr.addColorStop(1, rgba(col || '#fff3a8', 0));
     g.fillStyle = gr; g.beginPath(); g.arc(x, y, r * 3.4, 0, TAU); g.fill();
     g.save(); g.translate(x, y); g.fillStyle = 'rgba(255,240,160,.35)';
@@ -107,6 +112,7 @@
     g.beginPath(); g.arc(x, y, r, 0, TAU); const sg = g.createLinearGradient(0, y - r, 0, y + r); sg.addColorStop(0, '#fffbe0'); sg.addColorStop(1, col || '#ffd84a'); g.fillStyle = sg; g.fill();
   }
   function cloud(g, x, y, s, a) {
+    if (SKYOFF) return;
     a = a == null ? .9 : a;
     g.fillStyle = 'rgba(190,215,255,' + a * .6 + ')';
     E(g, x, y + 2 * s, 19 * s, 7 * s); g.fill();
@@ -126,8 +132,9 @@
     for (let i = 0; i < w / 5; i++) { const xx = x + r() * w, h = 8 + r() * 14; g.beginPath(); g.moveTo(xx, y); g.quadraticCurveTo(xx + (r() - .5) * 8, y - h * .6, xx + (r() - .5) * 10, y - h); g.lineWidth = 1.8; g.strokeStyle = r() < .5 ? '#6f8a3a' : '#8a9a48'; g.stroke(); if (r() < .3) dot(g, xx + (r() - .5) * 8, y - h, 1.8, '#c9b860'); }
     for (let i = 0; i < w / 14; i++) { E(g, x + r() * w, y - 2, 6 + r() * 4, 4 + r() * 3); F(g, '#7f9a4a', 1.2); }
   }
-  function flowers(g, x, y, w, seed, dense) {
-    const r = srnd(seed), cols = ['#f58aa0', '#ffffff', '#5b86e0', '#f7d24c', '#f7a8c8', '#ff8a5c'];
+  const FLCOL = { boho: ['#ff9a5a', '#ffd06a', '#f6ead6', '#e2874c'], minimal: ['#ffffff', '#f4f0e8', '#ffffff', '#e8eef0'], romantic: ['#ff8fb0', '#ffd0dc', '#ffffff', '#ec5f86'] };
+  function flowers(g, x, y, w, seed, dense, st) {
+    const r = srnd(seed), cols = FLCOL[st] || ['#f58aa0', '#ffffff', '#5b86e0', '#f7d24c', '#f7a8c8', '#ff8a5c'];
     for (let i = 0; i < w / (dense ? 3 : 5); i++) {
       const xx = x + r() * w, yy = y - r() * 6, h = 5 + r() * 7;
       g.beginPath(); g.moveTo(xx, yy); g.lineTo(xx, yy - h); g.lineWidth = 1.1; g.strokeStyle = '#4f8f3f'; g.stroke();
@@ -163,8 +170,8 @@
     if (opt.apples) { const r = srnd(5); for (let i = 0; i < 9; i++) { const ax = x + (r() - .5) * 34 * s, ay = y - 30 * s - r() * 26 * s; dot(g, ax, ay, 2.6 * s, '#e2463c'); dot(g, ax - .8 * s, ay - .8 * s, .8 * s, '#ffc0b0'); } }
     if (opt.blossom) { const r = srnd(9); for (let i = 0; i < 14; i++) dot(g, x + (r() - .5) * 36 * s, y - 28 * s - r() * 30 * s, 1.8 * s, '#ffd6e0'); }
   }
-  function fence(g, x0, x1, y, h, broken, col, seed) {
-    col = col || '#f4efe6'; const r = srnd(seed || 3);
+  function fence(g, x0, x1, y, h, broken, col, seed, st) {
+    col = ({ boho: '#d8b48a', minimal: '#ffffff', romantic: '#ffd6e2' })[st] || col || '#f4efe6'; const r = srnd(seed || 3);
     R(g, x0, y - h * .7, x1 - x0, 3, 1); F(g, col, 1.2); R(g, x0, y - h * .3, x1 - x0, 3, 1); F(g, col, 1.2);
     for (let x = x0 + 2; x < x1 - 2; x += 8) {
       if (broken && r() < .35) { if (r() < .5) { g.save(); g.translate(x, y); g.rotate(.5 + r()); R(g, -2, -h + 2, 4, h - 2, 1); F(g, '#a89a88', 1.1); g.restore(); } continue; }
@@ -178,13 +185,20 @@
       E(g, x, y - 3 - row * (h / 3), 5 + r() * 1.5, h / 6 + .5); F(g, mix('#b9b2a6', '#d8d2c6', r()), 1.1, '#6f675e');
     }
   }
-  function lantern(g, x, y, lit) {
-    ln(g, [x, y, x, y - 26], '#5a4030', 2); R(g, x - 4, y - 34, 8, 9, 2); F(g, lit ? '#ffe08a' : '#8a8a80', 1.2, '#3a2a20');
-    PL(g, [x - 5, y - 34, x, y - 39, x + 5, y - 34]); F(g, '#3a3a3a', 1);
+  function lantern(g, x, y, lit, st) {
+    const post = st === 'minimal' ? '#3a4150' : st === 'boho' ? '#8a5a30' : st === 'romantic' ? '#c89aa8' : '#5a4030', cap = st === 'minimal' ? '#3a4150' : st === 'boho' ? '#b7865c' : st === 'romantic' ? '#ec5f86' : '#3a3a3a';
+    ln(g, [x, y, x, y - 26], post, 2);
+    if (st === 'boho') { E(g, x, y - 30, 5, 6); F(g, lit ? '#ffd88a' : '#8a8a80', 1.2, '#8a5a30'); for (let i = -1; i <= 1; i++) ln(g, [x + i * 2.6, y - 35.5, x + i * 2.6, y - 24.5], '#b7865c', .7, .8); }
+    else { R(g, x - 4, y - 34, 8, 9, st === 'minimal' ? 0 : 2); F(g, lit ? (st === 'romantic' ? '#ffe6ee' : '#ffe08a') : '#8a8a80', 1.2, st === 'minimal' ? '#3a4150' : '#3a2a20'); }
+    if (st === 'romantic') { heart(g, x, y - 28.5, 2.2); F(g, '#ec5f86', 0); }
+    PL(g, [x - 5, y - 34, x, y - 39, x + 5, y - 34]); F(g, cap, 1);
   }
-  function bench(g, x, y, col) {
-    col = col || '#b9784a'; R(g, x - 16, y - 10, 32, 3.5, 1.5); F(g, col, 1.2); R(g, x - 16, y - 18, 32, 3.5, 1.5); F(g, col, 1.2);
-    ln(g, [x - 13, y - 10, x - 13, y], dk(col, .3), 2.2); ln(g, [x + 13, y - 10, x + 13, y], dk(col, .3), 2.2); ln(g, [x - 13, y - 18, x - 13, y - 10], dk(col, .3), 2); ln(g, [x + 13, y - 18, x + 13, y - 10], dk(col, .3), 2);
+  function bench(g, x, y, col, st) {
+    col = ({ boho: '#c4895a', minimal: '#fbfbf9', romantic: '#ffc2d4' })[st] || col || '#b9784a'; const leg = st === 'minimal' ? '#3a4150' : dk(col, .3);
+    R(g, x - 16, y - 10, 32, 3.5, 1.5); F(g, col, 1.2, st === 'minimal' ? '#3a4150' : null); R(g, x - 16, y - 18, 32, 3.5, 1.5); F(g, col, 1.2, st === 'minimal' ? '#3a4150' : null);
+    ln(g, [x - 13, y - 10, x - 13, y], leg, 2.2); ln(g, [x + 13, y - 10, x + 13, y], leg, 2.2); ln(g, [x - 13, y - 18, x - 13, y - 10], leg, 2); ln(g, [x + 13, y - 18, x + 13, y - 10], leg, 2);
+    if (st === 'boho') { R(g, x - 12, y - 13, 10, 4, 2); F(g, '#ecc27a', .8); R(g, x + 2, y - 13, 10, 4, 2); F(g, '#8fae86', .8); for (let i = 0; i < 6; i++) ln(g, [x - 10 + i * 4, y - 10, x - 10 + i * 4, y - 7], '#ecc27a', .8); }
+    if (st === 'romantic') { heart(g, x, y - 19, 3.4); F(g, '#ec5f86', .8, '#a8466a'); }
   }
   function barrel(g, x, y, s) { R(g, x - 7 * s, y - 16 * s, 14 * s, 16 * s, 4 * s); VG(g, '#b9784a', y - 16 * s, y, 1.3); ln(g, [x - 7 * s, y - 12 * s, x + 7 * s, y - 12 * s], '#5a5a5a', 1.4); ln(g, [x - 7 * s, y - 4 * s, x + 7 * s, y - 4 * s], '#5a5a5a', 1.4); }
   function crate(g, x, y, s, col) { R(g, x - 9 * s, y - 14 * s, 18 * s, 14 * s, 1.5); F(g, col || '#d39a5e', 1.3); ln(g, [x - 9 * s, y - 14 * s, x + 9 * s, y], dk(col || '#d39a5e', .35), 1.2); ln(g, [x - 9 * s, y - 7 * s, x + 9 * s, y - 7 * s], dk(col || '#d39a5e', .35), 1); }
@@ -246,12 +260,14 @@
   // each area: still(g, f, L, R) draws the cached layer; anim(g, f, t, L, R) draws per frame
   const S = {};
   // the young heroine's seaside café-bakery: pastel walls, mint scalloped roof, big arched windows, parasols
-  function awning(g, x, w, y, h, c1, c2) {
+  function awning(g, x, w, y, h, c1, c2, st) {
+    if (st && A.STYLED) { A.STYLED.awn(g, x, w, y, h, st, { a: c1, b: c2 }); return; }
     const n = Math.max(3, Math.round(w / 10)), sw = w / n;
     for (let i = 0; i < n; i++) { g.beginPath(); g.moveTo(x + i * sw, y); g.lineTo(x + (i + 1) * sw, y); g.lineTo(x + (i + 1) * sw, y + h); g.arc(x + i * sw + sw / 2, y + h, sw / 2, 0, PI); g.closePath(); F(g, i % 2 ? c2 : c1, 1.1, dk(c1, .5)); }
     R(g, x - 2, y - 3, w + 4, 4, 2); F(g, dk(c1, .15), 1.1);
   }
-  function parasol(g, x, y, col) {
+  function parasol(g, x, y, col, st) {
+    if (st && A.STYLED) { const P = { a: col, b: '#ffffff' }, S2 = A.STYLED; S2.umbrella(g, x, y, st, P); S2.table(g, x, y, P, st); S2.chair(g, x - 17, y, st, P, false); S2.chair(g, x + 17, y, st, P, true); return; }
     ln(g, [x, y, x, y - 30], '#8a6a8a', 1.6);
     g.beginPath(); g.moveTo(x - 20, y - 26); g.quadraticCurveTo(x, y - 44, x + 20, y - 26); g.closePath(); F(g, col, 1.3, dk(col, .5));
     g.save(); g.clip(); for (let i = -2; i <= 2; i += 2) { g.beginPath(); g.moveTo(x, y - 42); g.lineTo(x + i * 6 - 3, y - 24); g.lineTo(x + i * 6 + 3, y - 24); g.closePath(); g.fillStyle = '#ffffff'; g.fill(); } g.restore();
@@ -266,6 +282,7 @@
     dot(g, x - 2 * s, y - 22 * s, 1.4 * s, '#ffd23f'); dot(g, x + 4 * s, y - 17 * s, 1.4 * s, '#ff8fb8');
   }
   S.pagariari = {
+    glows: f => [].concat(f.has('aknad') ? [[146, 158, 22], [254, 158, 22], [200, 162, 14]] : [], f.has('laternad') ? [[108, 170, 12], [160, 130, 7], [240, 130, 7]] : []),
     still(g, f, L, Rr) {
       sky(g, L, Rr, '#5ec8ff', '#ffe9f0', 128); sun(g, 330, 38, 13);
       cloud(g, 70, 36, 1.1, .9);
@@ -300,10 +317,10 @@
           const gr = g.createLinearGradient(0, yb - 54, 0, yb - 17); gr.addColorStop(0, ws === 2 ? '#fff4b8' : '#c8f0ff'); gr.addColorStop(1, ws === 2 ? '#ffc070' : '#8fd8f8'); g.fillStyle = gr; g.fill();
           R(g, wx + 5, yb - 26, 22, 3, 1); F(g, '#ffffff', .8); dot(g, wx + 10, yb - 29, 3, '#ff9ab8'); dot(g, wx + 17, yb - 29.5, 3.4, '#ffcf6a'); dot(g, wx + 23, yb - 29, 2.6, '#c79aff');
           ln(g, [wx + 8, yb - 48, wx + 12, yb - 52], '#ffffff', 1.6, .8);
-          if (painted) awning(g, wx - 4, 40, yb - 60, 6, '#ff7a9a', '#ffffff');
+          if (painted) awning(g, wx - 4, 40, yb - 60, 6, '#ff7a9a', '#ffffff', sty('seinad'));
         } else { R(g, wx, yb - 50, 32, 34, 2); F(g, '#5a5058', 1.2); g.save(); g.translate(wx + 16, yb - 33); g.rotate(.45); R(g, -22, -2.5, 44, 5, 1); F(g, '#b8a48a', 1); g.rotate(-.9); R(g, -22, -2.5, 44, 5, 1); F(g, '#c8b49a', 1); g.restore(); }
       }
-      if (f.has('lillekastid')) { for (const wx of [128, 236]) { R(g, wx, yb - 16, 36, 6, 2); F(g, '#ffffff', 1.1, '#8a6a8a'); flowers(g, wx + 2, yb - 16, 32, wx | 0, true); } plant(g, 180, yb, 1); plant(g, 222, yb, 1); }
+      if (f.has('lillekastid')) { const sk = sty('lillekastid'); for (const wx of [128, 236]) { R(g, wx, yb - 16, 36, 6, 2); F(g, ({ boho: '#d8a868', minimal: '#fbfbf9', romantic: '#ffd6e2' })[sk] || '#ffffff', 1.1, sk === 'minimal' ? '#3a4150' : '#8a6a8a'); flowers(g, wx + 2, yb - 16, 32, wx | 0, true, sk); } plant(g, 180, yb, 1); plant(g, 222, yb, 1); }
       g.beginPath(); g.moveTo(186, yb); g.lineTo(186, yb - 38); g.arc(200, yb - 38, 14, PI, 0); g.lineTo(214, yb); g.closePath(); F(g, '#ffffff', 1.3);
       g.beginPath(); g.moveTo(189, yb); g.lineTo(189, yb - 37); g.arc(200, yb - 37, 11, PI, 0); g.lineTo(211, yb); g.closePath();
       if (f.has('uks')) { F(g, '#3fd0b0', 1.2); R(g, 193, yb - 44, 14, 22, 6); F(g, '#d8f6ff', 1); ln(g, [195, yb - 30, 199, yb - 40], '#ffffff', 1.4, .8); dot(g, 208, yb - 18, 1.6, '#ffd23f'); }
@@ -315,8 +332,8 @@
         g.drawImage(A.item('bread', 7, 48), 165, yb - wh - 4, 15, 15);
         PL(g, [166, yb, 172, yb - 22, 178, yb]); F(g, '#8a6a8a', 1); R(g, 163, yb - 22, 18, 15, 2); F(g, '#3a3a4a', 1.2, '#8a6a8a'); ln(g, [166, yb - 18, 177, yb - 18], '#ffffff', 1, .8); ln(g, [166, yb - 14, 174, yb - 14], '#ff9ab8', 1, .8); ln(g, [166, yb - 10.5, 176, yb - 10.5], '#9fe8ff', 1, .8);
       }
-      if (f.has('pink')) { parasol(g, 318, 200, '#ff6b8a'); parasol(g, 92, 202, '#3db8ff'); }
-      if (f.has('laternad')) { ln(g, [x0 - 6, yb - 68, 160, yb - 58, 200, yb - 62, 240, yb - 58, x1 + 6, yb - 68], '#6a5a7a', .8); lantern(g, 108, 204, true); }
+      if (f.has('pink')) { parasol(g, 318, 200, '#ff6b8a', sty('pink')); parasol(g, 92, 202, '#3db8ff', sty('pink')); }
+      if (f.has('laternad')) { ln(g, [x0 - 6, yb - 68, 160, yb - 58, 200, yb - 62, 240, yb - 58, x1 + 6, yb - 68], '#6a5a7a', .8); lantern(g, 108, 204, true, sty('laternad')); }
       if (!clean) { junk(g, 96, 198, 3); junk(g, 300, 202, 8); weeds(g, x0 - 4, yb + 2, 40, 5); weeds(g, x1 - 30, yb + 2, 36, 6); }
       else { flowers(g, 70, 206, 30, 11); flowers(g, 330, 208, 40, 12); bush(g, 130, 194, .7, '#5fd07a', f.has('lillekastid') ? '#ff8fb8' : null); }
       grass(g, L, Rr, 196, 220, 9, '#46b85a');
@@ -342,7 +359,7 @@
       wallBoards(g, 312, 96, 80, 42, '#ffc0d6', true); thatch(g, 312, 392, 96, 26, false, '#4fd4b4');
       const wd = f.has('umbrohi');
       tree(g, 64, 170, 1.25, 'round', f.has('ounapuu') ? { apples: true } : { bare: true });
-      fence(g, L, Rr, 152, 16, !f.has('aed'), '#f4efe6', 6);
+      fence(g, L, Rr, 152, 16, !f.has('aed'), '#f4efe6', 6, sty('aed'));
       // beds
       for (let i = 0; i < 3; i++) {
         const bx = 130 + i * 54; R(g, bx, 168, 44, 14, 3); F(g, f.has('peenrad') ? '#7a4a30' : '#8a7a62', 1.4);
@@ -363,7 +380,7 @@
         ln(g, [262, 184, 262, 146], '#8a5a3a', 2); ln(g, [250, 158, 274, 158], '#8a5a3a', 2); R(g, 254, 156, 16, 16, 3); F(g, '#5f86c8', 1.2);
         E(g, 262, 148, 6, 6); F(g, '#f2deb0', 1.2); PL(g, [253, 145, 262, 138, 271, 145]); F(g, '#c9a24a', 1.2); dot(g, 260, 148, .8, '#3a2a20'); dot(g, 264, 148, .8, '#3a2a20');
       }
-      if (f.has('lilled')) { flowers(g, 18, 196, 90, 41, true); flowers(g, 230, 200, 160, 42, true); bush(g, 120, 200, .7, '#6aa84f', '#f7a8c8'); }
+      if (f.has('lilled')) { flowers(g, 18, 196, 90, 41, true, sty('lilled')); flowers(g, 230, 200, 160, 42, true, sty('lilled')); bush(g, 120, 200, .7, '#6aa84f', '#f7a8c8'); }
       if (!wd) { weeds(g, 10, 196, 120, 51); weeds(g, 200, 200, 190, 52); junk(g, 236, 204, 9); }
       grass(g, L, Rr, 188, 220, 13);
     },
@@ -377,6 +394,7 @@
     }
   };
   S.sadam = {
+    glows: f => f.has('laternad') ? [[144, 132, 12], [246, 132, 12], [340, 132, 12]] : [],
     still(g, f, L, Rr) {
       sky(g, L, Rr, '#55c2ff', '#ffeef4', 120); sun(g, 300, 34, 12); cloud(g, 120, 38, 1.1, .7);
       PL(g, [Rr, 104, 340, 98, 300, 102, 270, 110, Rr, 110]); g.closePath(); F(g, '#8fb8a0', 0);
@@ -404,7 +422,7 @@
       }
       if (!f.has('koristus')) { junk(g, 30, 160, 21); junk(g, 120, 162, 22); E(g, 210, 205, 14, 4); F(g, '#6a6a5a', 1); }
       else { flowers(g, 6, 168, 40, 23); E(g, 40, 175, 6, 3); F(g, '#c9c2b6', 1); }
-      if (f.has('laternad')) { for (const x of [144, 246, 340]) lantern(g, x, 166, true); }
+      if (f.has('laternad')) { for (const x of [144, 246, 340]) lantern(g, x, 166, true, sty('laternad')); }
     },
     anim(g, f, t, L, Rr) {
       cloud(g, ((t * 3 + 260) % (Rr - L + 80)) + L - 40, 28, .9, .8);
@@ -430,6 +448,7 @@
     }
   };
   S.tuuleveski = {
+    glows: f => f.has('veskimaja') ? [[205, 91, 12]] : [],
     still(g, f, L, Rr) {
       sky(g, L, Rr, '#62caff', '#fff0e6', 150); sun(g, 60, 40, 12); cloud(g, 300, 30, 1, .7);
       hill(g, L, Rr, [L, 130, 100, 120, 220, 126, 320, 118, Rr, 126], '#a8e88a', 220);
@@ -473,6 +492,7 @@
     }
   };
   S.majakas = {
+    glows: f => [].concat(f.has('tuli') ? [[296, 50, 34]] : [], f.has('maja') ? [[345, 116, 10]] : []),
     still(g, f, L, Rr) {
       sky(g, L, Rr, '#58c4ff', '#ffe6f0', 130); sun(g, 110, 46, 12); cloud(g, 40, 30, .9, .7);
       seaBand(g, L, Rr, 120, 220, '#7fe0ff', '#1a9fd8');
@@ -493,9 +513,9 @@
       R(g, lx - 6, base - 16, 12, 16, 1); F(g, '#5f86c8', 1.2);
       if (f.has('maja')) { wallBoards(g, 330, 104, 50, 28, '#e8d06a', true); PL(g, [324, 106, 355, 86, 386, 106]); F(g, '#c94a3c', 1.4); window_(g, 340, 112, 10, 9, f.has('tuli') ? 2 : 1); R(g, 360, 114, 9, 18, 1); F(g, '#5f9e78', 1.1); chimney(g, 372, 96, true); }
       else { E(g, 356, 126, 24, 8); F(g, '#9a9088', 1.2); weeds(g, 334, 132, 44, 81); }
-      if (f.has('aed')) fence(g, 222, 272, 146, 9, false, '#f4efe6', 9);
-      if (f.has('pink')) bench(g, 250, 150, '#5f86c8');
-      if (f.has('lilled')) { flowers(g, 214, 158, 70, 83, true); flowers(g, 330, 140, 60, 84, true); }
+      if (f.has('aed')) fence(g, 222, 272, 146, 9, false, '#f4efe6', 9, sty('aed'));
+      if (f.has('pink')) bench(g, 250, 150, '#5f86c8', sty('pink'));
+      if (f.has('lilled')) { flowers(g, 214, 158, 70, 83, true, sty('lilled')); flowers(g, 330, 140, 60, 84, true, sty('lilled')); }
       else weeds(g, 220, 156, 50, 85);
       if (f.has('lipp')) ln(g, [196, 160, 196, 120], '#8a8a8a', 1.6);
       // rocks in the sea
@@ -517,6 +537,7 @@
     }
   };
   S.saladus = {
+    ownSky: true,
     still(g, f, L, Rr) {
       const sk = f.has('taevas');
       sky(g, L, Rr, sk ? '#2a2f8a' : '#3a3f72', sk ? '#ff8ac0' : '#9a7aa8', 150);
@@ -542,14 +563,14 @@
       if (ok) { star(g, cx, yb - 18, 3.4, 1.4, 8); g.fillStyle = '#f2c14b'; g.fill(); }
       // gate
       if (f.has('varav')) {
-        fence(g, 104, 184, 212, 12, false, '#d8ccb8', 4); fence(g, 230, 310, 213, 12, false, '#d8ccb8', 5);
+        fence(g, 104, 184, 212, 12, false, '#d8ccb8', 4, sty('varav')); fence(g, 230, 310, 213, 12, false, '#d8ccb8', 5, sty('varav'));
         ln(g, [186, 214, 186, 186], '#8a6a4a', 3); ln(g, [228, 214, 228, 186], '#8a6a4a', 3);
         g.beginPath(); g.moveTo(186, 186); g.quadraticCurveTo(207, 170, 228, 186); g.lineWidth = 3; g.strokeStyle = '#8a6a4a'; g.stroke();
         const r = srnd(97); for (let i = 0; i < 16; i++) { const u = i / 15, xx = 186 + u * 42, yy = 186 - Math.sin(u * PI) * 8 + (r() - .5) * 3; if (i % 3) { for (let k = 0; k < 5; k++) dot(g, xx + Math.cos(k * 1.26) * 1.6, yy + Math.sin(k * 1.26) * 1.6, 1.3, i % 2 ? '#f7a8c8' : '#fff6e6'); dot(g, xx, yy, .8, '#f6d36a'); } else { E(g, xx, yy, 2.6, 1.4, u * 2); F(g, '#6aa84f', .6); } }
       }
       else { fence(g, 104, 310, 212, 12, true, '#a89a88', 6); }
       if (f.has('raamat')) { ln(g, [262, 206, 262, 186], '#6b4a30', 2.4); PL(g, [250, 186, 274, 186, 270, 180, 254, 180]); F(g, '#8a5a3a', 1.2); g.drawImage(A.icon('book', 48), 254, 168, 16, 14); }
-      if (f.has('laternad')) { lantern(g, 140, 206, true); lantern(g, 276, 208, true); }
+      if (f.has('laternad')) { lantern(g, 140, 206, true, sty('laternad')); lantern(g, 276, 208, true, sty('laternad')); }
       if (f.has('lilled')) { const r = srnd(96); for (let i = 0; i < 26; i++) { const x = L + 10 + r() * (Rr - L - 20), y = 196 + r() * 20; for (let k = 0; k < 5; k++) dot(g, x + Math.cos(k * 1.26) * 1.7, y + Math.sin(k * 1.26) * 1.7, 1.4, '#f4f0ff'); dot(g, x, y, .9, '#f6d36a'); } }
       if (f.has('pidu')) {
         R(g, 286, 196, 70, 5, 2); F(g, '#fff6e6', 1.2); ln(g, [292, 201, 292, 214], '#6b4a30', 2); ln(g, [350, 201, 350, 214], '#6b4a30', 2);
@@ -585,33 +606,105 @@
   }
 
   // ---------- public ----------
+  // Shared renderer for ART.scene and ART.tourScene: a cached still layer (tinted for the hour and the weather, with the sky
+  // drawn live behind it by ART.sky), the animated layer on top, warm window glows after dark and the weather in front.
+  //   def: { still(g, on, L, R), anim(g, on, t, L, R), glows?(on) -> [[x, y, r], ...] (design space), ownSky?: true }
+  //   opts (last argument of ART.scene / ART.tourScene): { tod, weather, style: {taskId: 'boho'|'minimal'|'romantic'},
+  //   noWeather, noEnv }. Without tod / weather the local clock and today's weather are used (ART.env).
   const cache = A._sceneCache = new Map();
-  A.scene = function (ctx, area, progress, x, y, w, h, t) {
+  const OVER = { night: 'rgba(28,34,104,.42)', dusk: 'rgba(84,60,150,.26)', sunset: 'rgba(255,130,90,.14)', golden: 'rgba(255,170,90,.08)', dawn: 'rgba(255,150,190,.12)', day: null };
+  let _glowSpr = null;
+  function glowSprite() {
+    if (_glowSpr) return _glowSpr;
+    const c = _glowSpr = mk(64, 64), g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,236,170,.95)'); gr.addColorStop(.35, 'rgba(255,200,120,.45)'); gr.addColorStop(1, 'rgba(255,190,110,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    return c;
+  }
+  let _animC = null;
+  function scratchAnim(w, h) { if (!_animC) _animC = mk(w, h); if (_animC.width !== w || _animC.height !== h) { _animC.width = w; _animC.height = h; } return _animC; }
+  A._renderScene = function (ctx, id, def, on, frac, x, y, w, h, t, opts, sty) {
     if (w < 4 || h < 4) return;
-    const key = areaKey(area), on = featureSet(key, progress), def = S[key];
+    opts = opts || {}; t = t || 0;
+    const env = opts.env || A.env(opts), look = A.skyLook(env), plain = !!(look.plain || opts.noEnv);
     // fit the height, but on a short wide strip zoom in (crop some sky and ground) so details stay readable
     const s = Math.max(h / DH, Math.min(w / 520, h / 150)), ox = (w - DW * s) / 2, oy = Math.max(h - DH * s, Math.min(0, h - 204 * s)), L = -ox / s, Rr = DW + ox / s, sc = A.scaleOf(ctx);
-    const ck = key + '|' + A.sceneFeatures[key].map(f => on.has(f) ? 1 : 0).join('') + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
+    const own = !!def.ownSky, styKey = sty ? Object.keys(sty).sort().map(k => k + '=' + sty[k][0]).join(',') : '';
+    const ck = id + '|' + styKey + '|' + (plain ? 'plain' : env.key) + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
     let c = cache.get(ck);
     if (!c) {
       c = mk(w * sc, h * sc); const g = c.getContext('2d');
       g.scale(sc, sc); g.translate(ox, oy); g.scale(s, s);
-      try { def.still(g, on, L, Rr); } catch (e) { console.error('ART.scene', key, e); }
+      SKYOFF = !plain && !own; STY = sty || null;
+      try { def.still(g, on, L, Rr); } catch (e) { console.error('ART.scene', id, e); }
+      SKYOFF = false; STY = null;
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      const hole = !plain && !own; let cp = null;
+      if (hole) { cp = A.fx.scratch('sceneCopy', c.width, c.height); cp.getContext('2d').drawImage(c, 0, 0); }
+      if (A.vibrance && c.width * c.height < 4.5e6) A.vibrance(g, c.width, c.height, .38);
       // a dusty, faded look that clears as the area is restored
-      const frac = on.size / A.sceneFeatures[key].length, fade = (1 - frac) * .3;
-      if (A.vibrance && c.width * c.height < 4.5e6) { g.setTransform(1, 0, 0, 1, 0, 0); A.vibrance(g, c.width, c.height, .38); }
+      const fade = (1 - frac) * .3;
       if (fade > .01) {
-        g.setTransform(1, 0, 0, 1, 0, 0);
         g.globalCompositeOperation = 'saturation'; g.fillStyle = 'rgba(128,128,128,' + fade + ')'; g.fillRect(0, 0, c.width, c.height);
         g.globalCompositeOperation = 'source-over'; g.fillStyle = 'rgba(120,100,80,' + fade * .18 + ')'; g.fillRect(0, 0, c.width, c.height);
       }
-      if (cache.size > 6) cache.delete(cache.keys().next().value);
+      if (!plain && look.tint) { g.globalCompositeOperation = 'multiply'; g.fillStyle = look.tint; g.fillRect(0, 0, c.width, c.height); }
+      if (!plain && look.haze) { // snow: a cold white haze over the ground
+        g.globalCompositeOperation = 'source-over'; const hg = g.createLinearGradient(0, c.height * .55, 0, c.height); hg.addColorStop(0, 'rgba(255,255,255,0)'); hg.addColorStop(1, 'rgba(255,255,255,' + look.haze + ')'); g.fillStyle = hg; g.fillRect(0, 0, c.width, c.height);
+      }
+      if (hole) { g.globalCompositeOperation = 'destination-in'; g.drawImage(cp, 0, 0); } // keep the transparent sky hole
+      g.globalCompositeOperation = 'source-over';
+      if (cache.size > 8) cache.delete(cache.keys().next().value);
       cache.set(ck, c);
     }
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    if (!plain && !own) A.sky(ctx, x, y, w, h, t, Object.assign({}, env, { horizon: Math.max(.3, Math.min(.95, (oy + 132 * s) / h)) }));
     ctx.drawImage(c, x, y, w, h);
-    ctx.translate(x + ox, y + oy); ctx.scale(s, s);
-    try { def.anim(ctx, on, t || 0, L, Rr); } catch (e) { console.error('ART.scene anim', key, e); }
+    const over = plain ? null : (env.weather === 'rain' && !OVER[env.phase] ? 'rgba(80,90,130,.18)' : OVER[env.phase]);
+    const q = (typeof FX !== 'undefined' && FX) ? FX.quality | 0 : 2;
+    SKYOFF = !plain && !own;
+    if (over && q > 1) { // tint the animated layer the same way (offscreen at a capped resolution, one fill; top quality only)
+      const asc = Math.min(sc, 2), aw = Math.ceil(w * asc), ah = Math.ceil(h * asc), ac = scratchAnim(aw, ah), ag = ac.getContext('2d');
+      ag.setTransform(1, 0, 0, 1, 0, 0); ag.globalCompositeOperation = 'source-over'; ag.globalAlpha = 1; ag.clearRect(0, 0, aw, ah);
+      ag.scale(asc, asc); ag.translate(ox, oy); ag.scale(s, s);
+      try { def.anim(ag, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
+      ag.setTransform(1, 0, 0, 1, 0, 0); ag.globalCompositeOperation = 'source-atop'; ag.fillStyle = over; ag.fillRect(0, 0, aw, ah); ag.globalCompositeOperation = 'source-over';
+      ctx.drawImage(ac, 0, 0, aw, ah, x, y, w, h);
+    } else {
+      ctx.save(); ctx.translate(x + ox, y + oy); ctx.scale(s, s);
+      try { def.anim(ctx, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
+      ctx.restore();
+    }
+    SKYOFF = false;
+    if (!plain && look.dark && def.glows) { // warm windows and lamps after dark
+      let pts = null; try { pts = def.glows(on); } catch (e) { }
+      if (pts && pts.length) {
+        const spr = glowSprite(); ctx.save(); ctx.translate(x + ox, y + oy); ctx.scale(s, s);
+        for (const p of pts) { const r = p[2] * (1 + .06 * Math.sin(t * 2.3 + p[0])); ctx.globalAlpha = look.dark * (.75 + .25 * Math.sin(t * 1.7 + p[1])); ctx.drawImage(spr, p[0] - r, p[1] - r, r * 2, r * 2); }
+        ctx.restore();
+      }
+    }
+    if (!opts.noWeather) A.weatherFx(ctx, x, y, w, h, t, env.weather);
     ctx.restore();
   };
+  const STYLE_KEYS = { boho: 1, minimal: 1, romantic: 1 };
+  A.styleKeys = ['boho', 'minimal', 'romantic'];
+  // which features of an area the player's style choices control: { feature: styleKey }
+  function styleMap(key, style) {
+    if (!style) return null; const out = {}; let n = 0;
+    for (const id in style) {
+      const m = A.sceneMap[id], sk = style[id]; if (!STYLE_KEYS[sk]) continue;
+      if (m) { if (areaKey(m[0]) === key) for (let i = 1; i < m.length; i++) { out[m[i]] = sk; n++; } continue; }
+      const low = String(id).toLowerCase(), f = A.sceneFeatures[key].find(f => low === f || low.endsWith('_' + f));
+      if (f) { out[f] = sk; n++; }
+    }
+    return n ? out : null;
+  }
+  A.scene = function (ctx, area, progress, x, y, w, h, t, opts) {
+    if (w < 4 || h < 4) return;
+    const key = areaKey(area), on = featureSet(key, progress), def = S[key];
+    const id = key + '|' + A.sceneFeatures[key].map(f => on.has(f) ? 1 : 0).join('');
+    A._renderScene(ctx, id, def, on, on.size / A.sceneFeatures[key].length, x, y, w, h, t, opts, styleMap(key, opts && opts.style));
+  };
+  // drawing helpers for the other scene modules (26-tour.js)
+  A.SH = { F, VG, ln, sky, sun, cloud, seaBand, hill, tuft, grass, weeds, flowers, bush, tree, fence, stoneWall, lantern, bench, barrel, crate, junk, sheep, cat, bird, window_, flowerBox, awning, parasol, plant, glow, smoke, lights, seaSparkle, wallBoards, thatch, chimney, DW, DH, setStyle: m => { STY = m; }, styleOf: f => (STY && STY[f]) || null };
 })();
