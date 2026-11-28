@@ -37,6 +37,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 //   node tools/mergeaudio.js --soak10              SOAKMIN minutes (default 10) of scene changes and sounds in the real game
 //        (phone profile, CPU 4x): live sources, nodes made and the JS heap (after GC) every minute. Fails when sources are
 //        still live after the music stops, the heap grows by more than 3 MB, or there is any page or audio error.
+//        DBG=1 lists every source that never sent its ended event (where it was made).
 //   node tools/mergeaudio.js --life                lifecycle: hidden page, idle sleep and wake on a touch, mute, both volumes at
 //        0, music volume 0 (nothing written, the bus at exactly 0), a quiet sleep woken by a sound, an outside suspend (an
 //        iPhone interruption) resumed by a touch, fast scene switches (one song left), no loud start after any wake.
