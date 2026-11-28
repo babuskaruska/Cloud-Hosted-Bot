@@ -303,18 +303,17 @@ const EVENT_PTS = { merge: 1, mergeHi: 2, order: 5, lucky: 3, merge5: 4 };
 CHAINS.key = { kind: 'key', name: 'Võtmed', color: '#d8a227', names: ['Väike võti', 'Võti', 'Kuldvõti'] };
 
 // A new chapter every 50 levels; each has its own favourite chains (the chapters repeat with a number after 8).
+// The six themes match Ash's map scenery (ART.mapTheme); they cycle forever.
 const CHAPTERS = [
-  { name: 'Rannaküla', chains: ['bread', 'berry', 'fish', 'dairy', 'tea'] },
-  { name: 'Õunaaed', chains: ['apple', 'flower', 'berry', 'bread', 'tea'] },
-  { name: 'Kalasadam', chains: ['fish', 'sea', 'wood', 'bread', 'wool'] },
-  { name: 'Tuuleveski', chains: ['bread', 'wood', 'dairy', 'apple', 'wool'] },
-  { name: 'Majakas', chains: ['sea', 'tea', 'wool', 'fish', 'wood'] },
-  { name: 'Sõnajalamets', chains: ['flower', 'berry', 'tea', 'apple', 'wool'] },
-  { name: 'Talvine saar', chains: ['wool', 'tea', 'bread', 'dairy', 'berry'] },
-  { name: 'Suvepidu', chains: ['flower', 'apple', 'dairy', 'sea', 'bread'] },
+  { name: 'Kommirand', chains: ['bread', 'berry', 'fish', 'sea', 'dairy'] },
+  { name: 'Lilleaas', chains: ['flower', 'apple', 'berry', 'tea', 'bread'] },
+  { name: 'Marjamets', chains: ['berry', 'apple', 'wood', 'tea', 'wool'] },
+  { name: 'Tuletorni kaljud', chains: ['fish', 'sea', 'wood', 'wool', 'tea'] },
+  { name: 'Talveküla', chains: ['wool', 'tea', 'bread', 'dairy', 'berry'] },
+  { name: 'Lavendliväljad', chains: ['flower', 'tea', 'dairy', 'apple', 'sea'] },
 ];
-const chapterTitle = c => CHAPTERS[c % CHAPTERS.length].name + (c >= CHAPTERS.length ? ' ' + (Math.floor(c / CHAPTERS.length) + 1) : '');
-const chapterName = c => (c + 1) + '. peatükk: ' + chapterTitle(c);
+const chapterTitle = c => CHAPTERS[c % CHAPTERS.length].name;
+const chapterName = c => 'Peatükk ' + (c + 1) + ' · ' + chapterTitle(c);
 
 // Boosters. price: coins when bought inside a level.
 const BOOSTERS = {

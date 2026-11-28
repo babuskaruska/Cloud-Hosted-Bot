@@ -29,10 +29,13 @@ const ADV = (() => {
 
   // ---------- placeholder art (cached canvases) ----------
   const cache = new Map();
+  // Ash's names and damage states (0 = whole): my states are layers / hit points left, or the key level for chests.
+  const OB_ART = { web: 'cobweb', crate: 'lockedCrate' };
+  const ARTST = { ice: s => s === 'cracked' ? 1 : 0, box: s => s === 'cracked' ? 1 : 0 };
   function mk(px) { const c = document.createElement('canvas'); c.width = c.height = px; return c; }
   function obstacleImg(kind, px, state) {
     px = Math.max(8, Math.round(px));
-    if (artOn('obstacle')) { try { const c = ART.obstacle(kind, px, state); if (c && c.width) return c; } catch (e) {} }
+    if (artOn('obstacle')) { try { const c = ART.obstacle(OB_ART[kind] || kind, px, ARTST[kind] ? ARTST[kind](state) : 0); if (c && c.width) return c; } catch (e) {} }
     const key = 'o:' + kind + ':' + px + ':' + state; let c = cache.get(key); if (c) return c;
     c = mk(px); const x = c.getContext('2d'), s = px, m = s * 0.06;
     const rrx = (x0, y0, w, h, r) => { x.beginPath(); x.moveTo(x0 + r, y0); x.arcTo(x0 + w, y0, x0 + w, y0 + h, r); x.arcTo(x0 + w, y0 + h, x0, y0 + h, r); x.arcTo(x0, y0 + h, x0, y0, r); x.arcTo(x0, y0, x0 + w, y0, r); x.closePath(); };
@@ -76,7 +79,7 @@ const ADV = (() => {
   }
   function boostImg(kind, px) {
     px = Math.max(8, Math.round(px));
-    if (artOn('booster')) { try { const c = ART.booster(kind, px); if (c && c.width) return c; } catch (e) {} }
+    if (artOn('booster')) { try { const c = ART.booster(kind === 'moves' ? 'moves5' : kind, px); if (c && c.width) return c; } catch (e) {} }
     const key = 'b:' + kind + ':' + px; let c = cache.get(key); if (c) return c;
     c = mk(px); const x = c.getContext('2d'), s = px, cx = s / 2, cy = s / 2;
     x.lineJoin = 'round'; x.lineCap = 'round';
@@ -113,12 +116,12 @@ const ADV = (() => {
   function mapGeo() {
     W = H.W; Hh = H.H; const si = H.insets();
     const top = si.t + 6, bot = Hh - si.b - 6, cx = W / 2, amp = Math.min(W * 0.27, 150);
-    return { top, bot, cx, amp, base: bot - 150 };
+    return { top, bot, cx, amp, base: bot - 200 };
   }
   const nodeX = (G, n) => G.cx + Math.sin(n * 0.9) * G.amp;
   const nodeY = (G, n) => G.base - (n * SP - M.scroll);
   const scrollFor = (G, n) => n * SP - (G.base - (G.top + G.bot) * 0.5);
-  function clampScroll(G) { const lo = scrollFor(G, 1) - SP * 1.2, hi = Math.max(lo, scrollFor(G, S.adv.top + 6)); M.scroll = clamp(M.scroll, lo, hi); }
+  function clampScroll(G) { const lo = SP - 10, hi = Math.max(lo, scrollFor(G, S.adv.top + 6)); M.scroll = clamp(M.scroll, lo, hi); }
   const CH_COL = [['#bfe9ff', '#fff2d8'], ['#d6f5c8', '#fff6d6'], ['#a9dcf5', '#e4f6f2'], ['#ffe2bf', '#fff1e0'], ['#c6d4f5', '#efe4fa'], ['#cdeec2', '#e9f7d6'], ['#e2f0ff', '#ffffff'], ['#ffd6ec', '#fff3c8']];
 
   function drawMap(t) {
@@ -136,7 +139,7 @@ const ADV = (() => {
       if (yBot <= yTop) continue;
       g.save(); g.beginPath(); g.rect(0, yTop, W, yBot - yTop); g.clip();
       let drawn = false;
-      if (artOn('mapBg')) { try { ART.mapBg(g, c, 0, yTop, W, yBot - yTop, t); drawn = true; } catch (e) {} }
+      if (artOn('mapBg')) { try { ART.mapBg(g, c, 0, yTop, W, yBot - yTop, t, yTop - M.scroll); drawn = true; } catch (e) {} }
       if (!drawn) {
         const col = CH_COL[c % CH_COL.length], gr = g.createLinearGradient(0, yTop, 0, yBot); gr.addColorStop(0, col[0]); gr.addColorStop(1, col[1]); g.fillStyle = gr; g.fillRect(0, yTop, W, yBot - yTop);
         // soft decor: blobs that scroll with the map
@@ -153,7 +156,7 @@ const ADV = (() => {
     const pts = [];
     for (let f = nLo - 1; f <= nHi + 1; f += 0.25) if (f >= 0.6) pts.push({ x: nodeX(G, f), y: nodeY(G, f), n: f });
     let pathDrawn = false;
-    if (artOn('mapPath')) { try { ART.mapPath(g, pts, A.top, t); pathDrawn = true; } catch (e) {} }
+    if (artOn('mapPath')) { try { let done = -1; pts.forEach((p, j) => { if (p.n <= A.top) done = j; }); ART.mapPath(g, pts, t, { done }); pathDrawn = true; } catch (e) {} }
     if (!pathDrawn && pts.length > 1) {
       g.lineCap = 'round'; g.lineJoin = 'round';
       g.strokeStyle = 'rgba(80,60,160,0.16)'; g.lineWidth = 26; g.beginPath(); pts.forEach((p, j) => j ? g.lineTo(p.x, p.y + 4) : g.moveTo(p.x, p.y + 4)); g.stroke();
@@ -163,7 +166,8 @@ const ADV = (() => {
     }
     // chapter ribbons
     for (let c = c0; c <= c1 + 1; c++) {
-      const y = nodeY(G, c * 50 + 0.5); if (y < G.top - 30 || y > Hh + 30) continue;
+      const y = nodeY(G, c * 50 + 0.5); if (y < G.top - 80 || y > Hh + 80) continue;
+      if (artOn('mapDivider')) { try { ART.mapDivider(g, c, 0, y, W, t); continue; } catch (e) {} }
       g.font = H.font(18, 900); const tw = Math.min(W - 40, g.measureText(chapterName(c)).width + 48);
       panel(W / 2 - tw / 2, y - 20, tw, 40, 'ribbon'); text(chapterName(c), W / 2, y, 18, '#fff', 'center', 900, tw - 24);
     }
@@ -175,7 +179,7 @@ const ADV = (() => {
       const r = (boss ? 34 : 27) * (st === 'current' ? pulse : 1), stars = A.stars[n] || 0;
       M.nodes.push({ n, x, y, r: Math.max(30, r + 6) });
       let drawn = false;
-      if (artOn('mapNode')) { try { ART.mapNode(g, x, y, r, st, stars, n); drawn = true; } catch (e) {} }
+      if (artOn('mapNode')) { try { ART.mapNode(g, x, y, r, st, stars, n, t); drawn = true; } catch (e) {} }
       if (!drawn) phNode(x, y, r, st, stars, n, boss, t);
     }
     // the heroine stands on the current level
@@ -291,16 +295,16 @@ const ADV = (() => {
     if (!V) return;
     const P = cell >= 0 ? cellC(cell) : null, cs = V.G.cs;
     switch (kind) {
-      case 'merge': setAnim(cell, { pop: 1, dur: 0.38 }); if (!fx('merge', P.x, P.y, d.k, d.l)) floater(P.x, P.y, '✦', GOLD); snd('merge', { level: d.l }); V.sel = cell; break;
+      case 'merge': moodCheck(); setAnim(cell, { pop: 1, dur: 0.38 }); if (!fx('merge', P.x, P.y, d.k, d.l)) floater(P.x, P.y, '✦', GOLD); snd('merge', { level: d.l }); V.sel = cell; break;
       case 'move': case 'swap': { const F = V.dropPt || cellC(d.from); setAnim(cell, { fx: F.x, fy: F.y, dur: 0.16 }); if (kind === 'swap') { setAnim(d.from, { fx: P.x, fy: P.y, dur: 0.22 }); snd('swap'); } else snd('drop'); V.sel = cell; break; }
       case 'spawn': setAnim(cell, { fx: P.x, fy: V.G.by - cs, arc: 0, pop: 1, dur: 0.42, delay: 0.12 }); snd('spawn', { level: 1 }); break;
-      case 'ice': if (!fx('iceCrack', P.x, P.y)) { fx('sparkle', P.x, P.y, 8, cs * 0.5); fx('ring', P.x, P.y, cs * 0.6, '#bfeaff'); } snd2('iceCrack', 'tap'); break;
-      case 'box': if (d.left) { setAnim(cell, { shake: 1, dur: 0.3 }); snd2('boxBreak', 'drop'); } else { if (!fx('boxBreak', P.x, P.y)) fx('merge', P.x, P.y, 'chest', 1); snd2('boxBreak', 'chest'); } break;
+      case 'ice': if (!fx('iceCrack', P.x, P.y, cs)) { fx('sparkle', P.x, P.y, 8, cs * 0.5); fx('ring', P.x, P.y, cs * 0.6, '#bfeaff'); } snd2('iceCrack', 'tap'); break;
+      case 'box': if (d.left) { setAnim(cell, { shake: 1, dur: 0.3 }); snd2('boxBreak', 'drop'); } else { if (!fx('boxBreak', P.x, P.y, cs)) fx('merge', P.x, P.y, 'chest', 1); snd2('boxBreak', 'chest'); } break;
       case 'reveal': setAnim(cell, { pop: 1, dur: 0.5, delay: 0.1 }); break;
-      case 'web': fx('sparkle', P.x, P.y, 8, cs * 0.5); snd2('cobweb', 'tap'); setAnim(cell, { squash: 1, dur: 0.3 }); break;
-      case 'bubble': fx('ring', P.x, P.y, cs * 0.6, '#d8b8ff'); snd('bubblePop'); break;
+      case 'web': if (!fx('obstacleClear', 'cobweb', P.x, P.y, cs)) fx('sparkle', P.x, P.y, 8, cs * 0.5); snd2('cobweb', 'tap'); setAnim(cell, { squash: 1, dur: 0.3 }); break;
+      case 'bubble': if (!fx('obstacleClear', 'bubble', P.x, P.y, cs)) fx('ring', P.x, P.y, cs * 0.6, '#d8b8ff'); snd('bubblePop'); break;
       case 'spread': setAnim(cell, { pop: 1, dur: 0.5, delay: 0.3 }); snd('bubble'); break;
-      case 'crate': fx('merge', P.x, P.y, 'chest', 2); fx('confetti', 0.25, P.x, P.y); snd2('boxBreak', 'chest'); banner({ text: '+' + d.moves + ' käiku!', x: P.x, y: P.y, color: '#7fd0ff', size: 30 }); break;
+      case 'crate': if (!fx('obstacleClear', 'lockedCrate', P.x, P.y, cs)) fx('merge', P.x, P.y, 'chest', 2); fx('confetti', 0.25, P.x, P.y); snd2('boxBreak', 'chest'); banner({ text: '+' + d.moves + ' käiku!', x: P.x, y: P.y, color: '#7fd0ff', size: 30 }); break;
       case 'goal': {
         const T = goalPos(d.gi), from = P || T;
         if (d.type === 'make') ghost({ k: d.k, l: d.l, x0: from.x, y0: from.y, x1: T.x, y1: T.y, dur: 0.55, s0: 1, s1: 0.5 });
@@ -318,8 +322,8 @@ const ADV = (() => {
       case 'twin': setAnim(cell, { pop: 1, dur: 0.5, delay: 0.2 }); break;
       case 'boost': {
         const Q = P || { x: W / 2, y: V.G.by + V.G.bh / 2 };
-        if (!fx('boosterUse', d.kind, Q.x, Q.y)) { fx('sparkle', Q.x, Q.y, 14, cs * 0.8); fx('ring', Q.x, Q.y, cs, '#ffe07a'); }
-        snd2('booster', 'lucky');
+        if (!fx('boosterUse', d.kind === 'moves' ? 'moves5' : d.kind, Q.x, Q.y)) { fx('sparkle', Q.x, Q.y, 14, cs * 0.8); fx('ring', Q.x, Q.y, cs, '#ffe07a'); }
+        snd2('booster', 'lucky', { kind: d.kind === 'moves' ? 'moves5' : d.kind });
         if (d.kind === 'wand') setAnim(cell, { pop: 1, dur: 0.5 });
         if (d.kind === 'scissors') { setAnim(cell, { pop: 1, dur: 0.4 }); setAnim(d.to, { fx: Q.x, fy: Q.y, arc: 1, pop: 1, dur: 0.4 }); }
         if (d.kind === 'shuffle') d.cells.forEach((c, j) => setAnim(c, { pop: 1, dur: 0.45, delay: j * 0.04 }));
@@ -329,6 +333,12 @@ const ADV = (() => {
       case 'win': V.endAt = tn() + 1.0; V.sel = -1; break;
       case 'out': V.endAt = tn() + 0.7; break;
     }
+  }
+  // Few moves left: tense music and a warning sound once.
+  function moodCheck() {
+    const r = V && V.r; if (!r) return;
+    const tense = r.moves <= 3 && !r.won;
+    if (tense !== V.tense) { V.tense = tense; try { if (typeof MUSIC !== 'undefined' && MUSIC && MUSIC.mood) MUSIC.mood(tense ? 'tense' : 'normal'); } catch (e) {} if (tense && r.moves > 0) snd2('movesLow', 'deny'); }
   }
   function movesPos() { const G = V.G; return { x: G.x0 + G.cw - 52, y: G.top + 46 }; }
 
@@ -451,7 +461,6 @@ const ADV = (() => {
       if (artOn('cell')) { try { ART.cell(g, x, y, cs, state); drawn = true; } catch (e) {} }
       if (!drawn) { g.fillStyle = state === 'target' ? 'rgba(255,214,110,0.9)' : state === 'hint' ? 'rgba(190,240,160,0.85)' : 'rgba(255,248,232,0.88)'; rr(x + 2, y + 2, cs - 4, cs - 4, 10); g.fill(); }
       if (r.sand[i]) drawObstacle('sand', x, y, cs, 1);
-      if (r.ice[i]) drawObstacle('ice', x, y, cs, r.ice[i]);
     }
     // selection
     if (V.sel >= 0 && r.it[V.sel] && !(V.drag && V.drag.from === V.sel)) {
@@ -462,13 +471,19 @@ const ADV = (() => {
     for (let i = 0; i < LN; i++) {
       if (r.vd[i]) continue;
       const d = animState(i, t);
-      if (r.box[i]) { g.save(); g.translate(d.x, d.y); g.scale(d.s, d.s); drawObstacle('box', -cs / 2, -cs / 2, cs, r.box[i]); g.restore(); continue; }
-      if (r.crate[i]) { const pu = 1 + Math.sin(t * 3 + i) * 0.02; drawObstacle('crate', d.x - cs * pu / 2, d.y - cs * pu / 2, cs * pu, r.crate[i]); continue; }
+      if (r.box[i]) { g.save(); g.translate(d.x, d.y); g.scale(d.s, d.s); drawObstacle('box', -cs / 2, -cs / 2, cs, r.def.box[i] > r.box[i] ? 'cracked' : r.box[i]); g.restore(); continue; }
+      if (r.crate[i]) {
+        const pu = 1 + Math.sin(t * 3 + i) * 0.02; drawObstacle('crate', d.x - cs * pu / 2, d.y - cs * pu / 2, cs * pu, r.crate[i]);
+        if (artOn('obstacle') && r.crate[i] >= 2) { g.fillStyle = DARK; rr(d.x - 18, d.y + cs * 0.22, 36, 20, 10); g.fill(); text('×2', d.x, d.y + cs * 0.22 + 10, 15, '#ffd23f', 'center', 900); }
+        continue;
+      }
       if (r.bub[i]) { const wob = 1 + Math.sin(t * 2.5 + i) * 0.04; g.save(); g.translate(d.x, d.y); g.scale(d.s * wob, d.s / wob); drawObstacle('bubble', -cs / 2, -cs / 2, cs, 1); g.restore(); continue; }
-      const it = r.it[i]; if (!it || (V.drag && V.drag.from === i) || d.hide) continue;
+      const it = r.it[i], ice = r.ice[i] ? () => drawObstacle('ice', G.bx + (i % LC) * cs, G.by + ((i / LC) | 0) * cs, cs, r.def.ice[i] > r.ice[i] ? 'cracked' : r.ice[i]) : null;
+      if (!it || (V.drag && V.drag.from === i) || d.hide) { if (ice) ice(); continue; }
       g.save(); g.translate(d.x, d.y); g.scale(d.s * (1 + d.sq), d.s * (1 - d.sq));
       drawItem(it.k, it.l, 0, 0, isz);
       g.restore();
+      if (ice) ice();
       if (r.web[i]) drawObstacle('web', d.x - cs / 2, d.y - cs / 2, cs, 1);
       for (const g2 of r.goals) if (g2.type === 'make' && g2.got < g2.n && it.k === g2.k && it.l === g2.l - 1) { const s = Math.max(20, cs * 0.3); drawIcon('star', d.x + cs * 0.5 - s * 0.95, d.y - cs * 0.5 - s * 0.05, s); break; }
     }
@@ -601,22 +616,25 @@ const ADV = (() => {
       else if (!M.drag && Math.abs(M.vel) > 5) { M.scroll += M.vel * dt; M.vel *= Math.pow(0.05, dt); clampScroll(mapGeo()); }
       return;
     }
+    // The win celebration (Ash's FX.levelWin: fireworks, stars, "Tubli!") plays over the board first, then the panel.
+    if (V && V.winRes && tn() > V.winAt && !H.modal) { const res = V.winRes; V.winRes = null; H.openModal({ kind: 'advWin', res, sticky: true, onDone: () => backToMap(true) }); }
     if (V && V.r.over && !V.endShown && V.endAt && tn() > V.endAt && !H.modal) {
       V.endShown = true;
       if (V.r.won) {
-        const res = LV.win();
-        if (!fx('levelWin')) { fx('confetti', 1); }
-        snd2('levelWin', 'taskDone');
-        H.openModal({ kind: 'advWin', res, sticky: true, fxTop: true });
+        const res = LV.win(), big = fx('levelWin', { stars: res ? res.stars : 1 });
+        if (!big) fx('confetti', 1);
+        snd2('levelWin', 'taskDone', { stars: res ? res.stars : 1 });
+        V.winRes = res; V.winAt = tn() + (big ? 2.3 : 0.3);
       } else {
         fx('levelFail'); snd2('levelFail', 'deny');
-        H.openModal({ kind: 'advFail', sticky: true });
+        H.openModal({ kind: 'advFail', sticky: true, onDone: () => { const r = LV.cur; if (V && r && r === V.r && r.over && !r.won) { V.endShown = false; V.endAt = tn() + 0.2; } } });
       }
     }
   }
   function entered(s, was) {
+    try { if (typeof MUSIC !== 'undefined' && MUSIC && MUSIC.mood) MUSIC.mood('normal'); } catch (e) {}
     if (s === 'map') { M.scroll = null; M.vel = 0; music('map'); }
-    else if (s === 'level' && V) music('level', { chapter: V.r.def.chapter });
+    else if (s === 'level' && V) music('level', { chapter: V.r.def.chapter + 1, level: V.r.n });
     if (s !== 'level' && was === 'level' && LV.cur && !LV.cur.won && !LV.cur.paid) LV.quit();
   }
 
@@ -626,14 +644,14 @@ const ADV = (() => {
       const age = t0 === undefined ? 9 : tn() - t0 - 0.35 - j * 0.32, k = clamp(age / 0.35, 0, 1), on = j < n && k > 0;
       const sc = on ? 0.4 + 0.6 * ease.outBack(k) : 1, x = cx + (j - 1) * s * 1.05, yy = y - (j === 1 ? s * 0.18 : 0);
       g.save(); g.translate(x, yy); g.scale(sc, sc); g.globalAlpha = on ? 1 : 0.28; drawIcon('star', -s / 2, -s / 2, s); g.restore();
-      if (big && on && k < 1 && !big['s' + j]) { big['s' + j] = 1; snd2('star', 'stars'); fx('sparkle', x, yy, 10, s * 0.6); }
+      if (big && on && k < 1 && !big['s' + j]) { big['s' + j] = 1; snd2('star', 'stars', { n: j + 1 }); fx('sparkle', x, yy, 10, s * 0.6); }
     }
   }
   function drawModal(m, t, B) {
     W = H.W; Hh = H.H;
     if (m.kind === 'advStart') {
       const d = m.def, n = m.n, boss = d.kind === 'boss', A = S.adv;
-      const P = H.modalPanel(m, 420, 470 + (d.goals.length - 1) * 56, boss ? 'Suur tellimus!' : 'Tase ' + n);
+      const P = H.modalPanel(m, 420, 430 + (d.goals.length - 1) * 56, boss ? 'Suur tellimus!' : 'Tase ' + n);
       if (boss) text('Tase ' + n, P.x + P.w / 2, P.y + 40, 16, INK2, 'center', 900);
       starRow(P.x + P.w / 2, P.y + 80, 40, A.stars[n] || 0);
       text('Eesmärk', P.x + P.w / 2, P.y + 124, 18, INK, 'center', 900);
@@ -685,14 +703,14 @@ const ADV = (() => {
       for (let j = 0; j < HEART_MAX; j++) { const pu = j === A.hearts && !full ? 1 + Math.sin(t * 5) * 0.08 : 1; g.globalAlpha = j < A.hearts ? 1 : 0.25; drawIcon('heart', P.x + P.w / 2 - HEART_MAX * 30 + j * 60 + 6 - 24 * (pu - 1), P.y + 44 - 24 * (pu - 1), 48 * pu); } g.globalAlpha = 1;
       text(full ? 'Elud on täis!' : 'Järgmine elu ' + fmtTime(LV.heartNext()) + ' pärast', P.x + P.w / 2, P.y + 124, 19, INK, 'center', 900, P.w - 24);
       wrap('Elu kulub ainult siis, kui tase jääb pooleli. Iga 15 minutiga tuleb üks tagasi.', P.w - 40, 15, 700).forEach((s, j) => text(s, P.x + P.w / 2, P.y + 158 + j * 21, 15, INK2, 'center', 700));
-      if (!full) button(P.x + 40, P.y + P.h - 76, P.w - 80, 56, 'Täida elud · ' + HEART_REFILL_PRICE, () => { if (LV.refillHearts()) { snd2('claim', 'coins'); fx('hearts', P.x + P.w / 2, P.y + 60, 8); H.closeModal(true); } else { snd('deny'); toast('Münte jääb puudu.'); } }, Object.assign({ icon: 'coin', hot: S.coins >= HEART_REFILL_PRICE, off: S.coins < HEART_REFILL_PRICE, offFn: () => { snd('deny'); toast('Münte jääb puudu.'); }, size: 19 }, B));
+      if (!full) button(P.x + 40, P.y + P.h - 76, P.w - 80, 56, 'Täida elud · ' + HEART_REFILL_PRICE, () => { if (LV.refillHearts()) { snd2('heart', 'coins'); fx('hearts', P.x + P.w / 2, P.y + 60, 8); H.closeModal(true); } else { snd('deny'); toast('Münte jääb puudu.'); } }, Object.assign({ icon: 'coin', hot: S.coins >= HEART_REFILL_PRICE, off: S.coins < HEART_REFILL_PRICE, offFn: () => { snd('deny'); toast('Münte jääb puudu.'); }, size: 19 }, B));
       else button(P.x + 40, P.y + P.h - 76, P.w - 80, 56, 'Super!', () => H.closeModal(), Object.assign({ hot: true, size: 20 }, B));
     } else if (m.kind === 'advWheel') drawWheel(m, t, B);
     else if (m.kind === 'advPiggy') drawPiggy(m, t, B);
   }
   function drawWin(m, t, B) {
     const res = m.res || { n: 0, stars: 1, rew: {} }, age = tn() - m.t0;
-    const P = H.modalPanel(m, 420, 470, 'Tase ' + res.n + ' läbitud!');
+    const P = H.modalPanel(m, 420, 420, 'Tase ' + res.n + ' läbitud!');
     starRow(P.x + P.w / 2, P.y + 92, 62, res.stars, m.t0, m);
     if (res.stars > res.prev && res.prev > 0 && age > 1.4) text('Uus rekord!', P.x + P.w / 2, P.y + 146, 18, PINK, 'center', 900);
     else text(['', 'Hästi tehtud!', 'Väga tubli!', 'Täiuslik!'][res.stars], P.x + P.w / 2, P.y + 146, 20, INK, 'center', 900);
@@ -711,8 +729,8 @@ const ADV = (() => {
     if (res.streak > 1) text('Võiduseeria: ' + res.streak + ' järjest!', P.x + P.w / 2, ty + 120, 17, PINK, 'center', 900, P.w - 20);
     if (age > 0.9) {
       const bw = (P.w - 50) / 2, by = P.y + P.h - 72;
-      button(P.x + 20, by, bw, 56, 'Kaart', () => { H.closeModal(true); backToMap(true); }, Object.assign({ style: 'buttonBlue', size: 20 }, B));
-      button(P.x + 30 + bw, by, bw, 56, 'Edasi', () => { H.closeModal(true); backToMap(true); openStart(S.adv.top); }, Object.assign({ hot: true, pulse: 1, size: 21 }, B));
+      button(P.x + 20, by, bw, 56, 'Kaart', () => H.closeModal(true), Object.assign({ style: 'buttonBlue', size: 20 }, B));
+      button(P.x + 30 + bw, by, bw, 56, 'Edasi', () => { H.closeModal(true); openStart(S.adv.top); }, Object.assign({ hot: true, pulse: 1, size: 21 }, B));
     }
     H.keep(0.1);
   }
@@ -721,7 +739,7 @@ const ADV = (() => {
     if (!r) { H.closeModal(true); return; }
     const rem = LV.remaining(r), est = rem.est;
     const head = est <= 1 ? 'Ainult 1 käik puudu!' : est <= 4 ? 'Ainult ' + est + ' käiku puudu!' : 'Käigud said otsa!';
-    const P = H.modalPanel(m, 420, 430, est <= 4 ? 'Nii lähedal!' : 'Oi-oi!');
+    const P = H.modalPanel(m, 420, 270 + rem.list.length * 50, est <= 4 ? 'Nii lähedal!' : 'Oi-oi!');
     textO(head, P.x + P.w / 2, P.y + 52, 24, '#fff', PINK, 6, P.w - 30);
     text('Puudu jäi:', P.x + P.w / 2, P.y + 94, 16, INK2, 'center', 800);
     rem.list.forEach((x, j) => {
@@ -730,8 +748,8 @@ const ADV = (() => {
       text(goalText(g2, x.left), P.x + 84, y + 23, 17, INK, 'left', 900, P.w - 124);
     });
     const have = S.adv.boost.moves > 0, price = LV.movesPrice(), by = P.y + P.h - 136;
-    if (have) button(P.x + 30, by, P.w - 60, 60, '+5 käiku (sul on ' + S.adv.boost.moves + ')', () => { if (LV.boost('moves')) { H.closeModal(true); V.endShown = false; V.endAt = 0; } }, Object.assign({ hot: true, pulse: 1, size: 20 }, B));
-    else button(P.x + 30, by, P.w - 60, 60, '+5 käiku · ' + price, () => { if (LV.buyMoves()) { snd('coins'); H.closeModal(true); V.endShown = false; V.endAt = 0; } else { snd('deny'); toast('Münte jääb puudu.'); } }, Object.assign({ icon: 'coin', hot: S.coins >= price, pulse: S.coins >= price, off: S.coins < price, offFn: () => { snd('deny'); toast('Münte jääb puudu.'); }, size: 21 }, B));
+    if (have) button(P.x + 30, by, P.w - 60, 60, '+5 käiku (sul on ' + S.adv.boost.moves + ')', () => { if (LV.boost('moves')) { H.closeModal(true); V.endShown = false; V.endAt = 0; moodCheck(); } }, Object.assign({ hot: true, pulse: 1, size: 20 }, B));
+    else button(P.x + 30, by, P.w - 60, 60, '+5 käiku · ' + price, () => { if (LV.buyMoves()) { snd('coins'); H.closeModal(true); V.endShown = false; V.endAt = 0; moodCheck(); } else { snd('deny'); toast('Münte jääb puudu.'); } }, Object.assign({ icon: 'coin', hot: S.coins >= price, pulse: S.coins >= price, off: S.coins < price, offFn: () => { snd('deny'); toast('Münte jääb puudu.'); }, size: 21 }, B));
     button(P.x + 60, by + 70, P.w - 120, 48, 'Loobu', () => { H.closeModal(true); LV.lose(); toast(S.adv.hearts > 0 ? 'Kaotasid ühe elu. Järgmine kord läheb paremini!' : 'Elud said otsa. Puhka natuke!', 3); backToMap(false); }, Object.assign({ style: 'buttonGrey', size: 18 }, B));
   }
   // Lucky wheel
@@ -746,6 +764,17 @@ const ADV = (() => {
     WH.spin = { from: WH.angle, to: target, t0: tn(), dur: 4.2, i, last: -1 };
     m.sticky = true; m.result = null; snd('tap');
   }
+  // Slices for Ash's wheel: an icon name, item key or canvas, a short label and the colour.
+  let slicesC = null;
+  function wheelSlices() {
+    if (slicesC) return slicesC;
+    slicesC = WHEEL.map(w => {
+      const r = w.r, b = typeof r.boost === 'string' ? r.boost : null;
+      const icon = w.big ? 'trophy' : r.item ? r.item[0] : b ? boostImg(b, 96) : r.energy ? 'energy' : 'coin';
+      return { icon, label: w.big ? 'Suur!' : r.coins && !r.item ? String(r.coins) : r.energy ? '+' + r.energy : w.label, color: w.color };
+    });
+    return slicesC;
+  }
   function drawWheel(m, t, B) {
     const P = H.modalPanel(m, 420, 580, 'Õnneratas'), R = Math.min(P.w * 0.4, 160), cx = P.x + P.w / 2, cy = P.y + 70 + R;
     const seg = Math.PI * 2 / WHEEL.length;
@@ -753,16 +782,16 @@ const ADV = (() => {
       const k = clamp((tn() - WH.spin.t0) / WH.spin.dur, 0, 1);
       WH.angle = lerp(WH.spin.from, WH.spin.to, ease.outCubic(k) * 0.35 + (1 - Math.pow(1 - k, 4)) * 0.65);
       const idx = Math.floor(((-WH.angle % (Math.PI * 2)) + Math.PI * 4) % (Math.PI * 2) / seg);
-      if (idx !== WH.spin.last) { WH.spin.last = idx; snd2('wheelTick', 'tap'); }
+      if (idx !== WH.spin.last) { WH.spin.last = idx; snd2('wheelTick', 'tap', { speed: clamp(1 - k, 0, 1) }); }
       if (k >= 1) {
         const w = WHEEL[WH.spin.i]; m.result = { w, t0: tn() }; WH.spin = null; m.sticky = false;
-        snd2('wheelWin', 'lucky'); fx('confetti', w.big ? 1 : 0.5, cx, cy - R); H.rewardFx(w.r, cx, cy);
+        snd2('wheelWin', 'lucky', { big: !!w.big }); fx('confetti', w.big ? 1 : 0.5, cx, cy - R); H.rewardFx(w.r, cx, cy);
         banner({ text: w.big ? 'Suur auhind!' : 'Võitsid!', sub: H.describe(w.r).map(d => d.t).join(', '), x: cx, y: cy - 20, color: GOLD, size: w.big ? 40 : 34, rays: w.big ? 1 : 0, dur: 2.2 });
       }
       H.keep(0.1);
     }
     let drawn = false;
-    if (artOn('wheel')) { try { ART.wheel(g, cx, cy, R, WHEEL, WH.angle); drawn = true; } catch (e) {} }
+    if (artOn('wheel')) { try { ART.wheel(g, cx, cy, R, wheelSlices(), WH.angle + seg / 2, t); drawn = true; } catch (e) {} }
     if (!drawn) {
       g.fillStyle = 'rgba(60,20,120,0.2)'; g.beginPath(); g.arc(cx, cy + 6, R + 10, 0, 7); g.fill();
       g.fillStyle = '#7a3ac8'; g.beginPath(); g.arc(cx, cy, R + 10, 0, 7); g.fill();

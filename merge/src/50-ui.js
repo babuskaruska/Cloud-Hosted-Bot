@@ -1112,7 +1112,7 @@ const UI = (() => {
       text('Toksa asja, et see lauale tagasi tuua.', P.x + P.w / 2, P.y + P.h - 26, 15, INK2, 'center', 700, P.w - 20);
     } else if (m.kind === 'daily') {
       Game.ensureDaily();
-      const D = S.daily, P = modalPanel(m, 440, 664, 'Päevakalender'), gr = Game.giftReward();
+      const D = S.daily, P = modalPanel(m, 440, 680, 'Päevakalender'), gr = Game.giftReward();
       // 7-day row: past days ticked, today glowing, the big 7th day with a crown of rays
       const n7 = 7, gap = 5, tw = Math.floor((P.w - 20 - gap * (n7 - 1)) / n7), th = 92, ty = P.y + 40;
       const today = gr.day7, startX = P.x + (P.w - (tw * n7 + gap * (n7 - 1))) / 2;
@@ -1137,20 +1137,20 @@ const UI = (() => {
       if (!D.gift) button(P.x + P.w - 128, cy + 4, 112, 52, 'Võta!', () => { m.tap = { x: startX + today * (tw + gap) + tw / 2, y: ty + th / 2 }; Game.claimGift(); }, Object.assign({ hot: true, pulse: 1, size: 20 }, B));
       // 30-day track
       const ry = cy + 70, bx = P.x + 22, bw = P.w - 44, d30 = D.gift ? D.d30 : Math.max(0, gr.d30 - 1);
-      g.fillStyle = 'rgba(124,92,255,0.08)'; rr(P.x + 10, ry, P.w - 20, 92, 16); g.fill();
+      g.fillStyle = 'rgba(124,92,255,0.08)'; rr(P.x + 10, ry, P.w - 20, 112, 16); g.fill();
       text('30 päeva rada: ' + d30 + '/30', P.x + 22, ry + 18, 16, INK, 'left', 900, P.w - 140);
       const nx = CAL30.find(x => x.day > d30) || CAL30[0];
-      text('Vahele jäänud päev ei nulli seda.', P.x + P.w - 22, ry + 18, 15, INK2, 'right', 700, Math.max(60, P.w - 230));
-      bar(bx, ry + 44, bw, 12, d30 / 30, GRAPE);
+      text('Vahele jäänud päev seda ei nulli.', P.x + 22, ry + 40, 15, INK2, 'left', 700, P.w - 44);
+      bar(bx, ry + 62, bw - 14, 12, d30 / 30, GRAPE);
       for (const c of CAL30) {
-        const x = bx + bw * c.day / 30, got = d30 >= c.day, nextOne = c === nx && !got;
-        g.fillStyle = got ? GOOD : nextOne ? GOLD : '#fff'; g.beginPath(); g.arc(x - 2, ry + 50, 13, 0, 7); g.fill(); g.lineWidth = 2.5; g.strokeStyle = got ? '#fff' : 'rgba(124,92,255,0.5)'; g.stroke();
-        text(String(c.day), x - 2, ry + 51, 15, got ? '#fff' : INK, 'center', 900);
+        const x = bx + 12 + (bw - 28) * c.day / 30, got = d30 >= c.day, nextOne = c === nx && !got;
+        g.fillStyle = got ? GOOD : nextOne ? GOLD : '#fff'; g.beginPath(); g.arc(x - 2, ry + 68, 13, 0, 7); g.fill(); g.lineWidth = 2.5; g.strokeStyle = got ? '#fff' : 'rgba(124,92,255,0.5)'; g.stroke();
+        text(String(c.day), x - 2, ry + 69, 15, got ? '#fff' : INK, 'center', 900);
       }
-      text(nx.day > d30 ? 'Järgmine: ' + nx.day + '. päeval' : 'Uus ring algab!', P.x + 22, ry + 76, 15, INK2, 'left', 800, 150);
-      rewardRow(nx.r, P.x + 170, ry + 76, P.w - 190, 22);
+      text(nx.day > d30 ? 'Järgmine: ' + nx.day + '. päeval' : 'Uus ring algab!', P.x + 22, ry + 96, 15, INK2, 'left', 800, 150);
+      rewardRow(nx.r, P.x + 170, ry + 96, P.w - 190, 22);
       // daily tasks
-      const ty2 = ry + 104;
+      const ty2 = ry + 124;
       text('Päevaülesanded', P.x + P.w / 2, ty2 + 10, 18, INK, 'center', 900);
       D.tasks.forEach((tk, j) => {
         const y = ty2 + 26 + j * 64, def = DAILY_POOL.find(x => x.id === tk.id);

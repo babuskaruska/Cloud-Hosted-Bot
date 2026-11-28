@@ -51,6 +51,22 @@
   window.__mg = {
     get S() { return S; }, act, UI, Game, CHAINS, GENERATORS, AREAS, TASKS,
     cell: i => UI.cellCenter(i),
+    // Adventure levels for QA: gen(n) is deterministic; start(n) opens level n (skips the start screen);
+    // state is the current try; win() finishes it as won; cell(i) / cellRect(i) are level-board screen positions.
+    levels: {
+      LV, ADV, gen: n => LV.gen(n), botTest: (a, b, t) => LV.botTest(a, b, t),
+      map: () => { if (UI.onTitle) UI.startAdv(); else UI.goScreen('map'); },
+      start: n => { if (UI.onTitle) UI.startAdv(); UI.closeModal(true); S.adv.top = Math.max(S.adv.top, n || 1); ADV.play(n || S.adv.top); return LV.cur; },
+      get state() { return LV.cur; },
+      drop: (a, b) => LV.cur ? LV.drop(LV.cur, a, b) : null,
+      boost: (k, i) => LV.boost(k, i),
+      botStep: () => LV.cur ? LV.botStep(LV.cur, 'careful') : false,
+      win: () => { const r = LV.cur; if (!r || r.over) return false; for (const g of r.goals) g.got = g.n; r.won = r.over = true; if (r.on) r.on('win', -1, {}); return true; },
+      lose: () => { const r = LV.cur; if (!r || r.over) return false; r.moves = 0; r.over = true; if (r.on) r.on('out', -1, {}); return true; },
+      cell: i => ADV.cellCenter(i),
+      cellRect: i => { const v = ADV.view; if (!v || !v.G) return null; return { x: v.G.bx + (i % LV.LC) * v.G.cs, y: v.G.by + Math.floor(i / LV.LC) * v.G.cs, s: v.G.cs }; },
+      spinWheel: () => { ADV.openWheel(); },
+    },
     cellRect: i => { const L = UI.L; return { x: L.bx + (i % COLS) * L.cs, y: L.by + Math.floor(i / COLS) * L.cs, s: L.cs }; },
   };
 })();

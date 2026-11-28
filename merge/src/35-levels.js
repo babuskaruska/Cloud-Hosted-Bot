@@ -48,6 +48,7 @@ const LV = (() => {
   function build(n, R, f) {
     const kind = kindOf(n), d = Math.min(1, (n - 1) / 160), ch = chapterOf(n), km = KMUL[kind] * f;
     const pool = shuffled(CHAPTERS[ch % CHAPTERS.length].chains, R);
+    if (n <= 3 && pool.includes('bread')) { pool.splice(pool.indexOf('bread'), 1); pool.unshift('bread'); } // the first levels start with buns, like the café
     let nch = n <= 2 ? 1 : n <= 9 ? 2 : 2 + (R() < 0.3 + d * 0.45 ? 1 : 0) + (kind === 'hard' && d > 0.3 && R() < 0.45 ? 1 : 0);
     if (kind === 'breather') nch = Math.min(nch, 2);
     if (kind === 'boss') nch = Math.max(2, Math.min(nch, 3));
