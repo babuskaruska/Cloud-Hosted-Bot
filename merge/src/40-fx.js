@@ -24,7 +24,7 @@
 //   FX.update(dt)  FX.draw(ctx)  FX.clear()  FX.count()  FX.active()  FX.busy()  FX.quality = 0 | 1 | 2  FX.onArrive = fn(name)
 const FX = (function () {
   const F = { quality: 2, onArrive: null, spawnDur: 0.42 };
-  const CAP = [110, 260, 480];
+  const CAP = [100, 220, 360]; // phase C: a little lower at the top (a long chain no longer floods weak GPUs)
   const P = [], pool = [], pops = [], flights = [], texts = [], hints = [], shows = [], rockets = [], stamps = [], links = [];
   function get() { return pool.pop() || {}; }
   function add(o) { if (P.length >= CAP[F.quality | 0]) { pool.push(o); return null; } P.push(o); return o; }
