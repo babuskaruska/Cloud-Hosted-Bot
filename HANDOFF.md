@@ -214,14 +214,29 @@ The owner asked for a merge-style game for his girlfriend. It is original (no co
   - QA: `node tools/mergelevels.js`. Bot win rates for levels 1–200: easy 96%, hard 77% (lowest 25%), boss 75%.
 - **Ash:** `24-map.js` (6 themes), `25-level.js` (obstacles, boosters, wheel), plus the level effects.
 - **Echo:** map and level music (`MUSIC.mood('tense')`) and the level sounds.
-- **Next:** phase B, contracts below; agents are running.
+- **Next:** see phase B below.
 - **Known:**
   - Some hard levels are too noisy (25%).
   - Leaving a level mid-way costs no life.
   - `drawItemIdle` is unused.
   - 360-wide screens are unchecked.
 
-**Version 3 phase B contracts (in progress).** Base branch for agents: `claude/intelligent-cerf-23obgr`.
+**Version 3 phase B (merged and live).**
+- **Mira:**
+  - `36-tour.js` (`TOUR`, 8 themes, task ids `t<i>_<n>`); `56-extra.js` with `PASS`, `WEEK` (replaces the weekend festival; tab "Nädal"), `LOOK` (Garderoob, pets Kutsu and Jänku), photo mode and the rest note (45 min, `?rest=`).
+  - Style picks in `S.style`; save v3 with migration; the proofread and `merge/GLOSSARY.md`.
+  - Test hook `__mg.extra`; `mergeqa` covers phase B.
+- **Ash:** `26-tour.js` (`ART.tourScene`), `27-sky.js` (`ART.sky`, tod and weather; scenes follow the clock unless `opts.noEnv`), `28-look.js` (`ART.heroine`, `ART.pet`), `29-extra.js` (`ART.postcard`, icons), event chain items, style variants; gallery modes in `tools/artgallery.js`.
+- **Echo:** island-theme songs, event songs, `MUSIC.season`, the new sounds; `tools/mergeaudio.js` covers them.
+- **QA:** `mergeqa` PASS on all three profiles; `mergelevels` unchanged.
+- **Known:**
+  - 6 bottom tabs only just fit at 360 px; "Seiklus" shrinks to an icon at 390 px and narrower; long island names are cut short.
+  - The map HUD overlaps its "Täis" label with the coin icon at 390 px.
+  - The night and weather tint costs 4–7 ms per frame headless at DPR 3 (only at `FX.quality` 2); untested on a real phone.
+  - `drawItemIdle` is still unused; nobody has heard the new music on a phone.
+- **Next:** phase C (balance and pacing, cheap-Android performance, polish from player feedback).
+
+Phase B contracts (for reference). Base branch for agents: `claude/intelligent-cerf-23obgr`.
 - **Island tour (Mira data and rules, Ash art):** after the 6 story areas (`S.ended`), `S.tour` counts generated islands from 0 forever.
   - `TOUR.island(i)` (Mira, `10-data.js` or a new `36-tour.js`) is deterministic and returns `{ i, theme, name, tasks:[{id, name, cost, reward, choices?}], intro }`. Task ids are `t<i>_<n>`, so `S.done` keeps working.
   - Themes (key → Estonian name): `flower` Lillepood, `spa` Spaa, `icecream` Jäätisekiosk, `fashion` Moebutiik, `wedding` Pulmaaed, `beach` Rannaklubi, `xmas` Jõuluturg, `orchard` Sügisene õunaaed. They cycle, and each cycle reshuffles names and tasks.
