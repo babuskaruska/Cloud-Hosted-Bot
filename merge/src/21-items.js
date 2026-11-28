@@ -808,4 +808,354 @@
     energy: 'energia', chest: 'kirst', coins: 'raha', oven: 'ahi', basket: 'korv', toolbox: 'tooriistakast', gardenbed: 'aiapeenar', net: 'kalavork', kalavõrk: 'kalavork',
     teapot: 'teekann', churn: 'piimanou', piimanõu: 'piimanou', hive: 'taru', map: 'kaart', 'tööriistakast': 'tooriistakast'
   });
+
+  // ================= the game's chains (Mira's keys in 10-data.js); reuse the drawings above where they fit =================
+  const D = (k, l) => ART.defs[k][l - 1];
+  function apple(g, x, y, r, col, rot) {
+    g.save(); g.translate(x, y); g.rotate(rot || 0);
+    g.beginPath(); g.moveTo(0, -r * .62); g.bezierCurveTo(r * .5, -r * 1.05, r * 1.15, -r * .55, r * .98, r * .2); g.bezierCurveTo(r * .85, r * .95, r * .25, r * 1.05, 0, r * .82);
+    g.bezierCurveTo(-r * .25, r * 1.05, -r * .85, r * .95, -r * .98, r * .2); g.bezierCurveTo(-r * 1.15, -r * .55, -r * .5, -r * 1.05, 0, -r * .62); g.closePath(); paint(g, col || '#e2463c', -r * .3, -r * .2, r * 1.2, 3.4);
+    g.beginPath(); g.moveTo(0, -r * .55); g.quadraticCurveTo(r * .05, -r * .9, r * .2, -r * 1.05); stroke(g, '#6b4a30', Math.max(2, r * .13));
+    leaf(g, r * .12, -r * .82, r * .7, r * .28, -.4, C.leaf, false);
+    HL(g, -r * .45, -r * .2, r * .16, r * .3, .3, .6); g.restore();
+  }
+  function bowl(g, y, col) {
+    g.beginPath(); g.moveTo(12, y); g.lineTo(88, y); g.quadraticCurveTo(86, y + 32, 50, y + 32); g.quadraticCurveTo(14, y + 32, 12, y); g.closePath(); paint(g, col, 42, y + 8, 40);
+    E(g, 50, y, 38, 5); stroke(g, dk(col, .55), 3.2);
+  }
+  function bun(g, x, y, rx, ry, col) { E(g, x, y, rx, ry); paint(g, col || '#e7a356', x - rx * .3, y - ry * .4, Math.max(rx, ry) * 1.1); HL(g, x - rx * .35, y - ry * .45, rx * .25, ry * .15, -.4, .5); }
+  function boltBadge(g) { E(g, 82, 80, 12, 12); paint(g, '#ffe066', 82, 80, 12, 3); PL(g, [84, 70, 76, 82, 82, 82, 79, 90, 88, 78, 82, 78, 85, 70]); flat(g, '#f5a623', 1.4, '#8a5a12'); }
+  function bushDot(g, x, y, c) { E(g, x, y - 8, 8, 8); paint(g, '#6dbb5a', x, y - 8, 8, 2.4); dot(g, x - 2, y - 10, 2.2, c); dot(g, x + 3, y - 6, 2.2, c); }
+  const extra = {
+    rukkileib: g => {
+      sh(g, 38);
+      R(g, 14, 40, 72, 44, 18); paint(g, '#7a4a2e', 40, 50, 44);
+      g.save(); R(g, 14, 40, 72, 44, 18); g.clip(); g.fillStyle = 'rgba(255,245,230,.35)'; for (let i = 0; i < 4; i++) { E(g, 26 + i * 16, 46, 7, 3, -.3); g.fill(); } g.restore();
+      for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(28 + i * 16, 50); g.lineTo(38 + i * 16, 74); stroke(g, '#5a3220', 3); }
+      const r = srnd(21); for (let i = 0; i < 14; i++) { E(g, 20 + r() * 60, 48 + r() * 30, 1.6, .8, r() * 3); g.fillStyle = '#3a2014'; g.fill(); }
+      HL(g, 28, 46, 8, 3, -.2, .3);
+    },
+    kook: g => {
+      sh(g, 40, 90); plate(g, 82, 40);
+      g.beginPath(); g.moveTo(16, 78); g.bezierCurveTo(12, 34, 88, 34, 84, 78); g.closePath(); paint(g, '#e5a04f', 40, 50, 40);
+      g.save(); g.clip(); for (let i = 0; i < 7; i++) { g.beginPath(); g.moveTo(20 + i * 10, 80); g.quadraticCurveTo(30 + i * 6.5, 46, 50, 40); stroke(g, '#c47a36', 2, .8); } g.restore();
+      g.beginPath(); g.moveTo(22, 52); g.bezierCurveTo(30, 38, 70, 38, 78, 52); g.quadraticCurveTo(74, 62, 70, 54); g.quadraticCurveTo(64, 66, 58, 54); g.quadraticCurveTo(50, 64, 44, 54); g.quadraticCurveTo(36, 66, 32, 54); g.quadraticCurveTo(26, 62, 22, 52); g.closePath(); paint(g, '#fffaf0', 44, 46, 30, 3);
+      E(g, 50, 44, 8, 3); flat(g, '#c47a36', 2); berryDot(g, 50, 38, 5, '#e2463c'); g.beginPath(); g.moveTo(50, 33); g.quadraticCurveTo(52, 26, 56, 24); stroke(g, '#5c7a3a', 1.6);
+    },
+    peotais: g => {
+      sh(g, 34); leaf(g, 14, 70, 40, 16, -.25, '#7bc760'); leaf(g, 86, 70, 40, 16, PI + .25, C.leaf);
+      strawberry(g, 38, 52, 15, -.4); berryDot(g, 64, 50, 9, '#d6304d'); dot(g, 61, 47, 1.4, '#ffd0d8');
+      blueberry(g, 52, 66, 9); blueberry(g, 70, 66, 8); blueberry(g, 30, 70, 8);
+    },
+    moosisai: g => {
+      sh(g, 34); bun(g, 50, 60, 34, 24, '#eaa95c');
+      E(g, 50, 54, 15, 10); paint(g, '#c8284a', 46, 50, 14, 3); HL(g, 45, 51, 4, 2, -.4, .7);
+      const r = srnd(8); for (let i = 0; i < 12; i++) { const a = r() * TAU, d = 18 + r() * 10; dot(g, 50 + Math.cos(a) * d, 60 + Math.sin(a) * d * .6, 1.5, '#fffaf0'); }
+    },
+    mustikakook: g => {
+      sh(g, 42);
+      g.beginPath(); g.moveTo(8, 58); g.lineTo(92, 58); g.lineTo(86, 78); g.quadraticCurveTo(50, 88, 14, 78); g.closePath(); paint(g, '#e5a04f', 46, 66, 40);
+      g.save(); g.clip(); for (let i = 0; i < 12; i++) { g.beginPath(); g.moveTo(12 + i * 7, 60); g.lineTo(14 + i * 7, 86); stroke(g, '#c47a36', 2); } g.restore();
+      E(g, 50, 56, 42, 17); paint(g, '#f0c07a', 46, 52, 40, 3.6); E(g, 50, 55, 35, 13); paint(g, '#4b4fa0', 46, 52, 34, 2.4);
+      const r = srnd(14); for (let i = 0; i < 18; i++) { const a = r() * TAU, d = r(); blueberry(g, 50 + Math.cos(a) * d * 28, 55 + Math.sin(a) * d * 9, 4.2); }
+      for (let i = 0; i < 3; i++) leaf(g, 46 + i * 4, 48, 8, 3, -1.4 + i * .5, C.leaf, false);
+    },
+    marjatort: g => {
+      sh(g, 40, 92); plate(g, 86, 40);
+      g.beginPath(); g.moveTo(22, 40); g.lineTo(22, 78); g.ellipse(50, 78, 28, 8, 0, PI, 0, true); g.lineTo(78, 40); g.closePath(); paint(g, '#b996e0', 40, 56, 36);
+      for (let i = 0; i < 2; i++) { R(g, 22, 52 + i * 12, 56, 4, 1); flat(g, '#fff6f0', 0); }
+      g.beginPath(); g.moveTo(22, 40); g.lineTo(22, 78); g.ellipse(50, 78, 28, 8, 0, PI, 0, true); g.lineTo(78, 40); stroke(g, dk('#b996e0', .6), 3.6);
+      E(g, 50, 40, 28, 9); paint(g, '#fff6f0', 44, 38, 28, 3.4);
+      for (let i = 0; i < 6; i++) { const x = 25 + i * 10; g.beginPath(); g.moveTo(x - 3, 42); g.quadraticCurveTo(x, 50 + (i % 2) * 4, x + 3, 42); g.fillStyle = '#fff6f0'; g.fill(); }
+      strawberry(g, 40, 32, 7, -.3); blueberry(g, 52, 34, 5); berryDot(g, 60, 32, 5, '#d6304d'); blueberry(g, 46, 28, 4.4); strawberry(g, 60, 26, 6, .4);
+      leaf(g, 34, 34, 8, 3, -2.4, C.leaf, false);
+    },
+    taimeke: g => {
+      sh(g, 28);
+      g.beginPath(); g.moveTo(50, 62); g.quadraticCurveTo(48, 44, 50, 28); stroke(g, dk(C.leaf, .5), 5.5); stroke(g, '#7bc760', 3.2);
+      leaf(g, 50, 52, 22, 9, -.5); leaf(g, 50, 54, 22, 9, PI + .5, '#7bc760'); leaf(g, 50, 38, 18, 8, -.9, '#7bc760'); leaf(g, 50, 40, 18, 8, PI + .9); leaf(g, 50, 30, 12, 6, -PI / 2, C.leaf, false);
+      g.beginPath(); g.moveTo(30, 62); g.lineTo(70, 62); g.lineTo(65, 88); g.lineTo(35, 88); g.closePath(); paint(g, '#d9784a', 44, 70, 26);
+      R(g, 27, 58, 46, 9, 3); paint(g, '#e58a5a', 50, 62, 24, 3.2); HL(g, 38, 74, 2.4, 7, .1, .35);
+    },
+    rukkilill: g => {
+      sh(g, 26);
+      for (const [x, y] of [[36, 32], [62, 26], [52, 46]]) { g.beginPath(); g.moveTo(50, 88); g.quadraticCurveTo((x + 50) / 2, 66, x, y); stroke(g, dk('#7fa868', .5), 5); stroke(g, '#86b06a', 3); }
+      leaf(g, 49, 76, 18, 4, -.9, '#86b06a', false); leaf(g, 50, 72, 18, 4, PI + .8, '#86b06a', false);
+      cornflower(g, 36, 32, 12); cornflower(g, 62, 26, 13); cornflower(g, 52, 46, 10);
+    },
+    lillevaas: g => {
+      sh(g, 30);
+      daisy(g, 32, 30, 10, '#fff', '#f6c33b', 9); cornflower(g, 50, 20, 10); tulip(g, 66, 30, 8, '#f58aa0'); rose(g, 42, 40, 6, '#f7b84c'); cornflower(g, 60, 42, 7); leaf(g, 26, 44, 14, 5, PI + .5); leaf(g, 74, 44, 14, 5, -.5);
+      g.beginPath(); g.moveTo(38, 46); g.lineTo(62, 46); g.quadraticCurveTo(58, 54, 66, 64); g.quadraticCurveTo(76, 80, 64, 90); g.lineTo(36, 90); g.quadraticCurveTo(24, 80, 34, 64); g.quadraticCurveTo(42, 54, 38, 46); g.closePath(); paint(g, '#6fa8dc', 42, 66, 30);
+      for (let i = 0; i < 3; i++) daisySmall(g, 40 + i * 10, 74 + (i % 2) * 4); E(g, 50, 46, 12, 3); stroke(g, '#3d6a8c', 2.4); HL(g, 36, 70, 2.4, 9, .2, .5);
+    },
+    laud: g => { sh(g, 36); g.save(); g.translate(50, 54); g.rotate(-.35); plank(g, -40, -9, 80, 18, '#e3b07a'); g.restore(); nail(g, 70, 64, 18, .5); },
+    pink: g => {
+      sh(g, 40, 88);
+      for (const x of [22, 74]) { R(g, x, 58, 7, 28, 2); paint(g, C.woodD, x + 3, 70, 8, 3); }
+      R(g, 12, 52, 76, 11, 4); paint(g, '#d9a06b', 46, 56, 40);
+      for (const x of [22, 74]) { R(g, x, 26, 6, 28, 2); paint(g, C.woodD, x + 3, 40, 8, 3); }
+      R(g, 14, 26, 72, 9, 4); paint(g, '#e3b07a', 46, 30, 38, 3.4); R(g, 14, 38, 72, 8, 4); paint(g, '#e3b07a', 46, 42, 38, 3.4);
+      heart(g, 50, 33, 3.4); g.fillStyle = '#e2574c'; g.fill();
+    },
+    aknaraam: g => {
+      sh(g, 34);
+      R(g, 18, 14, 64, 72, 6); paint(g, '#fbf6ee', 44, 40, 44);
+      for (const [x, y] of [[25, 21], [52, 21], [25, 51], [52, 51]]) { R(g, x, y, 23, 28, 2); const gr = g.createLinearGradient(x, y, x + 23, y + 28); gr.addColorStop(0, '#d8f0fa'); gr.addColorStop(1, '#8cc6e6'); g.fillStyle = gr; g.fill(); g.lineWidth = 2; g.strokeStyle = '#a8b8c4'; g.stroke(); g.beginPath(); g.moveTo(x + 4, y + 22); g.lineTo(x + 14, y + 5); stroke(g, '#ffffff', 2.4, .8); }
+      R(g, 12, 84, 76, 7, 3); paint(g, '#e3b07a', 50, 86, 38, 3); for (let i = 0; i < 5; i++) daisySmall(g, 22 + i * 14, 82);
+    },
+    uks: g => {
+      sh(g, 30, 90);
+      g.beginPath(); g.moveTo(24, 88); g.lineTo(24, 36); g.arc(50, 36, 26, PI, 0); g.lineTo(76, 88); g.closePath(); paint(g, '#fbf6ee', 44, 40, 40);
+      g.beginPath(); g.moveTo(29, 88); g.lineTo(29, 37); g.arc(50, 37, 21, PI, 0); g.lineTo(71, 88); g.closePath(); paint(g, '#5f9e78', 42, 46, 36, 3.4);
+      for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(36 + i * 14, 52); g.lineTo(36 + i * 14, 84); stroke(g, '#4a7f60', 2); }
+      E(g, 50, 34, 8, 8); flat(g, '#fff2b0', 2.4, '#2f5e48'); g.beginPath(); g.moveTo(50, 26); g.lineTo(50, 42); g.moveTo(42, 34); g.lineTo(58, 34); stroke(g, '#2f5e48', 1.6);
+      dot(g, 64, 64, 3.4, '#f2c14b'); HL(g, 34, 50, 2.6, 12, 0, .3);
+    },
+    ahven: g => {
+      sh(g, 32); fish(g, 50, 54, 66, 30, '#b8b85a', -.15, '#f2f0c8');
+      g.save(); g.translate(50, 54); g.rotate(-.15);
+      for (let i = 0; i < 5; i++) { R(g, -16 + i * 8, -12, 3.4, 16, 1.7); g.fillStyle = 'rgba(70,80,40,.55)'; g.fill(); }
+      PL(g, [-8, -13, 0, -24, 8, -20, 14, -12]); flat(g, '#e86a3a', 2.4); PL(g, [-6, 12, 2, 20, 6, 12]); flat(g, '#e86a3a', 2.4); g.restore();
+    },
+    suitsulest: g => {
+      sh(g, 34);
+      g.save(); g.translate(50, 56); g.rotate(-.15);
+      PL(g, [28, 0, 44, -16, 40, 0, 44, 16]); paint(g, '#b8742d', 36, 0, 12, 3);
+      E(g, 0, 0, 32, 24); paint(g, '#d9923a', -6, -6, 32);
+      g.beginPath(); g.ellipse(0, 0, 36, 28, 0, 0, TAU); g.setLineDash([2, 4]); stroke(g, dk('#d9923a', .4), 4); g.setLineDash([]);
+      for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(i * 9 - 4, -16); g.quadraticCurveTo(i * 9 + 2, 0, i * 9 - 4, 16); stroke(g, '#a8601e', 1.6, .7); }
+      dot(g, -20, -8, 3, '#2b1a12'); dot(g, -14, -12, 3, '#2b1a12'); HL(g, -8, -12, 10, 3, -.2, .45); g.restore();
+      steam(g, 50, 30, 14, .6);
+    },
+    kilukarp: g => {
+      sh(g, 40);
+      R(g, 10, 40, 80, 44, 14); paint(g, '#c9d3dd', 46, 52, 44);
+      R(g, 16, 46, 68, 32, 10); flat(g, '#e9b860', 2.4, '#8a6a3a');
+      for (let i = 0; i < 5; i++) { g.save(); g.translate(26 + i * 12, 62); g.rotate(PI / 2 + (i % 2 ? .1 : -.1)); fish(g, 0, 0, 28, 9, '#9fb4c4', 0, '#eef4f8'); g.restore(); }
+      g.beginPath(); g.moveTo(14, 42); g.quadraticCurveTo(30, 18, 66, 24); g.quadraticCurveTo(82, 26, 88, 40); stroke(g, '#7d8794', 6); stroke(g, '#dfe7ee', 3);
+      R(g, 70, 18, 14, 8, 4); flat(g, '#a7b2c0', 2.4, '#5d6673');
+    },
+    kalapidu: g => {
+      D('kala', 6)(g);
+      E(g, 22, 40, 10, 8); paint(g, '#e5a04f', 20, 38, 10, 3); E(g, 78, 38, 10, 8); paint(g, '#e5a04f', 76, 36, 10, 3);
+      spark(g, 86, 18, 6, '#fff7c2'); spark(g, 12, 22, 4, '#fff7c2');
+    },
+    teepakk: g => {
+      sh(g, 28);
+      R(g, 26, 28, 48, 60, 6); paint(g, '#5f9a6a', 42, 46, 40);
+      R(g, 24, 20, 52, 14, 5); paint(g, '#4a7f58', 50, 26, 26, 3.4);
+      R(g, 32, 44, 36, 30, 4); flat(g, '#fff6e6', 2.4, '#b8873a'); leaf(g, 38, 66, 24, 9, -.75, '#5fb35a');
+      for (let i = 0; i < 4; i++) dot(g, 32 + i * 12, 82, 1.8, '#f2c14b');
+      HL(g, 30, 54, 2.4, 12, 0, .35);
+    },
+    kruus: g => {
+      sh(g, 28); steam(g, 46, 30, 16, .8);
+      g.beginPath(); g.arc(70, 58, 11, -PI / 2, PI / 2); stroke(g, '#8a3a2a', 9); stroke(g, '#e8796b', 5);
+      R(g, 24, 36, 46, 50, 10); paint(g, '#e8796b', 38, 50, 34);
+      E(g, 47, 38, 22, 5); flat(g, '#b8682d', 2.4, '#5a2a1a'); heart(g, 47, 66, 8); g.fillStyle = '#fff6e6'; g.fill(); HL(g, 32, 52, 2.4, 10, 0, .4);
+    },
+    kohupiim: g => {
+      sh(g, 36);
+      const r = srnd(31); for (let i = 0; i < 12; i++) { const x = 24 + r() * 52, y = 50 - r() * 14; E(g, x, y, 7, 6); paint(g, '#fffaf2', x - 2, y - 2, 8, 2.4); }
+      berryDot(g, 44, 34, 6, '#d6304d'); blueberry(g, 56, 36, 5); leaf(g, 50, 30, 10, 4, -.8, C.leaf, false);
+      bowl(g, 54, '#f2d6a0');
+    },
+    juustuvaagen: g => {
+      sh(g, 44, 90);
+      R(g, 6, 58, 88, 26, 10); paint(g, '#c98a55', 44, 66, 44); dot(g, 88, 71, 3, '#8a5232');
+      PL(g, [16, 64, 50, 46, 56, 54, 56, 70, 16, 74]); paint(g, '#f7cf45', 36, 60, 24, 3); E(g, 34, 66, 3, 2.4); flat(g, '#e0a92a', 0);
+      for (let i = 0; i < 6; i++) berryDot(g, 64 + (i % 3) * 8, 52 + Math.floor(i / 3) * 8, 5, '#9a5ac0');
+      g.beginPath(); g.moveTo(72, 46); g.quadraticCurveTo(76, 40, 80, 38); stroke(g, '#6b4a30', 2); leaf(g, 76, 42, 10, 4, -.6, C.leaf, false);
+      for (let i = 0; i < 3; i++) { R(g, 50 + i * 4, 62 + i * 3, 16, 12, 2); flat(g, '#f0d08a', 2, '#a87a3a'); }
+    },
+    oun: g => { sh(g, 26); apple(g, 50, 56, 28, '#e2463c'); },
+    ounapaar: g => { sh(g, 34); apple(g, 64, 58, 23, '#9fd05a', .2); apple(g, 38, 58, 25, '#e2463c', -.15); },
+    ounakorv: g => {
+      sh(g, 40);
+      g.beginPath(); g.ellipse(50, 50, 32, 30, 0, PI, 0); stroke(g, dk(C.woodL, .55), 8); stroke(g, C.woodL, 4.5);
+      apple(g, 32, 48, 13, '#e2463c', -.3); apple(g, 50, 42, 14, '#f0c040', 0); apple(g, 68, 48, 13, '#9fd05a', .3);
+      g.beginPath(); g.moveTo(14, 52); g.lineTo(86, 52); g.lineTo(78, 86); g.quadraticCurveTo(50, 92, 22, 86); g.closePath(); paint(g, '#d59a5c', 44, 66, 40);
+      g.save(); g.clip(); for (let y = 56; y < 92; y += 7) for (let x = 12 + (y % 14); x < 90; x += 14) { E(g, x, y, 6, 3); stroke(g, '#a8703c', 1.6); } g.restore();
+      R(g, 12, 49, 76, 8, 4); paint(g, '#c78a50', 50, 52, 36, 3.2);
+    },
+    ounamahl: g => {
+      sh(g, 34);
+      g.beginPath(); g.moveTo(32, 20); g.lineTo(46, 20); g.lineTo(46, 32); g.quadraticCurveTo(56, 38, 56, 50); g.lineTo(56, 86); g.lineTo(22, 86); g.lineTo(22, 50); g.quadraticCurveTo(22, 38, 32, 32); g.closePath(); paint(g, '#f2c24a', 34, 48, 34);
+      R(g, 22, 54, 34, 20, 2); flat(g, '#fff6e6', 2, '#b8873a'); apple(g, 39, 65, 6, '#e2463c');
+      R(g, 30, 13, 18, 9, 3); paint(g, '#e2574c', 39, 16, 10, 3); HL(g, 27, 44, 2.4, 9, .2, .6);
+      g.beginPath(); g.moveTo(60, 56); g.lineTo(82, 56); g.lineTo(79, 86); g.lineTo(63, 86); g.closePath(); g.fillStyle = 'rgba(230,245,255,.6)'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#7fa6c0'; g.stroke();
+      g.beginPath(); g.moveTo(61, 64); g.lineTo(81, 64); g.lineTo(79, 86); g.lineTo(63, 86); g.closePath(); g.fillStyle = 'rgba(242,194,74,.85)'; g.fill(); HL(g, 66, 72, 1.6, 6, 0, .7);
+    },
+    ounamoos: g => { sh(g, 28); jarBody(g, 50, 60, 46, 50, '#e89a3a', null, '#8fd17a'); R(g, 34, 56, 32, 18, 4); flat(g, '#fff6e6', 2.4, '#b8873a'); apple(g, 50, 66, 6.5, '#e2463c'); },
+    ounakook: g => {
+      sh(g, 42);
+      g.beginPath(); g.moveTo(8, 56); g.lineTo(92, 56); g.lineTo(86, 78); g.quadraticCurveTo(50, 88, 14, 78); g.closePath(); paint(g, '#e5a04f', 46, 66, 40);
+      E(g, 50, 54, 42, 17); paint(g, '#f0c07a', 46, 50, 40, 3.6);
+      for (let ring = 0; ring < 2; ring++) for (let i = 0; i < (ring ? 7 : 12); i++) {
+        const a = i * TAU / (ring ? 7 : 12), rx = ring ? 18 : 33, ry = ring ? 7 : 12.5; g.save(); g.translate(50 + Math.cos(a) * rx, 54 + Math.sin(a) * ry); g.rotate(a + PI / 2);
+        g.beginPath(); g.arc(0, 0, 7, PI, 0); g.closePath(); paint(g, '#f6dc8a', 0, -2, 7, 1.6); g.beginPath(); g.arc(0, 0, 7, PI, 0); stroke(g, '#d9473c', 1.6); g.restore();
+      }
+      E(g, 50, 54, 6, 3); flat(g, '#e9a75a', 1.6);
+    },
+    ounapuu: g => {
+      sh(g, 36, 92);
+      R(g, 45, 52, 10, 30, 3); paint(g, '#8a5a3a', 50, 66, 10, 3);
+      for (const [x, y, r] of [[30, 40, 18], [70, 40, 18], [50, 26, 20], [50, 46, 18]]) { E(g, x, y, r, r * .86); paint(g, '#6fb552', x - 4, y - 6, r, 3.4); }
+      for (const [x, y] of [[30, 38], [44, 24], [62, 30], [72, 46], [52, 46], [36, 52], [58, 16]]) { dot(g, x, y, 4.6, '#e2463c'); dot(g, x - 1.2, y - 1.4, 1.4, '#ffc0b0'); }
+      SM(g, [18, 88, 30, 78, 50, 76, 70, 78, 82, 88]); paint(g, '#8fcf6a', 50, 80, 30, 3);
+      daisySmall(g, 26, 84); daisySmall(g, 74, 85); daisySmall(g, 62, 82);
+    },
+    villatups: g => {
+      sh(g, 30);
+      const p = []; for (let i = 0; i < 14; i++) { const a = i * TAU / 14, q = i % 2 ? 26 : 32; p.push(50 + Math.cos(a) * q * 1.1, 54 + Math.sin(a) * q * .8); } SM(g, p); paint(g, '#fbf7ee', 42, 44, 36);
+      for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(34 + i * 7, 50 + (i % 2) * 8, 6, PI * 1.1, PI * 1.9); stroke(g, '#e0d6c4', 2); }
+      HL(g, 36, 40, 9, 4, -.3, .6);
+    },
+    lapitekk: g => {
+      sh(g, 42, 90);
+      const cols = ['#e2574c', '#f2b84b', '#7fb3e0', '#8fcf6a', '#f58aa0', '#b996e0'];
+      for (let k = 0; k < 3; k++) {
+        const y = 66 - k * 16; g.save(); R(g, 10 + k * 2, y, 80 - k * 4, 18, 6); g.clip();
+        for (let i = 0; i < 6; i++) { g.fillStyle = cols[(i + k * 2) % 6]; g.fillRect(10 + i * 14, y, 14, 18); if ((i + k) % 2) { g.fillStyle = 'rgba(255,255,255,.35)'; for (let d = 0; d < 3; d++) g.fillRect(12 + i * 14 + d * 4, y + 3, 2, 12); } }
+        g.restore(); R(g, 10 + k * 2, y, 80 - k * 4, 18, 6); g.lineWidth = 3.4; g.strokeStyle = '#6b3a22'; g.stroke();
+        g.setLineDash([3, 3]); R(g, 14 + k * 2, y + 3, 72 - k * 4, 12, 4); stroke(g, '#fff6e6', 1.4, .8); g.setLineDash([]);
+      }
+      heart(g, 50, 40, 5); g.fillStyle = '#fff6e6'; g.fill();
+    },
+    kivike: g => {
+      sh(g, 30);
+      const pts = [22, 58, 30, 40, 52, 34, 74, 40, 80, 58, 66, 72, 40, 74];
+      SM(g, pts); paint(g, '#a8aab0', 40, 46, 40);
+      g.save(); SM(g, pts); g.clip(); g.beginPath(); g.moveTo(20, 66); g.bezierCurveTo(40, 50, 60, 60, 84, 46); stroke(g, '#f4f4f0', 4.5); g.restore();
+      SM(g, pts); stroke(g, dk('#a8aab0', .62), 4.2);
+      HL(g, 38, 44, 9, 4, -.2, .55);
+    },
+    teokarp: g => {
+      sh(g, 30);
+      E(g, 50, 54, 28, 26); paint(g, '#f2c49a', 42, 44, 30);
+      g.beginPath(); for (let a = 0; a < 14; a += .2) { const r = 26 * Math.exp(-a * .2); g.lineTo(52 + Math.cos(a + 2) * r * 1.02, 54 + Math.sin(a + 2) * r * .95); } stroke(g, '#b8744a', 3);
+      HL(g, 40, 42, 7, 4, -.6, .55);
+    },
+    merepudel: g => {
+      sh(g, 32);
+      g.save(); g.translate(50, 54); g.rotate(.6);
+      R(g, -7, -40, 14, 12, 3); paint(g, '#c98a55', 0, -34, 7, 3);
+      g.beginPath(); g.moveTo(-6, -28); g.lineTo(6, -28); g.lineTo(6, -18); g.quadraticCurveTo(18, -12, 18, 2); g.lineTo(18, 30); g.quadraticCurveTo(18, 36, 12, 36); g.lineTo(-12, 36); g.quadraticCurveTo(-18, 36, -18, 30); g.lineTo(-18, 2); g.quadraticCurveTo(-18, -12, -6, -18); g.closePath();
+      paint(g, '#6fc4a8', -6, 0, 28); HL(g, -11, 6, 2.4, 14, 0, .7); g.restore();
+      spark(g, 30, 30, 5, '#ffffff');
+    },
+    vanakaart: g => { sh(g, 40); gens.kaart[0](g, 1); },
+    retseptileht: g => {
+      sh(g, 34);
+      g.beginPath(); g.moveTo(22, 14); g.lineTo(76, 12); g.quadraticCurveTo(82, 46, 80, 86); g.lineTo(24, 88); g.quadraticCurveTo(18, 50, 22, 14); g.closePath(); paint(g, '#f6e6c4', 44, 40, 44);
+      g.beginPath(); g.moveTo(70, 88); g.quadraticCurveTo(80, 84, 80, 76); g.lineTo(70, 76); g.closePath(); flat(g, '#e2cc9a', 2.4, '#a8875a');
+      g.save(); g.translate(28, 18); g.scale(.42, .42); kringel(g); g.restore();
+      for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(30, 66 + i * 5.5); g.lineTo(70 - (i % 2) * 10, 66 + i * 5.5); stroke(g, '#a8875a', 1.6); }
+      heart(g, 66, 26, 5); g.fillStyle = '#e2574c'; g.fill();
+    },
+    kohvioad: g => {
+      sh(g, 30);
+      for (const [x, y, r] of [[36, 58, -.5], [62, 54, .4], [48, 40, 0]]) { g.save(); g.translate(x, y); g.rotate(r); E(g, 0, 0, 12, 16); paint(g, '#7a4a2e', -3, -4, 16, 3.4); g.beginPath(); g.moveTo(0, -13); g.bezierCurveTo(-5, -4, 5, 4, 0, 13); stroke(g, '#3a2014', 2.4); HL(g, -5, -6, 2, 4, .3, .4); g.restore(); }
+      boltBadge(g);
+    },
+    kohvitass: g => {
+      sh(g, 30); steam(g, 46, 34, 18, .8);
+      E(g, 46, 74, 30, 8); paint(g, '#fffaf4', 46, 74, 30, 3);
+      g.beginPath(); g.arc(68, 56, 8, -PI / 2, PI / 2); stroke(g, '#6b5a4a', 8); stroke(g, '#fff6ea', 4);
+      g.beginPath(); g.moveTo(24, 46); g.lineTo(68, 46); g.quadraticCurveTo(66, 72, 46, 72); g.quadraticCurveTo(26, 72, 24, 46); g.closePath(); paint(g, '#fff6ea', 40, 54, 26, 3.2);
+      E(g, 46, 46, 22, 5.5); flat(g, '#7a4a2e', 2.4, '#4a2a1a'); heart(g, 46, 47, 4.4); g.fillStyle = '#f2dcc0'; g.fill();
+      R(g, 28, 56, 36, 3, 1.5); flat(g, '#e2574c', 0);
+      boltBadge(g);
+    },
+    kohvikann: g => {
+      sh(g, 34); steam(g, 76, 26, 14, .8);
+      g.beginPath(); g.moveTo(66, 50); g.quadraticCurveTo(80, 44, 82, 30); stroke(g, '#2f5e48', 8); stroke(g, '#5f9e78', 4.5);
+      g.beginPath(); g.arc(24, 56, 10, PI * .5, PI * 1.5); stroke(g, '#2f5e48', 8); stroke(g, '#5f9e78', 4.5);
+      g.beginPath(); g.moveTo(34, 30); g.lineTo(62, 30); g.lineTo(70, 86); g.lineTo(26, 86); g.closePath(); paint(g, '#5f9e78', 40, 50, 36);
+      E(g, 48, 30, 15, 4.5); paint(g, '#7fc49a', 48, 30, 15, 3); dot(g, 48, 24, 4, '#7fc49a');
+      for (let i = 0; i < 3; i++) daisySmall(g, 38 + i * 10, 58 + (i % 2) * 6); R(g, 26, 80, 44, 5, 2); flat(g, '#2f5e48', 0);
+      HL(g, 36, 46, 2.4, 12, -.1, .45); boltBadge(g);
+    },
+    kohvimasin: g => {
+      sh(g, 36, 92);
+      R(g, 22, 50, 52, 38, 4); paint(g, '#b9784a', 44, 62, 34);
+      R(g, 40, 66, 16, 12, 2); paint(g, '#8a5232', 48, 72, 8, 2.4); dot(g, 48, 72, 2, '#f2c14b');
+      g.beginPath(); g.moveTo(28, 50); g.lineTo(32, 32); g.lineTo(64, 32); g.lineTo(68, 50); g.closePath(); paint(g, '#d9962a', 48, 40, 22, 3.4);
+      g.beginPath(); g.moveTo(48, 30); g.lineTo(48, 20); g.lineTo(74, 14); stroke(g, '#5a5a66', 4); E(g, 76, 14, 5, 5); paint(g, '#e2574c', 76, 14, 5, 2.4);
+      for (let i = 0; i < 3; i++) { E(g, 36 + i * 12, 30, 4, 5, .4); paint(g, '#7a4a2e', 36 + i * 12, 30, 5, 2); }
+      boltBadge(g);
+    },
+    greenhouse: () => g => {
+      R(g, 12, 80, 76, 8, 2); paint(g, C.wood, 50, 84, 38);
+      PL(g, [16, 82, 16, 44, 50, 18, 84, 44, 84, 82]); g.fillStyle = 'rgba(205,238,250,.8)'; g.fill(); g.lineWidth = 4; g.strokeStyle = '#3d6a5a'; g.lineJoin = 'round'; g.stroke();
+      for (const x of [33, 67]) { g.beginPath(); g.moveTo(x, 82); g.lineTo(x, 44 - (17 - Math.abs(50 - x)) * 1.5); stroke(g, '#fbf6ee', 3); }
+      g.beginPath(); g.moveTo(50, 82); g.lineTo(50, 20); stroke(g, '#fbf6ee', 3); g.beginPath(); g.moveTo(16, 60); g.lineTo(84, 60); stroke(g, '#fbf6ee', 3);
+      bushDot(g, 30, 80, '#e2463c'); bushDot(g, 50, 80, '#f6c33b'); bushDot(g, 70, 80, '#f58aa0');
+      PL(g, [22, 46, 40, 30, 30, 56]); g.fillStyle = 'rgba(255,255,255,.55)'; g.fill();
+    },
+    paat: g => {
+      g.beginPath(); g.moveTo(52, 16); g.lineTo(52, 66); stroke(g, '#7a5232', 4);
+      PL(g, [55, 18, 55, 62, 84, 62]); paint(g, '#fff8ec', 66, 44, 26, 3); PL(g, [49, 22, 49, 62, 24, 62]); paint(g, '#f2b0bd', 40, 46, 22, 3);
+      g.beginPath(); g.moveTo(10, 64); g.lineTo(90, 64); g.quadraticCurveTo(84, 88, 70, 88); g.lineTo(28, 88); g.quadraticCurveTo(14, 86, 10, 64); g.closePath(); paint(g, '#e2574c', 40, 72, 42);
+      R(g, 10, 63, 80, 6, 3); flat(g, '#fff8ec', 2.4); fish(g, 74, 58, 18, 7, '#5d8bb0', .3, '#e8f1f7');
+      g.beginPath(); g.moveTo(52, 16); g.lineTo(70, 20); g.lineTo(52, 24); g.closePath(); flat(g, '#4f86c6', 2);
+    },
+    vokk: (g, lv) => {
+      if (lv < 3) { // spinning wheel
+        g.beginPath(); g.moveTo(30, 86); g.lineTo(40, 58); g.moveTo(70, 86); g.lineTo(60, 58); g.moveTo(22, 86); g.lineTo(80, 86); stroke(g, '#6b4a30', 6); stroke(g, '#b9784a', 3);
+        E(g, 50, 46, 30, 30); stroke(g, '#6b4a30', 8); E(g, 50, 46, 30, 30); stroke(g, '#c98a55', 4.5);
+        for (let i = 0; i < 8; i++) { const a = i * PI / 4; g.beginPath(); g.moveTo(50, 46); g.lineTo(50 + Math.cos(a) * 28, 46 + Math.sin(a) * 28); stroke(g, '#8a5a3a', 2.4); }
+        E(g, 50, 46, 6, 6); paint(g, '#d9962a', 50, 46, 6, 2.4);
+        g.beginPath(); g.moveTo(74, 30); g.lineTo(86, 16); stroke(g, '#6b4a30', 4); E(g, 86, 22, 6, 9, .4); paint(g, lv >= 2 ? '#b996e0' : '#fbf7ee', 84, 20, 8, 2.4);
+        if (lv >= 2) { E(g, 20, 76, 9, 9); paint(g, '#e2574c', 18, 74, 9, 3); }
+      } else { // loom
+        R(g, 14, 18, 8, 70, 2); paint(g, '#8a5a3a', 18, 50, 10, 3); R(g, 78, 18, 8, 70, 2); paint(g, '#8a5a3a', 82, 50, 10, 3);
+        R(g, 10, 16, 80, 8, 3); paint(g, '#b9784a', 50, 20, 40, 3); R(g, 10, 76, 80, 8, 3); paint(g, '#b9784a', 50, 80, 40, 3);
+        R(g, 24, 28, 52, 42, 2); g.fillStyle = '#fbf6ee'; g.fill();
+        g.save(); R(g, 24, 28, 52, 42, 2); g.clip(); const cols = ['#e2574c', '#f2b84b', '#5a86cf', '#8fcf6a'];
+        for (let i = 0; i < 6; i++) { g.fillStyle = cols[i % 4]; g.fillRect(24, 40 + i * 5, 52, 3); } for (let x = 26; x < 76; x += 4) { g.beginPath(); g.moveTo(x, 28); g.lineTo(x, 70); stroke(g, '#d8ccb8', .8); }
+        g.restore(); R(g, 24, 28, 52, 42, 2); stroke(g, '#8a5a3a', 2.4);
+        if (lv >= 4) { star(g, 50, 50, 6, 2.4, 8); g.fillStyle = '#fff6e6'; g.fill(); }
+      }
+    }
+  };
+  const E2 = n => extra[n];
+  const P = (names, fns) => names.map((n, i) => [n, fns[i]]);
+  ART.def('bread', P(['jahukott', 'tainapall', 'kukkel', 'sai', 'rukkileib', 'palmik', 'kringel', 'kook', 'tort', 'pulmatort'],
+    [D('pagar', 1), D('pagar', 2), D('pagar', 3), D('pagar', 4), E2('rukkileib'), D('pagar', 5), D('pagar', 6), E2('kook'), D('pagar', 7), D('pagar', 8)]));
+  ART.def('berry', P(['mustikas', 'marjapeotäis', 'marjakausike', 'moosipurk', 'moosisai', 'marjapirukas', 'mustikakook', 'marjatort'],
+    [D('mari', 1), E2('peotais'), D('mari', 3), D('mari', 4), E2('moosisai'), D('mari', 5), E2('mustikakook'), E2('marjatort')]));
+  ART.def('flower', P(['seeme', 'idu', 'taimeke', 'rukkilill', 'lillekimp', 'lillevaas', 'jaanipärg', 'lillekorv'],
+    [D('lill', 1), D('lill', 2), E2('taimeke'), E2('rukkilill'), D('lill', 5), E2('lillevaas'), D('lill', 7), D('lill', 6)]));
+  ART.def('wood', P(['nael', 'haamer', 'laud', 'lauavirn', 'pink', 'aknaraam', 'uks', 'tööpink'],
+    [D('tooriist', 1), D('tooriist', 2), E2('laud'), D('tooriist', 3), E2('pink'), E2('aknaraam'), E2('uks'), D('tooriist', 6)]));
+  ART.def('fish', P(['kilu', 'räim', 'ahven', 'lest', 'suitsulest', 'kilukarp', 'kalapirukas', 'kalapidu'],
+    [D('kala', 1), D('kala', 2), E2('ahven'), D('kala', 3), E2('suitsulest'), E2('kilukarp'), D('kala', 5), E2('kalapidu')]));
+  ART.def('tea', P(['teeleht', 'kummelikimp', 'teepakk', 'teetass', 'tass ja alustass', 'teekomplekt', 'samovar'],
+    [D('tee', 1), D('tee', 2), E2('teepakk'), E2('kruus'), D('tee', 3), D('tee', 5), D('tee', 6)]));
+  ART.def('dairy', P(['piimapudel', 'piimakann', 'võinupp', 'kohupiim', 'kohuke', 'juustuviil', 'juustuketas', 'juustuvaagen'],
+    [D('piim', 1), D('piim', 2), D('piim', 3), E2('kohupiim'), D('piim', 4), D('piim', 5), D('piim', 6), E2('juustuvaagen')]));
+  ART.def('apple', P(['õun', 'õunapaar', 'õunakorv', 'õunamahl', 'õunamoos', 'õunakook', 'õunapuu'],
+    ['oun', 'ounapaar', 'ounakorv', 'ounamahl', 'ounamoos', 'ounakook', 'ounapuu'].map(E2)));
+  ART.def('wool', P(['villatups', 'lõngakera', 'sokid', 'kindad', 'müts', 'sall', 'kampsun', 'lapitekk'],
+    [E2('villatups'), D('kudum', 1), D('kudum', 3), D('kudum', 2), D('kudum', 4), D('kudum', 5), D('kudum', 6), E2('lapitekk')]));
+  ART.def('sea', P(['kivike', 'teokarp', 'merevaik', 'merepudel', 'pudelikiri', 'vana kaart', 'kompass', 'retseptileht'],
+    [E2('kivike'), E2('teokarp'), D('meri', 2), E2('merepudel'), D('meri', 4), E2('vanakaart'), D('meri', 5), E2('retseptileht')]));
+  ART.def('coffee', P(['kohvioad', 'kohvitass', 'kohvikann', 'kohvimasin'], ['kohvioad', 'kohvitass', 'kohvikann', 'kohvimasin'].map(E2)));
+  ART.def('coin', P(['münt', 'mündihunnik', 'rahakott', 'kukkur'], [1, 2, 3, 4].map(l => D('raha', l))));
+  ART.def('chest', P(['väike kirst', 'suurem kirst', 'suur kirst'], [1, 2, 3].map(l => D('kirst', l))));
+  // generators (4 levels each): oven, basket, teapot, bed (lv4 greenhouse), toolbox, net (lv4 boat), wheel (lv3+ loom)
+  const genDef = (key, base, col, last) => ART.def(key, gen((g, lv) => (last && lv >= 4 ? last(g, lv) : base(g, lv)), col, 4).map((e, i) => [key + (i + 1), e[1]]));
+  genDef('oven', gens.ahi[0], gens.ahi[1]);
+  genDef('basket', gens.korv[0], gens.korv[1]);
+  genDef('teapot', gens.teekann[0], gens.teekann[1]);
+  genDef('bed', gens.aiapeenar[0], gens.aiapeenar[1], (g) => extra.greenhouse()(g));
+  genDef('toolbox', gens.tooriistakast[0], gens.tooriistakast[1]);
+  genDef('net', gens.kalavork[0], gens.kalavork[1], extra.paat);
+  genDef('wheel', extra.vokk, '#efdcf4');
+  ART.chains = ['bread', 'berry', 'flower', 'wood', 'fish', 'tea', 'dairy', 'apple', 'wool', 'sea', 'coffee', 'coin', 'chest'];
+  ART.generators = ['oven', 'basket', 'teapot', 'bed', 'toolbox', 'net', 'wheel'];
+  ART.extraChains = ['pagar', 'lill', 'tooriist', 'kala', 'tee', 'mari', 'piim', 'mesi', 'kudum', 'meri', 'energia', 'raha', 'kirst'];
+  ART.extraGenerators = Object.keys(gens);
 })();

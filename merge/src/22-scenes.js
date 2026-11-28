@@ -16,9 +16,9 @@
     pagariari: ['koristus', 'katus', 'seinad', 'aknad', 'uks', 'korsten', 'silt', 'lillekastid', 'pink', 'laternad', 'muri'],
     aed: ['umbrohi', 'aed', 'peenrad', 'ounapuu', 'kaev', 'lilled', 'kasvuhoone', 'mesitaru', 'kiik', 'hirmutis'],
     sadam: ['koristus', 'sild', 'paat', 'kuur', 'vorgud', 'tynnid', 'laternad', 'lipud', 'kiosk'],
-    tuuleveski: ['rada', 'kivimyyr', 'veskimaja', 'katus', 'tiivad', 'trepp', 'jahukotid', 'lilled', 'lambad'],
+    tuuleveski: ['rada', 'kivimyyr', 'veskimaja', 'katus', 'tiivad', 'trepp', 'jahukotid', 'lilled', 'laternad', 'veskikivi', 'lambad'],
     majakas: ['trepp', 'varv', 'aknad', 'tuli', 'maja', 'aed', 'pink', 'lipp', 'lilled'],
-    saladus: ['rada', 'kadakad', 'varav', 'onn', 'aknad', 'laternad', 'raamat', 'lilled', 'tulikarbid', 'taevas']
+    saladus: ['rada', 'kadakad', 'varav', 'onn', 'aknad', 'laternad', 'raamat', 'lilled', 'tulikarbid', 'taevas', 'pidu']
   };
   // keyword hints (Estonian and English) so differently named task ids still find their feature
   const KW = {
@@ -33,7 +33,17 @@
     tuli: /tuli|tule|lamp|light|lääts/, maja: /maja|house|cottage/, lipp: /lipp|flag/, kadakad: /kadak|juniper|põõsas/, varav: /värav|varav|gate/,
     onn: /onn|maja|cottage|köök/, raamat: /raamat|book|retsept|recipe/, tulikarbid: /tulikar|firefl|jaaniuss/, taevas: /taevas|täht|sky|star|virmalis/
   };
-  A.sceneMap = {}; // taskId -> [area, feature]
+  // taskId -> [area, feature, feature...]: the game's 36 tasks (10-data.js) each light up one or more features
+  A.sceneMap = {
+    b1: ['pagariari', 'koristus'], b2: ['pagariari', 'uks', 'seinad'], b3: ['pagariari', 'aknad'], b4: ['pagariari', 'korsten', 'katus'],
+    b5: ['pagariari', 'silt', 'lillekastid'], b6: ['pagariari', 'pink'], b7: ['pagariari', 'laternad', 'muri'],
+    g1: ['aed', 'umbrohi'], g2: ['aed', 'aed', 'peenrad'], g3: ['aed', 'ounapuu', 'lilled'], g4: ['aed', 'mesitaru', 'kasvuhoone'], g5: ['aed', 'kiik'], g6: ['aed', 'kaev', 'hirmutis'],
+    h1: ['sadam', 'koristus', 'sild'], h2: ['sadam', 'paat'], h3: ['sadam', 'vorgud'], h4: ['sadam', 'tynnid', 'kiosk'], h5: ['sadam', 'kuur'], h6: ['sadam', 'laternad', 'lipud'],
+    w1: ['tuuleveski', 'rada', 'veskimaja'], w2: ['tuuleveski', 'tiivad'], w3: ['tuuleveski', 'kivimyyr', 'trepp', 'katus'], w4: ['tuuleveski', 'jahukotid', 'lilled'],
+    w5: ['tuuleveski', 'laternad'], w6: ['tuuleveski', 'veskikivi', 'lambad'],
+    l1: ['majakas', 'trepp', 'aed'], l2: ['majakas', 'aknad', 'pink'], l3: ['majakas', 'maja', 'lilled'], l4: ['majakas', 'varv', 'lipp'], l5: ['majakas', 'tuli'],
+    s1: ['saladus', 'rada', 'kadakad', 'varav'], s2: ['saladus', 'onn', 'raamat'], s3: ['saladus', 'aknad', 'lilled', 'laternad'], s4: ['saladus', 'tulikarbid', 'taevas', 'pidu']
+  };
   const AREA_ALIAS = {
     bakery: 'pagariari', pagar: 'pagariari', pagariäri: 'pagariari', garden: 'aed', harbour: 'sadam', harbor: 'sadam', windmill: 'tuuleveski', veski: 'tuuleveski',
     lighthouse: 'majakas', secret: 'saladus', vanaema: 'saladus', 'vanaema saladus': 'saladus', grandma: 'saladus'
@@ -71,7 +81,7 @@
     let generic = 0;
     for (const raw of ids) {
       const id = String(raw), m = A.sceneMap[id];
-      if (m) { if (areaKey(m[0]) === area) on.add(m[1]); continue; }
+      if (m) { if (areaKey(m[0]) === area) for (let i = 1; i < m.length; i++) on.add(m[i]); continue; }
       const ar = taskArea(id); if (ar && ar !== area) continue;
       const low = id.toLowerCase();
       let f = list.find(f => low === f || low.endsWith('_' + f) || low.endsWith('-' + f) || low.endsWith('.' + f) || low.endsWith(':' + f));
@@ -399,6 +409,7 @@
       }
       if (f.has('jahukotid')) { for (let i = 0; i < 3; i++) { const x = 160 + i * 11; SM(g, [x - 5, 150, x + 5, 150, x + 6, 140, x, 136, x - 6, 140]); F(g, '#ecdcb8', 1.2); } R(g, 236, 142, 28, 10, 2); F(g, '#b9784a', 1.2); dot(g, 242, 154, 4, '#5a4030'); dot(g, 258, 154, 4, '#5a4030'); }
       if (f.has('lilled')) { flowers(g, 20, 186, 110, 71, true); flowers(g, 280, 190, 110, 72, true); const r = srnd(73); for (let i = 0; i < 14; i++) { const x = L + 10 + r() * (Rr - L - 20), y = 200 + r() * 16; dot(g, x, y, 2.4, '#e2463c'); dot(g, x, y, .9, '#3a2020'); } }
+      if (f.has('veskikivi')) { E(g, 258, 168, 13, 13); F(g, '#c9c2b6', 1.4, '#6f675e'); E(g, 258, 168, 3, 3); F(g, '#8a857b', 1); ln(g, [250, 162, 266, 174], '#a8a094', 1); }
       if (f.has('lambad')) { sheep(g, 92, 182, .9); sheep(g, 300, 186, 1, true); sheep(g, 332, 178, .8); }
       grass(g, L, Rr, 190, 220, 17);
     },
@@ -409,7 +420,9 @@
         const mx = 205, my = 96, a0 = t * .9;
         g.save(); g.translate(mx, my);
         for (let i = 0; i < 4; i++) { g.save(); g.rotate(a0 + i * PI / 2); ln(g, [0, 0, 62, 0], '#6b4a30', 2.6); R(g, 12, -1, 50, 10, 1); g.fillStyle = 'rgba(255,248,236,.92)'; g.fill(); g.lineWidth = 1.2; g.strokeStyle = '#8a5a3a'; g.stroke(); for (let k = 0; k < 4; k++) ln(g, [20 + k * 11, -1, 20 + k * 11, 9], '#b8906a', .8); g.restore(); }
-        dot(g, 0, 0, 4.5, '#6b4a30'); dot(g, 0, 0, 2, '#c98a55'); g.restore();
+        dot(g, 0, 0, 4.5, '#6b4a30'); dot(g, 0, 0, 2, '#c98a55');
+        if (f.has('laternad')) for (let i = 0; i < 4; i++) { const a = a0 + i * PI / 2; for (let k = 1; k <= 3; k++) { const x = Math.cos(a) * k * 19, y = Math.sin(a) * k * 19; glow(g, x, y, 7, .5); dot(g, x, y, 2, ['#ffd86a', '#ff9a8a', '#a8e0ff'][k - 1]); } }
+        g.restore();
       }
     }
   };
@@ -492,6 +505,12 @@
       if (f.has('raamat')) { ln(g, [262, 206, 262, 186], '#6b4a30', 2.4); PL(g, [250, 186, 274, 186, 270, 180, 254, 180]); F(g, '#8a5a3a', 1.2); g.drawImage(A.icon('book', 48), 254, 168, 16, 14); }
       if (f.has('laternad')) { lantern(g, 140, 206, true); lantern(g, 276, 208, true); }
       if (f.has('lilled')) { const r = srnd(96); for (let i = 0; i < 26; i++) { const x = L + 10 + r() * (Rr - L - 20), y = 196 + r() * 20; for (let k = 0; k < 5; k++) dot(g, x + Math.cos(k * 1.26) * 1.7, y + Math.sin(k * 1.26) * 1.7, 1.4, '#f4f0ff'); dot(g, x, y, .9, '#f6d36a'); } }
+      if (f.has('pidu')) {
+        R(g, 286, 196, 70, 5, 2); F(g, '#fff6e6', 1.2); ln(g, [292, 201, 292, 214], '#6b4a30', 2); ln(g, [350, 201, 350, 214], '#6b4a30', 2);
+        g.drawImage(A.item('bread', 7, 48), 298, 182, 18, 18); g.drawImage(A.item('berry', 8, 48), 320, 180, 18, 18); g.drawImage(A.item('tea', 7, 48), 338, 182, 16, 16);
+        const pts = []; for (let i = 0; i <= 8; i++) pts.push(60 + i * 36, 150 + Math.sin(i / 8 * PI) * 12);
+        ln(g, pts, '#5a4030', .7); for (let i = 0; i < 8; i++) { const x = pts[i * 2] + 18, y = pts[i * 2 + 1] + 5; PL(g, [x - 5, y - 2, x + 5, y - 2, x, y + 7]); F(g, ['#e2574c', '#f7d24c', '#5b86e0', '#fff6e6'][i % 4], .6); }
+      }
       grass(g, L, Rr, 196, 220, 19, '#3f6a4a');
     },
     anim(g, f, t, L, Rr) {
@@ -503,6 +522,7 @@
       if (f.has('onn')) smoke(g, 228, 112, t, '#d8d0e8');
       if (f.has('laternad')) { glow(g, 140, 174, 12, .45 + Math.sin(t * 3) * .1); glow(g, 276, 176, 12, .45 + Math.sin(t * 3 + 2) * .1); }
       if (f.has('raamat')) { glow(g, 262, 175, 16, .4 + Math.sin(t * 2.4) * .12); for (let i = 0; i < 3; i++) { const p = (t * .5 + i / 3) % 1; A.H.spark(g, 262 + Math.sin(i * 2 + t) * 8, 172 - p * 26, 2.6 * Math.sin(p * PI), '#fff3b0'); } }
+      if (f.has('pidu')) for (let i = 0; i < 8; i++) glow(g, 78 + i * 36, 158 + Math.sin((i + .5) / 8 * PI) * 12, 8, .35 + Math.sin(t * 3 + i) * .12);
       if (f.has('tulikarbid')) for (let i = 0; i < 9; i++) { const x = L + ((i * 53 + Math.sin(t * .6 + i) * 20) % (Rr - L)), y = 150 + ((i * 29) % 60) + Math.cos(t * .8 + i * 2) * 8, a = .5 + .5 * Math.sin(t * 3 + i * 1.3); glow(g, x, y, 6, .5 * a); dot(g, x, y, 1.3, 'rgba(240,255,150,' + (.5 + .5 * a) + ')'); }
     }
   };
@@ -523,12 +543,13 @@
   A.scene = function (ctx, area, progress, x, y, w, h, t) {
     if (w < 4 || h < 4) return;
     const key = areaKey(area), on = featureSet(key, progress), def = S[key];
-    const s = h / DH, ox = (w - DW * s) / 2, L = -ox / s, Rr = DW + ox / s, sc = A.scaleOf(ctx);
+    // fit the height, but on a short wide strip zoom in (crop some sky and ground) so details stay readable
+    const s = Math.max(h / DH, Math.min(w / 520, h / 150)), ox = (w - DW * s) / 2, oy = Math.max(h - DH * s, Math.min(0, h - 204 * s)), L = -ox / s, Rr = DW + ox / s, sc = A.scaleOf(ctx);
     const ck = key + '|' + A.sceneFeatures[key].map(f => on.has(f) ? 1 : 0).join('') + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
     let c = cache.get(ck);
     if (!c) {
       c = mk(w * sc, h * sc); const g = c.getContext('2d');
-      g.scale(sc, sc); g.translate(ox, 0); g.scale(s, s);
+      g.scale(sc, sc); g.translate(ox, oy); g.scale(s, s);
       try { def.still(g, on, L, Rr); } catch (e) { console.error('ART.scene', key, e); }
       // a dusty, faded look that clears as the area is restored
       const frac = on.size / A.sceneFeatures[key].length, fade = (1 - frac) * .55;
@@ -542,7 +563,7 @@
     }
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
     ctx.drawImage(c, x, y, w, h);
-    ctx.translate(x + ox, y); ctx.scale(s, s);
+    ctx.translate(x + ox, y + oy); ctx.scale(s, s);
     try { def.anim(ctx, on, t || 0, L, Rr); } catch (e) { console.error('ART.scene anim', key, e); }
     ctx.restore();
   };

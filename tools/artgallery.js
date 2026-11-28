@@ -27,16 +27,16 @@ if (mode === 'items') {
   let y = 20;
   for (const k of ART.generators) {
     label(k, 8, y + 10);
-    for (let i = 1; i <= 5; i++) { const x = 8 + (i - 1) * (S + 12); ART.cell(g, x, y + 16, S + 6, i === 1 ? 'hint' : 'empty'); g.drawImage(ART.item(k, i, S * d), x + 3, y + 19, S, S); }
+    for (let i = 1; i <= ART.maxLevel(k); i++) { const x = 8 + (i - 1) * (S + 12); ART.cell(g, x, y + 16, S + 6, i === 1 ? 'hint' : 'empty'); g.drawImage(ART.item(k, i, S * d), x + 3, y + 19, S, S); }
     y += S + 32;
   }
 } else if (mode === 'scenes') {
-  const areas = ART.areas, h = 200; let y = 10;
+  const areas = ART.areas, h = +(new URLSearchParams(location.search).get('h') || 200); let y = 10;
   const step = +(new URLSearchParams(location.search).get('p') || 0);
   for (const a of areas) {
     const nf = ART.sceneFeatures[a].length, states = [0, Math.ceil(nf / 2), nf];
     const pst = states[step] != null ? states[step] : nf;
-    ART.scene(g, a, ART.sceneFeatures[a].slice(0, pst), 0, y, W, h, 1.3);
+    ART.scene(g, a, ART.sceneFeatures[a].slice(0, pst), 0, y, W, h, 1.3); if (step === 3) { ART.scene(g, a, new Set(Object.keys(ART.sceneMap).filter(k => ART.areaKey(ART.sceneMap[k][0]) === a).slice(0, 2)), 0, y, W, h, 1.3); }
     label(a + ' ' + pst + '/' + nf, 8, y + 14); y += h + 10;
   }
 } else if (mode === 'people') {
@@ -44,7 +44,7 @@ if (mode === 'items') {
   who.forEach((w, i) => { const x = 10 + (i % 3) * 130, y = 10 + Math.floor(i / 3) * 150; g.drawImage(ART.portrait(w, 120 * d), x, y, 120, 120); label(w, x + 40, y + 136); });
   who.forEach((w, i) => { g.drawImage(ART.portrait(w, 48 * d), 10 + i * 56, 320, 48, 48); });
 } else if (mode === 'ui') {
-  ART.logo(g, W / 2, 90, Math.min(W * .8, 340), 1);
+  { const lw = Math.min(W - 40, 420); ART.logo(g, W / 2 - lw / 2, 40, lw, 1); }
   const st = ['paper', 'wood', 'button', 'buttonHot', 'buttonBlue', 'buttonGrey', 'ribbon'];
   st.forEach((s, i) => { ART.panel(g, 30 + (i % 2) * 180, 170 + Math.floor(i / 2) * 70, 150, 50, s); label(s, 40 + (i % 2) * 180, 200 + Math.floor(i / 2) * 70); });
   const ic = Object.keys(ART.iconDefs); ic.forEach((n, i) => { const x = 10 + (i % 8) * 46, y = 470 + Math.floor(i / 8) * 60; g.drawImage(ART.icon(n, 40 * d), x, y, 40, 40); g.font='9px system-ui'; label(n, x, y + 52); g.font='700 12px system-ui'; });

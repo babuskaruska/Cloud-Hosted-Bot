@@ -124,10 +124,10 @@ const ART = (function () {
     list.forEach((e, i) => { if (!A.names[e[0]]) A.names[e[0]] = [chain, i + 1]; });
   };
   A.alias = {}; // A.alias['bakery'] = 'pagar' lets other code use its own keys
-  A.maxLevel = function (chain) { const d = A.defs[A.alias[chain] || chain]; return d ? d.length : 0; };
+  A.maxLevel = function (chain) { const d = A.defs[chain] || A.defs[A.alias[chain]]; return d ? d.length : 0; };
   const cache = new Map(); let cacheN = 0;
   function resolve(chain, level) {
-    let k = A.alias[chain] || chain;
+    let k = A.defs[chain] ? chain : (A.alias[chain] || chain);
     if (!A.defs[k] && A.names[k]) { const n = A.names[k]; return [n[0], n[1] + (level > 1 ? level - 1 : 0)]; }
     return [k, level];
   }
@@ -140,7 +140,7 @@ const ART = (function () {
       if (d) { const f = d[Math.min(lv, d.length) - 1]; f(g, Math.min(lv, d.length), lv > d.length ? lv - d.length : 0); if (lv >= d.length && d.length > 2) maxTwinkle(g); }
       else fallback(g, k, lv);
     } catch (e) { console.error('ART.item', chain, level, e); }
-    if (++cacheN > 900) { cache.clear(); cacheN = 0; }
+    if (++cacheN > 360) { cache.clear(); cacheN = 0; }
     cache.set(key, c); return c;
   };
   A.clearCache = function () { cache.clear(); cacheN = 0; for (const k in _ic) delete _ic[k]; for (const k in _pc) delete _pc[k]; A._sceneCache && A._sceneCache.clear(); };
@@ -260,6 +260,12 @@ const ART = (function () {
     pstar(g, 50, 46, 14); g.fillStyle = '#f2c14b'; g.fill(); R(g, 24, 18, 6, 64, 2); flat(g, '#7a3a2e', 0);
   };
   I.task = I.book;
+  I.tasks = g => {
+    R(g, 18, 14, 64, 78, 8); paint(g, '#c98a55', 50, 50, 44); R(g, 25, 22, 50, 64, 4); flat(g, '#fffaf0', 3, '#a8875a');
+    R(g, 38, 8, 24, 12, 4); paint(g, '#8e98a6', 50, 12, 12, 3);
+    for (let i = 0; i < 3; i++) { PL(g, [30, 38 + i * 15, 34, 42 + i * 15, 40, 34 + i * 15], true); stroke(g, i < 2 ? '#4aa84a' : '#d8c8a8', 3.4); R(g, 45, 36 + i * 15, 24, 4, 2); flat(g, '#d8c8a8', 0); }
+    pstar(g, 74, 80, 12); paint(g, '#ffcf3d', 74, 80, 12, 3);
+  };
   I.sell = g => { I.coin(g); };
   I.home = g => { PL(g, [50, 12, 90, 46, 80, 46, 80, 88, 20, 88, 20, 46, 10, 46]); paint(g, '#e2846a', 50, 50, 40, 6); R(g, 42, 60, 16, 28, 4); flat(g, C.woodD, 0); };
 
@@ -329,8 +335,9 @@ const ART = (function () {
   };
 
   // ---- logo ----
-  A.logo = function (ctx, x, y, w, t) {
-    t = t || 0; const word = 'Saarepagar', fs = w / 6.2;
+  // (x, y) is the top-left of a w-wide box about 0.4·w tall: kringel on top, the name, then a small ribbon subtitle
+  A.logo = function (ctx, x0, y0, w, t) {
+    t = t || 0; const word = 'Saarepagar', fs = w / 6.6, x = x0 + w / 2, y = y0 + w * .2;
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '900 ' + fs + 'px ui-rounded,"SF Pro Rounded","Nunito","Varela Round",system-ui,sans-serif';
     // kringel on top
@@ -350,6 +357,10 @@ const ART = (function () {
       ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.save(); ctx.beginPath(); ctx.rect(-fs, -fs, fs * 2, fs * .82); ctx.clip(); ctx.fillText(ch, 0, -fs * .03); ctx.restore();
       ctx.restore(); cx += ws[i];
     }
+    // subtitle ribbon
+    const sw = w * .7, sh = fs * .42, sy = y + fs * .62;
+    A.panel(ctx, x - sw / 2, sy, sw, sh, 'ribbon');
+    ctx.font = '800 ' + (sh * .56) + 'px ui-rounded,"SF Pro Rounded",system-ui,sans-serif'; ctx.fillStyle = '#fff6e6'; ctx.fillText('väike pagarikoda saare peal', x, sy + sh * .53);
     // sparkles
     for (let i = 0; i < 3; i++) { const a = (t * .8 + i / 3) % 1; spark(ctx, x + (i - 1) * tw * .45, y - fs * .6 + i * 6, fs * .12 * Math.sin(a * Math.PI), '#fff7c2'); }
     ctx.restore();

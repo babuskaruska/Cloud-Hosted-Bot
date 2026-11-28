@@ -9,7 +9,7 @@
 //   FX.confetti()  FX.sparkle(x, y, n)  FX.ring(x, y, r, col)  FX.text(x, y, str, col)
 //   FX.update(dt)  FX.draw(ctx)  FX.clear()  FX.count()  FX.quality = 0 | 1 | 2  FX.onArrive = fn(name)
 const FX = (function () {
-  const F = { quality: 2, onArrive: null };
+  const F = { quality: 2, onArrive: null, spawnDur: 0.42 };
   const CAP = [90, 220, 420];
   const P = []; // live particles (objects reused from the pool)
   const pool = [];
@@ -32,7 +32,7 @@ const FX = (function () {
     return (spr[name] = c);
   }
   function sparkCol(chain) {
-    return ({ pagar: '#ffc24a', lill: '#ff8fb4', tooriist: '#7fb6ff', kala: '#5fc4f0', tee: '#7fd06a', mari: '#ff6f8a', piim: '#8fd0ff', mesi: '#ffb21e', kudum: '#ff8a6a', meri: '#4fd0c0', energia: '#ffd21e', raha: '#ffc21e' })[ART.alias && ART.alias[chain] || chain] || '#fff2b0';
+    return ({ pagar: '#ffc24a', lill: '#ff8fb4', tooriist: '#7fb6ff', kala: '#5fc4f0', tee: '#7fd06a', mari: '#ff6f8a', piim: '#8fd0ff', mesi: '#ffb21e', kudum: '#ff8a6a', meri: '#4fd0c0', energia: '#ffd21e', raha: '#ffc21e' })[chain] || ({ bread: '#ffc24a', flower: '#ff8fb4', wood: '#ffb46a', fish: '#5fc4f0', tea: '#7fd06a', berry: '#ff6f8a', dairy: '#8fd0ff', apple: '#ff7a5a', wool: '#c79aff', sea: '#4fd0c0', coffee: '#ffd21e', coin: '#ffc21e', chest: '#ffc21e' })[chain] || '#fff2b0';
   }
   // particle kinds: 0 sprite (spark/glow/dot/heart), 1 ring, 2 confetti, 3 flyer (icon to HUD)
   function part(kind, x, y, vx, vy, life, size, img, col) {
@@ -72,8 +72,8 @@ const FX = (function () {
     return null;
   };
   F.spawn = function (fx, fy, tx, ty, img, size) {
-    const sc = ART.dpr || 1; size = size || (img ? img.width / sc : 48);
-    flights.push({ fx, fy, tx, ty, img, size, t: 0, dur: .38 + Math.min(.2, Math.hypot(tx - fx, ty - fy) / 1500), land: 0 });
+    // the arc plus the landing bounce together take FX.spawnDur, so the game can hide the item for exactly that long
+    flights.push({ fx, fy, tx, ty, img, size: size || 0, t: 0, dur: F.spawnDur * .72, land: 0, lend: F.spawnDur * .28 });
     for (let i = 0; i < [2, 4, 6][F.quality | 0]; i++) { const o = part(0, fx, fy, (Math.random() - .5) * 120, -60 - Math.random() * 80, .4, 8 + Math.random() * 6, sprite('dot')); if (o) { o.g = 300; o.drag = 2; } }
   };
   F.landing = function (x, y) { for (const f of flights) if (f.land === 0 && Math.abs(f.tx - x) < 3 && Math.abs(f.ty - y) < 3) return true; return false; };
@@ -116,7 +116,7 @@ const FX = (function () {
     for (let i = flights.length - 1; i >= 0; i--) {
       const f = flights[i]; f.t += dt;
       if (f.land === 0 && f.t >= f.dur) { f.land = f.t; for (let k = 0; k < [2, 4, 6][F.quality | 0]; k++) { const a = Math.PI + k / 5 * Math.PI; const o = part(0, f.tx, f.ty + f.size * .3, Math.cos(a) * 70, Math.sin(a) * 40, .35, 8, sprite('puff')); if (o) o.drag = 3; } }
-      if (f.land && f.t - f.land > .22) flights.splice(i, 1);
+      if (f.land && f.t - f.land > f.lend) flights.splice(i, 1);
     }
     for (let i = texts.length - 1; i >= 0; i--) { texts[i].t += dt; texts[i].y -= 30 * dt; if (texts[i].t > 1) texts.splice(i, 1); }
     for (let i = P.length - 1; i >= 0; i--) {
@@ -144,12 +144,12 @@ const FX = (function () {
   };
   F.draw = function (ctx) {
     if (!P.length && !flights.length && !texts.length) return;
-    ctx.save();
+    ctx.save(); const dsc = ART.scaleOf(ctx);
     // flights first (items landing on the board), then particles above
     for (const f of flights) {
-      let x, y, sx = 1, sy = 1;
+      let x, y, sx = 1, sy = 1; if (!f.size) f.size = f.img ? f.img.width / dsc : 48;
       if (!f.land) { const u = f.t / f.dur, e = u; x = f.fx + (f.tx - f.fx) * e; y = f.fy + (f.ty - f.fy) * e - Math.sin(u * Math.PI) * (40 + Math.abs(f.tx - f.fx) * .25); const s = .5 + .5 * u; sx = sy = s; }
-      else { const v = (f.t - f.land) / .22; x = f.tx; y = f.ty; sx = 1 + Math.sin(v * Math.PI) * .18; sy = 1 - Math.sin(v * Math.PI) * .16; }
+      else { const v = Math.min(1, (f.t - f.land) / f.lend); x = f.tx; y = f.ty; sx = 1 + Math.sin(v * Math.PI) * .18; sy = 1 - Math.sin(v * Math.PI) * .16; }
       if (f.img) { const w = f.size * sx, h = f.size * sy; ctx.drawImage(f.img, x - w / 2, y + f.size / 2 - h, w, h); }
     }
     for (let i = 0; i < P.length; i++) {
@@ -181,6 +181,7 @@ const FX = (function () {
   };
   F.clear = function () { while (P.length) pool.push(P.pop()); pops.length = 0; flights.length = 0; texts.length = 0; };
   F.count = () => P.length + flights.length;
+  F.active = () => P.length > 0 || flights.length > 0 || pops.length > 0 || texts.length > 0;
   F.busy = () => P.length > 0 || flights.length > 0 || pops.length > 0;
   window.__fx = F;
   return F;
