@@ -125,7 +125,7 @@ const ART = (function () {
   //                         (<= 4 cores or <= 4 GB), lower after slow frames. URL flag dpr=<n> forces a cap.
   //   ART.perf.level        0 = full; 1 = backing <= 2; 2 = + FX.quality 1; 3 = backing <= 1.5, FX.quality 0.
   //   ART.perf.frame(ms, drew, jsMs)  called by the frame loop on every rAF (ms = rAF time; drew = UI.draw ran in the
-  //                         previous callback; jsMs = its tick + draw time). Slow drawn frames (median gap > 42 ms or JS
+  //                         previous callback; jsMs = its tick + draw time). Slow drawn frames (median gap > 42 ms, > 55 ms for level 3, or JS
   //                         > 14 ms over 36 frames) step one level down, at most every 2.5 s; the level is saved for a week.
   //   ART.perf.onChange     fn(level) set by the UI (relayout when the backing cap changed). URL flag perf=0 = no auto.
   A.perf = (function () {
@@ -156,10 +156,9 @@ const ART = (function () {
       }
       wasDraw = !!drew; last = ms;
       if (!P.auto || P.level >= 3 || gaps.length < 36 || ms < hold) return;
-      if (med(gaps) > 42 || (js.length >= 36 && med(js) > 14)) {
-        let n = P.level + 1; if (n === 1 && P.maxDpr() <= 2 && (window.devicePixelRatio || 1) <= 2) n = 2; // no point capping a 2x screen
-        P.set(n, true);
-      }
+      let n = P.level + 1; if (n === 1 && Math.min(weak ? 2 : 3, window.devicePixelRatio || 1) <= 2) n = 2; // the cap to 2 would change nothing
+      const lim = n >= 3 ? 55 : 42; // the last step (blurrier canvas) only below ~18 fps
+      if (med(gaps) > lim || (js.length >= 36 && med(js) > 14)) P.set(n, true);
     };
     P.stats = () => ({ level: P.level, weak, maxDpr: P.maxDpr(), fx: P.fxQuality(), gap: gaps.length ? +med(gaps).toFixed(1) : null, js: js.length ? +med(js).toFixed(1) : null });
     return P;
