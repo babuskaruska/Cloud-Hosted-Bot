@@ -1,8 +1,56 @@
-// Placeholder boot (Mira replaces it): shows the name so the scaffold builds and loads.
+// Saarepagar boot (Mira): load or start a game, the frame loop (rAF, 60 fps or 30 on weak devices,
+// redraw only when needed, paused while hidden), saving on hide, and the test hook window.__mg.
 (function () {
-  const cv = document.getElementById('cv'), g = cv.getContext('2d'), d = Math.min(devicePixelRatio || 1, 3);
-  cv.width = innerWidth * d; cv.height = innerHeight * d; g.scale(d, d);
-  g.fillStyle = '#fbe9d0'; g.fillRect(0, 0, innerWidth, innerHeight);
-  g.fillStyle = '#a0613a'; g.font = '700 28px system-ui'; g.textAlign = 'center'; g.fillText('Saarepagar', innerWidth / 2, innerHeight / 2);
+  S = load() || Game.newGame();
+  S.title = true;
+  Game.tickEnergy(); Game.ensureDaily();
+  const cap = (navigator.hardwareConcurrency || 8) <= 4 ? 30 : 60;
+  try { if (typeof FX !== 'undefined' && FX && FX.quality === undefined) FX.quality = cap === 30 ? 1 : 2; } catch (e) {}
+  UI.layout();
+  addEventListener('resize', () => UI.layout());
+  addEventListener('orientationchange', () => setTimeout(() => UI.layout(), 120));
+
+  let raf = 0, last = 0, running = false;
+  function frame(ms) {
+    raf = requestAnimationFrame(frame);
+    if (ms - last < 1000 / cap - 2) return;
+    const dt = Math.min(0.1, (ms - last) / 1000); last = ms;
+    try {
+      Game.tick();
+      UI.update(dt);
+      if (UI.needsDraw(ms)) UI.draw(ms);
+    } catch (e) { console.error(e); }
+  }
+  function run() { if (running) return; running = true; last = performance.now(); raf = requestAnimationFrame(frame); UI.markDirty(); }
+  function stop() { running = false; cancelAnimationFrame(raf); }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { stop(); save(); try { if (typeof AU !== 'undefined' && AU && AU.suspend) AU.suspend(); } catch (e) {} }
+    else { Game.tickEnergy(); run(); try { if (typeof AU !== 'undefined' && AU && AU.resume) AU.resume(); } catch (e) {} }
+  });
+  addEventListener('pagehide', save);
+  run();
   const l = document.getElementById('load'); if (l) l.remove();
+  try { if (typeof MUSIC !== 'undefined' && MUSIC && MUSIC.scene) MUSIC.scene('title'); } catch (e) {}
+
+  // Test hook for QA (tools/mergeqa.js). act.* run game actions directly; UI exposes layout and screen coordinates.
+  const act = {
+    start: () => UI.start(),
+    tapGen: i => Game.tapGen(i), tap: i => Game.tapItem(i), merge: (a, b) => Game.merge(a, b), move: (a, b) => Game.move(a, b),
+    swap: (a, b) => Game.swap(a, b), drop: (a, b) => Game.drop(a, b), fulfill: oi => Game.fulfill(oi), doTask: id => Game.doTask(id),
+    sell: i => Game.sell(i), store: i => Game.store(i), take: s => Game.take(s), buy: id => Game.buy(id), popBubble: i => Game.popBubble(i),
+    openChest: i => Game.openChest(i), collect: i => Game.collect(i), rush: i => Game.rushGen(i),
+    claimGift: () => Game.claimGift(), claimDaily: j => Game.claimDaily(j), claimBonus: () => Game.claimBonus(),
+    skipDialog: () => { let n = 0; while (UI.modal && UI.modal.kind === 'dialog' && n++ < 200) UI.dialogNext(); },
+    closeModal: () => UI.closeModal(), open: kind => UI.openModal({ kind }),
+    find: (k, l) => { const out = []; S.board.forEach((it, i) => { if (it && !it.b && it.k === k && (l === undefined || it.l === l)) out.push(i); }); return out; },
+    // Merge pairs of identical items until nothing pairs up (handy to reach an order quickly).
+    autoMerge: () => { let did = true, n = 0; while (did && n < 500) { did = false; for (let a = 0; a < NCELL && !did; a++) for (let b = a + 1; b < NCELL && !did; b++) if (Game.canMerge(S.board[a], S.board[b])) { Game.merge(a, b); did = true; n++; } } return n; },
+    reset: () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} Game.newGame(); UI.resetView(); },
+    save: () => save(),
+  };
+  window.__mg = {
+    get S() { return S; }, act, UI, Game, CHAINS, GENERATORS, AREAS, TASKS,
+    cell: i => UI.cellCenter(i),
+    cellRect: i => { const L = UI.L; return { x: L.bx + (i % COLS) * L.cs, y: L.by + Math.floor(i / COLS) * L.cs, s: L.cs }; },
+  };
 })();
