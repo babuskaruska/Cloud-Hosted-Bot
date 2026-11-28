@@ -1,7 +1,8 @@
 // Saarepagar audio mix table: loads merge/index.html in headless Chrome, plays a scene and measures the master output
 // with AU.meter (merge/src/80-audio.js): integrated loudness (approx. LUFS), loudest 400 ms block, true peak, and the
 // share of energy in five bands (sub < 150 Hz, low, mid, presence, air > 6 kHz). Also the Web Audio nodes made per
-// second (n/s, a CPU proxy for weak phones), dropped sounds and the music's section.
+// second (n/s, a CPU proxy for weak phones), dropped sounds and the music's section. Scene 'combo' plays a merge combo
+// climbing over the harbour music (merge, merge5, combo, lucky).
 //   node tools/mergeaudio.js                 every scene (SECS each, default 20)
 //   node tools/mergeaudio.js sfx mix aed     only these scenes
 //   SECS=10 / LITE=1 / PHONE=1               shorter, the lite mode, a phone page (steeper low cut)
@@ -14,9 +15,10 @@ const only = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const SECS = +(process.env.SECS || 20);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // Every sound in a loop (the sound bank alone), and a busy play session (rapid merges over the music).
-const ALL = `const L=[['pick'],['drop'],['swap'],['merge',{level:1}],['merge',{level:4}],['merge',{level:8}],['mergeMax',{level:10}],['spawn'],['noEnergy'],['bubble'],['bubblePop'],['chest'],['order'],['orderDone'],['coins',{n:4}],['stars',{n:5}],['taskDone'],['levelUp'],['daily'],['tap'],['open'],['close'],['sell'],['deny'],['talk',{who:'maali',ch:'a'}],['talk',{who:'muri',ch:'i'}],['talk',{who:'ants',ch:'o'}]];let i=0;setInterval(()=>{const x=L[i++%L.length];AU.sfx(x[0],x[1])},700);`;
+const ALL = `const L=[['pick'],['drop'],['swap'],['merge',{level:1}],['merge',{level:4}],['merge',{level:8}],['mergeMax',{level:10}],['merge5',{level:3}],['combo',{n:3}],['combo',{n:5}],['lucky'],['discover'],['mystery'],['event'],['hint'],['album'],['claim'],['spawn'],['noEnergy'],['bubble'],['bubblePop'],['chest'],['order'],['orderDone'],['coins',{n:4}],['stars',{n:5}],['taskDone'],['levelUp'],['daily'],['tap'],['open'],['close'],['sell'],['deny'],['talk',{who:'maali',ch:'a'}],['talk',{who:'muri',ch:'i'}],['talk',{who:'ants',ch:'o'}]];let i=0;setInterval(()=>{const x=L[i++%L.length];AU.sfx(x[0],x[1])},700);`;
 const PLAY = `let k=0;setInterval(()=>{k++;AU.sfx('pick');setTimeout(()=>AU.sfx(k%3?'merge':'drop',{level:1+k%9}),250);if(k%4==0)setTimeout(()=>AU.sfx('spawn'),500);if(k%9==0)setTimeout(()=>AU.sfx('orderDone'),600);if(k%13==0)setTimeout(()=>AU.sfx('coins',{n:5}),900)},900);`;
 const RAPID = `setInterval(()=>{for(let j=0;j<12;j++)setTimeout(()=>AU.sfx('merge',{level:1+j}),j*25);AU.sfx('mergeMax');AU.sfx('levelUp');AU.sfx('coins',{n:6})},1500);`;
+const COMBO = `let k=0;setInterval(()=>{k++;const n=k%14;if(!n)return;AU.sfx(n%6==5?'merge5':'merge',{level:1+n%5});if(n>2&&n%3==0)setTimeout(()=>AU.sfx('combo',{n}),120);if(n==13)setTimeout(()=>AU.sfx('lucky'),300)},380);`;
 const TALK = `const s='Tere, kullake! Kas sa aitad mul pagariäri korda teha?';let i=0,w=['maali','ants','muri','liisa','peeter','mina'];setInterval(()=>{const c=s[i%s.length];AU.sfx('talk',{who:w[Math.floor(i/s.length)%6],ch:c});i++},45);`;
 const SCENES = {
   title: { music: ['title'] },
@@ -31,6 +33,7 @@ const SCENES = {
   mix: { music: ['board', { area: 'pagariari' }], js: PLAY },
   rapid: { music: ['board', { area: 'aed' }], js: RAPID },
   talk: { music: ['story'], js: TALK },
+  combo: { music: ['board', { area: 'sadam' }], js: COMBO },
 };
 const f1 = v => v === undefined || v === null ? '    -' : (v >= 0 ? ' ' : '') + v.toFixed(1).padStart(5);
 (async () => {
