@@ -4,3 +4,4 @@ tools/shots/
 *.wav
 clips/
 .claude/worktrees/
+__pycache__/
