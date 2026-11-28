@@ -6893,7 +6893,7 @@ const TOUR = (() => {
     let pick = shuffle(T.tasks.map((x, j) => j), r).slice(0, TOUR_SIZE - 1);
     if (!pick.some(j => T.tasks[j][2])) { const c = T.tasks.findIndex(x => x[2]); pick[pick.length - 1] = c; }
     pick = pick.sort((a, b) => a - b);
-    const base = Math.min(20, 10 + Math.floor(i * 0.7));
+    const base = Math.min(15, 8 + Math.floor(i * 0.5)); // phase C: gentler, so an island is a few days of 25-minute play, not a week
     const tasks = pick.map((j, n) => {
       const d = T.tasks[j], t = { id: 't' + i + '_' + n, name: d[0], cost: base + n, reward: taskReward(i, n, false), story: [d[1].slice()], tour: i };
       if (d[2]) t.choices = STYLE_KEYS.slice();
