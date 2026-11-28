@@ -725,7 +725,7 @@ const UI = (() => {
     g.font = font(15, 900); const nameW = g.measureText(area.name).width;
     if (nameW <= a.w - 20 - cntW) { text(area.name, a.x + 10, a.y + 15, 15, INK, 'left', 900); text(cnt, a.x + a.w - 10, a.y + 15, 15, INK2, 'right', 800); }
     else if (nameW <= a.w - 16) text(area.name, a.x + 8, a.y + 15, 15, INK, 'left', 900);
-    else { const ls = wrap(area.name, a.w - 16, 15, 900); text(ls[0], a.x + 8, a.y + 11, 15, INK, 'left', 900, a.w - 14); text(ls.slice(1).join(' '), a.x + 8, a.y + 27, 15, INK, 'left', 900, a.w - 14); }
+    else { let ls = wrap(area.name, a.w - 16, 15, 900); if (ls.length < 2) { const m2 = /^(.{3,}?)(saar|laid|rahu|aed|kiosk)(.*)$/i.exec(area.name); ls = m2 ? [m2[1] + '-', m2[2] + m2[3]] : ls; } text(ls[0], a.x + 8, a.y + 11, 15, INK, 'left', 900, a.w - 14); text(ls.slice(1).join(' '), a.x + 8, a.y + 27, 15, INK, 'left', 900, a.w - 14); }
     bar(a.x + 8, a.y + a.h - 9, a.w - 16, 5, done / ts.length, PINK);
     hits.push({ x: a.x, y: a.y, w: a.w, h: Math.max(48, a.h), hud: 1, fn: () => { snd('tap'); openModal({ kind: 'tasks' }); } });
     // gift and settings
@@ -775,7 +775,7 @@ const UI = (() => {
     const fg = g.createLinearGradient(0, r.y + r.h - 40, 0, r.y + r.h); fg.addColorStop(0, 'rgba(255,255,255,0)'); fg.addColorStop(1, 'rgba(255,255,255,0.55)'); g.fillStyle = fg; g.fillRect(r.x, r.y + r.h - 40, r.w, 40);
     g.restore();
     g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,0.9)'; rr(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3, 20); g.stroke();
-    hits.push({ x: r.x, y: r.y + 96, w: r.w, h: Math.max(0, r.h - 96 - 22), fn: () => openModal({ kind: 'tasks' }) });
+    hits.push({ x: r.x, y: r.y + 96, w: r.w, h: Math.max(44, r.h - 96 - 22), fn: () => openModal({ kind: 'tasks' }) });
     drawHud(t);
   }
   const SKY = { bakery: ['#bfe3f2', '#fbe9d0'], garden: ['#cdeccf', '#f5f0d0'], harbour: ['#a9d6ef', '#e6f2f2'], windmill: ['#f7d9b8', '#fbeede'], lighthouse: ['#9db8e0', '#e8dff0'], secret: ['#d9c2e8', '#fbe9d0'] };
@@ -1148,7 +1148,10 @@ const UI = (() => {
       if (xx - x > maxW - size) break;
       if (d.boost) ADV.drawBoost(d.boost, xx, y - size / 2, size); else if (d.icon) drawIcon(d.icon, xx, y - size / 2, size); else drawItem(d.item[0], d.item[1], xx + size / 2, y, size);
       xx += size + 2;
-      g.font = font(16, 900); const [tt] = fit(d.t, 16, 900, Math.max(40, maxW - (xx - x))); text(tt, xx, y + 1, 16, INK, 'left', 900); xx += g.measureText(tt).width + 12;
+      // a word that does not fit is left out (the picture says it) rather than cut to "Ke…"
+      g.font = font(16, 900); const room = maxW - (xx - x), [tt] = fit(d.t, 16, 900, Math.max(40, room));
+      if (tt.endsWith('…') && d.t.length > 3) { xx += 8; continue; }
+      text(tt, xx, y + 1, 16, INK, 'left', 900); xx += g.measureText(tt).width + 12;
     }
     return xx - x;
   }
@@ -1375,12 +1378,11 @@ const UI = (() => {
     text(C.name, P.x + P.w / 2, P.y + 62, 20, INK, 'center', 900, P.w - 140);
     text(have + '/' + n + ' kogutud', P.x + P.w / 2, P.y + 86, 15, INK2, 'center', 800, P.w - 140);
     bar(P.x + 70, P.y + 102, P.w - 140, 10, have / n, PINK);
-    // page dots (red when that chain has rewards waiting)
+    // page dots (red when that chain has rewards waiting); only a picture: the ‹ › buttons turn the pages (dots are too small to tap)
     const dw = Math.min(26, (P.w - 40) / N), dx0 = P.x + (P.w - dw * N) / 2;
     ALBUM_CHAINS.forEach((c, j) => {
       const pend = Game.albumPending(c) > 0 || (Game.chainFull(c) && !S.albumDone[c]);
       g.fillStyle = j === m.page ? GRAPE : pend ? '#ff3b4a' : 'rgba(110,100,200,0.25)'; g.beginPath(); g.arc(dx0 + dw * (j + 0.5), P.y + 126, j === m.page ? 6 : 5, 0, 7); g.fill();
-      mhits.push({ x: dx0 + dw * j, y: P.y + 114, w: dw, h: 26, fn: () => { m.page = j; snd('tap'); } });
     });
     m.pend = []; const cols = 3, rows = Math.ceil(n / cols), top = P.y + 144, foot = 72, cw = (P.w - 20) / cols, rowH = Math.min(124, (P.h - (top - P.y) - foot) / rows);
     for (let j = 0; j < n; j++) {

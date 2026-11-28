@@ -28,7 +28,7 @@ Grandma Maali has left you her old seaside bakery on a small Estonian island. It
   4. windmill;
   5. lighthouse;
   6. grandma's secret.
-- **Energy:** max 100, +1 every 2 minutes, plus energy items on the board (merge-able: small → big). There are **no purchases**. The coins shop sells energy, generators and board-space chests.
+- **Energy:** +1 every minute up to 100; gifts, coffee and the shop may fill it up to 150 (`EN_CAP`), never more. Plus energy items on the board (merge-able: small → big). There are **no purchases**. The coins shop sells energy, generators and board-space chests.
 - **Extras:**
   - a daily gift and daily tasks;
   - bubbles: occasionally a merge produces a bonus copy in a bubble that you can pop for coins, or it vanishes after 60 s;

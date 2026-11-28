@@ -50,7 +50,8 @@ All player-visible text is Estonian. This list keeps the terms the same everywhe
 |---|---|
 | Seiklus | the level map mode |
 | käik, käigud | move: "5 käiku", "+5 käiku" |
-| elud | lives |
+| elud | lives. In warm one-liners a life may be called "süda": "Lahkud? Kaotad ühe südame." |
+| Lahku, Mängin edasi! | leave a level (pause window), and the kind way to stay |
 | Suur tellimus | boss level (every 10th) |
 | Peatükk 3 · Marjamets | chapter |
 | Võiduseeria | win streak |

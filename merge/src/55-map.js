@@ -390,7 +390,7 @@ const ADV = (() => {
       if (done) drawIcon('check', gx + gw - 34, icy - 15, 30);
       else text(String(g2.n - g2.got), gx + 12 + Math.min(44, h - 46) + (gw - 18 - Math.min(44, h - 46)) / 2, icy + 1, 22, INK, 'center', 900, gw - 54);
       V.goalR[gi] = { x: gx, y: gy, w: gw, h: h - 40 };
-      H.addHit({ x: gx, y: gy, w: gw, h: h - 40, fn: () => { snd('tap'); toast(goalText(g2) + ' (' + g2.got + '/' + g2.n + ')'); } });
+      H.addHit({ x: gx, y: gy - Math.max(0, 44 - (h - 40)) / 2, w: gw, h: Math.max(44, h - 40), fn: () => { snd('tap'); toast(goalText(g2) + ' (' + g2.got + '/' + g2.n + ')'); } });
     });
     // moves bubble with the star meter
     const mp = movesPos(), b = V.bump.moves ? clamp(1 - (tn() - V.bump.moves) / 0.35, 0, 1) : 0, low = r.moves <= 5 && !r.won;
@@ -665,7 +665,7 @@ const ADV = (() => {
       if (d.obs.length) {
         text('Takistused:', P.x + 24, y + 18, 16, INK2, 'left', 800);
         d.obs.forEach((o, j) => { drawObstacle(o, P.x + 130 + j * 44, y, 36, o === 'crate' ? 1 : 1); });
-        H.addHit({ x: P.x + 120, y, w: P.w - 140, h: 40, fn: () => { snd('tap'); toast(d.obs.map(o => OBST_NAME[o]).join(', ') + '.'); } }, true);
+        H.addHit({ x: P.x + 120, y: y - 2, w: P.w - 140, h: 44, fn: () => { snd('tap'); toast(d.obs.map(o => OBST_NAME[o]).join(', ') + '.'); } }, true);
       } else text('Takistusi pole. Puhka natuke!', P.x + 24, y + 18, 16, INK2, 'left', 800, P.w - 48);
       y += 50;
       // lives
@@ -694,7 +694,7 @@ const ADV = (() => {
       const P = H.modalPanel(m, 380, 330, 'Lahkud?');
       drawIcon('heart', P.x + P.w / 2 - 34, P.y + 34, 68);
       text('Lahkud? Kaotad ühe südame.', P.x + P.w / 2, P.y + 124, 19, INK, 'center', 900, P.w - 30);
-      text('Elud tulevad ise tagasi: üks iga 15 minuti järel.', P.x + P.w / 2, P.y + 152, 15, INK2, 'center', 700, P.w - 30);
+      text('Südamed tulevad ise tagasi.', P.x + P.w / 2, P.y + 152, 15, INK2, 'center', 700, P.w - 30);
       button(P.x + 30, P.y + 182, P.w - 60, 56, 'Mängin edasi!', () => H.closeModal(), Object.assign({ hot: true, size: 20 }, B));
       button(P.x + 50, P.y + 250, P.w - 100, 50, 'Lahku', () => { H.closeModal(true); LV.lose(); toast(S.adv.hearts > 0 ? 'Üks süda läks. Järgmine kord läheb paremini!' : 'Südamed said otsa. Puhka natuke!', 3); backToMap(false); }, Object.assign({ style: 'buttonGrey', size: 19 }, B));
     } else if (m.kind === 'advWin') drawWin(m, t, B);
