@@ -473,3 +473,5 @@ const FX = (function () {
   window.__fx = F;
   return F;
 })();
+try { ART.perf.apply(); } catch (e) { } // effect quality for this device (ART.perf in 20-art.js)
+try { window.__mgArt = { ART, FX }; } catch (e) { } // test hook for tools/mergeperf.js and tools/artgallery.js

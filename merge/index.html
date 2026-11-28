@@ -624,7 +624,50 @@ const ART = (function () {
 
   function scaleOf(ctx) { try { const m = ctx.getTransform(); return Math.max(.5, Math.min(4, Math.hypot(m.a, m.b))); } catch (e) { return A.dpr || 1; } }
   A.scaleOf = scaleOf;
-  A.dpr = Math.min(3, window.devicePixelRatio || 1);
+  // ---- device budget (version 3 phase C): ART.perf ----
+  // Cheap Androids (Poco M7 Pro class) choke on a 1080x2400 canvas redrawn 20-60 times a second, so the backing
+  // resolution and the effect quality follow the device and the measured frames:
+  //   ART.perf.maxDpr()     cap for the canvas backing scale (UI.layout uses it): 3 normally, 2 on weak devices
+  //                         (<= 4 cores or <= 4 GB), lower after slow frames. URL flag dpr=<n> forces a cap.
+  //   ART.perf.level        0 = full; 1 = backing <= 2; 2 = + FX.quality 1; 3 = backing <= 1.5, FX.quality 0.
+  //   ART.perf.frame(ms, drew, jsMs)  called by the frame loop on every rAF (ms = rAF time; drew = UI.draw ran in the
+  //                         previous callback; jsMs = its tick + draw time). Slow drawn frames (median gap > 42 ms or JS
+  //                         > 14 ms over 36 frames) step one level down, at most every 2.5 s; the level is saved for a week.
+  //   ART.perf.onChange     fn(level) set by the UI (relayout when the backing cap changed). URL flag perf=0 = no auto.
+  A.perf = (function () {
+    const nav = navigator, cores = nav.hardwareConcurrency || 8, mem = nav.deviceMemory || 8, weak = cores <= 4 || mem <= 4;
+    let qs = {}; try { new URLSearchParams(location.search + '&' + location.hash.slice(1)).forEach((v, k) => { qs[k] = v; }); } catch (e) { }
+    const KEY = 'saarepagar.perf', P = { weak, level: 0, onChange: null, auto: qs.perf !== '0' && !window.__mgPerfNoAuto };
+    try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && P.auto && Date.now() - s.at < 7 * 864e5) P.level = Math.max(0, Math.min(3, s.level | 0)); } catch (e) { }
+    if (qs.perf && /^[0-3]$/.test(qs.perf) && qs.perf !== '0') P.level = +qs.perf;
+    const forced = qs.dpr ? Math.max(1, Math.min(3, parseFloat(qs.dpr) || 3)) : 0;
+    P.maxDpr = () => forced || Math.min(weak ? 2 : 3, P.level >= 3 ? 1.5 : P.level >= 1 ? 2 : 3);
+    P.fxQuality = () => Math.min(weak ? 1 : 2, P.level >= 3 ? 0 : P.level >= 2 ? 1 : 2);
+    const gaps = [], js = []; let last = 0, wasDraw = false, hold = 0;
+    const med = a => { const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
+    P.apply = function () { try { if (typeof FX !== 'undefined' && FX) FX.quality = P.fxQuality(); } catch (e) { } A.quality = P.level >= 3 ? 1 : 2; };
+    P.set = function (lv, save) {
+      lv = Math.max(0, Math.min(3, lv | 0)); if (lv === P.level) return;
+      const d0 = P.maxDpr(); P.level = lv; P.apply(); gaps.length = js.length = 0; hold = performance.now() + 2500;
+      if (save) try { localStorage.setItem(KEY, JSON.stringify({ level: lv, at: Date.now() })); } catch (e) { }
+      if (P.onChange) try { P.onChange(lv, P.maxDpr() !== d0); } catch (e) { }
+    };
+    P.frame = function (ms, drew, jsMs) {
+      if (wasDraw && last && !document.hidden) {
+        const gap = ms - last;
+        if (gap > 0 && gap < 400) { gaps.push(gap); if (jsMs != null) js.push(jsMs); if (gaps.length > 36) gaps.shift(); if (js.length > 36) js.shift(); }
+      }
+      wasDraw = !!drew; last = ms;
+      if (!P.auto || P.level >= 3 || gaps.length < 36 || ms < hold) return;
+      if (med(gaps) > 42 || (js.length >= 36 && med(js) > 14)) {
+        let n = P.level + 1; if (n === 1 && P.maxDpr() <= 2 && (window.devicePixelRatio || 1) <= 2) n = 2; // no point capping a 2x screen
+        P.set(n, true);
+      }
+    };
+    P.stats = () => ({ level: P.level, weak, maxDpr: P.maxDpr(), fx: P.fxQuality(), gap: gaps.length ? +med(gaps).toFixed(1) : null, js: js.length ? +med(js).toFixed(1) : null });
+    return P;
+  })();
+  Object.defineProperty(A, 'dpr', { get: () => Math.min(A.perf.maxDpr(), window.devicePixelRatio || 1), enumerable: true });
 
   // ---- pixel helpers ----
   // vibrance: push weak colours toward saturation (the candy look), leave greys a little cooler
@@ -2887,8 +2930,61 @@ const ART = (function () {
     gr.addColorStop(0, 'rgba(255,236,170,.95)'); gr.addColorStop(.35, 'rgba(255,200,120,.45)'); gr.addColorStop(1, 'rgba(255,190,110,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
     return c;
   }
-  let _animC = null;
-  function scratchAnim(w, h) { if (!_animC) _animC = mk(w, h); if (_animC.width !== w || _animC.height !== h) { _animC.width = w; _animC.height = h; } return _animC; }
+  // ---- tinted drawing for the animated layer (phase C) ----
+  // tinted(ctx, over) returns a stand-in for ctx whose colours (fillStyle, strokeStyle, gradient stops, shadowColor) are
+  // mixed toward `over` (an rgba string) and whose drawImage uses a cached pre-tinted copy of the canvas: the same result
+  // as painting the layer offscreen and filling it 'source-atop', without the offscreen canvas and its full-rect
+  // composite every frame (that cost 4-7 ms per frame at DPR 3 on a throttled phone). Colour results are cached.
+  const _norm = (() => { let c = null; return v => { if (!c) c = mk(1, 1).getContext('2d'); c.fillStyle = '#000'; c.fillStyle = v; return c.fillStyle; }; })();
+  function parseCol(v) {
+    let m;
+    if (v[0] === '#') {
+      const h = v.length === 4 || v.length === 5 ? v.slice(1).split('').map(x => x + x).join('') : v.slice(1);
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16), h.length >= 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1];
+    }
+    if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)$/i.exec(v))) return [+m[1], +m[2], +m[3], m[4] == null ? 1 : m[4].endsWith('%') ? parseFloat(m[4]) / 100 : +m[4]];
+    return null;
+  }
+  const _tintCache = new Map();
+  function tintCol(v, over) {
+    if (typeof v !== 'string') return v;
+    let tc = _tintCache.get(over); if (!tc) { tc = { o: parseCol(over), m: new Map() }; _tintCache.set(over, tc); }
+    let r = tc.m.get(v); if (r !== undefined) return r;
+    let c = parseCol(v); if (!c) { const n = _norm(v); c = parseCol(n); }
+    const o = tc.o;
+    if (!c || !o) r = v;
+    else { const a = o[3], f = x => Math.round(x); r = 'rgba(' + f(c[0] * (1 - a) + o[0] * a) + ',' + f(c[1] * (1 - a) + o[1] * a) + ',' + f(c[2] * (1 - a) + o[2] * a) + ',' + +c[3].toFixed(3) + ')'; }
+    if (tc.m.size > 800) tc.m.clear();
+    tc.m.set(v, r); return r;
+  }
+  const _imgTint = new WeakMap();
+  function tintImg(img, over) {
+    if (!(img instanceof HTMLCanvasElement)) return img;
+    let e = _imgTint.get(img); if (e && e.over === over && e.w === img.width) return e.c;
+    const c = mk(img.width, img.height), g = c.getContext('2d');
+    g.drawImage(img, 0, 0); g.globalCompositeOperation = 'source-atop'; g.fillStyle = over; g.fillRect(0, 0, c.width, c.height);
+    _imgTint.set(img, { over, w: img.width, c }); return c;
+  }
+  const TintProto = (() => {
+    const P = {}, CP = CanvasRenderingContext2D.prototype, special = { fillStyle: 1, strokeStyle: 1, shadowColor: 1 };
+    for (const k of Object.getOwnPropertyNames(CP)) {
+      if (k === 'constructor') continue;
+      const d = Object.getOwnPropertyDescriptor(CP, k);
+      if (typeof d.value === 'function') P[k] = function () { return this._c[k].apply(this._c, arguments); };
+      else if (d.get) Object.defineProperty(P, k, special[k]
+        ? { get() { return this._c[k]; }, set(v) { this._c[k] = v && v._g ? v._g : tintCol(v, this._o); } }
+        : { get() { return this._c[k]; }, set(v) { this._c[k] = v; } });
+    }
+    const grad = (self, gr) => ({ _g: gr, addColorStop(o, c) { gr.addColorStop(o, tintCol(c, self._o)); } });
+    P.createLinearGradient = function () { return grad(this, this._c.createLinearGradient.apply(this._c, arguments)); };
+    P.createRadialGradient = function () { return grad(this, this._c.createRadialGradient.apply(this._c, arguments)); };
+    if (CP.createConicGradient) P.createConicGradient = function () { return grad(this, this._c.createConicGradient.apply(this._c, arguments)); };
+    P.drawImage = function (img) { const a = Array.prototype.slice.call(arguments); a[0] = tintImg(img, this._o); return this._c.drawImage.apply(this._c, a); };
+    return P;
+  })();
+  const _tinted = new WeakMap();
+  function tinted(ctx, over) { let t = _tinted.get(ctx); if (!t) { t = Object.create(TintProto); t._c = ctx; _tinted.set(ctx, t); } t._o = over; return t; }
+  A.tinted = tinted;
   A._renderScene = function (ctx, id, def, on, frac, x, y, w, h, t, opts, sty) {
     if (w < 4 || h < 4) return;
     opts = opts || {}; t = t || 0;
@@ -2927,18 +3023,11 @@ const ART = (function () {
     if (!plain && !own) A.sky(ctx, x, y, w, h, t, Object.assign({}, env, { horizon: Math.max(.3, Math.min(.95, (oy + 132 * s) / h)) }));
     ctx.drawImage(c, x, y, w, h);
     const over = plain ? null : (env.weather === 'rain' && !OVER[env.phase] ? 'rgba(80,90,130,.18)' : OVER[env.phase]);
-    const q = (typeof FX !== 'undefined' && FX) ? FX.quality | 0 : 2;
     SKYOFF = !plain && !own;
-    if (over && q > 1) { // tint the animated layer the same way (offscreen at a capped resolution, one fill; top quality only)
-      const asc = Math.min(sc, 2), aw = Math.ceil(w * asc), ah = Math.ceil(h * asc), ac = scratchAnim(aw, ah), ag = ac.getContext('2d');
-      ag.setTransform(1, 0, 0, 1, 0, 0); ag.globalCompositeOperation = 'source-over'; ag.globalAlpha = 1; ag.clearRect(0, 0, aw, ah);
-      ag.scale(asc, asc); ag.translate(ox, oy); ag.scale(s, s);
-      try { def.anim(ag, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
-      ag.setTransform(1, 0, 0, 1, 0, 0); ag.globalCompositeOperation = 'source-atop'; ag.fillStyle = over; ag.fillRect(0, 0, aw, ah); ag.globalCompositeOperation = 'source-over';
-      ctx.drawImage(ac, 0, 0, aw, ah, x, y, w, h);
-    } else {
+    { // the animated layer, tinted for the hour like the still (colour-mixed drawing, no offscreen pass; every quality)
+      const ac = over ? tinted(ctx, over) : ctx;
       ctx.save(); ctx.translate(x + ox, y + oy); ctx.scale(s, s);
-      try { def.anim(ctx, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
+      try { def.anim(ac, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
       ctx.restore();
     }
     SKYOFF = false;
@@ -3421,7 +3510,7 @@ const ART = (function () {
   const tiles = new Map();
   function tileFor(ch, w, sc) {
     const T = THEMES[((ch | 0) % THEMES.length + THEMES.length) % THEMES.length], cyc = Math.floor((ch | 0) / THEMES.length);
-    const rs = Math.min(sc, Q() >= 2 ? 2.5 : 2), Ht = Math.round(w * 2.2), key = ch % 60 + '|' + w + '|' + rs;
+    const rs = Math.min(sc, 3), Ht = Math.round(w * 2.2), key = ch % 60 + '|' + w + '|' + rs;
     let t = tiles.get(key); if (t) return t;
     if (tiles.size >= 2) tiles.delete(tiles.keys().next().value);
     const c = mk(w * rs, Ht * rs), g = c.getContext('2d'); g.scale(rs, rs);
@@ -3500,7 +3589,8 @@ const ART = (function () {
     const sc = A.scaleOf(ctx), tl = tileFor(ch | 0, Math.round(w), sc), H = tl.H;
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
     const off = ((scroll % H) + H) % H;
-    for (let yy = y - off; yy < y + h; yy += H) ctx.drawImage(tl.c, x, yy, w, H);
+    // 1:1 with the backing pixels (tile made at the canvas scale, y snapped to device pixels): no filtering per frame
+    for (let yy = y - off; yy < y + h; yy += H) ctx.drawImage(tl.c, x, Math.round(yy * sc) / sc, w, H);
     // animated layer
     const T = tl.T, q = Q(), n = [8, 16, 26][q];
     for (let i = 0; i < n && i < tl.bits.length; i++) {
@@ -7433,6 +7523,8 @@ const FX = (function () {
   window.__fx = F;
   return F;
 })();
+try { ART.perf.apply(); } catch (e) { } // effect quality for this device (ART.perf in 20-art.js)
+try { window.__mgArt = { ART, FX }; } catch (e) { } // test hook for tools/mergeperf.js and tools/artgallery.js
 
 // Saarepagar UI (Mira): layout (portrait first, landscape side by side), drawing, input (drag, tap, long press),
 // screens (board, orders, tasks, story, shop, bag, daily, settings, chain, album, festival, level-up), hints,
@@ -7715,7 +7807,7 @@ const UI = (() => {
   const slotFor = cs => Math.round(clamp(cs * 0.95, 46, 62));
   const ordHFor = cs => slotFor(cs) + 52;
   function layout() {
-    DPR = Math.min(window.devicePixelRatio || 1, 3);
+    DPR = Math.min(window.devicePixelRatio || 1, (typeof ART !== 'undefined' && ART.perf) ? ART.perf.maxDpr() : 3); // ART.perf caps it on weak phones
     W = window.innerWidth; H = window.innerHeight;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     const si = insets(), gap = 6, top = si.t + 6, bot = H - si.b - 4, left = si.l, right = W - si.r;
@@ -11465,20 +11557,25 @@ try { window.__saAudio = AU; window.__saMusic = MUSIC; } catch (e) {}
   S.title = true;
   Game.tickEnergy(); Game.ensureDaily();
   const cap = (navigator.hardwareConcurrency || 8) <= 4 ? 30 : 60;
-  try { if (typeof FX !== 'undefined' && FX && FX.quality === undefined) FX.quality = cap === 30 ? 1 : 2; } catch (e) {}
+  // FX.quality comes from ART.perf (1 on weak devices, lowered further after slow frames)
   UI.layout();
   addEventListener('resize', () => UI.layout());
   addEventListener('orientationchange', () => setTimeout(() => UI.layout(), 120));
 
-  let raf = 0, last = 0, running = false;
+  let raf = 0, last = 0, running = false, drew = false, jsMs = 0;
+  // ART.perf (Ash) watches drawn frames and lowers the canvas resolution / effect quality on slow phones.
+  const perf = typeof ART !== 'undefined' && ART.perf ? ART.perf : null;
+  if (perf) perf.onChange = (lv, dprChanged) => { if (dprChanged) UI.layout(); UI.markDirty(); };
   function frame(ms) {
     raf = requestAnimationFrame(frame);
+    if (perf) perf.frame(ms, drew, jsMs); drew = false;
     if (ms - last < 1000 / cap - 2) return;
     const dt = Math.min(0.1, (ms - last) / 1000); last = ms;
     try {
+      const t0 = performance.now();
       Game.tick();
       UI.update(dt);
-      if (UI.needsDraw(ms)) UI.draw(ms);
+      if (UI.needsDraw(ms)) { UI.draw(ms); drew = true; jsMs = performance.now() - t0; }
     } catch (e) { console.error(e); }
   }
   function run() { if (running) return; running = true; last = performance.now(); raf = requestAnimationFrame(frame); UI.markDirty(); }

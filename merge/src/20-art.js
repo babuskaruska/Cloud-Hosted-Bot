@@ -118,7 +118,50 @@ const ART = (function () {
 
   function scaleOf(ctx) { try { const m = ctx.getTransform(); return Math.max(.5, Math.min(4, Math.hypot(m.a, m.b))); } catch (e) { return A.dpr || 1; } }
   A.scaleOf = scaleOf;
-  A.dpr = Math.min(3, window.devicePixelRatio || 1);
+  // ---- device budget (version 3 phase C): ART.perf ----
+  // Cheap Androids (Poco M7 Pro class) choke on a 1080x2400 canvas redrawn 20-60 times a second, so the backing
+  // resolution and the effect quality follow the device and the measured frames:
+  //   ART.perf.maxDpr()     cap for the canvas backing scale (UI.layout uses it): 3 normally, 2 on weak devices
+  //                         (<= 4 cores or <= 4 GB), lower after slow frames. URL flag dpr=<n> forces a cap.
+  //   ART.perf.level        0 = full; 1 = backing <= 2; 2 = + FX.quality 1; 3 = backing <= 1.5, FX.quality 0.
+  //   ART.perf.frame(ms, drew, jsMs)  called by the frame loop on every rAF (ms = rAF time; drew = UI.draw ran in the
+  //                         previous callback; jsMs = its tick + draw time). Slow drawn frames (median gap > 42 ms or JS
+  //                         > 14 ms over 36 frames) step one level down, at most every 2.5 s; the level is saved for a week.
+  //   ART.perf.onChange     fn(level) set by the UI (relayout when the backing cap changed). URL flag perf=0 = no auto.
+  A.perf = (function () {
+    const nav = navigator, cores = nav.hardwareConcurrency || 8, mem = nav.deviceMemory || 8, weak = cores <= 4 || mem <= 4;
+    let qs = {}; try { new URLSearchParams(location.search + '&' + location.hash.slice(1)).forEach((v, k) => { qs[k] = v; }); } catch (e) { }
+    const KEY = 'saarepagar.perf', P = { weak, level: 0, onChange: null, auto: qs.perf !== '0' && !window.__mgPerfNoAuto };
+    try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && P.auto && Date.now() - s.at < 7 * 864e5) P.level = Math.max(0, Math.min(3, s.level | 0)); } catch (e) { }
+    if (qs.perf && /^[0-3]$/.test(qs.perf) && qs.perf !== '0') P.level = +qs.perf;
+    const forced = qs.dpr ? Math.max(1, Math.min(3, parseFloat(qs.dpr) || 3)) : 0;
+    P.maxDpr = () => forced || Math.min(weak ? 2 : 3, P.level >= 3 ? 1.5 : P.level >= 1 ? 2 : 3);
+    P.fxQuality = () => Math.min(weak ? 1 : 2, P.level >= 3 ? 0 : P.level >= 2 ? 1 : 2);
+    const gaps = [], js = []; let last = 0, wasDraw = false, hold = 0;
+    const med = a => { const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
+    P.apply = function () { try { if (typeof FX !== 'undefined' && FX) FX.quality = P.fxQuality(); } catch (e) { } A.quality = P.level >= 3 ? 1 : 2; };
+    P.set = function (lv, save) {
+      lv = Math.max(0, Math.min(3, lv | 0)); if (lv === P.level) return;
+      const d0 = P.maxDpr(); P.level = lv; P.apply(); gaps.length = js.length = 0; hold = performance.now() + 2500;
+      if (save) try { localStorage.setItem(KEY, JSON.stringify({ level: lv, at: Date.now() })); } catch (e) { }
+      if (P.onChange) try { P.onChange(lv, P.maxDpr() !== d0); } catch (e) { }
+    };
+    P.frame = function (ms, drew, jsMs) {
+      if (wasDraw && last && !document.hidden) {
+        const gap = ms - last;
+        if (gap > 0 && gap < 400) { gaps.push(gap); if (jsMs != null) js.push(jsMs); if (gaps.length > 36) gaps.shift(); if (js.length > 36) js.shift(); }
+      }
+      wasDraw = !!drew; last = ms;
+      if (!P.auto || P.level >= 3 || gaps.length < 36 || ms < hold) return;
+      if (med(gaps) > 42 || (js.length >= 36 && med(js) > 14)) {
+        let n = P.level + 1; if (n === 1 && P.maxDpr() <= 2 && (window.devicePixelRatio || 1) <= 2) n = 2; // no point capping a 2x screen
+        P.set(n, true);
+      }
+    };
+    P.stats = () => ({ level: P.level, weak, maxDpr: P.maxDpr(), fx: P.fxQuality(), gap: gaps.length ? +med(gaps).toFixed(1) : null, js: js.length ? +med(js).toFixed(1) : null });
+    return P;
+  })();
+  Object.defineProperty(A, 'dpr', { get: () => Math.min(A.perf.maxDpr(), window.devicePixelRatio || 1), enumerable: true });
 
   // ---- pixel helpers ----
   // vibrance: push weak colours toward saturation (the candy look), leave greys a little cooler

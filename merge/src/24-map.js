@@ -281,7 +281,7 @@
   const tiles = new Map();
   function tileFor(ch, w, sc) {
     const T = THEMES[((ch | 0) % THEMES.length + THEMES.length) % THEMES.length], cyc = Math.floor((ch | 0) / THEMES.length);
-    const rs = Math.min(sc, Q() >= 2 ? 2.5 : 2), Ht = Math.round(w * 2.2), key = ch % 60 + '|' + w + '|' + rs;
+    const rs = Math.min(sc, 3), Ht = Math.round(w * 2.2), key = ch % 60 + '|' + w + '|' + rs;
     let t = tiles.get(key); if (t) return t;
     if (tiles.size >= 2) tiles.delete(tiles.keys().next().value);
     const c = mk(w * rs, Ht * rs), g = c.getContext('2d'); g.scale(rs, rs);
@@ -360,7 +360,8 @@
     const sc = A.scaleOf(ctx), tl = tileFor(ch | 0, Math.round(w), sc), H = tl.H;
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
     const off = ((scroll % H) + H) % H;
-    for (let yy = y - off; yy < y + h; yy += H) ctx.drawImage(tl.c, x, yy, w, H);
+    // 1:1 with the backing pixels (tile made at the canvas scale, y snapped to device pixels): no filtering per frame
+    for (let yy = y - off; yy < y + h; yy += H) ctx.drawImage(tl.c, x, Math.round(yy * sc) / sc, w, H);
     // animated layer
     const T = tl.T, q = Q(), n = [8, 16, 26][q];
     for (let i = 0; i < n && i < tl.bits.length; i++) {
