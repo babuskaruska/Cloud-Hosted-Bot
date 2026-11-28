@@ -1,11 +1,11 @@
 // Saarepagar QA: loads merge/index.html fresh on desktop and an iPhone 13 profile, plays the opening with REAL input
 // (taps on the oven, finger/mouse drags held for several frames, order and task buttons), plays on with the test
 // hook, reloads to check the save, and fails on page errors or a stuck flow. Shots: tools/shots/mergeqa-<profile>-*.png
-//   node tools/mergeqa.js [desktop|phone]
+//   node tools/mergeqa.js [desktop|phone|promax]
 const { chromium, devices } = require('playwright');
 const path = require('path');
 const ROOT = path.dirname(__dirname), only = process.argv[2];
-const PROFILES = { desktop: { viewport: { width: 1280, height: 800 } }, phone: { ...devices['iPhone 13'] } };
+const PROFILES = { desktop: { viewport: { width: 1280, height: 800 } }, phone: { ...devices['iPhone 13'] }, promax: { viewport: { width: 440, height: 956 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: devices['iPhone 13'].userAgent } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function run(name) {
@@ -13,7 +13,7 @@ async function run(name) {
   const ctx = await b.newContext(PROFILES[name]), p = await ctx.newPage(), errs = [];
   p.on('pageerror', e => errs.push(String(e.stack || e).slice(0, 400)));
   p.on('console', m => { if (m.type() === 'error') errs.push('console: ' + m.text().slice(0, 200)); });
-  const touch = name === 'phone', cdp = touch ? await ctx.newCDPSession(p) : null;
+  const touch = name !== 'desktop', cdp = touch ? await ctx.newCDPSession(p) : null;
   const shot = n => p.screenshot({ path: path.join(__dirname, 'shots', `mergeqa-${name}-${n}.png`) });
   const down = async (x, y) => touch ? cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }] }) : (p.mouse.move(x, y), p.mouse.down());
   const move = async (x, y) => touch ? cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y, id: 1 }] }) : p.mouse.move(x, y);

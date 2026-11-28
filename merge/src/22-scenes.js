@@ -99,12 +99,19 @@
   function ln(g, pts, col, w, a) { PL(g, pts, true); g.lineWidth = w; g.strokeStyle = a != null ? rgba(col, a) : col; g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke(); }
   function sky(g, L, Rr, top, bot, y1) { const gr = g.createLinearGradient(0, 0, 0, y1); gr.addColorStop(0, top); gr.addColorStop(1, bot); g.fillStyle = gr; g.fillRect(L, -2, Rr - L, y1 + 2); }
   function sun(g, x, y, r, col) {
-    const gr = g.createRadialGradient(x, y, r * .3, x, y, r * 3); gr.addColorStop(0, rgba(col || '#fff2b8', .9)); gr.addColorStop(1, rgba(col || '#fff2b8', 0));
-    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r * 3, 0, TAU); g.fill(); g.beginPath(); g.arc(x, y, r, 0, TAU); g.fillStyle = col || '#fff6cf'; g.fill();
+    const gr = g.createRadialGradient(x, y, r * .3, x, y, r * 3.4); gr.addColorStop(0, rgba(col || '#fff3a8', .95)); gr.addColorStop(1, rgba(col || '#fff3a8', 0));
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r * 3.4, 0, TAU); g.fill();
+    g.save(); g.translate(x, y); g.fillStyle = 'rgba(255,240,160,.35)';
+    for (let i = 0; i < 12; i++) { g.rotate(PI / 6); g.beginPath(); g.moveTo(-r * .22, -r * 1.25); g.lineTo(0, -r * 2.2); g.lineTo(r * .22, -r * 1.25); g.closePath(); g.fill(); }
+    g.restore();
+    g.beginPath(); g.arc(x, y, r, 0, TAU); const sg = g.createLinearGradient(0, y - r, 0, y + r); sg.addColorStop(0, '#fffbe0'); sg.addColorStop(1, col || '#ffd84a'); g.fillStyle = sg; g.fill();
   }
   function cloud(g, x, y, s, a) {
-    g.fillStyle = 'rgba(255,255,255,' + (a == null ? .85 : a) + ')';
-    E(g, x, y, 18 * s, 7 * s); g.fill(); E(g, x - 9 * s, y - 3 * s, 9 * s, 7 * s); g.fill(); E(g, x + 5 * s, y - 6 * s, 11 * s, 9 * s); g.fill();
+    a = a == null ? .9 : a;
+    g.fillStyle = 'rgba(190,215,255,' + a * .6 + ')';
+    E(g, x, y + 2 * s, 19 * s, 7 * s); g.fill();
+    g.fillStyle = 'rgba(255,255,255,' + a + ')';
+    E(g, x, y, 18 * s, 7 * s); g.fill(); E(g, x - 9 * s, y - 3 * s, 9 * s, 7 * s); g.fill(); E(g, x + 5 * s, y - 6 * s, 11 * s, 9 * s); g.fill(); E(g, x + 13 * s, y - 1 * s, 7 * s, 6 * s); g.fill();
   }
   function seaBand(g, L, Rr, y0, y1, c0, c1) {
     const gr = g.createLinearGradient(0, y0, 0, y1); gr.addColorStop(0, c0 || '#8fd0e6'); gr.addColorStop(1, c1 || '#4aa3c7'); g.fillStyle = gr; g.fillRect(L, y0, Rr - L, y1 - y0);
@@ -238,62 +245,101 @@
   // ---------- areas ----------
   // each area: still(g, f, L, R) draws the cached layer; anim(g, f, t, L, R) draws per frame
   const S = {};
+  // the young heroine's seaside café-bakery: pastel walls, mint scalloped roof, big arched windows, parasols
+  function awning(g, x, w, y, h, c1, c2) {
+    const n = Math.max(3, Math.round(w / 10)), sw = w / n;
+    for (let i = 0; i < n; i++) { g.beginPath(); g.moveTo(x + i * sw, y); g.lineTo(x + (i + 1) * sw, y); g.lineTo(x + (i + 1) * sw, y + h); g.arc(x + i * sw + sw / 2, y + h, sw / 2, 0, PI); g.closePath(); F(g, i % 2 ? c2 : c1, 1.1, dk(c1, .5)); }
+    R(g, x - 2, y - 3, w + 4, 4, 2); F(g, dk(c1, .15), 1.1);
+  }
+  function parasol(g, x, y, col) {
+    ln(g, [x, y, x, y - 30], '#8a6a8a', 1.6);
+    g.beginPath(); g.moveTo(x - 20, y - 26); g.quadraticCurveTo(x, y - 44, x + 20, y - 26); g.closePath(); F(g, col, 1.3, dk(col, .5));
+    g.save(); g.clip(); for (let i = -2; i <= 2; i += 2) { g.beginPath(); g.moveTo(x, y - 42); g.lineTo(x + i * 6 - 3, y - 24); g.lineTo(x + i * 6 + 3, y - 24); g.closePath(); g.fillStyle = '#ffffff'; g.fill(); } g.restore();
+    for (let i = 0; i < 5; i++) { g.beginPath(); g.arc(x - 16 + i * 8, y - 26, 4, 0, PI); F(g, i % 2 ? '#ffffff' : col, .9, dk(col, .5)); }
+    R(g, x - 11, y - 12, 22, 3, 1.5); F(g, '#ffffff', 1.1, '#8a6a8a'); ln(g, [x - 8, y - 9, x - 8, y], '#8a6a8a', 1.4); ln(g, [x + 8, y - 9, x + 8, y], '#8a6a8a', 1.4);
+    for (const s of [-1, 1]) { R(g, x + s * 17 - 4, y - 10, 8, 2.5, 1); F(g, '#5fd0b0', .9); ln(g, [x + s * 17 - 3, y - 8, x + s * 17 - 3, y], '#5a5a7a', 1.1); ln(g, [x + s * 17 + 3, y - 8, x + s * 17 + 3, y], '#5a5a7a', 1.1); }
+    dot(g, x - 4, y - 14, 2, '#ffffff'); dot(g, x + 4, y - 14, 2.2, '#ffb0c8');
+  }
+  function plant(g, x, y, s) {
+    R(g, x - 5 * s, y - 9 * s, 10 * s, 9 * s, 2 * s); F(g, '#ffffff', 1.1, '#8a6a8a');
+    for (const [dx, dy, r] of [[-4, -16, 5], [3, -19, 6], [0, -24, 5], [5, -13, 4]]) { E(g, x + dx * s, y + dy * s, r * s, r * .85 * s); F(g, '#46c86a', 1, '#2a8a4a'); }
+    dot(g, x - 2 * s, y - 22 * s, 1.4 * s, '#ffd23f'); dot(g, x + 4 * s, y - 17 * s, 1.4 * s, '#ff8fb8');
+  }
   S.pagariari = {
     still(g, f, L, Rr) {
-      sky(g, L, Rr, '#a9dcf0', '#fdeed2', 128); sun(g, 330, 40, 13);
-      cloud(g, 70, 36, 1.1, .7);
-      seaBand(g, L, Rr, 118, 150);
-      PL(g, [L, 120, 20, 112, 60, 108, 100, 114, 120, 120]); g.closePath(); F(g, '#8fb8a0', 0);
-      hill(g, L, Rr, [L, 150, 100, 144, 200, 148, 300, 142, Rr, 148], '#a5d17a', 220);
-      g.fillStyle = 'rgba(255,240,200,.25)'; g.fillRect(L, 190, Rr - L, 30);
-      // path
-      g.beginPath(); g.moveTo(194, 184); g.quadraticCurveTo(170, 205, 150, 222); g.lineTo(196, 222); g.quadraticCurveTo(206, 205, 214, 184); g.closePath(); F(g, f.has('koristus') ? '#e9d3a8' : '#c9b48e', 0);
-      if (f.has('koristus')) { const r = srnd(2); for (let i = 0; i < 9; i++) { E(g, 175 + r() * 32 - i * 2.5, 190 + i * 3.6, 4, 2); F(g, '#d8c09a', .8); } }
-      tree(g, 52, 178, 1.1, 'birch'); tree(g, 352, 182, 1.05, 'round', { col: f.has('lillekastid') ? '#78bd5a' : '#7aa65a', apples: f.has('lillekastid') });
-      // bakery
-      const x0 = 122, x1 = 278, yb = 184, wh = 58;
-      wallBoards(g, x0, yb - wh, x1 - x0, wh, '#d98a5a', f.has('seinad'));
-      if (f.has('seinad')) { for (const xx of [x0, x1 - 4]) { R(g, xx, yb - wh, 4, wh, 1); F(g, '#fff8ec', 1); } }
-      chimney(g, 246, yb - wh - 34, f.has('korsten'));
-      thatch(g, x0, x1, yb - wh, 42, !f.has('katus'));
-      const ws = f.has('aknad') ? (f.has('laternad') ? 2 : 1) : 0;
-      window_(g, 136, yb - 46, 20, 18, ws); window_(g, 244, yb - 46, 20, 18, ws);
-      if (f.has('lillekastid')) { flowerBox(g, 134, yb - 26, 24); flowerBox(g, 242, yb - 26, 24); }
-      // door
-      g.beginPath(); g.moveTo(190, yb); g.lineTo(190, yb - 34); g.arc(204, yb - 34, 14, PI, 0); g.lineTo(218, yb); g.closePath(); F(g, '#fff8ec', 1.3);
-      g.beginPath(); g.moveTo(193, yb); g.lineTo(193, yb - 33); g.arc(204, yb - 33, 11, PI, 0); g.lineTo(215, yb); g.closePath();
-      if (f.has('uks')) { F(g, '#5f9e78', 1.2); dot(g, 204, yb - 36, 4, '#fff2b0'); g.beginPath(); g.arc(204, yb - 36, 4, 0, TAU); g.lineWidth = 1; g.strokeStyle = '#2f5e48'; g.stroke(); dot(g, 211, yb - 16, 1.3, '#f2c14b'); }
-      else { F(g, '#7a6a5a', 1.2); g.save(); g.translate(204, yb - 18); g.rotate(-.35); R(g, -12, -2, 24, 4, 1); F(g, '#9c8a76', 1); g.restore(); }
-      R(g, 186, yb, 36, 4, 1); F(g, '#bdb4a6', 1.2);
-      if (f.has('silt')) {
-        ln(g, [172, yb - 66, 172, yb - 58], '#5a4030', 1.2); ln(g, [236, yb - 66, 236, yb - 58], '#5a4030', 1.2);
-        R(g, 166, yb - 59, 76, 15, 4); F(g, '#fff6e6', 1.6, '#8a5232');
-        g.fillStyle = '#9a4a2a'; g.font = '800 10px ui-rounded,system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('PAGAR', 212, yb - 51);
-        g.drawImage(A.item('pagar', 6, 48), 170, yb - 58, 13, 13);
+      sky(g, L, Rr, '#5ec8ff', '#ffe9f0', 128); sun(g, 330, 38, 13);
+      cloud(g, 70, 36, 1.1, .9);
+      seaBand(g, L, Rr, 116, 150, '#7fe0ff', '#1fb0e0');
+      PL(g, [L, 118, 20, 110, 60, 106, 100, 112, 120, 118]); g.closePath(); F(g, '#7fd0b0', 0);
+      hill(g, L, Rr, [L, 148, 100, 143, 200, 147, 300, 141, Rr, 146], '#ffe2a8', 220);
+      hill(g, L, Rr, [L, 160, 100, 154, 200, 158, 300, 152, Rr, 158], '#8fe07a', 220);
+      g.fillStyle = 'rgba(255,255,220,.25)'; g.fillRect(L, 192, Rr - L, 30);
+      const clean = f.has('koristus');
+      g.beginPath(); g.moveTo(192, 188); g.quadraticCurveTo(170, 206, 150, 222); g.lineTo(198, 222); g.quadraticCurveTo(208, 205, 216, 188); g.closePath(); F(g, clean ? '#ffe9c8' : '#d8c8a8', 0);
+      if (clean) { const r = srnd(2); for (let i = 0; i < 9; i++) { E(g, 176 + r() * 30 - i * 2.5, 193 + i * 3.4, 4.2, 2.1); F(g, i % 2 ? '#ffd0dc' : '#d6f2ff', .8, '#b8a8c8'); } }
+      tree(g, 46, 182, 1.1, 'round', { col: '#5fd07a', blossom: f.has('lillekastid') });
+      tree(g, 358, 184, 1, 'round', { col: '#6fd88a', apples: f.has('lillekastid') });
+      const x0 = 118, x1 = 282, yb = 188, wh = 62, painted = f.has('seinad');
+      R(g, x0, yb - wh, x1 - x0, wh, 3); VG(g, painted ? '#ffd0e0' : '#b9b4b0', yb - wh, yb, 1.6);
+      if (!painted) { g.save(); R(g, x0, yb - wh, x1 - x0, wh, 3); g.clip(); for (let xx = x0 + 6; xx < x1; xx += 7) ln(g, [xx, yb - wh, xx, yb], '#8f8a86', .9, .5); const r = srnd(9); for (let i = 0; i < 6; i++) { E(g, x0 + r() * (x1 - x0), yb - r() * wh, 4 + r() * 5, 2 + r() * 2); g.fillStyle = 'rgba(80,70,60,.22)'; g.fill(); } g.restore(); }
+      else { for (const xx of [x0, x1 - 5]) { R(g, xx, yb - wh, 5, wh, 1); F(g, '#ffffff', 1); } R(g, x0, yb - 12, x1 - x0, 12, 2); F(g, '#ffffff', 1.2); for (let xx = x0 + 4; xx < x1 - 4; xx += 8) { R(g, xx, yb - 10, 6, 8, 1); F(g, '#bfefff', .7); } }
+      chimney(g, 252, yb - wh - 26, f.has('korsten'));
+      if (f.has('katus')) {
+        g.beginPath(); g.moveTo(x0 - 12, yb - wh + 2); g.lineTo(x0 + 22, yb - wh - 38); g.quadraticCurveTo(200, yb - wh - 44, x1 - 22, yb - wh - 38); g.lineTo(x1 + 12, yb - wh + 2); g.closePath(); VG(g, '#3fd0b0', yb - wh - 44, yb - wh, 1.6);
+        g.save(); g.clip(); for (let row = 0; row < 4; row++) for (let xx = x0 - 16 + (row % 2) * 7; xx < x1 + 16; xx += 14) { g.beginPath(); g.arc(xx, yb - wh - 30 + row * 9, 7, 0, PI); g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,.45)'; g.stroke(); } g.restore();
+        for (let xx = x0 - 10; xx < x1 + 10; xx += 8) { g.beginPath(); g.arc(xx + 4, yb - wh + 2, 4, 0, PI); F(g, '#ffffff', .8, '#8ab8c8'); }
+      } else {
+        g.beginPath(); g.moveTo(x0 - 10, yb - wh + 4); g.lineTo(x0 + 22, yb - wh - 34); g.quadraticCurveTo(200, yb - wh - 28, x1 - 22, yb - wh - 36); g.lineTo(x1 + 10, yb - wh + 4); g.closePath(); VG(g, '#9a948e', yb - wh - 36, yb - wh, 1.6);
+        for (const [dx, dy, rx] of [[.3, -18, 9], [.62, -24, 7], [.8, -10, 6]]) { E(g, x0 + (x1 - x0) * dx, yb - wh + dy, rx, rx * .6, .2); F(g, '#4a3a48', 1); }
       }
-      if (f.has('pink')) { bench(g, 296, 198, '#5f9e78'); R(g, 316, 186, 18, 3, 1); F(g, '#fff6e6', 1); ln(g, [325, 189, 325, 198], '#8a5232', 1.6); dot(g, 321, 184, 2.2, '#ffffff'); }
-      if (f.has('laternad')) { ln(g, [x0 - 6, yb - 62, 160, yb - 52, 204, yb - 56, 250, yb - 52, x1 + 6, yb - 62], '#5a4030', .8); lantern(g, 108, 200, true); }
-      if (!f.has('koristus')) { junk(g, 96, 196, 3); junk(g, 300, 200, 8); weeds(g, x0 - 4, yb + 2, 40, 5); weeds(g, x1 - 30, yb + 2, 36, 6); }
-      else { flowers(g, 92, 200, 22, 11); flowers(g, 300, 205, 30, 12); bush(g, 112, 186, .8, '#6aa84f', f.has('lillekastid') ? '#f58aa0' : null); }
-      grass(g, L, Rr, 192, 220, 9);
+      const ws = f.has('aknad') ? (f.has('laternad') ? 2 : 1) : 0;
+      for (const wx of [130, 238]) {
+        if (ws) {
+          g.beginPath(); g.moveTo(wx, yb - 16); g.lineTo(wx, yb - 40); g.arc(wx + 16, yb - 40, 16, PI, 0); g.lineTo(wx + 32, yb - 16); g.closePath(); F(g, '#ffffff', 1.4);
+          g.beginPath(); g.moveTo(wx + 3, yb - 17); g.lineTo(wx + 3, yb - 40); g.arc(wx + 16, yb - 40, 13, PI, 0); g.lineTo(wx + 29, yb - 17); g.closePath();
+          const gr = g.createLinearGradient(0, yb - 54, 0, yb - 17); gr.addColorStop(0, ws === 2 ? '#fff4b8' : '#c8f0ff'); gr.addColorStop(1, ws === 2 ? '#ffc070' : '#8fd8f8'); g.fillStyle = gr; g.fill();
+          R(g, wx + 5, yb - 26, 22, 3, 1); F(g, '#ffffff', .8); dot(g, wx + 10, yb - 29, 3, '#ff9ab8'); dot(g, wx + 17, yb - 29.5, 3.4, '#ffcf6a'); dot(g, wx + 23, yb - 29, 2.6, '#c79aff');
+          ln(g, [wx + 8, yb - 48, wx + 12, yb - 52], '#ffffff', 1.6, .8);
+          if (painted) awning(g, wx - 4, 40, yb - 60, 6, '#ff7a9a', '#ffffff');
+        } else { R(g, wx, yb - 50, 32, 34, 2); F(g, '#5a5058', 1.2); g.save(); g.translate(wx + 16, yb - 33); g.rotate(.45); R(g, -22, -2.5, 44, 5, 1); F(g, '#b8a48a', 1); g.rotate(-.9); R(g, -22, -2.5, 44, 5, 1); F(g, '#c8b49a', 1); g.restore(); }
+      }
+      if (f.has('lillekastid')) { for (const wx of [128, 236]) { R(g, wx, yb - 16, 36, 6, 2); F(g, '#ffffff', 1.1, '#8a6a8a'); flowers(g, wx + 2, yb - 16, 32, wx | 0, true); } plant(g, 180, yb, 1); plant(g, 222, yb, 1); }
+      g.beginPath(); g.moveTo(186, yb); g.lineTo(186, yb - 38); g.arc(200, yb - 38, 14, PI, 0); g.lineTo(214, yb); g.closePath(); F(g, '#ffffff', 1.3);
+      g.beginPath(); g.moveTo(189, yb); g.lineTo(189, yb - 37); g.arc(200, yb - 37, 11, PI, 0); g.lineTo(211, yb); g.closePath();
+      if (f.has('uks')) { F(g, '#3fd0b0', 1.2); R(g, 193, yb - 44, 14, 22, 6); F(g, '#d8f6ff', 1); ln(g, [195, yb - 30, 199, yb - 40], '#ffffff', 1.4, .8); dot(g, 208, yb - 18, 1.6, '#ffd23f'); }
+      else { F(g, '#6a6068', 1.2); g.save(); g.translate(200, yb - 20); g.rotate(-.35); R(g, -12, -2, 24, 4, 1); F(g, '#a8988a', 1); g.restore(); }
+      R(g, 182, yb, 36, 4, 1.5); F(g, '#e8e4f0', 1.1);
+      if (f.has('silt')) {
+        R(g, 160, yb - wh - 4, 80, 17, 8.5); F(g, '#ffffff', 1.6, '#c03a7a'); R(g, 163, yb - wh - 1.5, 74, 12, 6); F(g, '#ff5a9a', 0);
+        g.fillStyle = '#ffffff'; g.font = '900 10px ui-rounded,system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('KOHVIK', 206, yb - wh + 4.5);
+        g.drawImage(A.item('bread', 7, 48), 165, yb - wh - 4, 15, 15);
+        PL(g, [166, yb, 172, yb - 22, 178, yb]); F(g, '#8a6a8a', 1); R(g, 163, yb - 22, 18, 15, 2); F(g, '#3a3a4a', 1.2, '#8a6a8a'); ln(g, [166, yb - 18, 177, yb - 18], '#ffffff', 1, .8); ln(g, [166, yb - 14, 174, yb - 14], '#ff9ab8', 1, .8); ln(g, [166, yb - 10.5, 176, yb - 10.5], '#9fe8ff', 1, .8);
+      }
+      if (f.has('pink')) { parasol(g, 318, 200, '#ff6b8a'); parasol(g, 92, 202, '#3db8ff'); }
+      if (f.has('laternad')) { ln(g, [x0 - 6, yb - 68, 160, yb - 58, 200, yb - 62, 240, yb - 58, x1 + 6, yb - 68], '#6a5a7a', .8); lantern(g, 108, 204, true); }
+      if (!clean) { junk(g, 96, 198, 3); junk(g, 300, 202, 8); weeds(g, x0 - 4, yb + 2, 40, 5); weeds(g, x1 - 30, yb + 2, 36, 6); }
+      else { flowers(g, 70, 206, 30, 11); flowers(g, 330, 208, 40, 12); bush(g, 130, 194, .7, '#5fd07a', f.has('lillekastid') ? '#ff8fb8' : null); }
+      grass(g, L, Rr, 196, 220, 9, '#46b85a');
     },
     anim(g, f, t, L, Rr) {
-      cloud(g, ((t * 4 + 150) % (Rr - L + 80)) + L - 40, 26, .9, .8); cloud(g, ((t * 2.5 + 20) % (Rr - L + 80)) + L - 40, 52, .7, .6);
+      cloud(g, ((t * 4 + 150) % (Rr - L + 80)) + L - 40, 24, .9, .9); cloud(g, ((t * 2.5 + 20) % (Rr - L + 80)) + L - 40, 52, .7, .7);
+      const sx = ((t * 6 + 60) % (Rr - L + 60)) + L - 30; g.save(); g.translate(sx, 128 + Math.sin(t * 2) * .8);
+      PL(g, [0, 0, 0, -12, 7, 0]); F(g, '#ffffff', .8, '#6a8aa8'); PL(g, [-1, -1, -1, -9, -6, -1]); F(g, '#ff8fb8', .8, '#6a8aa8'); R(g, -8, 0, 16, 3, 1.5); F(g, '#ff6b6b', .8); g.restore();
       for (let i = 0; i < 2; i++) { const bx = ((t * 12 + i * 160) % (Rr - L + 60)) + L - 30; bird(g, bx, 60 + i * 12 + Math.sin(t * 2 + i) * 3, 1, Math.sin(t * 9 + i * 2)); }
-      seaSparkle(g, L, Rr, 122, 148, t);
-      if (f.has('korsten')) smoke(g, 246, 62, t);
-      if (f.has('laternad')) lights(g, [116, 122, 160, 132, 182, 130, 204, 128, 228, 130, 250, 132, 270, 126], t);
-      if (f.has('muri')) cat(g, 228, 190, 1, Math.sin(t * 2));
+      seaSparkle(g, L, Rr, 120, 146, t);
+      if (f.has('korsten')) smoke(g, 252, 74, t);
+      if (f.has('laternad')) lights(g, [116, 120, 140, 126, 160, 130, 180, 128, 200, 126, 220, 128, 240, 130, 262, 126, 284, 120], t);
+      if (f.has('muri')) cat(g, 234, 194, 1, Math.sin(t * 2));
     }
   };
   S.aed = {
     still(g, f, L, Rr) {
-      sky(g, L, Rr, '#b4e2f2', '#fff0d6', 140); sun(g, 70, 36, 12);
-      hill(g, L, Rr, [L, 118, 120, 104, 240, 112, 340, 100, Rr, 110], '#9cc98a', 220);
+      sky(g, L, Rr, '#6fd0ff', '#fff2e0', 140); sun(g, 70, 36, 12);
+      hill(g, L, Rr, [L, 118, 120, 104, 240, 112, 340, 100, Rr, 110], '#8fdc8a', 220);
       for (let i = 0; i < 5; i++) tree(g, 220 + i * 26, 118 + (i % 2) * 3, .55, 'pine');
-      hill(g, L, Rr, [L, 140, 140, 134, 260, 138, Rr, 132], '#a9d47c', 220);
+      hill(g, L, Rr, [L, 140, 140, 134, 260, 138, Rr, 132], '#98e27a', 220);
       // back of the bakery
-      wallBoards(g, 312, 96, 80, 42, '#d98a5a', true); thatch(g, 312, 392, 96, 26, false);
+      wallBoards(g, 312, 96, 80, 42, '#ffc0d6', true); thatch(g, 312, 392, 96, 26, false, '#4fd4b4');
       const wd = f.has('umbrohi');
       tree(g, 64, 170, 1.25, 'round', f.has('ounapuu') ? { apples: true } : { bare: true });
       fence(g, L, Rr, 152, 16, !f.has('aed'), '#f4efe6', 6);
@@ -332,12 +378,12 @@
   };
   S.sadam = {
     still(g, f, L, Rr) {
-      sky(g, L, Rr, '#9fd6ee', '#fdeed2', 120); sun(g, 300, 34, 12); cloud(g, 120, 38, 1.1, .7);
+      sky(g, L, Rr, '#55c2ff', '#ffeef4', 120); sun(g, 300, 34, 12); cloud(g, 120, 38, 1.1, .7);
       PL(g, [Rr, 104, 340, 98, 300, 102, 270, 110, Rr, 110]); g.closePath(); F(g, '#8fb8a0', 0);
-      seaBand(g, L, Rr, 106, 220, '#9ad6ea', '#3b8fb8');
+      seaBand(g, L, Rr, 106, 220, '#7fe0ff', '#1a9fd8');
       // shore on the left
       hill(g, L, 150, [L, 140, 40, 138, 90, 150, 130, 178, 150, 220], '#e9d3a0', 220, 1.4);
-      g.beginPath(); g.moveTo(L, 138); g.lineTo(L, 220); g.lineTo(60, 220); g.quadraticCurveTo(50, 170, 30, 150); g.quadraticCurveTo(10, 140, L, 138); g.closePath(); F(g, '#a5d17a', 0);
+      g.beginPath(); g.moveTo(L, 138); g.lineTo(L, 220); g.lineTo(60, 220); g.quadraticCurveTo(50, 170, 30, 150); g.quadraticCurveTo(10, 140, L, 138); g.closePath(); F(g, '#8fe07a', 0);
       // pier
       const ok = f.has('sild');
       for (let i = 0; i < 7; i++) { const x = 110 + i * 34; R(g, x - 2.5, 170, 5, 40, 1); F(g, '#7a5232', 1.2); }
@@ -385,10 +431,10 @@
   };
   S.tuuleveski = {
     still(g, f, L, Rr) {
-      sky(g, L, Rr, '#a9dcf0', '#ffeecf', 150); sun(g, 60, 40, 12); cloud(g, 300, 30, 1, .7);
-      hill(g, L, Rr, [L, 130, 100, 120, 220, 126, 320, 118, Rr, 126], '#b8d98c', 220);
+      sky(g, L, Rr, '#62caff', '#fff0e6', 150); sun(g, 60, 40, 12); cloud(g, 300, 30, 1, .7);
+      hill(g, L, Rr, [L, 130, 100, 120, 220, 126, 320, 118, Rr, 126], '#a8e88a', 220);
       for (let i = 0; i < 6; i++) tree(g, L + 14 + i * 22, 132 - (i % 2) * 3, .5, 'juniper');
-      hill(g, L, Rr, [L, 176, 80, 160, 170, 122, 240, 124, 330, 162, Rr, 172], '#a5d17a', 220, 1.2);
+      hill(g, L, Rr, [L, 176, 80, 160, 170, 122, 240, 124, 330, 162, Rr, 172], '#8fe07a', 220, 1.2);
       // path
       if (f.has('rada')) { g.beginPath(); g.moveTo(130, 220); g.quadraticCurveTo(170, 180, 196, 146); g.lineTo(212, 146); g.quadraticCurveTo(196, 184, 172, 220); g.closePath(); F(g, '#e9d3a8', 0); }
       else weeds(g, 150, 190, 60, 61);
@@ -428,11 +474,11 @@
   };
   S.majakas = {
     still(g, f, L, Rr) {
-      sky(g, L, Rr, '#9fd2ee', '#ffe9cc', 130); sun(g, 110, 46, 12); cloud(g, 40, 30, .9, .7);
-      seaBand(g, L, Rr, 120, 220, '#98d2e8', '#3b8fb8');
+      sky(g, L, Rr, '#58c4ff', '#ffe6f0', 130); sun(g, 110, 46, 12); cloud(g, 40, 30, .9, .7);
+      seaBand(g, L, Rr, 120, 220, '#7fe0ff', '#1a9fd8');
       // cliff
       g.beginPath(); g.moveTo(Rr, 220); g.lineTo(150, 220); g.quadraticCurveTo(170, 180, 190, 160); g.quadraticCurveTo(230, 136, 300, 134); g.lineTo(Rr, 132); g.closePath(); F(g, '#c9c0b0', 1.4);
-      g.beginPath(); g.moveTo(Rr, 160); g.lineTo(190, 160); g.quadraticCurveTo(230, 132, 300, 130); g.lineTo(Rr, 128); g.closePath(); F(g, '#a5d17a', 1.2);
+      g.beginPath(); g.moveTo(Rr, 160); g.lineTo(190, 160); g.quadraticCurveTo(230, 132, 300, 130); g.lineTo(Rr, 128); g.closePath(); F(g, '#8fe07a', 1.2);
       const r = srnd(5); for (let i = 0; i < 10; i++) { const x = 170 + r() * 200, y = 170 + r() * 44; if (x - 170 < (y - 160) * .6) continue; E(g, x, y, 8, 4); g.fillStyle = 'rgba(120,110,100,.25)'; g.fill(); }
       if (f.has('trepp')) { for (let i = 0; i < 8; i++) { R(g, 196 + i * 7, 196 - i * 6, 12, 3, 1); F(g, '#d8d0c4', 1); } }
       // lighthouse
@@ -473,7 +519,7 @@
   S.saladus = {
     still(g, f, L, Rr) {
       const sk = f.has('taevas');
-      sky(g, L, Rr, sk ? '#2c3570' : '#3a3f66', sk ? '#c98aa8' : '#8a7a8a', 150);
+      sky(g, L, Rr, sk ? '#2a2f8a' : '#3a3f72', sk ? '#ff8ac0' : '#9a7aa8', 150);
       dot(g, 320, 36, 13, '#fff6d6'); dot(g, 326, 32, 11, sk ? '#2f3a72' : '#3c4068');
       if (sk) { const r = srnd(91); for (let i = 0; i < 30; i++) dot(g, L + r() * (Rr - L), r() * 100, r() * 1 + .5, 'rgba(255,255,240,.8)'); }
       hill(g, L, Rr, [L, 120, 120, 112, 260, 118, Rr, 108], '#3f5a5a', 220);
@@ -552,7 +598,8 @@
       g.scale(sc, sc); g.translate(ox, oy); g.scale(s, s);
       try { def.still(g, on, L, Rr); } catch (e) { console.error('ART.scene', key, e); }
       // a dusty, faded look that clears as the area is restored
-      const frac = on.size / A.sceneFeatures[key].length, fade = (1 - frac) * .55;
+      const frac = on.size / A.sceneFeatures[key].length, fade = (1 - frac) * .3;
+      if (A.vibrance && c.width * c.height < 4.5e6) { g.setTransform(1, 0, 0, 1, 0, 0); A.vibrance(g, c.width, c.height, .38); }
       if (fade > .01) {
         g.setTransform(1, 0, 0, 1, 0, 0);
         g.globalCompositeOperation = 'saturation'; g.fillStyle = 'rgba(128,128,128,' + fade + ')'; g.fillRect(0, 0, c.width, c.height);

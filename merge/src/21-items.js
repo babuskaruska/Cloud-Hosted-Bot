@@ -100,8 +100,8 @@
     if (lv >= 5) { E(g, 50, 52, 46, 44); g.setLineDash([2, 6]); stroke(g, '#ffcf3d', 3); g.setLineDash([]); spark(g, 80, 50, 5, '#fff7c2'); spark(g, 20, 76, 5, '#fff7c2'); }
     if (lv >= 4) { PL(g, [8, 22, 8, 8, 15, 15, 22, 6, 29, 15, 36, 8, 36, 22]); paint(g, '#ffcf3d', 22, 15, 16, 3); dot(g, 22, 18, 2.4, C.red); }
   }
-  function gen(base, haloCol, n) { // n levels of one generator
-    const out = []; for (let i = 1; i <= (n || 4); i++) out.push([null, (g) => { halo(g, haloCol); base(g, i); adorn(g, i); }]); return out;
+  function gen(base, haloCol, n) { // n levels of one generator (the pedestal, rim and crown come from the ART.item pipeline)
+    const out = []; for (let i = 1; i <= (n || 4); i++) out.push([null, (g) => { base(g, i); }]); return out;
   }
 
   // ================= PAGAR (bakery) =================
@@ -365,7 +365,11 @@
     HL(g, -12, -8, 6, 4, -.6, .55); g.restore();
   }
   ART.def('tee', [
-    ['teeleht', g => { sh(g, 24); leaf(g, 24, 70, 58, 22, -.75, '#5fb35a'); E(g, 58, 42, 4.5, 5.5); g.fillStyle = 'rgba(220,245,255,.85)'; g.fill(); g.lineWidth = 1.5; g.strokeStyle = '#7fb6d0'; g.stroke(); dot(g, 56.6, 40.6, 1.3, '#fff'); }],
+    ['teeleht', g => { // two fresh tea leaves with a dewdrop
+      g.beginPath(); g.moveTo(50, 84); g.quadraticCurveTo(48, 70, 52, 58); stroke(g, '#2f9a52', 4);
+      leaf(g, 50, 70, 44, 18, -2.2, '#3fcf7a'); leaf(g, 51, 66, 46, 19, -.95, '#5fe08a');
+      E(g, 64, 40, 5.5, 6.5); g.fillStyle = 'rgba(220,250,255,.9)'; g.fill(); g.lineWidth = 1.8; g.strokeStyle = '#5fb8e0'; g.stroke(); dot(g, 62.5, 38, 1.8, '#fff');
+    }],
     ['teeoksad', g => {
       sh(g, 26);
       g.beginPath(); g.moveTo(40, 88); g.quadraticCurveTo(46, 60, 56, 30); stroke(g, '#5c7a3a', 4);
@@ -608,7 +612,7 @@
     ['karp', g => { sh(g, 30); shell(g, 50, 52, 1.1, '#f7a8a0'); }],
     ['merevaik', g => {
       sh(g, 26);
-      const gr = g.createRadialGradient(50, 52, 4, 50, 52, 40); gr.addColorStop(0, 'rgba(255,220,120,.6)'); gr.addColorStop(1, 'rgba(255,200,90,0)'); E(g, 50, 52, 42, 40); g.fillStyle = gr; g.fill();
+      if (!ART._raw) { const gr = g.createRadialGradient(50, 52, 4, 50, 52, 40); gr.addColorStop(0, 'rgba(255,220,120,.6)'); gr.addColorStop(1, 'rgba(255,200,90,0)'); E(g, 50, 52, 42, 40); g.fillStyle = gr; g.fill(); }
       SM(g, [34, 30, 58, 22, 74, 40, 70, 70, 46, 80, 26, 62]); paint(g, '#f0a030', 42, 42, 36);
       SM(g, [40, 36, 56, 30, 66, 44, 60, 62, 44, 68, 34, 56]); g.fillStyle = 'rgba(255,214,120,.55)'; g.fill();
       leaf(g, 44, 56, 12, 4, -.6, '#c07a30', false); HL(g, 42, 36, 7, 3.5, -.5, .75); spark(g, 72, 30, 6, '#fff7c2');
@@ -678,7 +682,7 @@
     }],
     ['energia5', g => {
       sh(g, 34);
-      const gr = g.createRadialGradient(50, 54, 6, 50, 54, 46); gr.addColorStop(0, 'rgba(255,240,140,.9)'); gr.addColorStop(1, 'rgba(255,220,90,0)'); E(g, 50, 54, 46, 44); g.fillStyle = gr; g.fill();
+      if (!ART._raw) { const gr = g.createRadialGradient(50, 54, 6, 50, 54, 46); gr.addColorStop(0, 'rgba(255,240,140,.9)'); gr.addColorStop(1, 'rgba(255,220,90,0)'); E(g, 50, 54, 46, 44); g.fillStyle = gr; g.fill(); }
       jarBody(g, 50, 58, 56, 60, '#c8ecff', '#ffcf55'); bolt(g, 42, 60, .6, -.25); bolt(g, 58, 58, .7, .2);
       spark(g, 22, 26, 7, '#fff7c2'); spark(g, 80, 30, 5, '#fff7c2');
     }]
@@ -796,7 +800,7 @@
       if (lv >= 3) { shell(g, 72, 70, .25, '#f7a8a0'); }
     }, '#f8ead0']
   };
-  for (const k in gens) ART.def(k, gen(gens[k][0], gens[k][1], 5).map((e, i) => [k + (i ? i + 1 : ''), e[1]]));
+  for (const k in gens) { ART.def(k, gen(gens[k][0], gens[k][1], 5).map((e, i) => [k + (i ? i + 1 : ''), e[1]])); ART.genInfo[k] = { col: gens[k][1] }; }
   ART.generators = Object.keys(gens);
   // which chain each generator makes (for galleries and for anyone who wants a default)
   ART.genChain = { ahi: 'pagar', korv: 'mari', tooriistakast: 'tooriist', aiapeenar: 'lill', kalavork: 'kala', teekann: 'tee', piimanou: 'piim', taru: 'mesi', kudumiskorv: 'kudum', kaart: 'meri' };
@@ -1006,11 +1010,13 @@
       SM(g, [18, 88, 30, 78, 50, 76, 70, 78, 82, 88]); paint(g, '#8fcf6a', 50, 80, 30, 3);
       daisySmall(g, 26, 84); daisySmall(g, 74, 85); daisySmall(g, 62, 82);
     },
-    villatups: g => {
-      sh(g, 30);
-      const p = []; for (let i = 0; i < 14; i++) { const a = i * TAU / 14, q = i % 2 ? 26 : 32; p.push(50 + Math.cos(a) * q * 1.1, 54 + Math.sin(a) * q * .8); } SM(g, p); paint(g, '#fbf7ee', 42, 44, 36);
-      for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(34 + i * 7, 50 + (i % 2) * 8, 6, PI * 1.1, PI * 1.9); stroke(g, '#e0d6c4', 2); }
-      HL(g, 36, 40, 9, 4, -.3, .6);
+    villatups: g => { // a fluffy candy-pink wool cloud with a happy face
+      const p = []; for (let i = 0; i < 16; i++) { const a = i * TAU / 16, q = i % 2 ? 27 : 33; p.push(50 + Math.cos(a) * q * 1.12, 54 + Math.sin(a) * q * .86); }
+      SM(g, p); paint(g, '#ffe3ef', 40, 42, 40);
+      for (const [x, y, r] of [[34, 46, 9], [52, 40, 10], [66, 52, 9], [44, 62, 8], [60, 66, 7]]) { g.beginPath(); g.arc(x, y, r, PI * 1.05, PI * 1.85); stroke(g, '#ffb3d0', 2.6); }
+      ART.H.face(g, 50, 58, 5.5);
+      HL(g, 34, 38, 9, 5, -.4, .7);
+      g.beginPath(); g.moveTo(78, 70); g.bezierCurveTo(90, 74, 88, 86, 76, 84); stroke(g, '#ff8fb8', 3.4);
     },
     lapitekk: g => {
       sh(g, 42, 90);
@@ -1023,13 +1029,13 @@
       }
       heart(g, 50, 40, 5); g.fillStyle = '#fff6e6'; g.fill();
     },
-    kivike: g => {
-      sh(g, 30);
-      const pts = [22, 58, 30, 40, 52, 34, 74, 40, 80, 58, 66, 72, 40, 74];
-      SM(g, pts); paint(g, '#a8aab0', 40, 46, 40);
-      g.save(); SM(g, pts); g.clip(); g.beginPath(); g.moveTo(20, 66); g.bezierCurveTo(40, 50, 60, 60, 84, 46); stroke(g, '#f4f4f0', 4.5); g.restore();
-      SM(g, pts); stroke(g, dk('#a8aab0', .62), 4.2);
-      HL(g, 38, 44, 9, 4, -.2, .55);
+    kivike: g => { // a smooth sea pebble: mint-to-sky gradient, a white quartz stripe and a tiny starfish
+      const pts = [20, 58, 28, 38, 52, 30, 76, 38, 84, 58, 70, 74, 42, 76];
+      SM(g, pts); paint(g, '#8fd8e8', 40, 44, 44);
+      g.save(); SM(g, pts); g.clip(); g.beginPath(); g.moveTo(16, 68); g.bezierCurveTo(40, 50, 62, 62, 88, 44); stroke(g, '#ffffff', 6, .9); dot(g, 30, 46, 2.2, 'rgba(255,255,255,.6)'); dot(g, 64, 66, 1.8, 'rgba(255,255,255,.6)'); g.restore();
+      SM(g, pts); stroke(g, dk('#8fd8e8', .6), 4);
+      HL(g, 38, 40, 10, 4.5, -.25, .7);
+      ART.H.pstar(g, 72, 34, 11, -PI / 2 + .3); paint(g, '#ff8a6b', 72, 34, 11, 3); dot(g, 70, 33, 1.4, '#fff0e0'); dot(g, 74, 36, 1.2, '#fff0e0');
     },
     teokarp: g => {
       sh(g, 30);
@@ -1146,7 +1152,8 @@
   ART.def('coin', P(['münt', 'mündihunnik', 'rahakott', 'kukkur'], [1, 2, 3, 4].map(l => D('raha', l))));
   ART.def('chest', P(['väike kirst', 'suurem kirst', 'suur kirst'], [1, 2, 3].map(l => D('kirst', l))));
   // generators (4 levels each): oven, basket, teapot, bed (lv4 greenhouse), toolbox, net (lv4 boat), wheel (lv3+ loom)
-  const genDef = (key, base, col, last) => ART.def(key, gen((g, lv) => (last && lv >= 4 ? last(g, lv) : base(g, lv)), col, 4).map((e, i) => [key + (i + 1), e[1]]));
+  const GCOL = { oven: '#ffb07a', basket: '#ff9cc8', teapot: '#7fe8bf', bed: '#b4ec7a', toolbox: '#8fc4ff', net: '#7fdcff', wheel: '#c9a8ff' };
+  const genDef = (key, base, col, last) => { ART.def(key, gen((g, lv) => (last && lv >= 4 ? last(g, lv) : base(g, lv)), col, 4).map((e, i) => [key + (i + 1), e[1]])); ART.genInfo[key] = { col: GCOL[key] || col }; };
   genDef('oven', gens.ahi[0], gens.ahi[1]);
   genDef('basket', gens.korv[0], gens.korv[1]);
   genDef('teapot', gens.teekann[0], gens.teekann[1]);

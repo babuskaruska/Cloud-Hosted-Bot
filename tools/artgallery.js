@@ -45,7 +45,7 @@ if (mode === 'items') {
   who.forEach((w, i) => { g.drawImage(ART.portrait(w, 48 * d), 10 + i * 56, 320, 48, 48); });
 } else if (mode === 'ui') {
   { const lw = Math.min(W - 40, 420); ART.logo(g, W / 2 - lw / 2, 40, lw, 1); }
-  const st = ['paper', 'wood', 'button', 'buttonHot', 'buttonBlue', 'buttonGrey', 'ribbon'];
+  const st = ['paper', 'wood', 'button', 'buttonHot', 'buttonBlue', 'buttonPink', 'buttonGrey', 'glass', 'ribbon'];
   st.forEach((s, i) => { ART.panel(g, 30 + (i % 2) * 180, 170 + Math.floor(i / 2) * 70, 150, 50, s); label(s, 40 + (i % 2) * 180, 200 + Math.floor(i / 2) * 70); });
   const ic = Object.keys(ART.iconDefs); ic.forEach((n, i) => { const x = 10 + (i % 8) * 46, y = 470 + Math.floor(i / 8) * 60; g.drawImage(ART.icon(n, 40 * d), x, y, 40, 40); g.font='9px system-ui'; label(n, x, y + 52); g.font='700 12px system-ui'; });
   ['empty', 'locked', 'hint', 'target'].forEach((s, i) => ART.cell(g, 10 + i * 60, 640, 54, s));
@@ -54,7 +54,7 @@ if (mode === 'items') {
 } else if (mode === 'fx') {
   window.UI = { hudPos: n => ({ coins: [W - 60, 20], stars: [W - 140, 20], energy: [60, 20] })[n] };
   FX.quality = 2; let t = 0; const img = ART.item('pagar', 4, 64 * d);
-  FX.merge(100, 200, 'pagar', 3); FX.merge(280, 200, 'pagar', 8); FX.coins(100, 400, 6); FX.stars(280, 400, 3); FX.energy(200, 500, 4); FX.confetti(); FX.spawn(60, 600, 300, 560, img);
+  FX.merge(100, 200, 'bread', 3); FX.merge(280, 200, 'bread', 10); FX.combo(100, 330, 4); FX.lucky(300, 330); FX.discover(200, 110); FX.hint(360, 90); if (/lv/.test(location.search)) FX.levelUp(); FX.coins(100, 400, 6); FX.stars(280, 400, 3); FX.energy(200, 500, 4); FX.spawn(60, 600, 300, 560, img);
   const NF = +(new URLSearchParams(location.search).get('f') || 12); for (let i = 0; i < NF; i++) FX.update(1 / 60);
   ART.bg(g, W, Hh, 0); FX.draw(g); const sq = FX.squash(100, 200); label('squash ' + (sq ? sq.map(v=>v.toFixed(2)).join(',') : 'none'), 10, 680);
   label('live ' + FX.count(), 200, 680);

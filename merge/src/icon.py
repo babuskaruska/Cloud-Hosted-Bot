@@ -1,4 +1,4 @@
-# Saarepagar home-screen icon (Ash): a shiny braided kringel on a warm gingham tablecloth. Stdlib only.
+# Saarepagar home-screen icon (Ash): a glossy golden kringel on a candy sky-to-pink gradient with a soft glow and sparkles. Stdlib only.
 # icon_png(size) -> PNG bytes. The art is rendered once at 512 px (a shaded tube along a pretzel curve,
 # with the second half passing over the first) and resampled for smaller sizes.
 import math, struct, zlib
@@ -47,19 +47,26 @@ def _render(S):
         x0 = min(sg[1], sg[3]) - reach; x1 = max(sg[1], sg[3]) + reach; y0 = min(sg[2], sg[4]) - reach; y1 = max(sg[2], sg[4]) + reach
         for gy in range(max(0, int(y0 * G)), min(G - 1, int(y1 * G)) + 1):
             for gx in range(max(0, int(x0 * G)), min(G - 1, int(x1 * G)) + 1): grid[gy][gx].append(si)
-    bg0, bg1, red = _hex('#fff4de'), _hex('#f8c494'), _hex('#e2786a')
-    base, dark, outl, icing = _hex('#e8a050'), _hex('#b8682d'), _hex('#6b3a1e'), _hex('#fffaf0')
+    top, bot, glow = _hex('#5ec8ff'), _hex('#ff8fc4'), _hex('#fffbe8')
+    base, dark, outl, icing = _hex('#ffb347'), _hex('#e0782a'), _hex('#3a1f5e'), _hex('#fffaf0')
+    sparks = [(0.83, 0.17, 0.075), (0.15, 0.24, 0.05), (0.86, 0.82, 0.045), (0.2, 0.84, 0.035)]
     lx, ly, lz = -0.45, -0.65, 0.62; ln = math.sqrt(lx * lx + ly * ly + lz * lz); lx, ly, lz = lx / ln, ly / ln, lz / ln
     px = 1.0 / S; rows = []
     for y in range(S):
         v = (y + 0.5) / S; row = bytearray([0])
         for x in range(S):
             u = (x + 0.5) / S
-            # background: warm radial gradient with soft gingham stripes
-            d = math.hypot(u - 0.5, v - 0.42) / 0.75
-            col = _mix(bg0, bg1, min(1.0, d * d * 1.2))
-            band = (int(u * 7) % 2) + (int(v * 7) % 2)
-            col = _mix(col, red, 0.07 * band)
+            # background: sky-blue to candy-pink diagonal gradient, a soft white glow, wave lines and sparkles
+            col = _mix(top, bot, min(1.0, max(0.0, (v * 0.8 + u * 0.35) - 0.1)))
+            d = math.hypot(u - 0.5, v - 0.52) / 0.44
+            if d < 1: col = _mix(col, glow, 0.7 * (1 - d) ** 1.5)
+            wy = (v * 9 + 0.5 * math.sin(u * 18)) % 1.0
+            if abs(wy - 0.5) < 0.02 and d > 0.9: col = _mix(col, (1, 1, 1), 0.22)
+            for (sx, sy, sr) in sparks:
+                ax, ay = abs(u - sx) / sr, abs(v - sy) / sr
+                if ax < 1 and ay < 1:
+                    q = math.sqrt(ax) + math.sqrt(ay)
+                    if q < 1: col = _mix(col, (1, 1, 1), min(1.0, (1 - q) * 6))
             cell = grid[min(G - 1, int(v * G))][min(G - 1, int(u * G))]
             if cell:
                 best = [None, None]  # per part: (dist, qx, qy, s, side)
@@ -80,7 +87,7 @@ def _render(S):
                     if ds < sh: sh = ds
                 if sh < r + 0.03:
                     a = min(1.0, (r + 0.03 - sh) / 0.03) * 0.28
-                    col = _mix(col, (0.45, 0.22, 0.1), a)
+                    col = _mix(col, (0.3, 0.15, 0.45), a)
                 for pi in (0, 1):  # part 1 is drawn over part 0
                     b = best[pi]
                     if b is None or b[0] > r + ol + px: continue
