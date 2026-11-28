@@ -5211,7 +5211,10 @@ const UI = (() => {
 })();
 
 // ---- Saarepagar audio (Echo): every sound and all the music, synthesized with WebAudio. No files, no network.
-// API (DESIGN.md):  sfx(name, opts)   MUSIC.scene(name, {area})   AU.unlock()   AU.setVolume('music'|'sfx', v)
+// API (DESIGN.md):  sfx(name, opts)   MUSIC.scene(name, {area})   AU.unlock()
+//   v3: MUSIC.scene('map')   MUSIC.scene('level', {chapter | level, tense})   MUSIC.mood('tense'|'normal')
+//       sfx: iceCrack boxBreak cobweb booster{kind: wand|scissors|shuffle|moves5} wheelTick{speed 0..1} wheelWin{big}
+//            levelWin{stars 1..3} levelFail star{n 1..3} piggy calendar heart movesLow   AU.setVolume('music'|'sfx', v)
 //                   AU.muted / AU.setMuted(b)   AU.stats()   AU.lite (no reverb, fewer nodes; auto on <= 4 cores)
 //                   AU.suspend() / AU.resume() (same as a hidden / shown page)
 // Tests: window.__saAudio (= AU), window.__saMusic (= MUSIC), AU.meter(true) then AU.stats().meter (LUFS, true peak, bands).
@@ -5597,6 +5600,155 @@ const AU = (function () {
       return t + 0.4;
     },
     talk(t, o) { return voice(t, o.who || 'mina', o.ch); },
+
+    // ---- v3 level mode: obstacles, boosters, wheel, level win/fail, map rewards ----
+    iceCrack(t) { // crisp little crackles, a soft crunch, then glassy tinkles falling in key
+      const n = LITE ? 2 : 4;
+      for (let i = 0; i < n; i++) noise(t + i * 0.022 + rnd() * 0.01, { f: 3000 + rnd() * 900, q: 2.2, a: 0.001, d: 0.012 + rnd() * 0.01, v: 0.07, pan: (rnd() - 0.5) * 0.6 });
+      noise(t + 0.02, { f: 1700, f2: 900, q: 0.9, a: 0.002, d: 0.09, v: 0.06 });
+      tone(t, { w: 'triangle', f: 520, f2: 260, gt: 0.05, a: 0.001, d: 0.06, v: 0.08 });
+      const r = kr(6);
+      for (let i = 0; i < 3; i++) INS.bell(t + 0.07 + i * 0.05, top(r + pent(5 - i * 2), 98), 0.3, 0.035, B.sfxIn, i === 1 ? -0.35 : 0.35);
+      return t + 0.6;
+    },
+    boxBreak(t) { // a gift box pops open: thump, a paper rip, a pop, then confetti ticks and a sparkle
+      duck(0.7, 0.7);
+      tone(t, { f: 210, f2: 105, gt: 0.06, a: 0.002, d: 0.12, v: 0.2 });
+      noise(t, { f: 1500, f2: 700, q: 1.1, a: 0.004, d: 0.1, v: 0.065 });
+      pop(t + 0.06, kr(5) + 7, 1, true);
+      const n = LITE ? 4 : 9;
+      for (let i = 0; i < n; i++) noise(t + 0.1 + rnd() * 0.45, { type: 'highpass', f: 3800, q: 0.7, a: 0.001, d: 0.006, v: 0.018 + rnd() * 0.016, pan: (rnd() - 0.5) * 1.4 });
+      sparkle(t + 0.12, kr(5) + 12, 4, 0.04, 0.04);
+      return t + 0.8;
+    },
+    cobweb(t) { // a sticky stretch ("fwiip") that lets go with a soft snap and a twinkle
+      noise(t, { f: 600, f2: 2200, q: 3, a: 0.08, d: 0.05, v: 0.045 });
+      tone(t, { w: 'triangle', f: 300, f2: 680, gt: 0.12, a: 0.02, d: 0.1, v: 0.07, lp: 1500 });
+      tone(t + 0.13, { f: 980, f2: 520, gt: 0.03, a: 0.001, d: 0.04, v: 0.07 });
+      noise(t + 0.13, { f: 2600, q: 1.4, a: 0.001, d: 0.015, v: 0.04 });
+      INS.bell(t + 0.17, top(kr(6) + 7, 98), 0.3, 0.035, B.sfxIn, 0.2);
+      return t + 0.5;
+    },
+    booster(t, o) { // wand | scissors | shuffle | moves5
+      const k = o.kind || 'wand', r = kr(5);
+      if (k === 'scissors') { // snip-snip, then a little split pop
+        for (let i = 0; i < 2; i++) { const tt = t + i * 0.13; noise(tt, { f: 4000, q: 3, a: 0.001, d: 0.02, v: 0.08 }); tone(tt, { w: 'triangle', f: 2100, f2: 1500, a: 0.001, d: 0.025, v: 0.035 }); tone(tt + 0.012, { f: 700, f2: 450, a: 0.001, d: 0.03, v: 0.06 }); }
+        pop(t + 0.3, r + 7, 0.9, false); pop(t + 0.36, r + 12, 0.8, false);
+        return t + 0.75;
+      }
+      duck(0.6, 1.1);
+      if (k === 'shuffle') { // a swirl: blips circling left-right, up then down, landing on a mallet
+        whoosh(t, 0.35, 0.04, true); whoosh(t + 0.3, 0.3, 0.035, false);
+        const st = [0, 2, 4, 6, 4, 2, 1, 3];
+        for (let i = 0; i < st.length; i++) tone(t + i * 0.055, { f: mtof(top(r + 7 + pent(st[i]), 92)), a: 0.002, d: 0.05, v: 0.06, pan: Math.sin(i * 1.4) * 0.6 });
+        INS.mallet(t + 0.5, top(r + 12, 94), 0.3, 0.09, B.sfxIn); INS.mallet(t + 0.5, top(r + 7, 94), 0.3, 0.06, B.sfxIn);
+        return t + 1;
+      }
+      if (k === 'moves5') { // counting up five, then a bright "ding"
+        for (let i = 0; i < 5; i++) INS.mallet(t + i * 0.065, top(r + pent(i + 2), 96), 0.2, 0.08, B.sfxIn, (i - 2) * 0.15);
+        chord(t + 0.36, r, [4, 7, 12], 0.35, 0.022, 'ep'); INS.bell(t + 0.36, top(r + 24, 100), 0.5, 0.045, B.sfxIn);
+        shimmer(t + 0.3, 0.3, 0.012);
+        return t + 1;
+      }
+      // wand: a magic rising glissando, a shimmer and a soft bell chord
+      whoosh(t, 0.3, 0.035, true); shimmer(t + 0.05, 0.45, 0.016);
+      for (let i = 0; i < (LITE ? 6 : 9); i++) INS.bell(t + i * 0.035, top(r + pent(i), 100), 0.3, 0.035, B.sfxIn, -0.5 + i * 0.12);
+      INS.bell(t + 0.36, top(r + 12, 100), 0.6, 0.04, B.sfxIn); INS.bell(t + 0.36, top(r + 16, 100), 0.6, 0.03, B.sfxIn);
+      tone(t + 0.34, { f: 200, f2: 100, gt: 0.07, a: 0.002, d: 0.15, v: 0.1 });
+      return t + 1.1;
+    },
+    wheelTick(t, o) { // one slice going past: a light click; faster spin = higher and brighter
+      const s = cl(o.speed === undefined ? 0.5 : +o.speed || 0, 0, 1), f = 900 + s * 900;
+      tone(t, { w: 'triangle', f: f, f2: f * 0.7, a: 0.001, d: 0.022, v: 0.05 + s * 0.02 });
+      if (!LITE) noise(t, { f: 2600 + s * 1000, q: 1.6, a: 0.001, d: 0.006, v: 0.02 });
+      return t + 0.04;
+    },
+    wheelWin(t, o) { // the wheel stops on a prize; {big} = the rare jackpot
+      const r = kr(5);
+      if (o.big) {
+        duck(0.35, 2.2);
+        fill(t, 4, 0.08, 0.08);
+        for (let i = 0; i < 12; i++) INS.bell(t + 0.1 + i * 0.03, top(r + pent(i + 2), 100), 0.3, 0.04, B.sfxIn, -0.6 + i * 0.1);
+        const tc = t + 0.5;
+        chord(tc, r, [0, 4, 7, 12, 16], 0.8, 0.032); INS.kick(tc, 0.24, B.sfxIn); INS.clap(tc, 0.08, B.sfxIn); INS.bass(tc, r - 12, 0.8, 0.18, B.sfxIn);
+        INS.vox(tc, r + 16, 0.12, 0.18, B.sfxIn, 'e'); INS.vox(tc + 0.15, r + 19, 0.35, 0.18, B.sfxIn, 'a');
+        pings(tc + 0.1, 6, kr(6) + 4, 0.045, 0.04); sparkle(tc + 0.15, r + 12, 6, 0.05, 0.04); shimmer(tc, 0.7, 0.018);
+        return tc + 1.5;
+      }
+      duck(0.55, 1.2);
+      INS.mallet(t, top(r + 12, 96), 0.2, 0.1, B.sfxIn, -0.2); INS.mallet(t + 0.08, top(r + 16, 96), 0.2, 0.1, B.sfxIn); INS.mallet(t + 0.16, top(r + 19, 98), 0.3, 0.1, B.sfxIn, 0.2);
+      chord(t + 0.24, r, [0, 4, 7, 12], 0.45, 0.028); INS.kick(t + 0.24, 0.2, B.sfxIn);
+      pings(t + 0.3, 4, kr(6) + 4, 0.045, 0.04);
+      return t + 1.1;
+    },
+    levelWin(t, o) { // bright jingle; more stars = a longer, bigger ending
+      const st = cl((+o.stars) | 0 || 1, 1, 3), r = kr(5), up = [0, 4, 7, 12];
+      duck(0.25, 1.6 + st * 0.5);
+      fill(t, 3, 0.09, 0.08);
+      for (let i = 0; i < up.length; i++) INS.pluck(t + i * 0.07, r + up[i], 0.1, 0.09, B.sfxIn, (i - 1.5) * 0.15);
+      let tc = t + 0.3;
+      chord(tc, r, [0, 4, 7, 12], 0.35, 0.03); INS.kick(tc, 0.22, B.sfxIn); INS.clap(tc, 0.07, B.sfxIn); INS.bass(tc, r - 12, 0.35, 0.16, B.sfxIn);
+      if (st >= 2) { // IV - V lift
+        tc += 0.36; chord(tc, r + 5, [0, 4, 7], 0.14, 0.028); INS.kick(tc, 0.2, B.sfxIn); INS.bass(tc, r - 7, 0.15, 0.14, B.sfxIn);
+        tc += 0.2; chord(tc, r + 7, [0, 5, 7], 0.14, 0.028); INS.kick(tc, 0.2, B.sfxIn); INS.bass(tc, r - 5, 0.15, 0.14, B.sfxIn);
+        tc += 0.2; chord(tc, r, [0, 4, 7, 12, 14], 0.6 + st * 0.15, 0.032); INS.kick(tc, 0.24, B.sfxIn); INS.clap(tc, 0.08, B.sfxIn); INS.bass(tc, r - 12, 0.7, 0.18, B.sfxIn);
+      }
+      if (st >= 3) { INS.vox(tc, r + 16, 0.12, 0.18, B.sfxIn, 'e'); INS.vox(tc + 0.15, r + 19, 0.4, 0.18, B.sfxIn, 'a'); shimmer(tc, 0.8, 0.018); }
+      sparkle(tc + 0.08, r + 12, 3 + st * 2, 0.045, 0.045);
+      return tc + 1 + st * 0.2;
+    },
+    levelFail(t) { // a kind, soft "aww" and a comforting IV - I, ending on a hopeful little bell
+      duck(0.4, 2);
+      const r = kr(5);
+      tone(t, { w: 'triangle', f: mtof(r + 16), f2: mtof(r + 12), gt: 0.5, a: 0.05, h: 0.15, d: 0.45, v: 0.08, lp: 1700, q: 1.2 });
+      if (!LITE) tone(t + 0.01, { w: 'triangle', f: mtof(r + 9), f2: mtof(r + 5), gt: 0.5, a: 0.05, h: 0.15, d: 0.45, v: 0.04, lp: 1400 });
+      chord(t + 0.05, r - 12 + 5, [0, 4, 7, 11], 0.6, 0.026, 'ep');
+      chord(t + 0.75, r - 12, [4, 7, 11, 14], 0.9, 0.026, 'ep');
+      INS.bell(t + 1.15, top(r + 19, 100), 0.5, 0.035, B.sfxIn); INS.bell(t + 1.3, top(r + 24, 100), 0.6, 0.03, B.sfxIn);
+      return t + 2;
+    },
+    star(t, o) { // one of three stars landing; each is a step higher, the third gets a little chord
+      const n = cl((+o.n) | 0 || 1, 1, 3), r = kr(5) + 12, m = top(r + [0, 4, 7][n - 1], 100);
+      whoosh(t, 0.14, 0.025, true);
+      INS.bell(t + 0.08, m, 0.5, 0.055, B.sfxIn, (n - 2) * 0.3); INS.mallet(t + 0.08, m - 12, 0.2, 0.08, B.sfxIn, (n - 2) * 0.3);
+      tone(t + 0.08, { f: 190, f2: 100, gt: 0.06, a: 0.002, d: 0.1, v: 0.09 });
+      if (n === 3) { chord(t + 0.1, r - 12, [0, 4, 7, 12], 0.4, 0.02, 'ep'); sparkle(t + 0.14, r, 4, 0.035, 0.04); }
+      return t + 0.7;
+    },
+    piggy(t) { // a coin jar shaken a few times, a cork-pop as it opens, coins pour out
+      duck(0.55, 1.8);
+      for (let i = 0; i < 4; i++) {
+        const tt = t + i * 0.11;
+        noise(tt, { f: i % 2 ? 900 : 700, q: 1.3, a: 0.002, d: 0.04, v: 0.07 });
+        for (let j = 0; j < (LITE ? 1 : 2); j++) tone(tt + 0.01 + j * 0.02, { f: 2300 + rnd() * 800, a: 0.001, d: 0.04, v: 0.025, pan: (rnd() - 0.5) * 0.6 });
+      }
+      tone(t + 0.5, { f: 400, f2: 900, gt: 0.03, a: 0.001, d: 0.05, v: 0.12 }); noise(t + 0.5, { f: 1800, q: 1, a: 0.001, d: 0.02, v: 0.06 });
+      pings(t + 0.55, 6, kr(6) + 4, 0.05, 0.045);
+      chord(t + 0.6, kr(5), [0, 4, 7, 12], 0.4, 0.024, 'ep');
+      return t + 1.5;
+    },
+    calendar(t) { // the daily stamp: a swish, a soft "thunk", a paper slap and a happy two-note
+      whoosh(t, 0.1, 0.03, false);
+      tone(t + 0.1, { f: 190, f2: 85, gt: 0.06, a: 0.002, d: 0.12, v: 0.22 });
+      noise(t + 0.1, { f: 1200, q: 0.8, a: 0.001, d: 0.05, v: 0.07 });
+      INS.mallet(t + 0.2, top(kr(5) + 7, 94), 0.2, 0.09, B.sfxIn); INS.mallet(t + 0.3, top(kr(5) + 12, 96), 0.3, 0.09, B.sfxIn);
+      sparkle(t + 0.34, kr(5) + 12, 3, 0.04, 0.035);
+      return t + 0.8;
+    },
+    heart(t) { // a life refills: a soft heartbeat "ba-dum", a warm rising chord and a twinkle
+      duck(0.65, 1);
+      tone(t, { f: 180, f2: 95, gt: 0.06, a: 0.003, d: 0.1, v: 0.16 }); tone(t + 0.15, { f: 170, f2: 90, gt: 0.06, a: 0.003, d: 0.12, v: 0.13 });
+      const r = kr(5);
+      [4, 7, 12].forEach((d, i) => INS.ep(t + 0.3 + i * 0.07, r + d, 0.5 - i * 0.07, 0.06, B.sfxIn));
+      INS.bell(t + 0.5, top(r + 24, 100), 0.5, 0.035, B.sfxIn); shimmer(t + 0.3, 0.4, 0.012);
+      return t + 1.1;
+    },
+    movesLow(t) { // a subtle "tick-tock" (woodblock) when 3 or fewer moves are left
+      const m = top(kr(6) + 7, 94);
+      tone(t, { w: 'triangle', f: mtof(m), a: 0.001, d: 0.045, v: 0.05, lp: 3000 });
+      tone(t + 0.13, { w: 'triangle', f: mtof(m - 5), a: 0.001, d: 0.05, v: 0.045, lp: 2600 });
+      return t + 0.25;
+    },
   };
 
   // Cute voice blips. Each character has its own pitch, timbre and lilt; opts.ch (the letter) picks the vowel colour.
@@ -5623,8 +5775,9 @@ const AU = (function () {
   }
 
   // Voice limits: a minimum gap per sound, a cap per sound, and a cap on everything at once.
-  const LIM = { merge: [0.04, 4], merge5: [0.08, 2], combo: [0.12, 1], talk: [0.055, 2], coins: [0.07, 2], tap: [0.03, 2], hint: [0.2, 1], pick: [0.04, 2], drop: [0.04, 3], swap: [0.05, 2], spawn: [0.05, 3], bubble: [0.1, 2], bubblePop: [0.04, 3], stars: [0.15, 1], mergeMax: [0.3, 1], lucky: [0.4, 1], claim: [0.25, 1], discover: [0.3, 1], mystery: [0.5, 1], event: [0.4, 1], album: [0.5, 1], taskDone: [0.5, 1], levelUp: [0.5, 1], daily: [0.5, 1], orderDone: [0.2, 1], chest: [0.3, 1], order: [0.2, 1], deny: [0.15, 1], noEnergy: [0.25, 1], open: [0.06, 1], close: [0.06, 1], sell: [0.1, 1] };
-  const PRI = { mergeMax: 1, taskDone: 1, levelUp: 1, orderDone: 1, daily: 1, chest: 1, lucky: 1, discover: 1, mystery: 1, event: 1, album: 1, combo: 1, claim: 1 };
+  const LIM = { merge: [0.04, 4], merge5: [0.08, 2], combo: [0.12, 1], talk: [0.055, 2], coins: [0.07, 2], tap: [0.03, 2], hint: [0.2, 1], pick: [0.04, 2], drop: [0.04, 3], swap: [0.05, 2], spawn: [0.05, 3], bubble: [0.1, 2], bubblePop: [0.04, 3], stars: [0.15, 1], mergeMax: [0.3, 1], lucky: [0.4, 1], claim: [0.25, 1], discover: [0.3, 1], mystery: [0.5, 1], event: [0.4, 1], album: [0.5, 1], taskDone: [0.5, 1], levelUp: [0.5, 1], daily: [0.5, 1], orderDone: [0.2, 1], chest: [0.3, 1], order: [0.2, 1], deny: [0.15, 1], noEnergy: [0.25, 1], open: [0.06, 1], close: [0.06, 1], sell: [0.1, 1],
+    iceCrack: [0.05, 3], boxBreak: [0.08, 2], cobweb: [0.06, 2], booster: [0.3, 2], wheelTick: [0.03, 3], wheelWin: [0.5, 2], levelWin: [0.8, 2], levelFail: [0.8, 2], star: [0.12, 2], piggy: [0.5, 1], calendar: [0.3, 1], heart: [0.25, 1], movesLow: [0.6, 1] };
+  const PRI = { mergeMax: 1, taskDone: 1, levelUp: 1, orderDone: 1, daily: 1, chest: 1, lucky: 1, discover: 1, mystery: 1, event: 1, album: 1, combo: 1, claim: 1, booster: 1, wheelWin: 1, levelWin: 1, levelFail: 1, star: 1, piggy: 1, calendar: 1, heart: 1 };
   const lastAt = {};
   function sfx(name, opts) {
     if (typeof name !== 'string' || !hasOwn(SFX, name)) return false;
@@ -5664,6 +5817,14 @@ const AU = (function () {
     light: { a: [[0, 4, 4], [4, 2, 2], [6, 4, 2], [8, 7, 6], [14, 6, 2]], b1: [[0, 5, 4], [4, 4, 4], [8, 2, 8]], b2: [[0, 5, 4], [4, 6, 2], [6, 7, 2], [8, 9, 8]] },
     secret: { a: [[0, 0, 2], [2, 2, 2], [4, 4, 3], [7, 3, 1], [8, 2, 4], [14, 4, 2]], b1: [[0, 6, 2], [2, 4, 2], [4, 3, 2], [6, 2, 2], [8, 1, 6]], b2: [[0, 6, 2], [2, 7, 2], [4, 9, 2], [6, 7, 2], [8, 4, 8]] },
     story: { a: [[0, 4, 4], [4, 5, 2], [6, 4, 2], [8, 2, 8]], b1: [[0, 1, 4], [4, 2, 2], [6, 4, 2], [8, 5, 8]], b2: [[0, 4, 4], [4, 2, 2], [6, 1, 2], [8, 0, 8]] },
+    // v3: the level map and the level chapters
+    map: { a: [[0, 0, 2], [2, 4, 2], [4, 7, 3], [7, 6, 1], [8, 4, 2], [10, 5, 2], [12, 4, 4]], b1: [[0, 2, 2], [2, 4, 2], [4, 5, 2], [6, 4, 2], [8, 2, 6], [14, 1, 2]], b2: [[0, 2, 2], [2, 4, 2], [4, 7, 2], [6, 9, 3], [9, 8, 1], [10, 7, 6]] },
+    candy: { a: [[0, 4, 1], [2, 4, 1], [3, 5, 2], [6, 4, 2], [8, 2, 2], [10, 4, 2], [12, 0, 3]], b1: [[0, 1, 2], [2, 2, 2], [4, 4, 2], [6, 2, 2], [8, 1, 6]], b2: [[0, 1, 2], [2, 2, 2], [4, 4, 2], [6, 5, 2], [8, 7, 4], [12, 4, 4]] },
+    meadow: { a: [[0, 2, 2], [2, 4, 2], [4, 5, 2], [6, 7, 4], [10, 5, 2], [12, 4, 4]], b1: [[0, 5, 2], [2, 4, 2], [4, 2, 2], [6, 4, 3], [9, 1, 7]], b2: [[0, 5, 2], [2, 4, 2], [4, 2, 2], [6, 1, 2], [8, 0, 8]] },
+    berry: { a: [[0, 0, 1], [1, 2, 1], [2, 4, 2], [4, 4, 1], [6, 6, 2], [8, 4, 2], [10, 2, 1], [11, 4, 5]], b1: [[0, 3, 2], [2, 2, 1], [3, 1, 1], [4, 2, 4], [8, 0, 2], [10, -1, 6]], b2: [[0, 3, 2], [2, 4, 1], [3, 5, 1], [4, 6, 4], [8, 7, 8]] },
+    cliffs: { a: [[0, 4, 3], [3, 3, 1], [4, 2, 2], [6, 0, 2], [8, 2, 2], [10, 4, 2], [12, 6, 4]], b1: [[0, 7, 2], [2, 6, 2], [4, 4, 4], [8, 3, 2], [10, 2, 6]], b2: [[0, 7, 2], [2, 6, 2], [4, 4, 2], [6, 6, 2], [8, 7, 8]] },
+    winter: { a: [[0, 2, 2], [2, 4, 2], [4, 7, 2], [6, 4, 2], [8, 5, 4], [12, 4, 4]], b1: [[0, 3, 2], [2, 2, 2], [4, 1, 2], [6, 2, 2], [8, 4, 6], [14, 2, 2]], b2: [[0, 3, 2], [2, 4, 2], [4, 5, 2], [6, 6, 2], [8, 7, 8]] },
+    lavender: { a: [[2, 4, 2], [4, 6, 2], [6, 4, 2], [8, 2, 4], [12, 1, 2], [14, 2, 2]], b1: [[0, 4, 4], [4, 2, 2], [6, 1, 2], [8, 0, 8]], b2: [[0, 4, 4], [4, 5, 2], [6, 6, 2], [8, 7, 6], [14, 6, 2]] },
   };
   // Grooves: kick, snare/clap steps, hats; the snare voice; the bass line [step, length, interval].
   const GROOVE = {
@@ -5701,7 +5862,35 @@ const AU = (function () {
       v: [[C(0, 'm9')], [C(8, 'maj7')], [C(5, 'maj7')], [C(7, 'sus'), C(7, 'm7')]], c: [[C(8, 'maj7')], [C(10, 'add9')], [C(0, 'm9')], [C(7, 'sus')]] },
     story: { root: 60, mode: 'major', bpm: 72, swing: 0.06, groove: 'none', keys: 'ep', compV: 'whole', compC: 'halves', lead: 'bell', lead2: 'ep', arp: 'mallet', pad: 1, pump: 0, tone: 5000, hook: 'story', vol: 1.1, story: true,
       v: [[C(0, 'maj9')], [C(9, 'm9')], [C(5, 'maj9')], [C(7, 'sus')]], c: [[C(5, 'maj7')], [C(4, 'm7')], [C(9, 'm9')], [C(7, 'sus'), C(7, 'M')]] },
+    // v3 level map: bright, adventurous feel-good pop (I - V - vi - IV verses, a vi - IV - I - V chorus).
+    map: { root: 64, mode: 'major', bpm: 110, swing: 0.03, groove: 'pop', keys: 'ep', compV: 'pop', compC: 'pop', lead: 'vox', lead2: 'mallet', arp: 'pluck', pad: 0.8, pump: 0.45, tone: 9500, hook: 'map', vol: 0.78,
+      v: [[C(0, 'add9')], [C(7, 'M')], [C(9, 'm7')], [C(5, 'maj7')]], c: [[C(9, 'm7')], [C(5, 'maj9')], [C(0, 'add9')], [C(7, 'sus'), C(7, 'M')]] },
+    // v3 level chapters: energetic but not stressful puzzle music, one per map chapter (they cycle).
+    candy: { root: 62, mode: 'major', bpm: 114, swing: 0, groove: 'tropical', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'mallet', lead2: 'vox', arp: null, pad: 0.9, pump: 0.5, tone: 9000, hook: 'candy', vol: 1.05, bassV: 0.75, level: true,
+      v: [[C(0, 'add9')], [C(9, 'm7')], [C(5, 'maj7')], [C(7, 'M')]], c: [[C(5, 'maj7')], [C(7, 'M')], [C(4, 'm7'), C(9, 'm7')], [C(2, 'm7'), C(7, 'sus')]] },
+    meadow: { root: 65, mode: 'major', bpm: 106, swing: 0.05, groove: 'pop', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'vox', lead2: 'pluck', arp: 'mallet', pad: 0.7, pump: 0.35, tone: 9000, hook: 'meadow', vol: 0.8, level: true,
+      v: [[C(0, 'maj9')], [C(2, 'm7')], [C(5, 'maj7')], [C(7, 'sus'), C(7, 'M')]], c: [[C(5, 'maj9')], [C(7, 'add9')], [C(9, 'm7')], [C(0, 'add9')]] },
+    berry: { root: 60, mode: 'mixo', bpm: 102, swing: 0.12, groove: 'bouncy', keys: 'ep', compV: 'pop', compC: 'pop', lead: 'pluck', lead2: 'vox', arp: 'mallet', pad: 0.6, pump: 0.3, tone: 8000, hook: 'berry', vol: 0.85, level: true,
+      v: [[C(0, 'M')], [C(10, 'add9')], [C(5, 'M')], [C(0, 'add9')]], c: [[C(5, 'maj7')], [C(10, 'M')], [C(0, 'add9')], [C(7, 'm7'), C(10, 'M')]] },
+    cliffs: { root: 57, mode: 'dorian', bpm: 108, swing: 0, groove: 'pop', keys: 'ep', compV: 'offbeat', compC: 'pop', lead: 'vox', lead2: 'mallet', arp: 'pluck', pad: 1, pump: 0.55, tone: 9000, hook: 'cliffs', vol: 0.86, level: true,
+      v: [[C(0, 'm9')], [C(5, 'add9')], [C(10, 'M')], [C(0, 'm7')]], c: [[C(3, 'maj7')], [C(10, 'add9')], [C(5, 'M')], [C(7, 'm7'), C(5, 'M')]] },
+    winter: { root: 67, mode: 'major', bpm: 100, swing: 0.08, groove: 'bouncy', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'bell', lead2: 'mallet', arp: 'mallet', pad: 0.9, pump: 0.3, tone: 7500, hook: 'winter', vol: 0.9, jingle: true, level: true,
+      v: [[C(0, 'maj7')], [C(4, 'm7')], [C(5, 'maj9')], [C(7, 'sus')]], c: [[C(5, 'maj7')], [C(7, 'M')], [C(9, 'm7')], [C(2, 'm7'), C(7, 'd7')]] },
+    lavender: { root: 63, mode: 'major', bpm: 96, swing: 0.16, groove: 'pop', keys: 'ep', compV: 'lofi', compC: 'pop', lead: 'vox', lead2: 'ep', arp: 'pluck', pad: 0.9, pump: 0.3, tone: 6500, hook: 'lavender', vol: 0.84, level: true,
+      v: [[C(0, 'maj9')], [C(9, 'm9')], [C(2, 'm7')], [C(7, 'sus')]], c: [[C(5, 'maj9')], [C(4, 'm7'), C(9, 'm7')], [C(2, 'm9')], [C(7, 'sus'), C(7, 'd7')]] },
   };
+  const CHAPTERS = ['candy', 'meadow', 'berry', 'cliffs', 'winter', 'lavender'];
+  const CH_ALIAS = { beach: 'candy', rand: 'candy', komm: 'candy', kommirand: 'candy', flower: 'meadow', flowers: 'meadow', niit: 'meadow', lilleniit: 'meadow', forest: 'berry', mets: 'berry', marjamets: 'berry', lighthouse: 'cliffs', cliff: 'cliffs', kalju: 'cliffs', kaljud: 'cliffs', majakas: 'cliffs', village: 'winter', talv: 'winter', kula: 'winter', talvekula: 'winter', lavendel: 'lavender', lavendlivali: 'lavender' };
+  // Chapter: a number (1 = candy beach, 2 = flower meadow, ... cycling forever), a name, or {level: n} (50 levels a chapter).
+  function normChapter(o) {
+    o = o || {};
+    let ch = o.chapter;
+    if (ch === undefined && o.level !== undefined) ch = Math.floor(Math.max(0, (+o.level || 1) - 1) / 50) + 1;
+    if (typeof ch === 'number' || (typeof ch === 'string' && /^\d+$/.test(ch))) { const n = Math.max(1, (+ch) | 0); return CHAPTERS[(n - 1) % CHAPTERS.length]; }
+    let s = String(ch || '').toLowerCase().replace(/[äâ]/g, 'a').replace(/[õöó]/g, 'o').replace(/ü/g, 'u').replace(/[^a-z]/g, '');
+    if (CH_ALIAS[s]) s = CH_ALIAS[s];
+    return CHAPTERS.indexOf(s) >= 0 ? s : CHAPTERS[0];
+  }
   const ALIAS = { bakery: 'pagariari', pagar: 'pagariari', cafe: 'pagariari', kohvik: 'pagariari', garden: 'aed', harbour: 'sadam', harbor: 'sadam', windmill: 'tuuleveski', veski: 'tuuleveski', lighthouse: 'majakas', secret: 'saladus' };
   const ORDER = ['pagariari', 'aed', 'sadam', 'tuuleveski', 'majakas', 'saladus'];
   function normArea(a) {
@@ -5711,7 +5900,7 @@ const AU = (function () {
     return hasOwn(CFG, s) && s !== 'title' && s !== 'story' ? s : 'pagariari';
   }
   const LEADV = { vox: 0.3, pluck: 0.085, mallet: 0.11, bell: 0.075, ep: 0.1 };
-  const MU = { E: null, want: null, key: '', sinceRest: 0, restAt: 190 };
+  const MU = { E: null, want: null, key: '', sinceRest: 0, restAt: 190, tense: false };
   function degMidi(c, d, base) { const s = SCALE[c.mode], o = Math.floor(d / 7), i = d - o * 7; return base + 12 * o + s[i]; }
   function voicing(c, ch) { // chord tones (root dropped from 4+ note chords; the bass has it) in a mid window
     const iv = Q[ch[1]], lo = fold(c.root, 55, 67) - 3, out = [];
@@ -5787,7 +5976,7 @@ const AU = (function () {
     if (!key) { MU.E = null; return; }
     const name = key.indexOf(':') > 0 ? key.split(':')[1] : key, c = CFG[name];
     const e16 = 60 / c.bpm / 4, bus = G(B.music, 0), lp = F(bus, 'lowpass', c.tone, 0.7), inn = G(lp, 1);
-    const E = { c: c, name: name, e16: e16, bar: 16 * e16, bus: bus, lp: lp, in: inn, pump: G(inn, 1), t: now + (old ? 0.5 : 0.15), form: null, si: 0, bi: 0, S: null, cycle: 0, prev: 4, bars: 0 };
+    const E = { c: c, name: name, e16: e16, bar: 16 * e16, bus: bus, lp: lp, in: inn, pump: G(inn, 1), tempo: 1, t: now + (old ? 0.5 : 0.15), form: null, si: 0, bi: 0, S: null, cycle: 0, prev: 4, bars: 0 };
     E.bus.gain.setValueAtTime(0.0001, now); E.bus.gain.linearRampToValueAtTime(c.vol, now + (old ? 2.2 : 0.8));
     E.form = form(E); MU.E = E; MU.sinceRest = 0; MU.restAt = 170 + rnd() * 70;
   }
@@ -5796,7 +5985,7 @@ const AU = (function () {
     E.si++;
     if (E.si >= E.form.length) { E.cycle++; E.form = form(E); E.si = 0; }
     // Every few minutes a quiet stretch (a hush, or a few bars of soft pad) before the song comes back.
-    if (MU.sinceRest > MU.restAt && E.form[E.si] !== 'outro' && !E.c.story) {
+    if (MU.sinceRest > MU.restAt && E.form[E.si] !== 'outro' && !E.c.story && !(MU.tense && E.c.level)) {
       MU.sinceRest = 0; MU.restAt = 170 + rnd() * 70;
       E.form.splice(E.si, 0, rnd() < 0.4 ? 'hush' : 'rest');
       if (E.form[E.si + 1] !== 'intro') E.form.splice(E.si + 1, 0, 'intro');
@@ -5807,6 +5996,9 @@ const AU = (function () {
     g.setValueAtTime(1 - depth, t); g.setTargetAtTime(1, t + 0.01, E.e16 * 1.1);
   }
   function playBar(E) {
+    // Tense (few moves left, level music only): the tempo lifts about 6 % over two bars and the hats stay on.
+    const tense = MU.tense && !!E.c.level, tg = tense ? 1.06 : 1;
+    if (E.tempo !== tg) { E.tempo = Math.abs(tg - E.tempo) < 0.012 ? tg : E.tempo + (tg - E.tempo) * 0.55; E.e16 = 60 / (E.c.bpm * E.tempo) / 4; E.bar = 16 * E.e16; }
     if (!E.S || E.bi >= E.S.n) { if (E.S) nextSection(E); E.bi = 0; E.S = section(E, E.form[E.si]); }
     const S = E.S, c = E.c, t0 = E.t, e16 = E.e16, b = E.bi, dest = E.in, lv = S.lv, GR = GROOVE[c.groove];
     const sw = (s) => (s % 2 ? c.swing * e16 : 0), hum = () => rnd() * 0.005, T = (s) => t0 + s * e16 + sw(s);
@@ -5853,7 +6045,7 @@ const AU = (function () {
     }
     // Drums
     if (S.dr) {
-      const last = b === S.n - 1, full = S.dr >= 2, fillOn = last && S.fill;
+      const last = b === S.n - 1, full = S.dr >= 2 || tense, fillOn = last && S.fill;
       for (let s = 0; s < 16; s++) {
         const t = T(s);
         if (fillOn && s >= 12) { INS.snap(t, 0.05 + (s - 12) * 0.012, dest); if (s === 12) INS.kick(t, 0.2, dest); continue; }
@@ -5861,6 +6053,7 @@ const AU = (function () {
         if (GR.s.indexOf(s) >= 0) INS[GR.sn](t, GR.sn === 'clap' ? 0.075 : GR.sn === 'snare' ? 0.07 : 0.08, dest);
         if (full && GR.h.indexOf(s) >= 0) INS.hat(t, (GR.acc && s % GR.acc === 0 ? 0.028 : 0.019) * (c.groove === 'half' ? 0.8 : 1), dest);
         if (full && GR.sh && s % 2 === 1) INS.shaker(t, 0.011, dest);
+        if (c.jingle && full && !LITE && s % 4 === 2) noise(t, { f: 4200, q: 4, a: 0.002, d: 0.06, v: 0.012, dest: dest }); // soft sleigh bells
       }
       if (b % 4 === 3 && !fillOn && full) INS.kick(T(14), 0.14, dest);
     }
@@ -5876,16 +6069,21 @@ const AU = (function () {
     while (E.t < now + 0.35 && guard++ < 4) { try { playBar(E); } catch (e) { ST.err = 'music: ' + e.message; E.t += E.bar; } }
   }
   const MUSIC = {
-    // MUSIC.scene('title' | 'board' | 'story' | null, {area}) — crossfades; the same scene again is a no-op.
+    // MUSIC.scene('title' | 'board' | 'story' | 'map' | 'level' | null, {area} | {chapter, level, tense}) — crossfades; the same scene again is a no-op.
     scene(name, opts) {
       let key = '';
-      if (name === 'title' || name === 'story') key = name;
+      if (name === 'title' || name === 'story' || name === 'map') key = name;
       else if (name === 'board') key = 'board:' + normArea(opts && opts.area);
+      else if (name === 'level') { key = 'level:' + normChapter(opts); MU.tense = !!(opts && opts.tense); }
       MU.want = key;
       if (ctx && api.ready) startMusic(key);
       return key;
     },
     stop() { return MUSIC.scene(null); },
+    // MUSIC.mood('tense' | 'normal'): few moves left in a level -> a slightly faster tempo (no restart, no crossfade).
+    mood(m) { MU.tense = m === 'tense' || m === true; return MU.tense ? 'tense' : 'normal'; },
+    get tense() { return MU.tense; },
+    chapters: CHAPTERS.slice(),
     get current() { return MU.key; },
     areas: ORDER.slice(),
   };
@@ -6044,7 +6242,7 @@ const AU = (function () {
   function stats() {
     const now = ctx ? ctx.currentTime : 0; let live = 0; for (const a of act) if (a.end > now) live++;
     const E = MU.E;
-    return { ready: api.ready, state: ctx ? ctx.state : 'none', muted: muted, hidden: hidden, lite: LITE, phone: PHONE, vol: Object.assign({}, VOL), music: MU.key, section: E && E.S ? E.S.type + ' bar' + E.bi + '/' + E.S.n + ' cycle' + E.cycle + ' lead:' + (E.S.lead || '-') + ' keys:' + (S_KEYS(E)) : '', bars: E ? E.bars : 0, sinceRest: Math.round(MU.sinceRest), sfxLive: live, made: ST.made, nodeRate: ST.nodeRate, dropped: ST.dropped, names: Object.assign({}, ST.names), err: ST.err, reverb: !!REV, meter: meterOut() };
+    return { ready: api.ready, state: ctx ? ctx.state : 'none', muted: muted, hidden: hidden, lite: LITE, phone: PHONE, vol: Object.assign({}, VOL), music: MU.key, section: E && E.S ? E.S.type + ' bar' + E.bi + '/' + E.S.n + ' cycle' + E.cycle + ' lead:' + (E.S.lead || '-') + ' keys:' + (S_KEYS(E)) + (E.tempo !== 1 ? ' tempo x' + E.tempo.toFixed(2) : '') : '', bars: E ? E.bars : 0, sinceRest: Math.round(MU.sinceRest), sfxLive: live, made: ST.made, nodeRate: ST.nodeRate, dropped: ST.dropped, names: Object.assign({}, ST.names), err: ST.err, reverb: !!REV, meter: meterOut() };
   }
 
   const api = { ready: false, unlock: unlock, setVolume: setVolume, setMuted: setMuted, setLite: setLite, stats: stats, sfx: sfx, meter: meter, music: MUSIC, sounds: Object.keys(SFX), who: Object.keys(WHO), setHidden: setHidden, suspend: () => setHidden(true), resume: () => { if (!DOC || DOC.visibilityState !== 'hidden') setHidden(false); } };
