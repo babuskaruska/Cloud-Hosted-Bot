@@ -207,6 +207,21 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
 
 The owner asked for a merge-style game for his girlfriend. It is original (no copying of any existing game), fully Estonian and phone first. Design and team contracts are in **`merge/DESIGN.md`**. Build with `python3 tools/build-merge.py` (writes `merge/index.html` and icons). It is live at `https://babuskaruska.github.io/Cloud-Hosted-Bot/merge/` and installable on its own (`merge/manifest.webmanifest`, `merge/sw.js`). The same team works on it: Mira (game, UI, story), Ash (art, effects), Echo (audio) and Forge (QA, merges).
 
+**Status (version 1, live):**
+- **Mira:** the full loop.
+  - 7×9 board; 10 chains (bread, berry, flower, wood, fish, tea, dairy, apple, wool, sea) plus coffee (energy), coin and chest; 7 generators (oven, basket, teapot, bed, toolbox, net, wheel) with 4 levels each.
+  - Orders; 36 tasks (b1–s4) over 6 areas (bakery, garden, harbour, windmill, lighthouse, secret); story and an ending.
+  - Energy over real time, shop, bag, bubbles, chests, daily gift and tasks, tutorial, save `saarepagar.save`.
+  - Hook `window.__mg`; URL flags `fresh=1`, `seed=`, `nosave=1`.
+- **Ash:** `20-art.js`, `21-items.js`, `22-scenes.js`, `23-people.js`, `40-fx.js`, `icon.py`; gallery `node tools/artgallery.js`.
+- **Echo:** `80-audio.js` (folk theme per area, sound effects, talk blips); measure with `node tools/mergeaudio.js`.
+- **Forge:** `node tools/mergeqa.js` (real drags on desktop and iPhone 13, save reload) passes.
+- **Known:**
+  - Toasts sit over the scene strip.
+  - The scene is short on phones.
+  - The merge glow ring is faint.
+  - Pacing after the garden is untested.
+
 ## Round 14 results (merged; build version 20, live)
 
 - **Mira:**
