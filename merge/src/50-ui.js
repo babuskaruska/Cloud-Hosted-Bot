@@ -283,7 +283,8 @@ const UI = (() => {
     W = window.innerWidth; H = window.innerHeight;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     const si = insets(), gap = 6, top = si.t + 6, bot = H - si.b - 4, left = si.l, right = W - si.r;
-    const barH = 78, infoH = 62, OVER = 22, SCENE_MIN = 100;
+    // Short screens (a 360 x 800 Android, an iPhone with its notch and home bar) get a slightly lower tab bar and info bar.
+    const compact = bot - top < 760, barH = compact ? 70 : 78, infoH = compact ? 56 : 62, OVER = 22;
     L.landscape = (right - left) >= 700 && (right - left) > (bot - top) * 1.15;
     if (L.landscape) {
       const availB = bot - top - infoH - barH - gap * 2;
@@ -300,8 +301,12 @@ const UI = (() => {
       const cw = Math.min(right - left, 560), x0 = left + (right - left - cw) / 2;
       L.col = { x: x0, w: cw };
       const avail = bot - top - barH - infoH - gap * 3;
+      // The scene strip (village picture plus the HUD over it) gets about a quarter of the height: the board shrinks
+      // a little on short phones rather than the picture vanishing under the HUD. Cells stay 44 px or more if they can.
+      const need = c => c * ROWS + ordHFor(c) - OVER, want = clamp(Math.round(avail * 0.25), 150, 210);
       let cs = Math.floor((cw - 8) / COLS);
-      while (cs > 34 && cs * ROWS + ordHFor(cs) - OVER + SCENE_MIN > avail) cs--;
+      while (cs > 44 && need(cs) + want > avail) cs--;
+      while (cs > 38 && need(cs) + 124 > avail) cs--;
       const oh = ordHFor(cs);
       let topH = avail - cs * ROWS, y = top;
       const maxTop = oh - OVER + 340;
@@ -315,16 +320,17 @@ const UI = (() => {
       L.bar = { x: x0, y, w: cw, h: barH };
     }
     L.board = { x: L.bx, y: L.by, w: L.cs * COLS, h: L.cs * ROWS };
-    // HUD pills over the top of the scene: level, energy, coins, stars; second row: area pill, gift, settings
+    // HUD pills over the top of the scene: level, energy, coins, stars; second row: area pill, Seiklus, wardrobe, gift, settings
     const sx = L.scene.x + 6, sw = L.scene.w - 12, hy = L.scene.y + 6, pw = Math.min(124, (sw - 50 - 3 * 6) / 3);
     L.hud = { lvl: { x: sx, y: hy, w: 44, h: 44 } };
     ['energy', 'coins', 'stars'].forEach((n, j) => { L.hud[n] = { x: sx + 50 + j * (pw + 6), y: hy + 4, w: pw, h: 36 }; });
-    L.hud.look = { x: sx + sw - 140, y: hy + 50, w: 44, h: 44 };
-    L.hud.gift = { x: sx + sw - 92, y: hy + 50, w: 44, h: 44 };
+    L.hud.look = { x: sx + sw - 136, y: hy + 50, w: 44, h: 44 };
+    L.hud.gift = { x: sx + sw - 90, y: hy + 50, w: 44, h: 44 };
     L.hud.settings = { x: sx + sw - 44, y: hy + 50, w: 44, h: 44 };
-    const room = sw - 148, advW = room >= 250 ? Math.min(140, Math.max(110, Math.round(room * 0.45))) : 52;
-    L.hud.area = { x: sx, y: hy + 52, w: Math.min(220, room - advW - 8), h: 40 };
-    L.hud.adv = { x: sx + L.hud.area.w + 8, y: hy + 50, w: advW, h: 44 };
+    // "Seiklus" always keeps its word (it used to shrink to an icon at 390 px and below); the area pill takes the rest.
+    const advW = clamp(Math.round((sw - 142) * 0.45), 108, 150);
+    L.hud.adv = { x: sx + sw - 142 - advW, y: hy + 50, w: advW, h: 44 };
+    L.hud.area = { x: sx, y: hy + 50, w: Math.min(230, L.hud.adv.x - 6 - sx), h: 44 };
     // bottom tabs
     const names = ['tasks', 'album', 'week', 'pass', 'shop', 'bag'], bw = L.bar.w / names.length;
     L.btn = {}; names.forEach((n, j) => { L.btn[n] = { x: L.bar.x + j * bw, y: L.bar.y, w: bw, h: L.bar.h }; });
@@ -689,9 +695,9 @@ const UI = (() => {
     g.fillStyle = DARK; rr(r.x + 8, r.y, r.w - 8, r.h, r.h / 2); g.fill();
     g.lineWidth = 2; g.strokeStyle = 'rgba(255,255,255,0.25)'; g.stroke();
     if (r.w < 104) plus = false; // narrow phones: the whole pill is the button
-    const is = 34 * s; drawIcon(icon, r.x + 4 + (34 - is) / 2, r.y + r.h / 2 - is / 2, is);
-    const tw = r.w - 44 - (plus ? 26 : 4);
-    text(value, r.x + 40 + tw / 2, r.y + r.h / 2 + 1, 19, '#fff', 'center', 900, tw);
+    const ib = r.w < 104 ? 30 : 34, is = ib * s; drawIcon(icon, r.x + 4 + (ib - is) / 2, r.y + r.h / 2 - is / 2, is);
+    const tx = r.x + ib + 6, tw = r.x + r.w - tx - (plus ? 31 : 6);
+    text(value, tx + tw / 2, r.y + r.h / 2 + 1, 19, '#fff', 'center', 900, tw);
     if (plus) { const px = r.x + r.w - 15, py = r.y + r.h / 2; g.fillStyle = MINT; g.beginPath(); g.arc(px, py, 12, 0, 7); g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke(); g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.moveTo(px - 5, py); g.lineTo(px + 5, py); g.moveTo(px, py - 5); g.lineTo(px, py + 5); g.stroke(); }
     hits.push({ x: r.x, y: r.y - 6, w: r.w, h: r.h + 12, hud: 1, fn: () => { snd('tap'); fn(); } });
   }
@@ -714,9 +720,13 @@ const UI = (() => {
     // area pill with completion bar
     const area = Game.curArea(), ts = area.tasks, done = ts.filter(x => S.done[x.id]).length, a = H2.area;
     g.fillStyle = 'rgba(255,255,255,0.92)'; rr(a.x, a.y, a.w, a.h, 14); g.fill(); g.lineWidth = 2; g.strokeStyle = EDGE; g.stroke();
-    text(area.name, a.x + 10, a.y + 14, 15, INK, 'left', 900, a.w - 60);
-    text(done + '/' + ts.length, a.x + a.w - 10, a.y + 14, 15, INK2, 'right', 800);
-    bar(a.x + 10, a.y + 27, a.w - 20, 7, done / ts.length, PINK);
+    // Long names (island names, "Vanaema saladus") wrap onto two lines on narrow phones instead of being cut.
+    const cnt = done + '/' + ts.length; g.font = font(15, 800); const cntW = g.measureText(cnt).width + 8;
+    g.font = font(15, 900); const nameW = g.measureText(area.name).width;
+    if (nameW <= a.w - 20 - cntW) { text(area.name, a.x + 10, a.y + 15, 15, INK, 'left', 900); text(cnt, a.x + a.w - 10, a.y + 15, 15, INK2, 'right', 800); }
+    else if (nameW <= a.w - 16) text(area.name, a.x + 8, a.y + 15, 15, INK, 'left', 900);
+    else { const ls = wrap(area.name, a.w - 16, 15, 900); text(ls[0], a.x + 8, a.y + 11, 15, INK, 'left', 900, a.w - 14); text(ls.slice(1).join(' '), a.x + 8, a.y + 27, 15, INK, 'left', 900, a.w - 14); }
+    bar(a.x + 8, a.y + a.h - 9, a.w - 16, 5, done / ts.length, PINK);
     hits.push({ x: a.x, y: a.y, w: a.w, h: Math.max(48, a.h), hud: 1, fn: () => { snd('tap'); openModal({ kind: 'tasks' }); } });
     // gift and settings
     const giftOn = !S.daily.gift || S.daily.tasks.some(x => x.n >= x.goal && !x.claimed) || (!S.daily.bonus && S.daily.tasks.length && S.daily.tasks.every(x => x.claimed));
@@ -731,7 +741,7 @@ const UI = (() => {
     drawIcon('wardrobe', lk.x + 22 - 16 * ls, lk.y + 22 - 16 * ls, 32 * ls);
     if (LOOK.unseen() > 0) dot(lk.x + 38, lk.y + 6);
     hits.push({ x: lk.x - 2, y: lk.y - 2, w: 48, h: 48, hud: 1, fn: () => { snd('tap'); openModal({ kind: 'xLook' }); } });
-    const av = H2.adv; button(av.x, av.y, av.w, av.h, av.w >= 100 ? 'Seiklus' : '', () => goScreen('map'), { style: 'buttonPink', icon: 'map', isz: 28, size: 17 });
+    const av = H2.adv; button(av.x, av.y, av.w, av.h, 'Seiklus', () => goScreen('map'), { style: 'buttonPink', icon: 'map', isz: av.w < 124 ? 24 : 28, size: av.w < 124 ? 16 : 17 });
     hits[hits.length - 1].hud = 1;
     if (ADV.attention()) dot(av.x + av.w - 4, av.y + 4);
     hits.push({ x: st.x - 2, y: st.y - 2, w: 48, h: 48, hud: 1, fn: () => openModal({ kind: 'settings' }) });
@@ -896,7 +906,8 @@ const UI = (() => {
       if (hint) { hset = new Set(hint); const u = ((tn() - idleT) % 2.4) / 2.4; hw = u < 0.35 ? Math.sin(u / 0.35 * Math.PI * 4) * 0.16 * Math.sin(u / 0.35 * Math.PI) : 0; }
     }
     needSet = Game.orderNeeds();
-    const isz = cs * FILL;
+    const isz = cs * FILL, q = (typeof FX !== 'undefined' && FX && FX.quality !== undefined) ? FX.quality | 0 : 2;
+    const idleOn = q >= 1 && !drag && artOn('itemIdle'), sparkOn = q >= 1 && fxOn('idle');
     for (let i = 0; i < NCELL; i++) {
       const it = S.board[i]; if (!it || (drag && drag.from === i)) continue;
       const d = itemDrawState(i, t); if (d.hide) continue;
@@ -912,10 +923,16 @@ const UI = (() => {
       }
       g.save(); g.translate(d.x, d.y);
       if (hset && hset.has(i)) { g.translate(0, cs * 0.3); g.rotate(hw); g.translate(0, -cs * 0.3); }
-      if (kind === 'mystery') { const q = Math.sin(t * 2.2 + i) * 0.05; g.rotate(q); }
+      else if (kind === 'mystery') { const q = Math.sin(t * 2.2 + i) * 0.05; g.rotate(q); }
+      else if (idleOn && !anim.has(i) && sel !== i) { // Ash's gentle idle breathing and wobble (pivot at the item's bottom)
+        const f = ART.itemIdle(i * 7 + it.l * 131 + (it.k.charCodeAt(0) << 4), t), by = isz * 0.5;
+        g.translate(0, by + f.dy * isz); g.rotate(f.rot); g.scale(f.sx, f.sy); g.translate(0, -by);
+      }
       g.scale(d.s * (1 + d.sq), d.s * (1 - d.sq));
       drawItem(it.k, it.l, 0, 0, isz);
       g.restore();
+      // an occasional sparkle on bigger items (FX.idle is stateless and skips itself on the lowest quality)
+      if (sparkOn && kind === 'item' && it.l >= 3 && !anim.has(i)) { try { FX.idle(g, d.x, d.y, isz, i * 13 + it.l, t); } catch (e) {} }
       if (kind === 'gen') genBadge(it, i, d.x, d.y, t);
       else if (needSet.has(it.k + ':' + it.l) && !(drag && drag.from === i)) {
         // "Tellimus!" badge: a green check bubble on items an order wants
@@ -1150,7 +1167,7 @@ const UI = (() => {
       const P = modalPanel(m, 440, head + ts.length * rowH + foot, area.name);
       const done = ts.filter(x => S.done[x.id]).length;
       let y0 = P.y + 36;
-      if (tour) { text('Saareringreis · ' + area.themeName + ' · ' + (area.i + 1) + '. saar', P.x + P.w / 2, P.y + 40, 15, GRAPE, 'center', 900, P.w - 124); y0 += 20; }
+      if (tour) { text((area.i + 1) + '. saar · ' + area.themeName, P.x + P.w / 2, P.y + 40, 15, GRAPE, 'center', 900, P.w - 124); y0 += 20; }
       drawIcon('star', P.x + 18, y0, 30); text(String(S.stars), P.x + 54, y0 + 16, 20, INK, 'left', 900);
       text(done + '/' + ts.length + ' tehtud', P.x + P.w - 18, y0 + 16, 15, INK2, 'right', 800);
       bar(P.x + 18, y0 + 40, P.w - 36, 10, done / ts.length, PINK);
@@ -1161,7 +1178,9 @@ const UI = (() => {
         const ic = Math.min(30, bh - 16), iy = y + (bh - ic) / 2;
         if (isDone) drawIcon('check', P.x + 18, iy, ic); else if (!isNext) { g.globalAlpha = 0.6; drawIcon('lock', P.x + 18, iy, ic); g.globalAlpha = 1; } else drawIcon('star', P.x + 18, iy - 1, ic + 2);
         const styled = isDone && tk.choices;
-        text(tk.name, P.x + 58, y + bh / 2, 17, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, P.w - (isNext ? 190 : styled ? 170 : 134));
+        const nmW = P.w - (isNext ? 190 : styled ? 170 : 134); g.font = font(17, isDone ? 700 : 900);
+        if (g.measureText(tk.name).width <= nmW || bh < 46) text(tk.name, P.x + 58, y + bh / 2, 17, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, nmW);
+        else { const ls = wrap(tk.name, nmW, 16, isDone ? 700 : 900); text(ls[0], P.x + 58, y + bh / 2 - 10, 16, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, nmW); text(ls.slice(1).join(' '), P.x + 58, y + bh / 2 + 10, 16, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, nmW); }
         if (isNext) { m.nextBtn = { x: P.x + P.w - 120, y: y + 4, w: 104, h: 48 }; button(P.x + P.w - 120, y + (bh - 48) / 2, 104, 48, String(tk.cost), () => Game.doTask(tk.id), Object.assign({ icon: 'star', hot: S.stars >= tk.cost, pulse: S.stars >= tk.cost, offFn: () => Game.doTask(tk.id), size: 19 }, B)); }
         else if (styled) { const st = STYLES[S.style[tk.id]]; button(P.x + P.w - 112, y + (bh - 44) / 2, 96, 44, st ? 'Muuda' : 'Vali', () => closeThen({ kind: 'xStyle', id: tk.id, back: 'tasks' }), Object.assign({ icon: 'brush', isz: 24, size: 16, style: 'buttonPink' }, B)); }
         else if (!isDone) { drawIcon('star', P.x + P.w - 64, y + bh / 2 - 12, 24); text(String(tk.cost), P.x + P.w - 30, y + bh / 2 + 1, 17, INK2, 'center', 900); }
@@ -1432,18 +1451,27 @@ const UI = (() => {
     if (WEEK.open()) { const wn = WEEK.info().E.name + ' käib!'; g.fillStyle = PINK; g.font = font(16, 900); const tw = Math.min(W - 30, g.measureText(wn).width + 30); rr(cx - tw / 2, by + 190, tw, 34, 17); g.fill(); text(wn, cx, by + 208, 16, '#fff', 'center', 900, tw - 12); }
   }
 
+  // Toasts never sit on the board or the scene: on the café they cover the info bar under the board, in Seiklus the
+  // free strip under the level board (or the bottom of the map), and while a window is open the top of the screen.
+  // They are drawn after the effects and the windows, so confetti never hides them.
   function drawToasts(t) {
     for (let j = toasts.length - 1; j >= 0; j--) if (t - toasts[j].t0 > toasts[j].dur) toasts.splice(j, 1);
     toasts.forEach(o => {
-      const k = t - o.t0, a = Math.min(1, k / 0.15, (o.dur - k) / 0.3);
-      const TB = scr === 'board' || onTitle ? L.board : ADV.toastRect();
-      const w = Math.min(TB.w - 8, 460), ls = wrap(o.s, w - 28, 16, 800), h = 20 + ls.length * 21;
-      const x = TB.x + (TB.w - w) / 2, y = TB.y + TB.h - h - 10 + (1 - Math.min(1, k / 0.15)) * 14;
+      const k = t - o.t0, a = Math.min(1, k / 0.15, (o.dur - k) / 0.3), slide = (1 - Math.min(1, k / 0.15)) * 14;
+      let TB, mode;
+      if (modal && !onTitle) { const si = insets(); TB = { x: 8, y: si.t + 6, w: W - 16, h: 0 }; mode = 'top'; }
+      else if (scr === 'board' || onTitle) { TB = L.info; mode = 'mid'; }
+      else { TB = ADV.toastRect(); mode = TB.mid ? 'mid' : 'bottom'; }
+      const w = Math.min(TB.w - (mode === 'top' ? 0 : 4), 460), ls = wrap(o.s, w - 28, 16, 800), h = Math.max(mode === 'mid' ? Math.min(TB.h, 52) : 0, 20 + ls.length * 21);
+      const x = TB.x + (TB.w - w) / 2;
+      const y = mode === 'top' ? TB.y - slide : mode === 'mid' ? TB.y + (h <= TB.h ? (TB.h - h) / 2 : TB.h - h) + slide : TB.y + TB.h - h - 10 + slide;
       g.globalAlpha = clamp(a, 0, 1);
-      g.fillStyle = DARK; rr(x, y, w, h, 18); g.fill();
-      ls.forEach((s, q) => text(s, x + w / 2, y + 20 + q * 21, 16, '#ffffff', 'center', 800));
+      g.fillStyle = 'rgba(40,28,96,0.92)'; rr(x, y, w, h, 18); g.fill();
+      ls.forEach((s, q) => text(s, x + w / 2, y + h / 2 + (q - (ls.length - 1) / 2) * 21, 16, '#ffffff', 'center', 800, w - 16));
       g.globalAlpha = 1;
     });
+  }
+  function drawFloaters(t) {
     for (let j = floaters.length - 1; j >= 0; j--) {
       const o = floaters[j], k = (t - o.t0) / 1.0; if (k >= 1) { floaters.splice(j, 1); continue; }
       g.globalAlpha = 1 - k * k; const y = o.y - k * 40;
@@ -1496,8 +1524,9 @@ const UI = (() => {
     if (scr !== 'board') {
       if (scr === 'map') ADV.drawMap(t); else ADV.drawLevel(t);
       if (fxOn('draw') && !(modal && modal.fxTop)) { try { FX.draw(g); } catch (e) {} }
-      drawBanners(t); drawToasts(t); drawModal(t);
+      drawBanners(t); drawFloaters(t); drawModal(t);
       if (modal && modal.fxTop && fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
+      drawToasts(t);
       return;
     }
     if (sel >= 0 && !S.board[sel]) sel = -1;
@@ -1518,10 +1547,11 @@ const UI = (() => {
     const fxTop = modal && modal.kind === 'levelup';
     if (!fxTop && fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
     drawBanners(t); drawPopup(t);
-    drawToasts(t);
+    drawFloaters(t);
     drawTutorial(t);
     drawModal(t);
     if (fxTop && fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
+    drawToasts(t);
     if (modal && modal.kind === 'tasks' && S.tut === 4 && modal.nextBtn && S.stars >= 1) { const b = modal.nextBtn; drawHand(b.x + b.w / 2 + 8, b.y + b.h / 2 + 10, t, true); }
   }
 

@@ -6,6 +6,7 @@
   try { if (QS._hash && history.replaceState) history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
   S.title = true;
   Game.tickEnergy(); Game.ensureDaily();
+  const leftLevel = LV.leftOpen();
   const cap = (navigator.hardwareConcurrency || 8) <= 4 ? 30 : 60;
   try { if (typeof FX !== 'undefined' && FX && FX.quality === undefined) FX.quality = cap === 30 ? 1 : 2; } catch (e) {}
   UI.layout();
@@ -32,6 +33,7 @@
   addEventListener('pagehide', save);
   run();
   const l = document.getElementById('load'); if (l) l.remove();
+  if (leftLevel) setTimeout(() => UI.toast('Tase ' + leftLevel + ' jäi pooleli, nii et üks süda läks. Elud tulevad ise tagasi!', 4), 600);
   try { if (typeof MUSIC !== 'undefined' && MUSIC && MUSIC.scene) MUSIC.scene('title'); } catch (e) {}
 
   // Test hook for QA (tools/mergeqa.js). act.* run game actions directly; UI exposes layout and screen coordinates.

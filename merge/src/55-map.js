@@ -211,20 +211,20 @@ const ADV = (() => {
   function drawMapHud(t, G) {
     const A = S.adv, top = G.top;
     // back to the café
-    button(8, top, 104, 48, '‹ Kohvik', () => UI.goScreen('board'), { style: 'buttonBlue', size: 18 });
-    // lives
-    const hx = 120, hw = Math.min(150, W - 120 - 120 - 16);
+    const narrow = W < 400, backW = narrow ? 96 : 104;
+    button(8, top, backW, 48, '‹ Kohvik', () => UI.goScreen('board'), { style: 'buttonBlue', size: narrow ? 17 : 18 });
+    // coins on the right, lives in between (the "Täis" label or the timer gets its own room, never under the coin)
+    const cw = narrow ? 100 : 118, cx0 = W - cw - 8, hx = backW + 16, hw = Math.min(160, cx0 - 8 - hx);
     g.fillStyle = DARK; rr(hx, top + 4, hw, 40, 20); g.fill();
     drawIcon('heart', hx + 4, top + 6, 36);
     const full = A.hearts >= HEART_MAX;
     text(String(A.hearts), hx + 50, top + 25, 20, '#fff', 'center', 900);
-    if (hw > 90) text(full ? 'Täis' : fmtTime(LV.heartNext()), hx + 64 + (hw - 70) / 2, top + 25, 16, full ? MINT : '#fff', 'center', 800, hw - 72);
+    if (hw > 96) text(full ? 'Täis' : fmtTime(LV.heartNext()), hx + 64 + (hw - 72) / 2, top + 25, 16, full ? MINT : '#fff', 'center', 800, hw - 72);
     H.addHit({ x: hx, y: top, w: hw, h: 48, fn: () => { snd('tap'); H.openModal({ kind: 'advHearts' }); } });
     mapHudR.hearts = { x: hx + 22, y: top + 24 };
-    // coins
-    const cw = Math.min(118, W - hx - hw - 14), cx0 = W - cw - 8;
     g.fillStyle = DARK; rr(cx0, top + 4, cw, 40, 20); g.fill(); drawIcon('coin', cx0 + 4, top + 7, 34);
     text(fmtNum(H.disp.coins === null ? S.coins : H.disp.coins), cx0 + 40 + (cw - 46) / 2, top + 25, 18, '#fff', 'center', 900, cw - 46);
+    H.addHit({ x: cx0, y: top, w: cw, h: 48, fn: () => { snd('tap'); toast('Münte saad tasemetelt, kohviku tellimustelt ja põrsast.'); } });
     mapHudR.coins = { x: cx0 + 20, y: top + 24 };
     // right column: wheel, piggy, calendar
     const col = [
@@ -233,7 +233,7 @@ const ADV = (() => {
       ['calendar', 'Kalender', () => H.openModal({ kind: 'daily' }), !S.daily.gift],
     ];
     col.forEach(([ic, lab, fn, hot], j) => {
-      const bx = W - 74, by = top + 62 + j * 84, wig = hot ? Math.sin(t * 8) * 0.12 * (Math.sin(t * 1.6) > 0.5 ? 1 : 0) : 0, ps = H.pressScale(bx, by);
+      const bx = W - 78, by = top + 62 + j * 84, wig = hot ? Math.sin(t * 8) * 0.12 * (Math.sin(t * 1.6) > 0.5 ? 1 : 0) : 0, ps = H.pressScale(bx, by);
       g.fillStyle = 'rgba(255,255,255,0.92)'; g.beginPath(); g.arc(bx + 33, by + 28, 29 * ps, 0, 7); g.fill(); g.lineWidth = 2.5; g.strokeStyle = 'rgba(124,92,255,0.25)'; g.stroke();
       g.save(); g.translate(bx + 33, by + 28); g.rotate(wig); drawIcon(ic, -22 * ps, -22 * ps, 44 * ps); g.restore();
       g.fillStyle = DARK; g.font = H.font(15, 900); const lw = g.measureText(lab).width + 14; rr(bx + 33 - lw / 2, by + 52, lw, 22, 11); g.fill();
@@ -687,8 +687,16 @@ const ADV = (() => {
       if (r) r.goals.forEach((g2, j) => text(goalText(g2) + ': ' + g2.got + '/' + g2.n, P.x + P.w / 2, P.y + 50 + j * 26, 17, INK, 'center', 800, P.w - 30));
       button(P.x + 30, P.y + 110, P.w - 60, 54, 'Jätka', () => H.closeModal(), Object.assign({ hot: true, size: 21 }, B));
       const costs = r && (r.used > 0 || r.over) && !r.won;
-      button(P.x + 30, P.y + 176, P.w - 60, 50, 'Loobu', () => { H.closeModal(true); if (costs) { LV.lose(); toast('Kaotasid ühe elu. Proovi uuesti!'); } else LV.quit(); backToMap(false); }, Object.assign({ style: 'buttonGrey', size: 19 }, B));
-      if (costs) text('Kui loobud, kaotad ühe elu.', P.x + P.w / 2, P.y + P.h - 24, 15, INK2, 'center', 700, P.w - 20);
+      button(P.x + 30, P.y + 176, P.w - 60, 50, 'Lahku', () => { if (costs) { H.closeThen({ kind: 'advLeave', sticky: true }); return; } H.closeModal(true); LV.quit(); backToMap(false); }, Object.assign({ style: 'buttonGrey', size: 19 }, B));
+      if (costs) text('Pärast esimest käiku maksab lahkumine ühe südame.', P.x + P.w / 2, P.y + P.h - 24, 15, INK2, 'center', 700, P.w - 20);
+    } else if (m.kind === 'advLeave') {
+      // A kind confirm: leaving after the first move costs a life (closing the app does too, see LV.leftOpen).
+      const P = H.modalPanel(m, 380, 330, 'Lahkud?');
+      drawIcon('heart', P.x + P.w / 2 - 34, P.y + 34, 68);
+      text('Lahkud? Kaotad ühe südame.', P.x + P.w / 2, P.y + 124, 19, INK, 'center', 900, P.w - 30);
+      text('Elud tulevad ise tagasi: üks iga 15 minuti järel.', P.x + P.w / 2, P.y + 152, 15, INK2, 'center', 700, P.w - 30);
+      button(P.x + 30, P.y + 182, P.w - 60, 56, 'Mängin edasi!', () => H.closeModal(), Object.assign({ hot: true, size: 20 }, B));
+      button(P.x + 50, P.y + 250, P.w - 100, 50, 'Lahku', () => { H.closeModal(true); LV.lose(); toast(S.adv.hearts > 0 ? 'Üks süda läks. Järgmine kord läheb paremini!' : 'Südamed said otsa. Puhka natuke!', 3); backToMap(false); }, Object.assign({ style: 'buttonGrey', size: 19 }, B));
     } else if (m.kind === 'advWin') drawWin(m, t, B);
     else if (m.kind === 'advFail') drawFail(m, t, B);
     else if (m.kind === 'advBuy') {
@@ -841,8 +849,10 @@ const ADV = (() => {
     return null;
   }
   function toastRect() {
-    if (UI.scr === 'level' && V && V.G) return { x: V.G.bx, y: V.G.by, w: V.G.bw, h: V.G.bh };
-    return { x: 10, y: Hh * 0.2, w: W - 20, h: Hh * 0.52 };
+    // Under the level board: the free strip above the boosters if it is tall enough, else over the booster row.
+    if (UI.scr === 'level' && V && V.G) { const G = V.G, y0 = G.by + G.bh + 4, gap = G.boostY - y0 - 4; return gap >= 46 ? { x: G.x0, y: y0, w: G.cw, h: gap, mid: true } : { x: G.x0, y: G.boostY, w: G.cw, h: 56, mid: true }; }
+    // The map: above the big play button.
+    const G = mapGeo(); return { x: 10, y: Hh * 0.3, w: W - 20, h: G.bot - 68 - 50 - Hh * 0.3 };
   }
   const busy = () => !!(WH.spin || (V && (V.drag || V.anim.size || V.ghosts.length)) || M.drag || M.walk || Math.abs(M.vel) > 5);
 

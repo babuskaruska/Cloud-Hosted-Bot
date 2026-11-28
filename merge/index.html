@@ -81,7 +81,7 @@ const ease = {
 
 function dayKey(ts) { const d = new Date(ts || now()); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
 function fmtTime(ms) { const s = Math.max(0, Math.ceil(ms / 1000)), m = Math.floor(s / 60); return m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ':' + String(s % 60).padStart(2, '0'); }
-function fmtNum(n) { n = Math.floor(n); return n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace('.', ',') + ' k' : String(n); }
+function fmtNum(n) { n = Math.floor(n); return n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace('.', ',') + '\u202fk' : String(n); }
 
 // Board geometry
 const COLS = 7, ROWS = 9, NCELL = COLS * ROWS;
@@ -107,7 +107,7 @@ function newState() {
     tut: 0, title: true,
     daily: { day: '', gift: false, streak: 0, lastGift: '', tasks: [], bonus: false, d30: 0, c30: 0 },
     // version 3: adventure levels, lucky wheel, piggy bank
-    adv: { top: 1, stars: {}, hearts: 5, heartT: t, streak: 0, best: 0, boost: { wand: 1, scissors: 1, shuffle: 1, moves: 1 }, plays: 0, wins: 0, tips: {}, seen: 0 },
+    adv: { top: 1, stars: {}, hearts: 5, heartT: t, streak: 0, best: 0, live: null, boost: { wand: 1, scissors: 1, shuffle: 1, moves: 1 }, plays: 0, wins: 0, tips: {}, seen: 0 },
     wheel: { free: '', extra: 0, n: 0 },
     piggy: { coins: 0, day: '' },
     stats: { merges: 0, orders: 0, taps: 0, tasks: 0, lucky: 0, merge5: 0, combo: 0, mbox: 0 },
@@ -5994,9 +5994,9 @@ const LV = (() => {
   const FIRST = { ice: 2, box: 4, order: 6, web: 8, sand: 12, crate: 15, bubble: 20 };
   // Move limit: the sampler bot (a sloppy, casual player) plays the level 16 times with no limit; the limit is the
   // move count that this share of its tries managed (plus a little), so a casual player wins about that often.
-  const PCT = { easy: 0.9, breather: 0.97, hard: 0.68, boss: 0.72 };
+  const PCT = { easy: 0.9, breather: 0.97, hard: 0.76, boss: 0.78 };
   const EXTRA = { easy: 2, breather: 3, hard: 0, boss: 1 };
-  const CAL_TRIES = 16;
+  const CAL_TRIES = 32;  // 16 tries left some hard levels at 25-40% for other players by bad luck in the sample
   const KMUL = { easy: 1, breather: 0.75, hard: 1.15, boss: 1.25 };
   const CRATE_MOVES = 2, WHO_ORDER = ['liisa', 'muri', 'ants', 'peeter'];
 
@@ -6146,10 +6146,26 @@ const LV = (() => {
       const d = best.d, need = best.need;
       d.need = need;
       const us = [];
-      for (let s = 0; s < CAL_TRIES; s++) { const r = newRun(d, hashStr('samp' + n + ':' + s), 300); play(r, 'sampler', mulberry(hashStr('sbot' + n + ':' + s))); us.push(r.won ? r.used : 999); }
+      // The move limit a try needed: its deepest point (merges made minus the +2 moves from locked chests).
+      for (let s = 0; s < CAL_TRIES; s++) {
+        const r = newRun(d, hashStr('samp' + n + ':' + s), 300), R = mulberry(hashStr('sbot' + n + ':' + s)); let lo = 300, k = 0;
+        while (!r.over && k++ < 600) { if (!botStep(r, 'sampler', R)) break; lo = Math.min(lo, r.moves); }
+        us.push(r.won ? 300 - lo : 999);
+      }
       us.sort((a, b) => a - b);
       const pct = us[Math.min(CAL_TRIES - 1, Math.ceil(PCT[d.kind] * CAL_TRIES) - 1)];
       d.moves = Math.max(8, need + 2, Math.min(pct, Math.ceil(need * 2.2)) + EXTRA[d.kind] + (n <= 10 ? 2 : 0));
+      // Floor: a second, independent sample must win at least 60% of the time (hard and boss levels are meant to
+      // be hard, not a coin flip). If not, the limit grows to that sample's 60% mark (capped like above).
+      const vs = [];
+      for (let s = 0; s < 12; s++) {
+        const r = newRun(d, hashStr('ver' + n + ':' + s), 300), R = mulberry(hashStr('vbot' + n + ':' + s)); let lo = 300, k = 0;
+        while (!r.over && k++ < 600) { if (!botStep(r, 'sampler', R)) break; lo = Math.min(lo, r.moves); }
+        vs.push(r.won ? 300 - lo : 999);
+      }
+      vs.sort((a, b) => a - b);
+      const floor = vs[Math.ceil(0.6 * vs.length) - 1];
+      if (floor < 999 && vs.filter(x => x <= d.moves).length < 0.6 * vs.length) d.moves = Math.max(d.moves, Math.min(floor, Math.ceil(need * 2.4)));
       d.s3 = Math.ceil(need * 1.08);
       d.s2 = Math.ceil(need + (d.moves - need) * 0.5);
       d.seed = hashStr('saarepagar-play-' + n);
@@ -6203,6 +6219,7 @@ const LV = (() => {
   function merge(r, a, b) {
     const A = r.it[a], res = { k: A.k, l: A.l + 1 };
     r.it[a] = null; r.it[b] = res; r.moves--; r.used++; r.popped = false;
+    if (r === cur && S.adv.live && !S.adv.live.used) { S.adv.live.used = 1; saveSoon(); }
     emit(r, 'merge', b, { from: a, k: res.k, l: res.l });
     landed(r, b);
     after(r, true);
@@ -6458,6 +6475,7 @@ const LV = (() => {
     S.adv.plays++;
     cur = newRun(def, (def.seed ^ Math.imul(S.adv.plays, 2654435761)) >>> 0);
     cur.streakBonus = Math.min(3, S.adv.streak); cur.moves += cur.streakBonus;
+    S.adv.live = { n, used: 0 }; // a level left by closing the app after a move still costs a life (see leftOpen)
     saveSoon();
     return cur;
   }
@@ -6473,7 +6491,7 @@ const LV = (() => {
   }
   function win() {
     const r = cur; if (!r || !r.won || r.paid) return null;
-    r.paid = true;
+    r.paid = true; S.adv.live = null;
     const n = r.n, A = S.adv, first = n === A.top, stars = starsFor(r), prev = A.stars[n] || 0;
     if (stars > prev) A.stars[n] = stars;
     if (first) A.top = n + 1;
@@ -6488,12 +6506,18 @@ const LV = (() => {
   // Losing (or leaving after the first move) costs one life and ends the win streak.
   function lose() {
     const r = cur; if (!r || r.won) return false;
-    loseHeart(); S.adv.streak = 0; cur = null; saveSoon(); return true;
+    loseHeart(); S.adv.streak = 0; cur = null; S.adv.live = null; saveSoon(); return true;
+  }
+  // On boot: a level that was left open (the app closed or reloaded after the first move) costs one life, like
+  // leaving it from the pause window. Returns the level number for a kind note, or 0.
+  function leftOpen() {
+    const L = S.adv.live; S.adv.live = null; if (!L || !L.used) return 0;
+    loseHeart(); S.adv.streak = 0; saveSoon(); return L.n || 1;
   }
   function quit() {
     const r = cur; if (!r) return false;
-    if (r.won) { cur = null; return true; }
-    if (r.used === 0 && !r.over) { cur = null; return true; }
+    if (r.won) { cur = null; S.adv.live = null; return true; }
+    if (r.used === 0 && !r.over) { cur = null; S.adv.live = null; return true; }
     return lose();
   }
   const movesPrice = () => MORE_MOVES_PRICE[Math.min(MORE_MOVES_PRICE.length - 1, cur ? cur.priceIx : 0)];
@@ -6515,7 +6539,7 @@ const LV = (() => {
   return {
     LC, LR, LN, NB, FIRST, kindOf, chapterOf, gen, newRun, canDrop, drop, remaining, starsFor, boostCheck, useBoost, pickable, blocked,
     candidates, botStep, play, botTest, tickHearts, heartNext, refillHearts, start, win, lose, quit, movesPrice, buyMoves, boost, buyBoost,
-    get cur() { return cur; }, set cur(v) { cur = v; }, hasMove, CRATE_MOVES,
+    get cur() { return cur; }, set cur(v) { cur = v; }, hasMove, CRATE_MOVES, leftOpen,
   };
 })();
 
@@ -7742,7 +7766,8 @@ const UI = (() => {
     W = window.innerWidth; H = window.innerHeight;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     const si = insets(), gap = 6, top = si.t + 6, bot = H - si.b - 4, left = si.l, right = W - si.r;
-    const barH = 78, infoH = 62, OVER = 22, SCENE_MIN = 100;
+    // Short screens (a 360 x 800 Android, an iPhone with its notch and home bar) get a slightly lower tab bar and info bar.
+    const compact = bot - top < 760, barH = compact ? 70 : 78, infoH = compact ? 56 : 62, OVER = 22;
     L.landscape = (right - left) >= 700 && (right - left) > (bot - top) * 1.15;
     if (L.landscape) {
       const availB = bot - top - infoH - barH - gap * 2;
@@ -7759,8 +7784,12 @@ const UI = (() => {
       const cw = Math.min(right - left, 560), x0 = left + (right - left - cw) / 2;
       L.col = { x: x0, w: cw };
       const avail = bot - top - barH - infoH - gap * 3;
+      // The scene strip (village picture plus the HUD over it) gets about a quarter of the height: the board shrinks
+      // a little on short phones rather than the picture vanishing under the HUD. Cells stay 44 px or more if they can.
+      const need = c => c * ROWS + ordHFor(c) - OVER, want = clamp(Math.round(avail * 0.25), 150, 210);
       let cs = Math.floor((cw - 8) / COLS);
-      while (cs > 34 && cs * ROWS + ordHFor(cs) - OVER + SCENE_MIN > avail) cs--;
+      while (cs > 44 && need(cs) + want > avail) cs--;
+      while (cs > 38 && need(cs) + 124 > avail) cs--;
       const oh = ordHFor(cs);
       let topH = avail - cs * ROWS, y = top;
       const maxTop = oh - OVER + 340;
@@ -7774,16 +7803,17 @@ const UI = (() => {
       L.bar = { x: x0, y, w: cw, h: barH };
     }
     L.board = { x: L.bx, y: L.by, w: L.cs * COLS, h: L.cs * ROWS };
-    // HUD pills over the top of the scene: level, energy, coins, stars; second row: area pill, gift, settings
+    // HUD pills over the top of the scene: level, energy, coins, stars; second row: area pill, Seiklus, wardrobe, gift, settings
     const sx = L.scene.x + 6, sw = L.scene.w - 12, hy = L.scene.y + 6, pw = Math.min(124, (sw - 50 - 3 * 6) / 3);
     L.hud = { lvl: { x: sx, y: hy, w: 44, h: 44 } };
     ['energy', 'coins', 'stars'].forEach((n, j) => { L.hud[n] = { x: sx + 50 + j * (pw + 6), y: hy + 4, w: pw, h: 36 }; });
-    L.hud.look = { x: sx + sw - 140, y: hy + 50, w: 44, h: 44 };
-    L.hud.gift = { x: sx + sw - 92, y: hy + 50, w: 44, h: 44 };
+    L.hud.look = { x: sx + sw - 136, y: hy + 50, w: 44, h: 44 };
+    L.hud.gift = { x: sx + sw - 90, y: hy + 50, w: 44, h: 44 };
     L.hud.settings = { x: sx + sw - 44, y: hy + 50, w: 44, h: 44 };
-    const room = sw - 148, advW = room >= 250 ? Math.min(140, Math.max(110, Math.round(room * 0.45))) : 52;
-    L.hud.area = { x: sx, y: hy + 52, w: Math.min(220, room - advW - 8), h: 40 };
-    L.hud.adv = { x: sx + L.hud.area.w + 8, y: hy + 50, w: advW, h: 44 };
+    // "Seiklus" always keeps its word (it used to shrink to an icon at 390 px and below); the area pill takes the rest.
+    const advW = clamp(Math.round((sw - 142) * 0.45), 108, 150);
+    L.hud.adv = { x: sx + sw - 142 - advW, y: hy + 50, w: advW, h: 44 };
+    L.hud.area = { x: sx, y: hy + 50, w: Math.min(230, L.hud.adv.x - 6 - sx), h: 44 };
     // bottom tabs
     const names = ['tasks', 'album', 'week', 'pass', 'shop', 'bag'], bw = L.bar.w / names.length;
     L.btn = {}; names.forEach((n, j) => { L.btn[n] = { x: L.bar.x + j * bw, y: L.bar.y, w: bw, h: L.bar.h }; });
@@ -8148,9 +8178,9 @@ const UI = (() => {
     g.fillStyle = DARK; rr(r.x + 8, r.y, r.w - 8, r.h, r.h / 2); g.fill();
     g.lineWidth = 2; g.strokeStyle = 'rgba(255,255,255,0.25)'; g.stroke();
     if (r.w < 104) plus = false; // narrow phones: the whole pill is the button
-    const is = 34 * s; drawIcon(icon, r.x + 4 + (34 - is) / 2, r.y + r.h / 2 - is / 2, is);
-    const tw = r.w - 44 - (plus ? 26 : 4);
-    text(value, r.x + 40 + tw / 2, r.y + r.h / 2 + 1, 19, '#fff', 'center', 900, tw);
+    const ib = r.w < 104 ? 30 : 34, is = ib * s; drawIcon(icon, r.x + 4 + (ib - is) / 2, r.y + r.h / 2 - is / 2, is);
+    const tx = r.x + ib + 6, tw = r.x + r.w - tx - (plus ? 31 : 6);
+    text(value, tx + tw / 2, r.y + r.h / 2 + 1, 19, '#fff', 'center', 900, tw);
     if (plus) { const px = r.x + r.w - 15, py = r.y + r.h / 2; g.fillStyle = MINT; g.beginPath(); g.arc(px, py, 12, 0, 7); g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke(); g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.moveTo(px - 5, py); g.lineTo(px + 5, py); g.moveTo(px, py - 5); g.lineTo(px, py + 5); g.stroke(); }
     hits.push({ x: r.x, y: r.y - 6, w: r.w, h: r.h + 12, hud: 1, fn: () => { snd('tap'); fn(); } });
   }
@@ -8173,9 +8203,13 @@ const UI = (() => {
     // area pill with completion bar
     const area = Game.curArea(), ts = area.tasks, done = ts.filter(x => S.done[x.id]).length, a = H2.area;
     g.fillStyle = 'rgba(255,255,255,0.92)'; rr(a.x, a.y, a.w, a.h, 14); g.fill(); g.lineWidth = 2; g.strokeStyle = EDGE; g.stroke();
-    text(area.name, a.x + 10, a.y + 14, 15, INK, 'left', 900, a.w - 60);
-    text(done + '/' + ts.length, a.x + a.w - 10, a.y + 14, 15, INK2, 'right', 800);
-    bar(a.x + 10, a.y + 27, a.w - 20, 7, done / ts.length, PINK);
+    // Long names (island names, "Vanaema saladus") wrap onto two lines on narrow phones instead of being cut.
+    const cnt = done + '/' + ts.length; g.font = font(15, 800); const cntW = g.measureText(cnt).width + 8;
+    g.font = font(15, 900); const nameW = g.measureText(area.name).width;
+    if (nameW <= a.w - 20 - cntW) { text(area.name, a.x + 10, a.y + 15, 15, INK, 'left', 900); text(cnt, a.x + a.w - 10, a.y + 15, 15, INK2, 'right', 800); }
+    else if (nameW <= a.w - 16) text(area.name, a.x + 8, a.y + 15, 15, INK, 'left', 900);
+    else { const ls = wrap(area.name, a.w - 16, 15, 900); text(ls[0], a.x + 8, a.y + 11, 15, INK, 'left', 900, a.w - 14); text(ls.slice(1).join(' '), a.x + 8, a.y + 27, 15, INK, 'left', 900, a.w - 14); }
+    bar(a.x + 8, a.y + a.h - 9, a.w - 16, 5, done / ts.length, PINK);
     hits.push({ x: a.x, y: a.y, w: a.w, h: Math.max(48, a.h), hud: 1, fn: () => { snd('tap'); openModal({ kind: 'tasks' }); } });
     // gift and settings
     const giftOn = !S.daily.gift || S.daily.tasks.some(x => x.n >= x.goal && !x.claimed) || (!S.daily.bonus && S.daily.tasks.length && S.daily.tasks.every(x => x.claimed));
@@ -8190,7 +8224,7 @@ const UI = (() => {
     drawIcon('wardrobe', lk.x + 22 - 16 * ls, lk.y + 22 - 16 * ls, 32 * ls);
     if (LOOK.unseen() > 0) dot(lk.x + 38, lk.y + 6);
     hits.push({ x: lk.x - 2, y: lk.y - 2, w: 48, h: 48, hud: 1, fn: () => { snd('tap'); openModal({ kind: 'xLook' }); } });
-    const av = H2.adv; button(av.x, av.y, av.w, av.h, av.w >= 100 ? 'Seiklus' : '', () => goScreen('map'), { style: 'buttonPink', icon: 'map', isz: 28, size: 17 });
+    const av = H2.adv; button(av.x, av.y, av.w, av.h, 'Seiklus', () => goScreen('map'), { style: 'buttonPink', icon: 'map', isz: av.w < 124 ? 24 : 28, size: av.w < 124 ? 16 : 17 });
     hits[hits.length - 1].hud = 1;
     if (ADV.attention()) dot(av.x + av.w - 4, av.y + 4);
     hits.push({ x: st.x - 2, y: st.y - 2, w: 48, h: 48, hud: 1, fn: () => openModal({ kind: 'settings' }) });
@@ -8355,7 +8389,8 @@ const UI = (() => {
       if (hint) { hset = new Set(hint); const u = ((tn() - idleT) % 2.4) / 2.4; hw = u < 0.35 ? Math.sin(u / 0.35 * Math.PI * 4) * 0.16 * Math.sin(u / 0.35 * Math.PI) : 0; }
     }
     needSet = Game.orderNeeds();
-    const isz = cs * FILL;
+    const isz = cs * FILL, q = (typeof FX !== 'undefined' && FX && FX.quality !== undefined) ? FX.quality | 0 : 2;
+    const idleOn = q >= 1 && !drag && artOn('itemIdle'), sparkOn = q >= 1 && fxOn('idle');
     for (let i = 0; i < NCELL; i++) {
       const it = S.board[i]; if (!it || (drag && drag.from === i)) continue;
       const d = itemDrawState(i, t); if (d.hide) continue;
@@ -8371,10 +8406,16 @@ const UI = (() => {
       }
       g.save(); g.translate(d.x, d.y);
       if (hset && hset.has(i)) { g.translate(0, cs * 0.3); g.rotate(hw); g.translate(0, -cs * 0.3); }
-      if (kind === 'mystery') { const q = Math.sin(t * 2.2 + i) * 0.05; g.rotate(q); }
+      else if (kind === 'mystery') { const q = Math.sin(t * 2.2 + i) * 0.05; g.rotate(q); }
+      else if (idleOn && !anim.has(i) && sel !== i) { // Ash's gentle idle breathing and wobble (pivot at the item's bottom)
+        const f = ART.itemIdle(i * 7 + it.l * 131 + (it.k.charCodeAt(0) << 4), t), by = isz * 0.5;
+        g.translate(0, by + f.dy * isz); g.rotate(f.rot); g.scale(f.sx, f.sy); g.translate(0, -by);
+      }
       g.scale(d.s * (1 + d.sq), d.s * (1 - d.sq));
       drawItem(it.k, it.l, 0, 0, isz);
       g.restore();
+      // an occasional sparkle on bigger items (FX.idle is stateless and skips itself on the lowest quality)
+      if (sparkOn && kind === 'item' && it.l >= 3 && !anim.has(i)) { try { FX.idle(g, d.x, d.y, isz, i * 13 + it.l, t); } catch (e) {} }
       if (kind === 'gen') genBadge(it, i, d.x, d.y, t);
       else if (needSet.has(it.k + ':' + it.l) && !(drag && drag.from === i)) {
         // "Tellimus!" badge: a green check bubble on items an order wants
@@ -8609,7 +8650,7 @@ const UI = (() => {
       const P = modalPanel(m, 440, head + ts.length * rowH + foot, area.name);
       const done = ts.filter(x => S.done[x.id]).length;
       let y0 = P.y + 36;
-      if (tour) { text('Saareringreis · ' + area.themeName + ' · ' + (area.i + 1) + '. saar', P.x + P.w / 2, P.y + 40, 15, GRAPE, 'center', 900, P.w - 124); y0 += 20; }
+      if (tour) { text((area.i + 1) + '. saar · ' + area.themeName, P.x + P.w / 2, P.y + 40, 15, GRAPE, 'center', 900, P.w - 124); y0 += 20; }
       drawIcon('star', P.x + 18, y0, 30); text(String(S.stars), P.x + 54, y0 + 16, 20, INK, 'left', 900);
       text(done + '/' + ts.length + ' tehtud', P.x + P.w - 18, y0 + 16, 15, INK2, 'right', 800);
       bar(P.x + 18, y0 + 40, P.w - 36, 10, done / ts.length, PINK);
@@ -8620,7 +8661,9 @@ const UI = (() => {
         const ic = Math.min(30, bh - 16), iy = y + (bh - ic) / 2;
         if (isDone) drawIcon('check', P.x + 18, iy, ic); else if (!isNext) { g.globalAlpha = 0.6; drawIcon('lock', P.x + 18, iy, ic); g.globalAlpha = 1; } else drawIcon('star', P.x + 18, iy - 1, ic + 2);
         const styled = isDone && tk.choices;
-        text(tk.name, P.x + 58, y + bh / 2, 17, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, P.w - (isNext ? 190 : styled ? 170 : 134));
+        const nmW = P.w - (isNext ? 190 : styled ? 170 : 134); g.font = font(17, isDone ? 700 : 900);
+        if (g.measureText(tk.name).width <= nmW || bh < 46) text(tk.name, P.x + 58, y + bh / 2, 17, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, nmW);
+        else { const ls = wrap(tk.name, nmW, 16, isDone ? 700 : 900); text(ls[0], P.x + 58, y + bh / 2 - 10, 16, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, nmW); text(ls.slice(1).join(' '), P.x + 58, y + bh / 2 + 10, 16, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, nmW); }
         if (isNext) { m.nextBtn = { x: P.x + P.w - 120, y: y + 4, w: 104, h: 48 }; button(P.x + P.w - 120, y + (bh - 48) / 2, 104, 48, String(tk.cost), () => Game.doTask(tk.id), Object.assign({ icon: 'star', hot: S.stars >= tk.cost, pulse: S.stars >= tk.cost, offFn: () => Game.doTask(tk.id), size: 19 }, B)); }
         else if (styled) { const st = STYLES[S.style[tk.id]]; button(P.x + P.w - 112, y + (bh - 44) / 2, 96, 44, st ? 'Muuda' : 'Vali', () => closeThen({ kind: 'xStyle', id: tk.id, back: 'tasks' }), Object.assign({ icon: 'brush', isz: 24, size: 16, style: 'buttonPink' }, B)); }
         else if (!isDone) { drawIcon('star', P.x + P.w - 64, y + bh / 2 - 12, 24); text(String(tk.cost), P.x + P.w - 30, y + bh / 2 + 1, 17, INK2, 'center', 900); }
@@ -8891,18 +8934,27 @@ const UI = (() => {
     if (WEEK.open()) { const wn = WEEK.info().E.name + ' käib!'; g.fillStyle = PINK; g.font = font(16, 900); const tw = Math.min(W - 30, g.measureText(wn).width + 30); rr(cx - tw / 2, by + 190, tw, 34, 17); g.fill(); text(wn, cx, by + 208, 16, '#fff', 'center', 900, tw - 12); }
   }
 
+  // Toasts never sit on the board or the scene: on the café they cover the info bar under the board, in Seiklus the
+  // free strip under the level board (or the bottom of the map), and while a window is open the top of the screen.
+  // They are drawn after the effects and the windows, so confetti never hides them.
   function drawToasts(t) {
     for (let j = toasts.length - 1; j >= 0; j--) if (t - toasts[j].t0 > toasts[j].dur) toasts.splice(j, 1);
     toasts.forEach(o => {
-      const k = t - o.t0, a = Math.min(1, k / 0.15, (o.dur - k) / 0.3);
-      const TB = scr === 'board' || onTitle ? L.board : ADV.toastRect();
-      const w = Math.min(TB.w - 8, 460), ls = wrap(o.s, w - 28, 16, 800), h = 20 + ls.length * 21;
-      const x = TB.x + (TB.w - w) / 2, y = TB.y + TB.h - h - 10 + (1 - Math.min(1, k / 0.15)) * 14;
+      const k = t - o.t0, a = Math.min(1, k / 0.15, (o.dur - k) / 0.3), slide = (1 - Math.min(1, k / 0.15)) * 14;
+      let TB, mode;
+      if (modal && !onTitle) { const si = insets(); TB = { x: 8, y: si.t + 6, w: W - 16, h: 0 }; mode = 'top'; }
+      else if (scr === 'board' || onTitle) { TB = L.info; mode = 'mid'; }
+      else { TB = ADV.toastRect(); mode = TB.mid ? 'mid' : 'bottom'; }
+      const w = Math.min(TB.w - (mode === 'top' ? 0 : 4), 460), ls = wrap(o.s, w - 28, 16, 800), h = Math.max(mode === 'mid' ? Math.min(TB.h, 52) : 0, 20 + ls.length * 21);
+      const x = TB.x + (TB.w - w) / 2;
+      const y = mode === 'top' ? TB.y - slide : mode === 'mid' ? TB.y + (h <= TB.h ? (TB.h - h) / 2 : TB.h - h) + slide : TB.y + TB.h - h - 10 + slide;
       g.globalAlpha = clamp(a, 0, 1);
-      g.fillStyle = DARK; rr(x, y, w, h, 18); g.fill();
-      ls.forEach((s, q) => text(s, x + w / 2, y + 20 + q * 21, 16, '#ffffff', 'center', 800));
+      g.fillStyle = 'rgba(40,28,96,0.92)'; rr(x, y, w, h, 18); g.fill();
+      ls.forEach((s, q) => text(s, x + w / 2, y + h / 2 + (q - (ls.length - 1) / 2) * 21, 16, '#ffffff', 'center', 800, w - 16));
       g.globalAlpha = 1;
     });
+  }
+  function drawFloaters(t) {
     for (let j = floaters.length - 1; j >= 0; j--) {
       const o = floaters[j], k = (t - o.t0) / 1.0; if (k >= 1) { floaters.splice(j, 1); continue; }
       g.globalAlpha = 1 - k * k; const y = o.y - k * 40;
@@ -8955,8 +9007,9 @@ const UI = (() => {
     if (scr !== 'board') {
       if (scr === 'map') ADV.drawMap(t); else ADV.drawLevel(t);
       if (fxOn('draw') && !(modal && modal.fxTop)) { try { FX.draw(g); } catch (e) {} }
-      drawBanners(t); drawToasts(t); drawModal(t);
+      drawBanners(t); drawFloaters(t); drawModal(t);
       if (modal && modal.fxTop && fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
+      drawToasts(t);
       return;
     }
     if (sel >= 0 && !S.board[sel]) sel = -1;
@@ -8977,10 +9030,11 @@ const UI = (() => {
     const fxTop = modal && modal.kind === 'levelup';
     if (!fxTop && fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
     drawBanners(t); drawPopup(t);
-    drawToasts(t);
+    drawFloaters(t);
     drawTutorial(t);
     drawModal(t);
     if (fxTop && fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
+    drawToasts(t);
     if (modal && modal.kind === 'tasks' && S.tut === 4 && modal.nextBtn && S.stars >= 1) { const b = modal.nextBtn; drawHand(b.x + b.w / 2 + 8, b.y + b.h / 2 + 10, t, true); }
   }
 
@@ -9217,20 +9271,20 @@ const ADV = (() => {
   function drawMapHud(t, G) {
     const A = S.adv, top = G.top;
     // back to the café
-    button(8, top, 104, 48, '‹ Kohvik', () => UI.goScreen('board'), { style: 'buttonBlue', size: 18 });
-    // lives
-    const hx = 120, hw = Math.min(150, W - 120 - 120 - 16);
+    const narrow = W < 400, backW = narrow ? 96 : 104;
+    button(8, top, backW, 48, '‹ Kohvik', () => UI.goScreen('board'), { style: 'buttonBlue', size: narrow ? 17 : 18 });
+    // coins on the right, lives in between (the "Täis" label or the timer gets its own room, never under the coin)
+    const cw = narrow ? 100 : 118, cx0 = W - cw - 8, hx = backW + 16, hw = Math.min(160, cx0 - 8 - hx);
     g.fillStyle = DARK; rr(hx, top + 4, hw, 40, 20); g.fill();
     drawIcon('heart', hx + 4, top + 6, 36);
     const full = A.hearts >= HEART_MAX;
     text(String(A.hearts), hx + 50, top + 25, 20, '#fff', 'center', 900);
-    if (hw > 90) text(full ? 'Täis' : fmtTime(LV.heartNext()), hx + 64 + (hw - 70) / 2, top + 25, 16, full ? MINT : '#fff', 'center', 800, hw - 72);
+    if (hw > 96) text(full ? 'Täis' : fmtTime(LV.heartNext()), hx + 64 + (hw - 72) / 2, top + 25, 16, full ? MINT : '#fff', 'center', 800, hw - 72);
     H.addHit({ x: hx, y: top, w: hw, h: 48, fn: () => { snd('tap'); H.openModal({ kind: 'advHearts' }); } });
     mapHudR.hearts = { x: hx + 22, y: top + 24 };
-    // coins
-    const cw = Math.min(118, W - hx - hw - 14), cx0 = W - cw - 8;
     g.fillStyle = DARK; rr(cx0, top + 4, cw, 40, 20); g.fill(); drawIcon('coin', cx0 + 4, top + 7, 34);
     text(fmtNum(H.disp.coins === null ? S.coins : H.disp.coins), cx0 + 40 + (cw - 46) / 2, top + 25, 18, '#fff', 'center', 900, cw - 46);
+    H.addHit({ x: cx0, y: top, w: cw, h: 48, fn: () => { snd('tap'); toast('Münte saad tasemetelt, kohviku tellimustelt ja põrsast.'); } });
     mapHudR.coins = { x: cx0 + 20, y: top + 24 };
     // right column: wheel, piggy, calendar
     const col = [
@@ -9239,7 +9293,7 @@ const ADV = (() => {
       ['calendar', 'Kalender', () => H.openModal({ kind: 'daily' }), !S.daily.gift],
     ];
     col.forEach(([ic, lab, fn, hot], j) => {
-      const bx = W - 74, by = top + 62 + j * 84, wig = hot ? Math.sin(t * 8) * 0.12 * (Math.sin(t * 1.6) > 0.5 ? 1 : 0) : 0, ps = H.pressScale(bx, by);
+      const bx = W - 78, by = top + 62 + j * 84, wig = hot ? Math.sin(t * 8) * 0.12 * (Math.sin(t * 1.6) > 0.5 ? 1 : 0) : 0, ps = H.pressScale(bx, by);
       g.fillStyle = 'rgba(255,255,255,0.92)'; g.beginPath(); g.arc(bx + 33, by + 28, 29 * ps, 0, 7); g.fill(); g.lineWidth = 2.5; g.strokeStyle = 'rgba(124,92,255,0.25)'; g.stroke();
       g.save(); g.translate(bx + 33, by + 28); g.rotate(wig); drawIcon(ic, -22 * ps, -22 * ps, 44 * ps); g.restore();
       g.fillStyle = DARK; g.font = H.font(15, 900); const lw = g.measureText(lab).width + 14; rr(bx + 33 - lw / 2, by + 52, lw, 22, 11); g.fill();
@@ -9693,8 +9747,16 @@ const ADV = (() => {
       if (r) r.goals.forEach((g2, j) => text(goalText(g2) + ': ' + g2.got + '/' + g2.n, P.x + P.w / 2, P.y + 50 + j * 26, 17, INK, 'center', 800, P.w - 30));
       button(P.x + 30, P.y + 110, P.w - 60, 54, 'Jätka', () => H.closeModal(), Object.assign({ hot: true, size: 21 }, B));
       const costs = r && (r.used > 0 || r.over) && !r.won;
-      button(P.x + 30, P.y + 176, P.w - 60, 50, 'Loobu', () => { H.closeModal(true); if (costs) { LV.lose(); toast('Kaotasid ühe elu. Proovi uuesti!'); } else LV.quit(); backToMap(false); }, Object.assign({ style: 'buttonGrey', size: 19 }, B));
-      if (costs) text('Kui loobud, kaotad ühe elu.', P.x + P.w / 2, P.y + P.h - 24, 15, INK2, 'center', 700, P.w - 20);
+      button(P.x + 30, P.y + 176, P.w - 60, 50, 'Lahku', () => { if (costs) { H.closeThen({ kind: 'advLeave', sticky: true }); return; } H.closeModal(true); LV.quit(); backToMap(false); }, Object.assign({ style: 'buttonGrey', size: 19 }, B));
+      if (costs) text('Pärast esimest käiku maksab lahkumine ühe südame.', P.x + P.w / 2, P.y + P.h - 24, 15, INK2, 'center', 700, P.w - 20);
+    } else if (m.kind === 'advLeave') {
+      // A kind confirm: leaving after the first move costs a life (closing the app does too, see LV.leftOpen).
+      const P = H.modalPanel(m, 380, 330, 'Lahkud?');
+      drawIcon('heart', P.x + P.w / 2 - 34, P.y + 34, 68);
+      text('Lahkud? Kaotad ühe südame.', P.x + P.w / 2, P.y + 124, 19, INK, 'center', 900, P.w - 30);
+      text('Elud tulevad ise tagasi: üks iga 15 minuti järel.', P.x + P.w / 2, P.y + 152, 15, INK2, 'center', 700, P.w - 30);
+      button(P.x + 30, P.y + 182, P.w - 60, 56, 'Mängin edasi!', () => H.closeModal(), Object.assign({ hot: true, size: 20 }, B));
+      button(P.x + 50, P.y + 250, P.w - 100, 50, 'Lahku', () => { H.closeModal(true); LV.lose(); toast(S.adv.hearts > 0 ? 'Üks süda läks. Järgmine kord läheb paremini!' : 'Südamed said otsa. Puhka natuke!', 3); backToMap(false); }, Object.assign({ style: 'buttonGrey', size: 19 }, B));
     } else if (m.kind === 'advWin') drawWin(m, t, B);
     else if (m.kind === 'advFail') drawFail(m, t, B);
     else if (m.kind === 'advBuy') {
@@ -9847,8 +9909,10 @@ const ADV = (() => {
     return null;
   }
   function toastRect() {
-    if (UI.scr === 'level' && V && V.G) return { x: V.G.bx, y: V.G.by, w: V.G.bw, h: V.G.bh };
-    return { x: 10, y: Hh * 0.2, w: W - 20, h: Hh * 0.52 };
+    // Under the level board: the free strip above the boosters if it is tall enough, else over the booster row.
+    if (UI.scr === 'level' && V && V.G) { const G = V.G, y0 = G.by + G.bh + 4, gap = G.boostY - y0 - 4; return gap >= 46 ? { x: G.x0, y: y0, w: G.cw, h: gap, mid: true } : { x: G.x0, y: G.boostY, w: G.cw, h: 56, mid: true }; }
+    // The map: above the big play button.
+    const G = mapGeo(); return { x: 10, y: Hh * 0.3, w: W - 20, h: G.bot - 68 - 50 - Hh * 0.3 };
   }
   const busy = () => !!(WH.spin || (V && (V.drag || V.anim.size || V.ghosts.length)) || M.drag || M.walk || Math.abs(M.vel) > 5);
 
@@ -10006,7 +10070,7 @@ const XUI = (() => {
     }
     const by = P.y + P.h - foot + 10;
     if (firstReady) button(P.x + 30, by, P.w - 60, 52, 'Võta kõik auhinnad!', () => { m.tap = { x: P.x + P.w / 2, y: by }; for (let s = 1; s <= n; s++) if (!S.pass.got[s]) PASS.claim(s); }, Object.assign({ hot: true, pulse: 1, size: 19 }, B));
-    else wrap('Punkte saad ühendamisest, tellimustest, remondist, päevaülesannetest ja Seikluse tasemetest.', P.w - 40, 15, 700).slice(0, 2).forEach((s2, j) => text(s2, P.x + P.w / 2, by + 14 + j * 21, 15, INK2, 'center', 700));
+    else { const ls = wrap('Punkte annavad ühendamised, tellimused, remont, päevaülesanded ja Seiklus.', P.w - 30, 15, 700).slice(0, 3); ls.forEach((s2, j) => text(s2, P.x + P.w / 2, by + 26 + (j - (ls.length - 1) / 2) * 20, 15, INK2, 'center', 700)); }
   }
   // The main prize of a reward as one picture.
   function rewardIcon(r, cx, cy, s) {
@@ -10032,8 +10096,9 @@ const XUI = (() => {
     WEEK.ensure();
     const cur = S.week.cur, icon = 'cur_' + e.key;
     drawIcon(icon, P.x + 16, P.y + 34, 44); text(String(cur), P.x + 66, P.y + 56, 24, INK, 'left', 900);
-    text('Lõpuni ' + H.fmtLong(e.left), P.x + 66, P.y + 84, 15, INK2, 'left', 800, P.w - 270);
-    if (e.weekend) { g.fillStyle = PINK; rr(P.x + P.w - 190, P.y + 64, 172, 30, 15); g.fill(); text('Nädalavahetus ×2!', P.x + P.w - 104, P.y + 79, 15, '#fff', 'center', 900, 164); }
+    let bw0 = 0;
+    if (e.weekend) { const wl = P.w >= 420 ? 'Nädalavahetus ×2!' : 'Täna ×2!'; g.font = H.font(15, 900); bw0 = g.measureText(wl).width + 26; g.fillStyle = PINK; rr(P.x + P.w - 18 - bw0, P.y + 64, bw0, 30, 15); g.fill(); text(wl, P.x + P.w - 18 - bw0 / 2, P.y + 79, 15, '#fff', 'center', 900); }
+    text('Lõpuni ' + H.fmtLong(e.left), P.x + 66, P.y + 84, 15, INK2, 'left', 800, P.w - 92 - bw0);
     // the event chain, small, so it is clear what to look for on the board
     const n = E.chain.length, cw = Math.min(58, (P.w - 30) / n), x0 = P.x + (P.w - cw * n) / 2, cy = P.y + 122;
     for (let j = 0; j < n; j++) {
@@ -10055,7 +10120,7 @@ const XUI = (() => {
       g.fillStyle = got ? '#5fc24a' : ready ? PINK : '#c9b49a'; g.beginPath(); g.arc(P.x + 38, y + (rowH - 6) / 2, 20, 0, 7); g.fill();
       text(String(tr.need), P.x + 38, y + (rowH - 6) / 2 + 1, 15, '#fff', 'center', 900);
       if (r.look) { drawIcon('wardrobe', P.x + 68, y + (rowH - 6) / 2 - 15, 30); const [kind, k] = r.look.split(':'); text(LOOK.name(kind, k), P.x + 102, y + (rowH - 6) / 2 + 1, 16, PINK, 'left', 900, P.w - 230); }
-      else H.rewardRow(r, P.x + 70, y + (rowH - 6) / 2, P.w - 200, 28);
+      else H.rewardRow(r, P.x + 70, y + (rowH - 6) / 2, P.w - (ready ? 196 : 136), 28);
       if (got) drawIcon('check', P.x + P.w - 56, y + 9, 32);
       else if (ready) button(P.x + P.w - 112, y + 1, 96, 48, 'Võta!', () => { m.tap = { x: P.x + P.w - 64, y: y + 24 }; WEEK.claim(j); }, Object.assign({ hot: true, pulse: 1, size: 18 }, B));
       else { g.globalAlpha = 0.5; drawIcon('lock', P.x + P.w - 54, y + 11, 28); g.globalAlpha = 1; }
@@ -11490,6 +11555,7 @@ try { window.__saAudio = AU; window.__saMusic = MUSIC; } catch (e) {}
   try { if (QS._hash && history.replaceState) history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
   S.title = true;
   Game.tickEnergy(); Game.ensureDaily();
+  const leftLevel = LV.leftOpen();
   const cap = (navigator.hardwareConcurrency || 8) <= 4 ? 30 : 60;
   try { if (typeof FX !== 'undefined' && FX && FX.quality === undefined) FX.quality = cap === 30 ? 1 : 2; } catch (e) {}
   UI.layout();
@@ -11516,6 +11582,7 @@ try { window.__saAudio = AU; window.__saMusic = MUSIC; } catch (e) {}
   addEventListener('pagehide', save);
   run();
   const l = document.getElementById('load'); if (l) l.remove();
+  if (leftLevel) setTimeout(() => UI.toast('Tase ' + leftLevel + ' jäi pooleli, nii et üks süda läks. Elud tulevad ise tagasi!', 4), 600);
   try { if (typeof MUSIC !== 'undefined' && MUSIC && MUSIC.scene) MUSIC.scene('title'); } catch (e) {}
 
   // Test hook for QA (tools/mergeqa.js). act.* run game actions directly; UI exposes layout and screen coordinates.

@@ -44,7 +44,7 @@ const ease = {
 
 function dayKey(ts) { const d = new Date(ts || now()); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
 function fmtTime(ms) { const s = Math.max(0, Math.ceil(ms / 1000)), m = Math.floor(s / 60); return m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ':' + String(s % 60).padStart(2, '0'); }
-function fmtNum(n) { n = Math.floor(n); return n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace('.', ',') + ' k' : String(n); }
+function fmtNum(n) { n = Math.floor(n); return n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace('.', ',') + '\u202fk' : String(n); }
 
 // Board geometry
 const COLS = 7, ROWS = 9, NCELL = COLS * ROWS;
@@ -70,7 +70,7 @@ function newState() {
     tut: 0, title: true,
     daily: { day: '', gift: false, streak: 0, lastGift: '', tasks: [], bonus: false, d30: 0, c30: 0 },
     // version 3: adventure levels, lucky wheel, piggy bank
-    adv: { top: 1, stars: {}, hearts: 5, heartT: t, streak: 0, best: 0, boost: { wand: 1, scissors: 1, shuffle: 1, moves: 1 }, plays: 0, wins: 0, tips: {}, seen: 0 },
+    adv: { top: 1, stars: {}, hearts: 5, heartT: t, streak: 0, best: 0, live: null, boost: { wand: 1, scissors: 1, shuffle: 1, moves: 1 }, plays: 0, wins: 0, tips: {}, seen: 0 },
     wheel: { free: '', extra: 0, n: 0 },
     piggy: { coins: 0, day: '' },
     stats: { merges: 0, orders: 0, taps: 0, tasks: 0, lucky: 0, merge5: 0, combo: 0, mbox: 0 },

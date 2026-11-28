@@ -1,9 +1,10 @@
 // Saarepagar v3 adventure QA: the level map, a level played with REAL touch drags, win and fail screens, the lucky
 // wheel, piggy bank and calendar, then the sampler-bot win rates over levels 1..N. Fails on page errors.
-//   node tools/mergelevels.js [promax|phone|desktop] [N=200]
+//   node tools/mergelevels.js [promax|phone|desktop] [N=300]
+// Fails if any level 1..N wins less than 45% of the sampler bot's tries (the phase C difficulty floor).
 const { chromium, devices } = require('playwright');
 const path = require('path');
-const ROOT = path.dirname(__dirname), prof = process.argv[2] || 'promax', NLEV = +process.argv[3] || 200;
+const ROOT = path.dirname(__dirname), prof = process.argv[2] || 'promax', NLEV = +process.argv[3] || 300;
 const PROFILES = { desktop: { viewport: { width: 1280, height: 800 } }, phone: { ...devices['iPhone 13'] }, promax: { viewport: { width: 440, height: 956 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: devices['iPhone 13'].userAgent } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -112,7 +113,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (JSON.parse(a1).top !== JSON.parse(a2).top) errs.push('SAVE: adv state lost');
     // solvability: sampler-bot win rates
     const res = await ev(n => { const t0 = performance.now(); const r = window.__mg.levels.botTest(1, n, 12); r.ms = performance.now() - t0; delete r.rows; return r; }, NLEV);
+    const low = await ev(n => window.__mg.levels.botTest(1, n, 12).rows.filter(r => r.win < 0.45).map(r => r.n + ':' + r.kind + ':' + Math.round(r.win * 100) + '%'), NLEV);
     console.log('sampler win rates 1..' + NLEV + ':', JSON.stringify(res));
+    if (low.length) errs.push('BALANCE: levels under 45%: ' + low.join(' '));
   } catch (e) { errs.push('FLOW: ' + e.message); }
   await b.close();
   if (errs.length) { ok = false; console.log(`[${prof}] FAIL\n  ` + errs.join('\n  ')); } else console.log(`[${prof}] ok`);
