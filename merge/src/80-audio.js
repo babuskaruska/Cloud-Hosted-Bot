@@ -156,7 +156,7 @@ const AU = (function () {
   const kr = (oct) => 12 * oct + keyPC();
   const top = (m, hi) => { while (m >= hi) m -= 12; return m; }; // keep sparkles below a ceiling (no harsh highs)
   let lastMerge = -9, combo = 0;
-  function comboStep(t, add) { combo = t - lastMerge < 2.4 ? Math.min(combo + add, 40) : 0; lastMerge = t; return combo; }
+  function comboStep(t, add) { combo = t - lastMerge < 2.6 ? Math.min(combo + add, 40) : 0; lastMerge = t; return combo; }
   // The merge pop: a pitched "bloop", a clean click and a three-note sparkle. m = midi of the pop.
   function pop(t, m, v, big) {
     const f = mtof(m);
@@ -219,8 +219,9 @@ const AU = (function () {
     combo(t, o) { // a "bling-bling" that rises with the combo count; every 5th is a bigger hit
       const n = cl(+o.n || 2, 2, 40); if (n > combo) { combo = n; lastMerge = t; }
       const m = kr(5) + pent(Math.min(10, n)), big = n % 5 === 0;
-      INS.mallet(t, top(m, 96), 0.2, 0.1, B.sfxIn, -0.2); INS.mallet(t + 0.07, top(m + 7, 98), 0.3, 0.1, B.sfxIn, 0.2);
-      shimmer(t, 0.22, 0.012);
+      // It plays on every combo merge (after the merge pop), so it stays a light accent until the 5th, 10th...
+      INS.mallet(t + 0.06, top(m, 96), 0.2, 0.06, B.sfxIn, -0.2); if (n >= 3) INS.mallet(t + 0.12, top(m + 7, 98), 0.3, 0.055, B.sfxIn, 0.2);
+      if (n >= 4) shimmer(t + 0.05, 0.22, 0.01);
       if (big) { duck(0.6, 0.8); chord(t + 0.14, kr(5), [0, 4, 7, 12], 0.25, 0.035); INS.kick(t + 0.14, 0.2, B.sfxIn); sparkle(t + 0.16, kr(6) + 7, 5, 0.03, 0.04); }
       return t + (big ? 0.8 : 0.4);
     },
