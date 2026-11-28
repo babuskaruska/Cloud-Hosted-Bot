@@ -472,14 +472,14 @@ const UI = (() => {
         if (d.island) islandIntro(d.ended);
         break;
       }
-      case 'style': snd2('styleSwap', 'tap'); flash = { t0: tn() - 0.45 }; keep(0.5); break;
-      case 'passStep': toast('Hooaja rada: ' + d.s + '. samm on käes!'); snd2('passStep', 'claim'); bump.pass = tn(); keep(0.4); break;
-      case 'passClaim': { const p = modal && modal.tap || { x: W / 2, y: H / 2 }; rewardFx(d.r, p.x, p.y); fx('sparkle', p.x, p.y, 10, 40); snd2('passStep', 'claim'); break; }
+      case 'style': snd2('styleSwap', 'tap', { style: d.key }); flash = { t0: tn() - 0.45 }; keep(0.5); break;
+      case 'passStep': toast('Hooaja rada: ' + d.s + '. samm on käes!'); snd2('passStep', 'claim', { n: d.s }); bump.pass = tn(); keep(0.4); break;
+      case 'passClaim': { const p = modal && modal.tap || { x: W / 2, y: H / 2 }; rewardFx(d.r, p.x, p.y); fx('sparkle', p.x, p.y, 10, 40); snd2('passStep', 'claim', { n: d.s }); break; }
       case 'passLate': toast('Eelmise kuu raja auhinnad on nüüd sinu!', 3.4); rewardFx(d.r, W / 2, H * 0.45); break;
       case 'passNew': if (S.tut >= 5) toast('Uus hooaja rada algas! Mängi ja kogu auhindu.', 3.4); break;
       case 'weekCur': {
         if (cell >= 0 && onBoard()) floater(C.x + L.cs * 0.25, C.y - L.cs * 0.35, '+' + d.n, PINK, 'cur_' + WEEK.info().key);
-        if (cell >= 0) snd2('eventCur', 'coins');
+        if (cell >= 0) snd2('eventCur', 'coins', { n: d.n, week: WEEK.info().key });
         if (d.ready && onBoard()) { toast(WEEK.info().E.name + ': auhind ootab! Vajuta „Nädal“.'); bump.week = tn(); }
         break;
       }
@@ -488,12 +488,12 @@ const UI = (() => {
       case 'cashEvent': { const b = L.btn.week; ghost({ k: d.k, l: d.l, x0: C.x, y0: C.y, x1: b.x + b.w / 2, y1: b.y + 24, dur: 0.5, s0: 1, s1: 0.3 }); fx('sparkle', C.x, C.y, 12, L.cs * 0.6); snd2('claim', 'coins'); if (sel === cell) sel = -1; break; }
       case 'lookNew': {
         const pets = d.list.filter(x => x[0] === 'pet'), rest = d.list.filter(x => x[0] !== 'pet');
-        if (pets.length) { toast('Uus sõber: ' + pets.map(x => LOOK.name(x[0], x[1])).join(', ') + '! Vaata garderoobi.', 3.6); snd2('pet', 'discover'); }
+        if (pets.length) { toast('Uus sõber: ' + pets.map(x => LOOK.name(x[0], x[1])).join(', ') + '! Vaata garderoobi.', 3.6); snd2('pet', 'discover', { kind: pets[0][1] }); }
         else if (rest.length) { toast('Garderoobis on uus asi: ' + rest.map(x => LOOK.name(x[0], x[1])).join(', ') + '!', 3.4); snd2('wardrobe', 'discover'); }
         bump.look = tn(); keep(0.4); break;
       }
       case 'wear': snd2('wardrobe', 'tap'); break;
-      case 'pet': snd2('pet', 'tap'); break;
+      case 'pet': snd2('pet', 'tap', { kind: d.k }); break;
       case 'reward': if (!d.silent) rewardFx(d, W / 2, H * 0.45); break;
       case 'gift': if (cell >= 0 && onBoard()) { setAnim(cell, { pop: 1, dur: 0.5 }); if (!d.silent) snd('drop'); } if (d.daily) { snd2('calendar', 'daily'); const p = modal && modal.tap || { x: W / 2, y: H * 0.4 }; rewardFx(Object.assign({}, d.g.r, d.g.m30 ? { coins: (d.g.r.coins || 0) + (d.g.m30.coins || 0) } : {}), p.x, p.y); fx('confetti', 0.5, p.x, p.y); } break;
       case 'toBag': toast('Laud oli täis, kingitus läks kotti.'); break;
