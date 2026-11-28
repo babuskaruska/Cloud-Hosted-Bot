@@ -98,6 +98,8 @@ Build with `python3 tools/build-merge.py`, which concatenates `merge/src/*.js` i
   - UI: `'tap'`, `'open'`, `'close'`, `'sell'`, `'deny'`, `'talk'` (dialogue blip).
 - **Music:** modern chill-pop and lo-fi (electric piano, plucks, side-chained pads, soft drums, vocal-chop hooks); the earlier folk style was replaced after player feedback. Scenes are `'title'`, `'board'` (one calm loop per area) and `'story'`. It must be long-listenable, with variation, and have no harsh highs.
 - `AU.unlock()` on the first gesture, `AU.setVolume(kind, v)` (kind `'music'` or `'sfx'`), `AU.muted`. iPhone: `navigator.audioSession.type = 'playback'`.
+- **Battery (phase C):** the audio sleeps by itself (the context is suspended) when the page is hidden, when muted or both volumes are 0, after 4 minutes without a touch (`AU.setIdle(ms)`; the music fades out and restarts from its intro on the next touch) and after 15 s with no music and no sound. The game needs no calls for this; `AU.poke()` counts as activity if something other than a touch should keep the music awake.
+- **Checks:** `node tools/mergeaudio.js --mix` (loudness of every song, full and lite, phone speaker model), `--sfxmix` (sound levels against the music, variety of repeated sounds), `--throttle` (cheap-Android timing), `--soak10` (10-minute soak), `--life` (sleep, wake, mute, volume 0, interruptions).
 
 ## Quality bar
 
