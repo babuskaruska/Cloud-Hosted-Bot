@@ -234,7 +234,45 @@ The owner asked for a merge-style game for his girlfriend. It is original (no co
   - The map HUD overlaps its "Täis" label with the coin icon at 390 px.
   - The night and weather tint costs 4–7 ms per frame headless at DPR 3 (only at `FX.quality` 2); untested on a real phone.
   - `drawItemIdle` is still unused; nobody has heard the new music on a phone.
-- **Next:** phase C (balance and pacing, cheap-Android performance, polish from player feedback).
+- **Next:** phase C, done below.
+
+**Version 3 phase C (merged and live).**
+- **Mira:**
+  - Layout fixes at 360, 390 and 440 px and on desktop.
+  - Leaving a level, or reloading mid-level, costs a heart ("Lahkud? Kaotad ühe südame.").
+  - Level difficulty: the lowest win rate is now 50%, up from 25%.
+  - Economy:
+    - Energy from gifts caps at 150; normal refill still stops at 100.
+    - Coins are about 30% less generous.
+    - The combo and level-up refill bugs are fixed.
+  - Hash flags are read.
+  - Idle wobble and sparkle (`drawItemIdle` is now used).
+  - New tools: `tools/mergeecon.js` (economy sim) and `tools/mergeplay.js` (full playthrough on android 360×800, phone and Pro Max; over 10 min, so run it in the background).
+- **Ash:**
+  - `ART.perf` device budget: weak devices start at canvas scale 2 and FX quality 1, then step down automatically. This also fixes `FX.quality` always being 2.
+  - Cached tints and level backgrounds; map tiles drawn at the canvas scale.
+  - The modal backdrop is a snapshot taken every 1.5 s.
+  - Idle frames drop to 10 fps, then 4 fps.
+  - New tool: `tools/mergeperf.js`.
+- **Echo:**
+  - Each song has its own lite-mode gain; the scenes are recalibrated.
+  - Loudness spread across scenes: full mode 2.2 → 1.8 LU; lite 2.2 → 1.6 LU; phone-speaker model 3.4 → 2.4 LU.
+  - Sound bugs fixed:
+    - Sources leaked when the audio was suspended; disconnects now follow the audio clock, and 0 sources are left after an 8-minute soak.
+    - Noise bursts never ended; they now use start plus stop.
+    - Idle sleep now waits for sound tails to end.
+  - Results at 4× and 6× CPU throttle: 0 late notes; audio JS costs 4–25 ms per second.
+  - `tools/mergeaudio.js` gained soak, lifecycle and throttle modes.
+- **QA:** `mergeqa` PASS; `mergeplay` PASS on all three profiles (level 7, area 6, tour 1).
+- **Known:**
+  - Merge chains cost about 95 ms at 4× throttle on the weak path.
+  - The map stays under 30 fps at DPR 3 on a 4×-throttled phone until the automatic step-down.
+  - Coins pile up with little to spend them on.
+  - At 360 px a two-line toast covers the bottom locked row.
+  - "süda" vs "elud" for lives is undecided.
+  - Pacing so far comes from a bot.
+  - Nobody has played or listened on a real phone; iPhone `audioSession` is only tested through simulation.
+- **Next:** owner playtest on real phones, then fix what it finds. Ideas: a coin sink (shop or decorations); lighter merge-chain effects on weak devices.
 
 Phase B contracts (for reference). Base branch for agents: `claude/intelligent-cerf-23obgr`.
 - **Island tour (Mira data and rules, Ash art):** after the 6 story areas (`S.ended`), `S.tour` counts generated islands from 0 forever.
