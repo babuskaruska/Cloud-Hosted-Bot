@@ -68,5 +68,13 @@
       spinWheel: () => { ADV.openWheel(); },
     },
     cellRect: i => { const L = UI.L; return { x: L.bx + (i % COLS) * L.cs, y: L.by + Math.floor(i / COLS) * L.cs, s: L.cs }; },
+    // Phase B for QA: the island tour, season pass, weekly event, wardrobe; open(kind) shows a screen
+    // ('xPass' | 'xWeek' | 'xLook' | 'xPhoto' | 'xRest' | 'xStyle'), endStory() jumps to the island tour.
+    extra: {
+      TOUR, PASS, WEEK, LOOK, XUI,
+      open: (kind, o) => { while (UI.modal) UI.closeModal(true); UI.openModal(Object.assign({ kind }, o || {})); },
+      endStory: () => { for (const a of AREAS) for (const t of a.tasks) S.done[t.id] = true; S.area = AREAS.length; S.ended = true; S.tour = S.tour | 0; saveSoon(); },
+      doIsland: () => { let n = 0; const i0 = S.tour; for (let k = 0; k < 10 && S.tour === i0; k++) { const t = Game.nextTask(); if (!t) break; S.stars += t.cost; if (Game.doTask(t.id)) n++; while (UI.modal) UI.closeModal(true); } return n; },
+    },
   };
 })();

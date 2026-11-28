@@ -2,8 +2,7 @@
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
 const now = () => Date.now();
-// URL flags from the query or the hash (?week=beach or #fresh=1).
-const QS = (() => { const o = {}; try { for (const src of [location.search, location.hash.replace(/^#/, '?')]) new URLSearchParams(src).forEach((v, k) => { o[k] = v; }); } catch (e) {} return o; })();
+const QS = (() => { const o = {}; try { new URLSearchParams(location.search).forEach((v, k) => { o[k] = v; }); } catch (e) {} return o; })();
 
 function mulberry(seed) {
   return function () {
@@ -53,7 +52,7 @@ function newState() {
     done: {}, area: 0, areaSeen: {}, ended: false,
     bag: [], bagSlots: 4,
     disc: {}, gensOwned: {},
-    album: {}, albumDone: {}, event: { id: '', pts: 0, got: 0 }, freeEnAt: 0,
+    album: {}, albumDone: {}, freeEnAt: 0,
     tut: 0, title: true,
     daily: { day: '', gift: false, streak: 0, lastGift: '', tasks: [], bonus: false, d30: 0, c30: 0 },
     // version 3: adventure levels, lucky wheel, piggy bank
@@ -91,7 +90,7 @@ function load() {
     for (const k in base.stats) if (!(k in d.stats)) d.stats[k] = base.stats[k];
     for (const o of ['adv', 'wheel', 'piggy', 'pass', 'week', 'look', 'set']) { if (!d[o] || typeof d[o] !== 'object') d[o] = base[o]; for (const k in base[o]) if (!(k in d[o])) d[o][k] = base[o][k]; }
     for (const k in base.adv.boost) if (typeof d.adv.boost[k] !== 'number') d.adv.boost[k] = 0;
-    if (!d.event || typeof d.event !== 'object') d.event = base.event;
+    delete d.event; // the weekend festival became the weekly event (S.week)
     for (const o of ['style', 'pets', 'owned', 'lookKnown', 'lookSeen']) if (!d[o] || typeof d[o] !== 'object' || Array.isArray(d[o])) d[o] = base[o];
     if (!d.pets.muri) d.pets.muri = { acc: 'none' };
     if (!d.pass.got || typeof d.pass.got !== 'object') d.pass.got = {};

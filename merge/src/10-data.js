@@ -282,22 +282,6 @@ const albumReward = l => ({ coins: 3 + l * 3 });
 const ALBUM_CHAIN = { stars: 2, chest: 2 };
 const ALBUM_CHAINS = Object.keys(CHAINS).filter(k => CHAINS[k].kind === 'item');
 
-// Weekend festival (local time, Friday 00:00 to Monday 00:00). Points come from merges, orders and lucky moments.
-const EVENT_SEASON = m => m === 11 || m <= 1 ? 'Talvefestival' : m <= 4 ? 'Kevadfestival' : m <= 7 ? 'Suvefestival' : 'Sügisfestival';
-const EVENT_TRACK = [
-  { need: 10, r: { coins: 30 } },
-  { need: 25, r: { energy: 30 } },
-  { need: 45, r: { item: ['mbox', 1] } },
-  { need: 70, r: { coins: 80 } },
-  { need: 100, r: { item: ['chest', 2] } },
-  { need: 140, r: { energy: 60 } },
-  { need: 190, r: { stars: 3 } },
-  { need: 250, r: { item: ['mbox', 1], coins: 100 } },
-  { need: 320, r: { item: ['chest', 3] } },
-  { need: 400, r: { genUp: true, stars: 5 } },
-];
-const EVENT_PTS = { merge: 1, mergeHi: 2, order: 5, lucky: 3, merge5: 4 };
-
 // ---- version 3: adventure levels ("Seiklus"), lucky wheel, daily calendar, piggy bank ----
 // Keys: a small chain that only the adventure levels use. Drop a key on a locked chest of the same level or lower.
 CHAINS.key = { kind: 'key', name: 'Võtmed', color: '#d8a227', names: ['Väike võti', 'Võti', 'Kuldvõti'] };

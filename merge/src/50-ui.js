@@ -405,7 +405,7 @@ const UI = (() => {
       case 'combo': {
         combo = { n: d.n, t0: tn() }; keep(COMBO_MS / 1000 + 0.3); if (d.n >= 3) fx('combo', C.x, C.y - L.cs * 0.3, d.n);
         snd2('combo', 'tap', { n: d.n });
-        if (d.r && d.r.energy) { banner({ text: 'Kombo x' + d.n + '!', sub: '+' + d.r.coins + ' münti, +' + d.r.energy + ' energiat', x: C.x, y: C.y - L.cs * 0.6, color: '#7fd0ff', size: 32 }); rewardFx(d.r, C.x, C.y); }
+        if (d.r && d.r.energy) { banner({ text: 'Kombo ×' + d.n + '!', sub: '+' + d.r.coins + ' münti, +' + d.r.energy + ' energiat', x: C.x, y: C.y - L.cs * 0.6, color: '#7fd0ff', size: 32 }); rewardFx(d.r, C.x, C.y); }
         break;
       }
       case 'discover': newq.push({ k: d.k, l: d.l }); keep(2); if (lastMerge && tn() - lastMerge.t < 0.05) fx('discover', lastMerge.x, lastMerge.y - L.cs * 0.4); break;
@@ -512,9 +512,6 @@ const UI = (() => {
       case 'tut': if (d.to === 5) toast(STORY.tutDone, 3.5); break;
       case 'albumClaim': { const p = modal && modal.tap || { x: W / 2, y: H / 2 }; rewardFx(d.r, p.x, p.y); snd2('claim', 'coins'); break; }
       case 'albumChain': { fx('confetti', 0.8); banner({ text: 'Kogu ahel!', sub: CHAINS[d.k].name, x: W / 2, y: H * 0.4, color: GOLD, size: 40, rays: 1, dur: 1.8 }); rewardFx(d.r, W / 2, H * 0.45); snd2('claim', 'taskDone'); break; }
-      case 'eventPts': if (cell >= 0 && onBoard()) floater(C.x + L.cs * 0.25, C.y - L.cs * 0.35, '+' + d.n, PINK, 'event'); if (d.ready && onBoard()) { toast('Festivali auhind ootab! Vajuta „Festival“.'); bump.event = tn(); } break;
-      case 'eventClaim': { const p = modal && modal.tap || { x: W / 2, y: H / 2 }; fx('confetti', 0.4, p.x, p.y); snd2('claim', 'daily'); break; }
-      case 'eventStart': if (onBoard()) toast(d.e.name + ' algas! Kogu märke ja võida auhindu.', 3.4); break;
       case 'freeEnergy': rewardFx({ energy: d.n }, W / 2, H * 0.45); snd('daily'); break;
       case 'piggy': case 'wheel': ADV.gameEv(kind, d); break;
     }
@@ -1041,7 +1038,7 @@ const UI = (() => {
     g.fillStyle = DARK; rr(-54, -22, 108, 44, 22); g.fill();
     g.lineWidth = 4; g.strokeStyle = col; g.beginPath(); rr(-54, -22, 108, 44, 22); g.stroke();
     g.fillStyle = col; rr(-50, 14, 100 * left, 5, 2.5); g.fill();
-    textO('Kombo x' + combo.n, 0, -2, 20, '#fff', col, 4, 100);
+    textO('Kombo ×' + combo.n, 0, -2, 20, '#fff', col, 4, 100);
     g.restore();
   }
   function drawBanners(t) {
@@ -1289,7 +1286,6 @@ const UI = (() => {
       button(P.x + 24, P.y + 234, P.w - 48, 52, x.name + ' +25 · ' + x.price, () => { if (Game.buy(x.id)) closeModal(); }, Object.assign({ icon: 'coin', off: S.coins < x.price, offFn: () => Game.buy(x.id), size: 17 }, B));
       text('Vihje: ühenda kohvioad ja toksa neid.', P.x + P.w / 2, P.y + P.h - 26, 15, INK2, 'center', 700, P.w - 24);
     } else if (m.kind === 'album') drawAlbum(m, t, B);
-    else if (m.kind === 'event') drawEvent(m, t, B);
     else if (m.kind.startsWith('adv')) ADV.drawModal(m, t, B);
     else if (m.kind[0] === 'x') XUI.drawModal(m, t, B);
     g.restore();
@@ -1384,37 +1380,6 @@ const UI = (() => {
   }
 
   function fmtLong(ms) { const h = Math.floor(ms / 3600000), d = Math.floor(h / 24); return d > 0 ? d + ' p ' + (h % 24) + ' h' : h > 0 ? h + ' h ' + Math.floor(ms / 60000) % 60 + ' min' : fmtTime(ms); }
-  // Weekend festival: points from merges and orders fill a reward track.
-  function drawEvent(m, t, B) {
-    const e = Game.eventInfo(), P = modalPanel(m, 440, Math.min(H - 24, 680), e.name);
-    if (!e.on) {
-      drawIcon('event', P.x + P.w / 2 - 40, P.y + 50, 80);
-      text('Järgmine festival algab reedel!', P.x + P.w / 2, P.y + 160, 19, INK, 'center', 900, P.w - 30);
-      text('Veel ' + fmtLong(e.startsIn), P.x + P.w / 2, P.y + 190, 17, PINK, 'center', 900);
-      wrap('Nädalavahetusel annab iga ühendamine ja tellimus festivalimärke. Märkidega avad auhinnad: mündid, energia, üllatuskastid, kirstud ja generaator!', P.w - 48, 16, 700).forEach((s, j) => text(s, P.x + P.w / 2, P.y + 236 + j * 22, 16, INK2, 'center', 700));
-      return;
-    }
-    const pts = S.event.pts, got = S.event.got, nx = EVENT_TRACK[got]; m.ready = null;
-    drawIcon('event', P.x + 18, P.y + 34, 40); text(String(pts), P.x + 64, P.y + 54, 24, INK, 'left', 900);
-    text('Lõpuni ' + fmtLong(e.left), P.x + P.w - 20, P.y + 54, 15, INK2, 'right', 800);
-    if (nx) { const prev = got ? EVENT_TRACK[got - 1].need : 0; bar(P.x + 18, P.y + 86, P.w - 36, 14, (pts - prev) / (nx.need - prev), PINK); text('Järgmine auhind: ' + nx.need + ' märki', P.x + P.w / 2, P.y + 116, 15, INK2, 'center', 800); }
-    else text('Kõik auhinnad võetud! Super!', P.x + P.w / 2, P.y + 100, 17, GOOD, 'center', 900);
-    const top = P.y + 138, rowH = 62, nRows = Math.max(3, Math.floor((P.h - (top - P.y) - 44) / rowH)), N = EVENT_TRACK.length;
-    const s0 = clamp(got - 1, 0, Math.max(0, N - nRows));
-    for (let j = s0; j < Math.min(N, s0 + nRows); j++) {
-      const tr = EVENT_TRACK[j], y = top + (j - s0) * rowH, done = j < got, ready = j === got && pts >= tr.need, locked = !done && !ready;
-      g.fillStyle = ready ? 'rgba(255,95,143,0.18)' : done ? 'rgba(95,194,74,0.12)' : SOFT; rr(P.x + 10, y, P.w - 20, rowH - 6, 14); g.fill();
-      g.fillStyle = done ? '#5fc24a' : ready ? PINK : '#c9b49a'; g.beginPath(); g.arc(P.x + 38, y + (rowH - 6) / 2, 20, 0, 7); g.fill();
-      text(String(tr.need), P.x + 38, y + (rowH - 6) / 2 + 1, 15, '#fff', 'center', 900);
-      rewardRow(tr.r, P.x + 70, y + (rowH - 6) / 2, P.w - 200, 30);
-      if (done) drawIcon('check', P.x + P.w - 56, y + 12, 32);
-      if (ready) m.ready = { x: P.x + P.w - 64, y: y + (rowH - 6) / 2 };
-      if (done) {} else if (ready) button(P.x + P.w - 112, y + 4, 96, rowH - 14, 'Võta!', () => { m.tap = { x: P.x + P.w - 64, y: y + 24 }; Game.claimEvent(); }, Object.assign({ hot: true, pulse: 1, size: 18 }, B));
-      else if (locked) { g.globalAlpha = 0.5; drawIcon('lock', P.x + P.w - 54, y + 14, 28); g.globalAlpha = 1; }
-    }
-    text('Märke saad ühendamisest ja tellimustest.', P.x + P.w / 2, P.y + P.h - 22, 15, INK2, 'center', 700, P.w - 24);
-  }
-
   function drawDialog(m, t) {
     dim(0.32);
     const line = m.lines[m.i] || m.lines[m.lines.length - 1], who = line[0], letter = who === 'maali';

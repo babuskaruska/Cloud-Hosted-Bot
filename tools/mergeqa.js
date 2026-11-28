@@ -48,6 +48,23 @@ async function run(name) {
     const s2 = await S(); await shot('4-reloaded');
     if (!s1 || !s2 || s2.coins !== s1.coins || s2.xp !== s1.xp) errs.push('SAVE: state changed after reload ' + JSON.stringify([s1, s2]));
     console.log(`[${name}] real merges ${merges}; after play ${JSON.stringify(s1)}`);
+    // Phase B: the new screens open without errors, a pass step is claimed, the island tour runs after the story,
+    // a style is picked by a real tap, and an old version 2 save migrates to version 3.
+    const pb = await p.evaluate(() => { const M = window.__mg, X = M.extra; M.act.start(); X.endStory(); M.S.pass.pts += 120; M.S.lvl = Math.max(M.S.lvl, 3); const c = X.PASS.claim(1); const n = X.doIsland(); return { claim: c, done: n, tour: M.S.tour, id: X.TOUR.cur().tasks[0].id }; });
+    if (!pb.claim || pb.tour !== 1 || pb.id !== 't1_0') errs.push('PHASE B: pass or tour wrong ' + JSON.stringify(pb));
+    for (const k of ['xPass', 'xWeek', 'xLook', 'xRest', 'tasks', 'xPhoto']) { await p.evaluate(k => window.__mg.extra.open(k), k); await sleep(450); await shot('5-' + k); }
+    const st = await p.evaluate(() => { const M = window.__mg, t = M.extra.TOUR.island(0).tasks.find(x => x.choices); M.extra.open('xStyle', { id: t.id }); return t.id; });
+    await sleep(500);
+    const card = await p.evaluate(() => { const h = window.__mg.UI.mhits.filter(x => x.w > 200 && x.h > 80 && x.h < 140); return h.length >= 3 ? [h[1].x + h[1].w / 2, h[1].y + h[1].h / 2] : null; });
+    if (card) await tap(...card); else errs.push('PHASE B: no style cards ' + await p.evaluate(() => { const U = window.__mg.UI; return (U.modal && U.modal.kind) + ' ' + JSON.stringify(U.mhits.map(x => [x.w | 0, x.h | 0])); }));
+    const picked = await p.evaluate(id => window.__mg.S.style[id], st);
+    if (picked !== 'minimal') errs.push('PHASE B: style tap did not pick minimal (' + picked + ')');
+    await p.evaluate(() => { const M = window.__mg; while (M.UI.modal) M.UI.closeModal(true); M.act.save(); });
+    const old = await p.evaluate(() => { const d = JSON.parse(localStorage.getItem('saarepagar.save')); d.v = 2; for (const k of ['tour', 'style', 'pass', 'week', 'look', 'pets', 'petOn', 'owned', 'lookKnown', 'lookSeen']) delete d[k]; delete d.set.rest; localStorage.setItem('saarepagar.save', JSON.stringify(d)); Storage.prototype.setItem = () => {}; return d.coins; });
+    await p.goto('file://' + ROOT + '/merge/index.html?nosave=1'); await p.waitForFunction(() => window.__mg, null, { timeout: 30000 }); await sleep(900);
+    const mig = await p.evaluate(() => { const S = window.__mg.S; return { v: S.v, tour: S.tour, pass: !!S.pass && !!S.pass.got, week: !!S.week, look: S.look && S.look.outfit, rest: S.set.rest, coins: S.coins }; });
+    if (mig.v !== 3 || mig.tour !== 0 || !mig.pass || !mig.week || mig.look !== 'casual' || mig.rest !== true || mig.coins !== old) errs.push('SAVE v2->v3: ' + JSON.stringify(mig));
+    console.log(`[${name}] phase B ${JSON.stringify(pb)} style ${picked} migrated ${JSON.stringify(mig)}`);
   } catch (e) { errs.push('FLOW: ' + e.message); }
   await b.close();
   if (errs.length) { ok = false; console.log(`[${name}] FAIL\n  ` + errs.join('\n  ')); } else console.log(`[${name}] ok`);

@@ -56,40 +56,6 @@ const Game = (() => {
     ev('albumChain', -1, { k, r: ALBUM_CHAIN }); after(); return true;
   }
 
-  // ---- weekend festival (local time) ----
-  function eventInfo(t) {
-    t = t || now();
-    const d = new Date(t), dow = d.getDay(); // 0 Sun .. 6 Sat
-    const back = dow === 5 ? 0 : dow === 6 ? 1 : dow === 0 ? 2 : -1;
-    const force = !!QS.event;
-    if (back < 0 && !force) {
-      const fri = new Date(d.getFullYear(), d.getMonth(), d.getDate() + (5 - dow));
-      return { on: false, startsIn: fri.getTime() - t, name: EVENT_SEASON(fri.getMonth()) };
-    }
-    const start = force && back < 0 ? new Date(d.getFullYear(), d.getMonth(), d.getDate()) : new Date(d.getFullYear(), d.getMonth(), d.getDate() - back);
-    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 3);
-    return { on: true, id: dayKey(start.getTime()), left: end.getTime() - t, name: EVENT_SEASON(start.getMonth()) };
-  }
-  function ensureEvent() {
-    const e = eventInfo();
-    if (e.on && S.event.id !== e.id) { S.event = { id: e.id, pts: 0, got: 0 }; ev('eventStart', -1, { e }); return true; }
-    return false;
-  }
-  function eventPts(n, cell) {
-    const e = eventInfo(); if (!e.on) return;
-    if (S.event.id !== e.id) ensureEvent();
-    const before = S.event.pts; S.event.pts += n;
-    const nx = EVENT_TRACK[S.event.got];
-    ev('eventPts', cell === undefined ? -1 : cell, { n, ready: !!(nx && before < nx.need && S.event.pts >= nx.need) });
-  }
-  function claimEvent() {
-    const e = eventInfo(), tier = EVENT_TRACK[S.event.got];
-    if (!e.on || S.event.id !== e.id || !tier || S.event.pts < tier.need) return false;
-    S.event.got++; give(tier.r);
-    ev('eventClaim', -1, { tier, i: S.event.got - 1 }); after(); return true;
-  }
-  const eventReady = () => { const e = eventInfo(), tier = EVENT_TRACK[S.event.got]; return !!(e.on && S.event.id === e.id && tier && S.event.pts >= tier.need); };
-
   // ---- free energy every few hours ----
   const freeEnIn = () => Math.max(0, (S.freeEnAt || 0) - now());
   function claimFreeEnergy() {
@@ -607,6 +573,7 @@ const Game = (() => {
     refillOrders();
     if (ensureDaily()) ev('newDay', -1);
     if (!S.title) { PASS.ensure(); WEEK.ensure(); LOOK.check(); }
+    while (S.ended && TOUR.cur().tasks.every(x => S.done[x.id])) S.tour++; // safety: never stall on a finished island
   }
 
   function newGame() {
@@ -626,7 +593,7 @@ const Game = (() => {
     tapItem, store, take, maxOrders, orderStatus, fulfill, refillOrders, genOrder, villagersAvail, curArea, nextTask, doTask,
     ensureDaily, claimGift, claimDaily, claimBonus, giftReward, shopList, buy, tutCheck, tick, newGame, addXp, give, refreshGen,
     group, merge5, openMystery, albumHas, albumPending, albumCount, chainFull, claimAlbum, claimChain,
-    eventInfo, ensureEvent, claimEvent, eventReady, freeEnIn, claimFreeEnergy, orderNeeds,
+    freeEnIn, claimFreeEnergy, orderNeeds,
     piggyAdd, piggyReady, openPiggy, wheelFree, wheelSpins, spinWheel, addCoins, setStyle, cashEvent,
   };
 })();
