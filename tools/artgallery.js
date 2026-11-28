@@ -101,7 +101,7 @@ if (mode === 'items') {
   FX.draw(g); label('live ' + FX.count() + ' f' + NF, 8, Hh - 10);
 } else if (mode === 'env') {
   // one area (a=<area or tour theme>) at six hours and four weathers; q=<FX quality>
-  const qs = new URLSearchParams(location.search), a = qs.get('a') || 'pagariari', hh = +(qs.get('h') || 150); window.FX && (FX.quality = +(qs.get('q') || 2));
+  const qs = new URLSearchParams(location.search), a = qs.get('a') || 'pagariari', hh = +(qs.get('h') || 150); FX.quality = +(qs.get('q') || 2);
   const rows = [[.12, 'clear'], [.24, 'clear'], [.5, 'clear'], [.74, 'clear'], [.8, 'clear'], [.87, 'clear'], [.5, 'rain'], [.5, 'snow'], [.5, 'petals'], [.95, 'snow']];
   const isTour = ART.tourThemes && ART.tourThemes.indexOf(a) >= 0;
   rows.forEach((r, i) => { const o = { tod: r[0], weather: r[1] }, y = 6 + i * (hh + 6);
@@ -130,6 +130,25 @@ if (mode === 'items') {
 } else if (mode === 'postcard') {
   const qs = new URLSearchParams(location.search), isl = ART.tourDemo(+(qs.get('i') || 4));
   ART.postcard(g, W, Hh, (c, x, y, w, h) => ART.tourScene(c, isl, 8, x, y, w, h, 2, { tod: +(qs.get('tod') || .76), weather: qs.get('weather') || 'petals' }), { sub: ART.tourNames[isl.theme], date: new Date(2026, 10, 28), t: 1.2 });
+} else if (mode === 'perf') {
+  // ms per frame for a 390 x 200 scene strip (first frame = cache build, then the average of 120 frames); q = FX.quality
+  const qs = new URLSearchParams(location.search); FX.quality = +(qs.get('q') || 1);
+  const out = {}, run = (name, fn) => { let t0 = performance.now(); fn(0); const first = performance.now() - t0; t0 = performance.now(); for (let i = 1; i <= 120; i++) fn(i / 60); out[name] = [+first.toFixed(1), +((performance.now() - t0) / 120).toFixed(2)]; };
+  const isl = ART.tourDemo(4);
+  run('scene day', t => ART.scene(g, 'pagariari', 99, 0, 0, 390, 200, t, { tod: .5, weather: 'clear' }));
+  run('scene night snow', t => ART.scene(g, 'pagariari', 99, 0, 0, 390, 200, t, { tod: .95, weather: 'snow' }));
+  run('tour day', t => ART.tourScene(g, isl, 8, 0, 210, 390, 200, t, { tod: .5, weather: 'clear' }));
+  run('tour sunset rain', t => ART.tourScene(g, isl, 8, 0, 210, 390, 200, t, { tod: .8, weather: 'rain' }));
+  run('tour night petals', t => ART.tourScene(g, isl, 8, 0, 420, 390, 200, t, { tod: .05, weather: 'petals' }));
+  run('heroine+pet new', t => { ART.heroine(96 * d, { outfit: ['casual', 'gala', 'cozy'][Math.floor(t * 60) % 3], hair: 'long', acc: 'hat' }); ART.pet('kutsu', 96 * d, 'bow'); });
+  window.__perf = out; label(JSON.stringify(out), 4, 640);
+} else if (mode === 'styles') {
+  // story areas with every task styled the same way; a=<comma list of areas>
+  const qs = new URLSearchParams(location.search), areas = (qs.get('a') || 'pagariari,aed,majakas').split(','), hh = +(qs.get('h') || 150); let y = 4;
+  for (const a of areas) for (const st of ['boho', 'minimal', 'romantic']) {
+    const style = {}; Object.keys(ART.sceneMap).filter(k => ART.areaKey(ART.sceneMap[k][0]) === a).forEach(k => style[k] = st);
+    ART.scene(g, a, 99, 0, y, W, hh, 1.5, { tod: .5, weather: 'clear', style }); label(a + ' ' + st, 8, y + 14); y += hh + 6;
+  }
 } else if (mode === 'sky') {
   const ws = ['clear', 'rain', 'snow', 'petals'], tods = [.1, .24, .5, .74, .8, .87];
   tods.forEach((td, i) => ws.forEach((wt, j) => { const x = j * (W / 4), y = 6 + i * 150, w = W / 4 - 4; ART.sky(g, x, y, w, 140, 3 + i, { tod: td, weather: wt, fg: true }); label(td + ' ' + wt, x + 4, y + 12); }));

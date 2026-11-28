@@ -628,6 +628,7 @@
   };
 
   // ---------- public ----------
+  A.STYLED = { awn, chair, table, umbrella, planter, garland, arch }; // styled props, also used by the story scenes (22-scenes.js)
   A.tourScene = function (ctx, island, progress, x, y, w, h, t, opts) {
     if (!island || w < 4 || h < 4) return;
     if (typeof island === 'number') island = A.tourDemo(island);
