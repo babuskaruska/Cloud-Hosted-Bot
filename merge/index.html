@@ -39,7 +39,20 @@ canvas{position:fixed;left:0;top:0;width:100%;height:100%;display:block;touch-ac
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
 const now = () => Date.now();
-const QS = (() => { const o = {}; try { new URLSearchParams(location.search).forEach((v, k) => { o[k] = v; }); } catch (e) {} return o; })();
+// URL flags come from the query (?fresh=1) or the hash (#fresh=1). Hash flags are read once and then removed from
+// the address bar at the end of boot (90-main.js, after every module read them), so a reload (or the home-screen app reopening) does not wipe the save again.
+const QS = (() => {
+  const o = {};
+  try { new URLSearchParams(location.search).forEach((v, k) => { o[k] = v; }); } catch (e) {}
+  try {
+    const h = (location.hash || '').replace(/^#/, '');
+    if (h && h.includes('=')) {
+      new URLSearchParams(h).forEach((v, k) => { if (!(k in o)) o[k] = v; });
+      o._hash = 1;
+    }
+  } catch (e) {}
+  return o;
+})();
 
 function mulberry(seed) {
   return function () {
@@ -68,11 +81,12 @@ const ease = {
 
 function dayKey(ts) { const d = new Date(ts || now()); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
 function fmtTime(ms) { const s = Math.max(0, Math.ceil(ms / 1000)), m = Math.floor(s / 60); return m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ':' + String(s % 60).padStart(2, '0'); }
-function fmtNum(n) { n = Math.floor(n); return n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace('.', ',') + ' k' : String(n); }
+function fmtNum(n) { n = Math.floor(n); return n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace('.', ',') + '\u202fk' : String(n); }
 
 // Board geometry
 const COLS = 7, ROWS = 9, NCELL = COLS * ROWS;
-const MAXEN = 100, EN_MS = 60000;  // +1 energy every minute (generous)
+const MAXEN = 100, EN_MS = 60000;  // +1 energy every minute up to 100 (generous)
+const EN_CAP = 150;  // gifts, coffee and the shop may fill energy past 100, but never past this
 const FREE_EN = 30, FREE_EN_MS = 4 * 3600000;  // free energy every 4 hours
 
 // Global state. Keys starting with "_" are view-only and never saved.
@@ -93,7 +107,7 @@ function newState() {
     tut: 0, title: true,
     daily: { day: '', gift: false, streak: 0, lastGift: '', tasks: [], bonus: false, d30: 0, c30: 0 },
     // version 3: adventure levels, lucky wheel, piggy bank
-    adv: { top: 1, stars: {}, hearts: 5, heartT: t, streak: 0, best: 0, boost: { wand: 1, scissors: 1, shuffle: 1, moves: 1 }, plays: 0, wins: 0, tips: {}, seen: 0 },
+    adv: { top: 1, stars: {}, hearts: 5, heartT: t, streak: 0, best: 0, live: null, boost: { wand: 1, scissors: 1, shuffle: 1, moves: 1 }, plays: 0, wins: 0, tips: {}, seen: 0 },
     wheel: { free: '', extra: 0, n: 0 },
     piggy: { coins: 0, day: '' },
     stats: { merges: 0, orders: 0, taps: 0, tasks: 0, lucky: 0, merge5: 0, combo: 0, mbox: 0 },
@@ -311,22 +325,22 @@ const AREAS = [
       ['peeter', 'Kui veski jälle käib, on saarel oma jahu. Ja oma jahust saab... kõike.'],
     ],
     tasks: [
-      { id: 'w1', name: 'Korista veski ära', cost: 6, reward: { coins: 90 }, story: [
+      { id: 'w1', name: 'Korista veski ära', cost: 7, reward: { coins: 90 }, story: [
         ['muri', 'Mrr. (Helmut elab nüüd siin. Ma tulin ainult külla. Taga ei ajanud. Natuke ainult.)'] ] },
-      { id: 'w2', name: 'Paranda tiivad', cost: 7, reward: { energy: 30 }, story: [
+      { id: 'w2', name: 'Paranda tiivad', cost: 8, reward: { energy: 30 }, story: [
         ['ants', 'Vanasti aitasin Maalil tiibu parandada. Ta ütles, et ma olen hea redel.'],
         ['mina', 'Redel?'],
         ['ants', 'Ma olin pikk. Ja ma ei rääkinud palju.'] ] },
-      { id: 'w3', name: 'Õlita veskikivid', cost: 7, reward: { gen: 'net' }, story: [
+      { id: 'w3', name: 'Õlita veskikivid', cost: 8, reward: { gen: 'net' }, story: [
         ['peeter', 'Kuula! Kivid laulavad. Madalalt, nagu vana kannel. Salvestan selle podcasti jaoks.'],
         ['peeter', 'Võta minu teine võrk. Merepõhjast leiab muudki kui kala.'] ] },
-      { id: 'w4', name: 'Jahvata esimene jahu', cost: 8, reward: { coins: 120 }, story: [
+      { id: 'w4', name: 'Jahvata esimene jahu', cost: 9, reward: { coins: 120 }, story: [
         ['liisa', 'Saare oma jahu! Ma teen sellest kringli. Või kaks. Või kõik.'],
         ['mina', 'Kohalik, käsitöö, meretuulega. Turistid lähevad hulluks.'] ] },
-      { id: 'w5', name: 'Riputa tiibadele tulukesed', cost: 8, reward: { energy: 40 }, story: [
+      { id: 'w5', name: 'Riputa tiibadele tulukesed', cost: 9, reward: { energy: 40 }, story: [
         ['mina', 'Õhtul helendab veski nagu suur tähekaart. Ilusam kui ükski filter.'],
         ['peeter', 'Majakast on see ilus vaade. Nüüd on mul kaks tuld, mida vaadata.'] ] },
-      { id: 'w6', name: 'Tõsta vana veskikivi', cost: 9, reward: { gen: 'toolbox', chest: 2 }, story: [
+      { id: 'w6', name: 'Tõsta vana veskikivi', cost: 10, reward: { gen: 'toolbox', chest: 2 }, story: [
         ['maali', '(Kivi all on kiri.) Kolmas vihje: retseptiraamatut valvab see, kes kunagi ei maga.'],
         ['peeter', 'See olen mina. Ma ei maga kunagi. Noh, päeval natuke.'],
         ['mina', 'Majakas!'] ] },
@@ -336,16 +350,16 @@ const AREAS = [
       ['peeter', 'Tere tulemast minu majakasse. Sada kaksteist astet. Olen neid mitu korda lugenud. Iga kord tuleb isesugune arv.'],
     ],
     tasks: [
-      { id: 'l1', name: 'Paranda keerdtrepp', cost: 8, reward: { coins: 120 }, story: [
+      { id: 'l1', name: 'Paranda keerdtrepp', cost: 10, reward: { coins: 120 }, story: [
         ['mina', 'Trepp kriuksub igal astmel ise noodis.'],
         ['peeter', 'Ma kutsun seda trepilauluks. Nüüd laulab ta puhtamalt.'] ] },
-      { id: 'l2', name: 'Nühi lääts särama', cost: 9, reward: { energy: 40 }, story: [
+      { id: 'l2', name: 'Nühi lääts särama', cost: 11, reward: { energy: 40 }, story: [
         ['peeter', 'Läbi läätse paistab saar nagu mänguasi. Vaata, Liisa räägib kellegagi. Muidugi räägib.'] ] },
-      { id: 'l3', name: 'Paranda vana lamp', cost: 9, reward: { gen: 'wheel' }, story: [
+      { id: 'l3', name: 'Paranda vana lamp', cost: 11, reward: { gen: 'wheel' }, story: [
         ['liisa', 'Tõin sulle teise voki! See seisis mu poes nii kaua, et kliendid pidasid seda mööbliks.'] ] },
-      { id: 'l4', name: 'Värvi majakale triibud', cost: 10, reward: { coins: 150 }, story: [
+      { id: 'l4', name: 'Värvi majakale triibud', cost: 12, reward: { coins: 150 }, story: [
         ['ants', 'Punane ja valge. Nagu õngekork. Väga hea majakas.'] ] },
-      { id: 'l5', name: 'Pane majakatuli põlema', cost: 12, reward: { chest: 3 }, story: [
+      { id: 'l5', name: 'Pane majakatuli põlema', cost: 14, reward: { chest: 3 }, story: [
         ['peeter', 'Maali palus mul hoida ühte kirstu. Ta ütles: anna see sellele, kes saare jälle valgeks teeb.'],
         ['peeter', 'See oled sina.'],
         ['mina', 'Retseptiraamat?!'],
@@ -358,13 +372,13 @@ const AREAS = [
       ['mina', 'Vanaema... sa oled päriselt kõige parem. Okei, korjame lehed kokku!'],
     ],
     tasks: [
-      { id: 's1', name: 'Korja retseptilehed kokku', cost: 10, reward: { coins: 150 }, story: [
+      { id: 's1', name: 'Korja retseptilehed kokku', cost: 12, reward: { coins: 150 }, story: [
         ['ants', 'Leidsin võrgust ühe lehe. „Lisa näpuotsaga soola ja natuke naeru.“ Hm.'] ] },
-      { id: 's2', name: 'Köida raamat kokku', cost: 12, reward: { energy: 50 }, story: [
+      { id: 's2', name: 'Köida raamat kokku', cost: 14, reward: { energy: 50 }, story: [
         ['liisa', 'Üks leht oli mu kassaaparaadi all! Kakskümmend aastat! Ma oleksin pidanud koristama.'] ] },
-      { id: 's3', name: 'Küpseta vanaema kringel', cost: 14, reward: { coins: 200 }, story: [
+      { id: 's3', name: 'Küpseta vanaema kringel', cost: 17, reward: { coins: 200 }, story: [
         ['muri', 'Mjäu. (See lõhnab nagu Maali. Ma istun siin ja ootan. Mitte kringlit. Lihtsalt istun.)'] ] },
-      { id: 's4', name: 'Suur saarepidu', cost: 15, reward: { coins: 500, chest: 3 }, story: [
+      { id: 's4', name: 'Suur saarepidu', cost: 18, reward: { coins: 500, chest: 3 }, story: [
         ['liisa', 'Terve saar on siin! Muusika, kringel ja tants! Teen otseülekande!'],
         ['ants', 'Ma ei tantsi. ... Hea küll, ühe korra.'],
         ['peeter', 'Majakas paistab täna ainult meile.'],
@@ -385,8 +399,8 @@ const STORY = {
 
 // Coins shop. Generator offers are added for every generator kind you have owned.
 const SHOP = [
-  { id: 'en25', name: 'Kohvitass', desc: '+25 energiat', price: 50, give: { energy: 25 }, icon: ['coffee', 2] },
-  { id: 'en60', name: 'Kohvikann', desc: '+60 energiat', price: 110, give: { energy: 60 }, icon: ['coffee', 3] },
+  { id: 'en25', name: 'Kohvitass', desc: '+25 energiat', price: 60, give: { energy: 25 }, icon: ['coffee', 2] },
+  { id: 'en60', name: 'Kohvikann', desc: '+60 energiat', price: 140, give: { energy: 60 }, icon: ['coffee', 3] },
   { id: 'mbox', name: 'Üllatuskast', desc: '1 üllatus', price: 35, give: { item: ['mbox', 1] }, icon: ['mbox', 1] },
   { id: 'chest1', name: 'Väike kirst', desc: '3 asja', price: 45, give: { item: ['chest', 1] }, icon: ['chest', 1] },
   { id: 'chest2', name: 'Kirst', desc: '5 asja', price: 110, give: { item: ['chest', 2] }, icon: ['chest', 2] },
@@ -401,26 +415,29 @@ const DAILY_POOL = [
   { id: 'coins', text: 'Teeni {n} münti', goals: [60, 100, 150] },
   { id: 'hi', text: 'Valmista {n} asja 5. või kõrgemal tasemel', goals: [1, 2, 3] },
 ];
-const DAILY_REWARD = { coins: 25, energy: 10 }, DAILY_BONUS = { stars: 2, chest: 1 };
+const DAILY_REWARD = { coins: 15, energy: 10 }, DAILY_BONUS = { stars: 2, chest: 1 };
 
 // ---- reward loops ----
 // Combo: merges less than COMBO_MS apart build a combo. Every merge from x3 on pays a coin; milestones pay more.
 const COMBO_MS = 2600;
-const comboReward = n => n % 5 === 0 ? { coins: 5 + n, energy: 3 } : n >= 3 ? { coins: 1 } : null;
+// The milestone pay is capped (fast players used to earn more per merge the longer they kept the combo going).
+const comboReward = n => n % 5 === 0 ? { coins: 4 + 2 * Math.min(4, n / 5), energy: n <= 10 ? 2 : 1 } : n >= 3 && n <= 20 ? { coins: 1 } : null;
 // Lucky merge chance (the 6th merge of a new game is always lucky, so she meets it early).
 const LUCKY_P = 0.06;
 // Mystery box drop chance on merges (result level 3+), and every Nth order pays one.
 const MBOX_P = 0.035, MBOX_ORDER_EVERY = 5;
 // Level-up rewards: coins, a full energy refill, a chest, now and then a mystery box or a spare generator.
-const xpNeed = L => L <= 1 ? 8 : 8 + (L - 1) * 10;
+// XP comes from merges (1 each) and orders, so it tracks energy spent (about 1.8 XP per energy). From level 4 on a
+// level costs more energy than the refill it pays, so level-ups are a treat, not an endless energy loop.
+const xpNeed = L => L <= 1 ? 10 : L === 2 ? 25 : L === 3 ? 45 : Math.round(40 + 30 * (L - 3) + 4 * (L - 3) * (L - 3));
 function levelReward(L) {
-  const r = { coins: 15 + 5 * L, refill: true, chest: L % 5 === 0 ? 2 : 1 };
+  const r = { coins: 10 + 4 * L, refill: true, chest: L % 5 === 0 ? 2 : 1 };
   if (L === 2 || L % 4 === 0) r.mbox = 1;
   if (L % 3 === 0) r.genCopy = true;
   return r;
 }
 // Collection album: each discovered item pays once when collected; a full chain pays a bonus.
-const albumReward = l => ({ coins: 3 + l * 3 });
+const albumReward = l => ({ coins: 2 + l * 2 });
 const ALBUM_CHAIN = { stars: 2, chest: 2 };
 const ALBUM_CHAINS = Object.keys(CHAINS).filter(k => CHAINS[k].kind === 'item');
 
@@ -471,26 +488,26 @@ const OBST_NAME = { ice: 'Jää', box: 'Kast', web: 'Ämblikuvõrk', sand: 'Liiv
 
 // Lucky wheel (Õnneratas): 8 slices, w = weight. One free spin a day; more from levels and the calendar.
 const WHEEL = [
-  { r: { coins: 25 }, w: 20, color: '#ffd23f', label: '25' },
+  { r: { coins: 15 }, w: 20, color: '#ffd23f', label: '15' },
   { r: { boost: 'wand' }, w: 10, color: '#b07cff', label: 'Võlukepp' },
   { r: { energy: 20 }, w: 18, color: '#5ad1ff', label: '+20' },
   { r: { boost: 'scissors' }, w: 10, color: '#ff8ab8', label: 'Käärid' },
-  { r: { coins: 60 }, w: 12, color: '#ffb02e', label: '60' },
+  { r: { coins: 40 }, w: 12, color: '#ffb02e', label: '40' },
   { r: { boost: 'shuffle' }, w: 12, color: '#6fe0a0', label: 'Segamine' },
   { r: { item: ['chest', 1], boost: 'moves' }, w: 14, color: '#ff9a6b', label: 'Kirst' },
-  { r: { coins: 300, item: ['mbox', 1], boost: 'wand', spins: 1 }, w: 3, color: '#ff4f9a', label: 'Suur auhind', big: true },
+  { r: { coins: 150, item: ['mbox', 1], boost: 'wand', spins: 1 }, w: 3, color: '#ff4f9a', label: 'Suur auhind', big: true },
 ];
 
 // Daily calendar: a 7-day streak with growing prizes (day 7 is the big one), and a 30-day track that counts
 // every day you come by (a missed day does not reset it).
 const CAL7 = [
-  { coins: 20, energy: 10 },
-  { coins: 30, energy: 15 },
-  { coins: 30, boost: 'shuffle' },
-  { coins: 40, energy: 20 },
-  { coins: 40, boost: 'scissors', spins: 1 },
-  { coins: 60, energy: 25, chest: 1 },
-  { coins: 100, boost: 'wand', chest: 2, spins: 1 },
+  { coins: 10, energy: 10 },
+  { coins: 15, energy: 15 },
+  { coins: 15, boost: 'shuffle' },
+  { coins: 20, energy: 20 },
+  { coins: 20, boost: 'scissors', spins: 1 },
+  { coins: 30, energy: 25, chest: 1 },
+  { coins: 60, boost: 'wand', chest: 2, spins: 1 },
 ];
 const CAL30 = [
   { day: 3, r: { spins: 1, coins: 30 } },
@@ -501,7 +518,7 @@ const CAL30 = [
 ];
 
 // Piggy bank (Hoiupõrsas): fills from play, opens free once a day.
-const PIGGY_MAX = 300, PIGGY_MIN = 10;
+const PIGGY_MAX = 60, PIGGY_MIN = 10;
 const PIGGY_ADD = { merge: 1, order: 4, level: 12 };
 
 // ===== ART (Ash): every picture in Saarepagar is drawn here with canvas paths. =====
@@ -624,7 +641,52 @@ const ART = (function () {
 
   function scaleOf(ctx) { try { const m = ctx.getTransform(); return Math.max(.5, Math.min(4, Math.hypot(m.a, m.b))); } catch (e) { return A.dpr || 1; } }
   A.scaleOf = scaleOf;
-  A.dpr = Math.min(3, window.devicePixelRatio || 1);
+  // ---- device budget (version 3 phase C): ART.perf ----
+  // Cheap Androids (Poco M7 Pro class) choke on a 1080x2400 canvas redrawn 20-60 times a second, so the backing
+  // resolution and the effect quality follow the device and the measured frames:
+  //   ART.perf.maxDpr()     cap for the canvas backing scale (UI.layout uses it): 3 normally, 2 on weak devices
+  //                         (<= 4 cores or <= 4 GB), lower after slow frames. URL flag dpr=<n> forces a cap.
+  //   ART.perf.level        0 = full; 1 = backing <= 2; 2 = + FX.quality 1; 3 = backing <= 1.5, FX.quality 0.
+  //   ART.perf.frame(ms, drew, jsMs)  called by the frame loop on every rAF (ms = rAF time; drew = UI.draw ran in the
+  //                         previous callback; jsMs = its tick + draw time). Slow drawn frames (median gap > 42 ms, > 55 ms for level 3, or JS
+  //                         > 14 ms over 36 frames) step one level down, at most every 2.5 s; the level is saved for a week.
+  //   ART.perf.onChange     fn(level) set by the UI (relayout when the backing cap changed). URL flag perf=0 = no auto.
+  A.perf = (function () {
+    const nav = navigator, cores = nav.hardwareConcurrency || 8, mem = nav.deviceMemory || 8;
+    // iPhones and iPads are never 'weak' by these numbers (Safari reports few cores and no memory); slow frames still count
+    const ios = /iPhone|iPad|iPod/.test(nav.userAgent || '') || (/Macintosh/.test(nav.userAgent || '') && nav.maxTouchPoints > 1);
+    const weak = !ios && (cores <= 4 || mem <= 4);
+    let qs = {}; try { new URLSearchParams(location.search + '&' + location.hash.slice(1)).forEach((v, k) => { qs[k] = v; }); } catch (e) { }
+    const KEY = 'saarepagar.perf', P = { weak, level: 0, onChange: null, auto: qs.perf !== '0' && !window.__mgPerfNoAuto };
+    try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && P.auto && Date.now() - s.at < 7 * 864e5) P.level = Math.max(0, Math.min(3, s.level | 0)); } catch (e) { }
+    if (qs.perf && /^[0-3]$/.test(qs.perf) && qs.perf !== '0') P.level = +qs.perf;
+    const forced = qs.dpr ? Math.max(1, Math.min(3, parseFloat(qs.dpr) || 3)) : 0;
+    P.maxDpr = () => forced || Math.min(weak ? 2 : 3, P.level >= 3 ? 1.5 : P.level >= 1 ? 2 : 3);
+    P.fxQuality = () => Math.min(weak ? 1 : 2, P.level >= 3 ? 0 : P.level >= 2 ? 1 : 2);
+    const gaps = [], js = []; let last = 0, wasDraw = false, hold = 0;
+    const med = a => { const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
+    P.apply = function () { try { if (typeof FX !== 'undefined' && FX) FX.quality = P.fxQuality(); } catch (e) { } A.quality = P.level >= 3 ? 1 : 2; };
+    P.set = function (lv, save) {
+      lv = Math.max(0, Math.min(3, lv | 0)); if (lv === P.level) return;
+      const d0 = P.maxDpr(); P.level = lv; P.apply(); gaps.length = js.length = 0; hold = performance.now() + 2500;
+      if (save) try { localStorage.setItem(KEY, JSON.stringify({ level: lv, at: Date.now() })); } catch (e) { }
+      if (P.onChange) try { P.onChange(lv, P.maxDpr() !== d0); } catch (e) { }
+    };
+    P.frame = function (ms, drew, jsMs) {
+      if (wasDraw && last && !document.hidden) {
+        const gap = ms - last;
+        if (gap > 0 && gap < 400) { gaps.push(gap); if (jsMs != null) js.push(jsMs); if (gaps.length > 36) gaps.shift(); if (js.length > 36) js.shift(); }
+      }
+      wasDraw = !!drew; last = ms;
+      if (!P.auto || P.level >= 3 || gaps.length < 36 || ms < hold) return;
+      let n = P.level + 1; if (n === 1 && Math.min(weak ? 2 : 3, window.devicePixelRatio || 1) <= 2) n = 2; // the cap to 2 would change nothing
+      const lim = n >= 3 ? 55 : 42; // the last step (blurrier canvas) only below ~18 fps
+      if (med(gaps) > lim || (js.length >= 36 && med(js) > 14)) P.set(n, true);
+    };
+    P.stats = () => ({ level: P.level, weak, maxDpr: P.maxDpr(), fx: P.fxQuality(), gap: gaps.length ? +med(gaps).toFixed(1) : null, js: js.length ? +med(js).toFixed(1) : null });
+    return P;
+  })();
+  Object.defineProperty(A, 'dpr', { get: () => Math.min(A.perf.maxDpr(), window.devicePixelRatio || 1), enumerable: true });
 
   // ---- pixel helpers ----
   // vibrance: push weak colours toward saturation (the candy look), leave greys a little cooler
@@ -2887,8 +2949,61 @@ const ART = (function () {
     gr.addColorStop(0, 'rgba(255,236,170,.95)'); gr.addColorStop(.35, 'rgba(255,200,120,.45)'); gr.addColorStop(1, 'rgba(255,190,110,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
     return c;
   }
-  let _animC = null;
-  function scratchAnim(w, h) { if (!_animC) _animC = mk(w, h); if (_animC.width !== w || _animC.height !== h) { _animC.width = w; _animC.height = h; } return _animC; }
+  // ---- tinted drawing for the animated layer (phase C) ----
+  // tinted(ctx, over) returns a stand-in for ctx whose colours (fillStyle, strokeStyle, gradient stops, shadowColor) are
+  // mixed toward `over` (an rgba string) and whose drawImage uses a cached pre-tinted copy of the canvas: the same result
+  // as painting the layer offscreen and filling it 'source-atop', without the offscreen canvas and its full-rect
+  // composite every frame (that cost 4-7 ms per frame at DPR 3 on a throttled phone). Colour results are cached.
+  const _norm = (() => { let c = null; return v => { if (!c) c = mk(1, 1).getContext('2d'); c.fillStyle = '#000'; c.fillStyle = v; return c.fillStyle; }; })();
+  function parseCol(v) {
+    let m;
+    if (v[0] === '#') {
+      const h = v.length === 4 || v.length === 5 ? v.slice(1).split('').map(x => x + x).join('') : v.slice(1);
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16), h.length >= 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1];
+    }
+    if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)$/i.exec(v))) return [+m[1], +m[2], +m[3], m[4] == null ? 1 : m[4].endsWith('%') ? parseFloat(m[4]) / 100 : +m[4]];
+    return null;
+  }
+  const _tintCache = new Map();
+  function tintCol(v, over) {
+    if (typeof v !== 'string') return v;
+    let tc = _tintCache.get(over); if (!tc) { tc = { o: parseCol(over), m: new Map() }; _tintCache.set(over, tc); }
+    let r = tc.m.get(v); if (r !== undefined) return r;
+    let c = parseCol(v); if (!c) { const n = _norm(v); c = parseCol(n); }
+    const o = tc.o;
+    if (!c || !o) r = v;
+    else { const a = o[3], f = x => Math.round(x); r = 'rgba(' + f(c[0] * (1 - a) + o[0] * a) + ',' + f(c[1] * (1 - a) + o[1] * a) + ',' + f(c[2] * (1 - a) + o[2] * a) + ',' + +c[3].toFixed(3) + ')'; }
+    if (tc.m.size > 800) tc.m.clear();
+    tc.m.set(v, r); return r;
+  }
+  const _imgTint = new WeakMap();
+  function tintImg(img, over) {
+    if (!(img instanceof HTMLCanvasElement)) return img;
+    let e = _imgTint.get(img); if (e && e.over === over && e.w === img.width) return e.c;
+    const c = mk(img.width, img.height), g = c.getContext('2d');
+    g.drawImage(img, 0, 0); g.globalCompositeOperation = 'source-atop'; g.fillStyle = over; g.fillRect(0, 0, c.width, c.height);
+    _imgTint.set(img, { over, w: img.width, c }); return c;
+  }
+  const TintProto = (() => {
+    const P = {}, CP = CanvasRenderingContext2D.prototype, special = { fillStyle: 1, strokeStyle: 1, shadowColor: 1 };
+    for (const k of Object.getOwnPropertyNames(CP)) {
+      if (k === 'constructor') continue;
+      const d = Object.getOwnPropertyDescriptor(CP, k);
+      if (typeof d.value === 'function') P[k] = function () { return this._c[k].apply(this._c, arguments); };
+      else if (d.get) Object.defineProperty(P, k, special[k]
+        ? { get() { return this._c[k]; }, set(v) { this._c[k] = v && v._g ? v._g : tintCol(v, this._o); } }
+        : { get() { return this._c[k]; }, set(v) { this._c[k] = v; } });
+    }
+    const grad = (self, gr) => ({ _g: gr, addColorStop(o, c) { gr.addColorStop(o, tintCol(c, self._o)); } });
+    P.createLinearGradient = function () { return grad(this, this._c.createLinearGradient.apply(this._c, arguments)); };
+    P.createRadialGradient = function () { return grad(this, this._c.createRadialGradient.apply(this._c, arguments)); };
+    if (CP.createConicGradient) P.createConicGradient = function () { return grad(this, this._c.createConicGradient.apply(this._c, arguments)); };
+    P.drawImage = function (img) { const a = Array.prototype.slice.call(arguments); a[0] = tintImg(img, this._o); return this._c.drawImage.apply(this._c, a); };
+    return P;
+  })();
+  const _tinted = new WeakMap();
+  function tinted(ctx, over) { let t = _tinted.get(ctx); if (!t) { t = Object.create(TintProto); t._c = ctx; _tinted.set(ctx, t); } t._o = over; return t; }
+  A.tinted = tinted;
   A._renderScene = function (ctx, id, def, on, frac, x, y, w, h, t, opts, sty) {
     if (w < 4 || h < 4) return;
     opts = opts || {}; t = t || 0;
@@ -2896,7 +3011,9 @@ const ART = (function () {
     // fit the height, but on a short wide strip zoom in (crop some sky and ground) so details stay readable
     const s = Math.max(h / DH, Math.min(w / 520, h / 150)), ox = (w - DW * s) / 2, oy = Math.max(h - DH * s, Math.min(0, h - 204 * s)), L = -ox / s, Rr = DW + ox / s, sc = A.scaleOf(ctx);
     const own = !!def.ownSky, styKey = sty ? Object.keys(sty).sort().map(k => k + '=' + sty[k][0]).join(',') : '';
-    const ck = id + '|' + styKey + '|' + (plain ? 'plain' : env.key) + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
+    const q = (typeof FX !== 'undefined' && FX) ? FX.quality | 0 : 2, hz = Math.max(.3, Math.min(.95, (oy + 132 * s) / h));
+    const bake = !plain && !own && q < 2; // lower quality: the sky (still clouds) is baked into the cached layer, one blit a frame
+    const ck = id + '|' + styKey + '|' + (plain ? 'plain' : env.key) + (bake ? '|b' + Math.round(env.tod * 96) : '') + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
     let c = cache.get(ck);
     if (!c) {
       c = mk(w * sc, h * sc); const g = c.getContext('2d');
@@ -2920,25 +3037,22 @@ const ART = (function () {
       }
       if (hole) { g.globalCompositeOperation = 'destination-in'; g.drawImage(cp, 0, 0); } // keep the transparent sky hole
       g.globalCompositeOperation = 'source-over';
+      if (bake) {
+        const c2 = mk(w * sc, h * sc), g2 = c2.getContext('2d'); g2.scale(sc, sc);
+        A.sky(g2, 0, 0, w, h, 0, Object.assign({}, env, { horizon: hz })); g2.setTransform(1, 0, 0, 1, 0, 0); g2.drawImage(c, 0, 0); c = c2;
+      }
       if (cache.size > 8) cache.delete(cache.keys().next().value);
       cache.set(ck, c);
     }
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    if (!plain && !own) A.sky(ctx, x, y, w, h, t, Object.assign({}, env, { horizon: Math.max(.3, Math.min(.95, (oy + 132 * s) / h)) }));
+    if (!plain && !own && !bake) A.sky(ctx, x, y, w, h, t, Object.assign({}, env, { horizon: hz }));
     ctx.drawImage(c, x, y, w, h);
     const over = plain ? null : (env.weather === 'rain' && !OVER[env.phase] ? 'rgba(80,90,130,.18)' : OVER[env.phase]);
-    const q = (typeof FX !== 'undefined' && FX) ? FX.quality | 0 : 2;
     SKYOFF = !plain && !own;
-    if (over && q > 1) { // tint the animated layer the same way (offscreen at a capped resolution, one fill; top quality only)
-      const asc = Math.min(sc, 2), aw = Math.ceil(w * asc), ah = Math.ceil(h * asc), ac = scratchAnim(aw, ah), ag = ac.getContext('2d');
-      ag.setTransform(1, 0, 0, 1, 0, 0); ag.globalCompositeOperation = 'source-over'; ag.globalAlpha = 1; ag.clearRect(0, 0, aw, ah);
-      ag.scale(asc, asc); ag.translate(ox, oy); ag.scale(s, s);
-      try { def.anim(ag, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
-      ag.setTransform(1, 0, 0, 1, 0, 0); ag.globalCompositeOperation = 'source-atop'; ag.fillStyle = over; ag.fillRect(0, 0, aw, ah); ag.globalCompositeOperation = 'source-over';
-      ctx.drawImage(ac, 0, 0, aw, ah, x, y, w, h);
-    } else {
+    { // the animated layer, tinted for the hour like the still (colour-mixed drawing, no offscreen pass; every quality)
+      const ac = over ? tinted(ctx, over) : ctx;
       ctx.save(); ctx.translate(x + ox, y + oy); ctx.scale(s, s);
-      try { def.anim(ctx, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
+      try { def.anim(ac, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
       ctx.restore();
     }
     SKYOFF = false;
@@ -3143,6 +3257,7 @@ const ART = (function () {
 //   ART.mapTheme(chapter)   -> { key, name, path, accent, ink } (chapter themes cycle forever; each cycle reshuffles the decor)
 //   ART.mapBg(ctx, chapter, x, y, w, h, t, scroll)  fills the rect with the chapter's scenery. scroll = world y (CSS px) of the rect's
 //       top edge: the picture moves up as scroll grows and repeats seamlessly. Cached tile + a light animated layer (QUALITY-scaled).
+//   ART.levelBg(ctx, chapter, x, y, w, h, t, cols, alpha)  the level screen backdrop (gradient + faded scenery), one cached blit
 //   ART.mapDivider(ctx, chapter, x, y, w, t)  a soft mist band with a ribbon "Peatükk n · Name", centred on y (hides the seam between chapters)
 //   ART.mapPath(ctx, points, t, opts)  winding candy path through points ([{x,y}] or [[x,y]] or flat); opts { done: float index of the
 //       last finished point (dots before it are candy coloured, after it pale), width }
@@ -3421,7 +3536,7 @@ const ART = (function () {
   const tiles = new Map();
   function tileFor(ch, w, sc) {
     const T = THEMES[((ch | 0) % THEMES.length + THEMES.length) % THEMES.length], cyc = Math.floor((ch | 0) / THEMES.length);
-    const rs = Math.min(sc, Q() >= 2 ? 2.5 : 2), Ht = Math.round(w * 2.2), key = ch % 60 + '|' + w + '|' + rs;
+    const rs = Math.min(sc, 3), Ht = Math.round(w * 2.2), key = ch % 60 + '|' + w + '|' + rs;
     let t = tiles.get(key); if (t) return t;
     if (tiles.size >= 2) tiles.delete(tiles.keys().next().value);
     const c = mk(w * rs, Ht * rs), g = c.getContext('2d'); g.scale(rs, rs);
@@ -3500,9 +3615,30 @@ const ART = (function () {
     const sc = A.scaleOf(ctx), tl = tileFor(ch | 0, Math.round(w), sc), H = tl.H;
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
     const off = ((scroll % H) + H) % H;
-    for (let yy = y - off; yy < y + h; yy += H) ctx.drawImage(tl.c, x, yy, w, H);
-    // animated layer
-    const T = tl.T, q = Q(), n = [8, 16, 26][q];
+    // 1:1 with the backing pixels (tile made at the canvas scale, y snapped to device pixels): no filtering per frame
+    for (let yy = y - off; yy < y + h; yy += H) ctx.drawImage(tl.c, x, Math.round(yy * sc) / sc, w, H);
+    animBits(ctx, tl, x, y, w, h, t, off);
+    ctx.restore();
+  };
+  // ART.levelBg(ctx, chapter, x, y, w, h, t, cols, alpha): the level screen backdrop in one cached blit: a vertical
+  // gradient cols [top, bottom] with the chapter scenery over it at `alpha` (default .55), plus the animated bits.
+  let _lvl = null;
+  A.levelBg = function (ctx, ch, x, y, w, h, t, cols, alpha) {
+    t = t == null ? now() : t; alpha = alpha == null ? .55 : alpha; cols = cols || ['#bfeaff', '#fff0f6'];
+    const sc = A.scaleOf(ctx), tl = tileFor(ch | 0, Math.round(w), sc), key = (ch | 0) + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc + '|' + cols.join() + '|' + alpha;
+    if (!_lvl || _lvl.key !== key) {
+      const c = mk(w * sc, h * sc), g = c.getContext('2d'); g.scale(sc, sc);
+      const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, cols[0]); gr.addColorStop(1, cols[1]); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      g.globalAlpha = alpha; for (let yy = 0; yy < h; yy += tl.H) g.drawImage(tl.c, 0, yy, w, tl.H);
+      _lvl = { key, c };
+    }
+    ctx.drawImage(_lvl.c, x, Math.round(y * sc) / sc, w, h);
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.globalAlpha *= alpha;
+    animBits(ctx, tl, x, y, w, h, t, 0);
+    ctx.restore();
+  };
+  function animBits(ctx, tl, x, y, w, h, t, off) {
+    const H = tl.H, T = tl.T, q = Q(), n = [8, 16, 26][q];
     for (let i = 0; i < n && i < tl.bits.length; i++) {
       const b = tl.bits[i];
       if (T.anim === 'snow') { // falls in screen space
@@ -3518,7 +3654,7 @@ const ART = (function () {
         const gx = x + ((b.x + t * 18 * b.s) % (w + 40)) - 20, gy = sy + Math.sin(t + b.p) * 6, f = Math.sin(t * 6 + b.p) * 4;
         ctx.beginPath(); ctx.moveTo(gx - 8, gy - f); ctx.quadraticCurveTo(gx - 4, gy - 4, gx, gy); ctx.quadraticCurveTo(gx + 4, gy - 4, gx + 8, gy - f); stroke(ctx, '#ffffff', 2.4);
       } else if (T.anim === 'butterfly' || T.anim === 'bee') {
-        const bx = x + b.x + Math.sin(t * .7 + b.p) * 26, byy = sy + Math.sin(t * 1.1 + b.p * 2) * 14, fl = Math.abs(Math.sin(t * 12 + b.p));
+        const bx = x + b.x + Math.sin(t * .7 + b.p) * 26, byy = sy + Math.sin(t * 1.1 + b.p * 2) * 14, fl = .35 + .65 * Math.abs(Math.sin(t * 9 + b.p)); // wings never fold flat (a bare body read as an 'I')
         if (T.anim === 'bee') {
           E(ctx, bx - 2, byy - 4, 3, 4 * fl + 1); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fill(); E(ctx, bx + 2, byy - 4, 3, 4 * fl + 1); ctx.fill();
           E(ctx, bx, byy, 4.5, 3.2); ctx.fillStyle = '#ffc83d'; ctx.fill(); ctx.fillStyle = '#33285c'; ctx.fillRect(bx - .8, byy - 3, 1.6, 6);
@@ -3526,7 +3662,8 @@ const ART = (function () {
           const c = ['#ff6fae', '#ffd23f', '#8fdcff', '#b79cff'][i % 4];
           E(ctx, bx - 4 * fl, byy - 2, 4.5 * fl + .8, 5); ctx.fillStyle = c; ctx.fill(); E(ctx, bx + 4 * fl, byy - 2, 4.5 * fl + .8, 5); ctx.fill();
           E(ctx, bx - 3 * fl, byy + 3, 3 * fl + .6, 3); ctx.fill(); E(ctx, bx + 3 * fl, byy + 3, 3 * fl + .6, 3); ctx.fill();
-          ctx.fillStyle = '#33285c'; ctx.fillRect(bx - .8, byy - 4, 1.6, 9);
+          E(ctx, bx, byy + .5, 1.3, 4); ctx.fillStyle = '#33285c'; ctx.fill();
+          ctx.beginPath(); ctx.moveTo(bx - .5, byy - 3.5); ctx.lineTo(bx - 2.5, byy - 7); ctx.moveTo(bx + .5, byy - 3.5); ctx.lineTo(bx + 2.5, byy - 7); ctx.lineWidth = .9; ctx.strokeStyle = '#33285c'; ctx.stroke();
         }
       } else if (T.anim === 'firefly') {
         const a = .5 + .5 * Math.sin(t * 2.6 + b.p), fx = x + b.x + Math.sin(t * .5 + b.p) * 18, fy = sy + Math.cos(t * .6 + b.p) * 12;
@@ -3534,8 +3671,7 @@ const ART = (function () {
         ctx.fillStyle = gg; ctx.fillRect(fx - 9, fy - 9, 18, 18); dot(ctx, fx, fy, 1.6, 'rgba(255,255,230,' + a.toFixed(2) + ')');
       }
     }
-    ctx.restore();
-  };
+  }
 
   A.mapDivider = function (ctx, ch, x, y, w, t) {
     const T = A.mapTheme(ch), hh = 120;
@@ -5295,57 +5431,73 @@ const ART = (function () {
   I.cur_beach = g => token(g, '#3db8ff', g => { g.beginPath(); g.moveTo(50, 70); g.bezierCurveTo(28, 62, 28, 34, 50, 30); g.bezierCurveTo(72, 34, 72, 62, 50, 70); g.closePath(); paint(g, '#ffe0c8', 50, 46, 22, 0); for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(50, 68); g.quadraticCurveTo(50 + i * 6, 50, 50 + i * 7, 33 + Math.abs(i) * 2); stroke(g, '#ff9a6a', 1.6); } });
   // ---------- postcard (photo mode) ----------
   function fmtDate(d) { const M = ['jaanuar', 'veebruar', 'märts', 'aprill', 'mai', 'juuni', 'juuli', 'august', 'september', 'oktoober', 'november', 'detsember']; return d.getDate() + '. ' + M[d.getMonth()] + ' ' + d.getFullYear(); }
+  // Cached in two layers per size and caption (phase C): the backdrop and card under the photo, and the stamp, postmark,
+  // tape and caption over it, both with the tilt baked in. Per frame only the photo (rendered unrotated offscreen, then
+  // one rotated blit) and three sparkles are drawn.
+  let _pc = null, _pcOff = null;
   A.postcard = function (ctx, w, h, drawScene, opts) {
-    opts = opts || {}; const t = opts.t || 0, FONT = A.theme.font;
-    ctx.save();
-    // backdrop: soft sky gradient with bokeh
-    const bg = ctx.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#ffd6e8'); bg.addColorStop(.5, '#e6e0ff'); bg.addColorStop(1, '#cdeeff'); ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
-    const r0 = srnd(5); for (let i = 0; i < 16; i++) { const x = r0() * w, y = r0() * h, rr = 8 + r0() * 30; ctx.fillStyle = 'rgba(255,255,255,' + (.12 + r0() * .2) + ')'; ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill(); }
-    // card geometry: a landscape photo with a caption band, as big as fits
+    opts = opts || {}; const t = opts.t || 0, FONT = A.theme.font, sc = Math.min(4, Math.ceil(A.scaleOf(ctx) * 2 - .05) / 2); // half steps: the opening zoom does not rebuild every frame
     const m = Math.max(14, Math.min(w, h) * .05), cw = Math.min(w - m * 2, (h - m * 2) * 1.25), pad = Math.max(8, cw * .035);
     const pw = cw - pad * 2, ph = Math.min(pw * .68, h - m * 2 - pad * 2 - cw * .2), capH = Math.max(54, cw * .2), ch = pad * 2 + ph + capH;
-    const cx = (w - cw) / 2, cy = (h - ch) / 2, tilt = opts.tilt != null ? opts.tilt : -.02;
-    ctx.translate(w / 2, h / 2); ctx.rotate(tilt); ctx.translate(-w / 2, -h / 2);
-    R(ctx, cx + 3, cy + 8, cw, ch, 10); ctx.fillStyle = 'rgba(60,40,120,.22)'; ctx.fill();
-    R(ctx, cx, cy, cw, ch, 10); const cg = ctx.createLinearGradient(0, cy, 0, cy + ch); cg.addColorStop(0, '#ffffff'); cg.addColorStop(1, '#fbf6ff'); ctx.fillStyle = cg; ctx.fill();
-    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(124,92,255,.18)'; ctx.stroke();
-    const px = cx + pad, py = cy + pad;
-    ctx.save(); R(ctx, px, py, pw, ph, 6); ctx.clip(); ctx.fillStyle = '#bfeaff'; ctx.fillRect(px, py, pw, ph);
-    try { drawScene && drawScene(ctx, px, py, pw, ph); } catch (e) { console.error('ART.postcard scene', e); }
-    // a soft vignette and a glossy corner sheen
-    const vg = ctx.createRadialGradient(px + pw / 2, py + ph / 2, Math.min(pw, ph) * .4, px + pw / 2, py + ph / 2, Math.max(pw, ph) * .75); vg.addColorStop(0, 'rgba(255,255,255,0)'); vg.addColorStop(1, 'rgba(80,40,120,.18)'); ctx.fillStyle = vg; ctx.fillRect(px, py, pw, ph);
-    ctx.restore();
-    R(ctx, px, py, pw, ph, 6); ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(60,40,120,.25)'; ctx.stroke();
-    // stamp (top right of the photo): scalloped edge, a kringel and a heart
-    const ss = Math.max(34, pw * .15), sx = px + pw - ss - pad * .6, sy = py + pad * .6;
-    ctx.save(); ctx.translate(sx + ss / 2, sy + ss * .6); ctx.rotate(.08); ctx.translate(-ss / 2, -ss * .6);
-    ctx.fillStyle = 'rgba(60,40,120,.2)'; R(ctx, 2, 3, ss, ss * 1.2, 2); ctx.fill();
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); const sc = ss / 10;
-    for (let i = 0; i <= 10; i++) { ctx.moveTo(i * sc + sc * .35, 0); ctx.arc(i * sc, 0, sc * .35, 0, TAU); ctx.moveTo(i * sc + sc * .35, ss * 1.2); ctx.arc(i * sc, ss * 1.2, sc * .35, 0, TAU); }
-    ctx.rect(0, 0, ss, ss * 1.2); ctx.fill();
-    R(ctx, sc * .6, sc * .6, ss - sc * 1.2, ss * 1.2 - sc * 1.2, 2); const sg = ctx.createLinearGradient(0, 0, 0, ss * 1.2); sg.addColorStop(0, '#ffe0ee'); sg.addColorStop(1, '#ffb0cc'); ctx.fillStyle = sg; ctx.fill();
-    ctx.drawImage(A.item('bread', 7, Math.round(ss * .7 * A.scaleOf(ctx))), ss * .15, ss * .2, ss * .7, ss * .7);
-    ctx.font = '900 ' + (ss * .16) + 'px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#c0306a'; ctx.fillText('EESTI', ss / 2, ss * 1.02);
-    ctx.restore();
-    // postmark rings
-    ctx.save(); ctx.globalAlpha = .45; ctx.strokeStyle = '#7a5aa8'; ctx.lineWidth = 1.4; const pmx = sx - ss * .2, pmy = sy + ss * .9;
-    ctx.beginPath(); ctx.arc(pmx, pmy, ss * .42, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.arc(pmx, pmy, ss * .32, 0, TAU); ctx.stroke();
-    for (let i = 0; i < 3; i++) { ctx.beginPath(); for (let x = 0; x <= ss * 1.2; x += 4) { const yy = pmy - ss * .2 + i * ss * .2 + Math.sin(x * .25) * 2; x ? ctx.lineTo(pmx + ss * .5 + x, yy) : ctx.moveTo(pmx + ss * .5, yy); } ctx.stroke(); }
-    ctx.restore();
-    // washi tape on two corners
-    for (const [tx, ty, a, col] of [[cx + cw * .12, cy, -.5, 'rgba(255,170,200,.82)'], [cx + cw * .9, cy + ch, -.5, 'rgba(160,220,255,.82)']]) {
-      ctx.save(); ctx.translate(tx, ty); ctx.rotate(a); const tw = Math.max(46, cw * .18), th = tw * .32; ctx.fillStyle = col; ctx.fillRect(-tw / 2, -th / 2, tw, th);
-      ctx.fillStyle = 'rgba(255,255,255,.45)'; for (let i = -tw / 2 + 4; i < tw / 2; i += 9) { ctx.beginPath(); ctx.arc(i, 0, th * .16, 0, TAU); ctx.fill(); } ctx.restore();
-    }
-    // caption
-    const capY = py + ph + capH * .42, fs = Math.max(15, Math.min(30, cw * .062));
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 ' + fs + 'px ' + FONT; ctx.lineJoin = 'round';
+    const cx = (w - cw) / 2, cy = (h - ch) / 2, tilt = opts.tilt != null ? opts.tilt : -.02, px = cx + pad, py = cy + pad;
     const cap = opts.caption || 'Tervitused Saarepagarist!';
-    ctx.lineWidth = fs * .22; ctx.strokeStyle = '#ffffff'; ctx.strokeText(cap, cx + cw / 2, capY);
-    const tg = ctx.createLinearGradient(cx, 0, cx + cw, 0); tg.addColorStop(0, '#ff7a6b'); tg.addColorStop(.5, '#ff4f9a'); tg.addColorStop(1, '#7c5cff'); ctx.fillStyle = tg; ctx.fillText(cap, cx + cw / 2, capY);
     const sub = [opts.sub, opts.date === false ? null : (opts.date instanceof Date ? fmtDate(opts.date) : opts.date || fmtDate(new Date()))].filter(Boolean).join(' · ');
-    if (sub) { ctx.font = '800 ' + Math.max(11, fs * .5) + 'px ' + FONT; ctx.fillStyle = A.theme.ink2; ctx.fillText(sub, cx + cw / 2, capY + fs * .95); }
-    for (const s of [-1, 1]) { const hx = cx + cw / 2 + s * (ctx.measureText(sub || '').width / 2 + fs * .6), hy = capY + fs * .95; if (sub) { heart(ctx, hx, hy + fs * .1, fs * .32); ctx.fillStyle = '#ff8fb0'; ctx.fill(); } }
+    const fs = Math.max(15, Math.min(30, cw * .062)), capY = py + ph + capH * .42;
+    const key = Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2) + '|' + tilt + '|' + cap + '|' + sub;
+    if (!_pc || _pc.key !== key) {
+      const mkL = () => { const c = mk(w * sc, h * sc), g = c.getContext('2d'); g.scale(sc, sc); g.translate(w / 2, h / 2); g.rotate(tilt); g.translate(-w / 2, -h / 2); return [c, g]; };
+      const [uc, u] = mkL(), [oc, o] = mkL();
+      // under: backdrop (unrotated) with bokeh, the card shadow and the card
+      u.save(); u.setTransform(sc, 0, 0, sc, 0, 0);
+      const bg = u.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#ffd6e8'); bg.addColorStop(.5, '#e6e0ff'); bg.addColorStop(1, '#cdeeff'); u.fillStyle = bg; u.fillRect(0, 0, w, h);
+      const r0 = srnd(5); for (let i = 0; i < 16; i++) { const x = r0() * w, y = r0() * h, rr = 8 + r0() * 30; u.fillStyle = 'rgba(255,255,255,' + (.12 + r0() * .2) + ')'; u.beginPath(); u.arc(x, y, rr, 0, TAU); u.fill(); }
+      u.restore();
+      R(u, cx + 3, cy + 8, cw, ch, 10); u.fillStyle = 'rgba(60,40,120,.22)'; u.fill();
+      R(u, cx, cy, cw, ch, 10); const cg = u.createLinearGradient(0, cy, 0, cy + ch); cg.addColorStop(0, '#ffffff'); cg.addColorStop(1, '#fbf6ff'); u.fillStyle = cg; u.fill();
+      u.lineWidth = 1.5; u.strokeStyle = 'rgba(124,92,255,.18)'; u.stroke();
+      R(u, px, py, pw, ph, 6); u.fillStyle = '#bfeaff'; u.fill();
+      // over: vignette and frame line of the photo, stamp, postmark, washi tape, caption
+      o.save(); R(o, px, py, pw, ph, 6); o.clip();
+      const vg = o.createRadialGradient(px + pw / 2, py + ph / 2, Math.min(pw, ph) * .4, px + pw / 2, py + ph / 2, Math.max(pw, ph) * .75); vg.addColorStop(0, 'rgba(255,255,255,0)'); vg.addColorStop(1, 'rgba(80,40,120,.18)'); o.fillStyle = vg; o.fillRect(px, py, pw, ph);
+      o.restore();
+      R(o, px, py, pw, ph, 6); o.lineWidth = 1.2; o.strokeStyle = 'rgba(60,40,120,.25)'; o.stroke();
+      const ss = Math.max(34, pw * .15), sx = px + pw - ss - pad * .6, sy = py + pad * .6;
+      o.save(); o.translate(sx + ss / 2, sy + ss * .6); o.rotate(.08); o.translate(-ss / 2, -ss * .6);
+      o.fillStyle = 'rgba(60,40,120,.2)'; R(o, 2, 3, ss, ss * 1.2, 2); o.fill();
+      o.fillStyle = '#ffffff'; o.beginPath(); const sq = ss / 10;
+      for (let i = 0; i <= 10; i++) { o.moveTo(i * sq + sq * .35, 0); o.arc(i * sq, 0, sq * .35, 0, TAU); o.moveTo(i * sq + sq * .35, ss * 1.2); o.arc(i * sq, ss * 1.2, sq * .35, 0, TAU); }
+      o.rect(0, 0, ss, ss * 1.2); o.fill();
+      R(o, sq * .6, sq * .6, ss - sq * 1.2, ss * 1.2 - sq * 1.2, 2); const sg = o.createLinearGradient(0, 0, 0, ss * 1.2); sg.addColorStop(0, '#ffe0ee'); sg.addColorStop(1, '#ffb0cc'); o.fillStyle = sg; o.fill();
+      o.drawImage(A.item('bread', 7, Math.round(ss * .7 * sc)), ss * .15, ss * .2, ss * .7, ss * .7);
+      o.font = '900 ' + (ss * .16) + 'px ' + FONT; o.textAlign = 'center'; o.textBaseline = 'middle'; o.fillStyle = '#c0306a'; o.fillText('EESTI', ss / 2, ss * 1.02);
+      o.restore();
+      o.save(); o.globalAlpha = .45; o.strokeStyle = '#7a5aa8'; o.lineWidth = 1.4; const pmx = sx - ss * .2, pmy = sy + ss * .9;
+      o.beginPath(); o.arc(pmx, pmy, ss * .42, 0, TAU); o.stroke(); o.beginPath(); o.arc(pmx, pmy, ss * .32, 0, TAU); o.stroke();
+      for (let i = 0; i < 3; i++) { o.beginPath(); for (let x = 0; x <= ss * 1.2; x += 4) { const yy = pmy - ss * .2 + i * ss * .2 + Math.sin(x * .25) * 2; x ? o.lineTo(pmx + ss * .5 + x, yy) : o.moveTo(pmx + ss * .5, yy); } o.stroke(); }
+      o.restore();
+      for (const [tx, ty, a, col] of [[cx + cw * .12, cy, -.5, 'rgba(255,170,200,.82)'], [cx + cw * .9, cy + ch, -.5, 'rgba(160,220,255,.82)']]) {
+        o.save(); o.translate(tx, ty); o.rotate(a); const tw = Math.max(46, cw * .18), th = tw * .32; o.fillStyle = col; o.fillRect(-tw / 2, -th / 2, tw, th);
+        o.fillStyle = 'rgba(255,255,255,.45)'; for (let i = -tw / 2 + 4; i < tw / 2; i += 9) { o.beginPath(); o.arc(i, 0, th * .16, 0, TAU); o.fill(); } o.restore();
+      }
+      o.textAlign = 'center'; o.textBaseline = 'middle'; o.font = '900 ' + fs + 'px ' + FONT; o.lineJoin = 'round';
+      o.lineWidth = fs * .22; o.strokeStyle = '#ffffff'; o.strokeText(cap, cx + cw / 2, capY);
+      const tg = o.createLinearGradient(cx, 0, cx + cw, 0); tg.addColorStop(0, '#ff7a6b'); tg.addColorStop(.5, '#ff4f9a'); tg.addColorStop(1, '#7c5cff'); o.fillStyle = tg; o.fillText(cap, cx + cw / 2, capY);
+      if (sub) { o.font = '800 ' + Math.max(11, fs * .5) + 'px ' + FONT; o.fillStyle = A.theme.ink2; o.fillText(sub, cx + cw / 2, capY + fs * .95); }
+      for (const s of [-1, 1]) { const hx = cx + cw / 2 + s * (o.measureText(sub || '').width / 2 + fs * .6), hy = capY + fs * .95; if (sub) { heart(o, hx, hy + fs * .1, fs * .32); o.fillStyle = '#ff8fb0'; o.fill(); } }
+      _pc = { key, uc, oc };
+    }
+    ctx.drawImage(_pc.uc, 0, 0, w, h);
+    // the photo: drawn unrotated offscreen at the backing scale, then one rotated blit under the rounded clip
+    const ow = Math.ceil(pw * sc), oh = Math.ceil(ph * sc);
+    if (!_pcOff) _pcOff = mk(ow, oh); if (_pcOff.width !== ow || _pcOff.height !== oh) { _pcOff.width = ow; _pcOff.height = oh; }
+    const og = _pcOff.getContext('2d'); og.setTransform(1, 0, 0, 1, 0, 0); og.clearRect(0, 0, ow, oh); og.fillStyle = '#bfeaff'; og.fillRect(0, 0, ow, oh);
+    og.setTransform(sc, 0, 0, sc, -px * sc, -py * sc);
+    try { drawScene && drawScene(og, px, py, pw, ph); } catch (e) { console.error('ART.postcard scene', e); }
+    ctx.save(); ctx.translate(w / 2, h / 2); ctx.rotate(tilt); ctx.translate(-w / 2, -h / 2);
+    ctx.save(); R(ctx, px, py, pw, ph, 6); ctx.clip(); ctx.drawImage(_pcOff, px, py, pw, ph); ctx.restore();
+    ctx.restore();
+    ctx.drawImage(_pc.oc, 0, 0, w, h);
+    ctx.save(); ctx.translate(w / 2, h / 2); ctx.rotate(tilt); ctx.translate(-w / 2, -h / 2);
     for (let i = 0; i < 3; i++) { const a = (t * .6 + i / 3) % 1; A.sparkAt(ctx, cx + cw * (.15 + i * .35), cy + ch - capH * .15 - (i % 2) * 6, Math.max(.1, fs * .3 * Math.sin(a * PI)), '#ffd23f'); }
     ctx.restore();
     // the photo rect in unrotated screen space (approximately; the tilt is small)
@@ -5414,8 +5566,8 @@ const Game = (() => {
   // ---- free energy every few hours ----
   const freeEnIn = () => Math.max(0, (S.freeEnAt || 0) - now());
   function claimFreeEnergy() {
-    if (freeEnIn() > 0) return false;
-    S.en += FREE_EN; S.freeEnAt = now() + FREE_EN_MS;
+    if (freeEnIn() > 0 || S.en >= EN_CAP) return false;
+    addEn(FREE_EN); S.freeEnAt = now() + FREE_EN_MS;
     ev('freeEnergy', -1, { n: FREE_EN }); after(); return true;
   }
 
@@ -5433,6 +5585,8 @@ const Game = (() => {
     const k = Math.floor((t - S.enT) / EN_MS);
     if (k > 0) { S.en = Math.min(MAXEN, S.en + k); S.enT += k * EN_MS; if (S.en >= MAXEN) S.enT = t; }
   }
+  // Energy from gifts and coffee: may overflow the 100 regen limit up to EN_CAP; returns what was added.
+  function addEn(n) { const before = S.en; if (n > 0) S.en = Math.max(S.en, Math.min(EN_CAP, S.en + n)); return S.en - before; }
   const enNext = () => S.en >= MAXEN ? 0 : EN_MS - (now() - S.enT);
 
   function addCoins(n) { S.coins += n; if (n > 0) daily('coins', n); }
@@ -5471,7 +5625,7 @@ const Game = (() => {
   function give(r) {
     if (!r) return;
     if (r.coins) addCoins(r.coins);
-    if (r.energy) S.en += r.energy;
+    if (r.energy) addEn(r.energy);
     if (r.stars) S.stars += r.stars;
     if (r.gen) giveItem(r.gen, 1);
     if (r.chest) giveItem('chest', r.chest);
@@ -5523,9 +5677,9 @@ const Game = (() => {
     S._combo = t - (S._comboT || 0) < COMBO_MS ? (S._combo || 0) + 1 : 1; S._comboT = t;
     if (S._combo > (S.stats.combo || 0)) S.stats.combo = S._combo;
     const cr = comboReward(S._combo);
-    if (cr) { if (cr.coins) addCoins(cr.coins); if (cr.energy) S.en += cr.energy; }
+    if (cr) { if (cr.coins) addCoins(cr.coins); if (cr.energy) addEn(cr.energy); }
     if (S._combo >= 2) ev('combo', b, { n: S._combo, r: cr });
-    PASS.add(PASS_PTS.merge * n, b);
+    for (let j = 0; j < n; j++) PASS.add('merge', b);
     if (ch(res.k).ev) WEEK.add(WEEK_CUR.merge(res.l) * n, b);
     addXp(n);
   }
@@ -5614,7 +5768,7 @@ const Game = (() => {
   function collect(i) {
     const it = S.board[i]; if (!it || it.b) return false;
     const c = ch(it.k), n = c.value ? c.value[it.l - 1] : 0;
-    if (c.kind === 'energy') S.en += n; else if (c.kind === 'coin') addCoins(n); else return false;
+    if (c.kind === 'energy') { if (S.en >= EN_CAP) { ev('enFull', i); return false; } addEn(n); } else if (c.kind === 'coin') addCoins(n); else return false;
     S.board[i] = null;
     ev('collect', i, { kind: c.kind, n, k: it.k, l: it.l }); after(); return true;
   }
@@ -5649,7 +5803,7 @@ const Game = (() => {
   function sellPrice(it) {
     if (!it || it.b) return 0;
     const k = ch(it.k).kind;
-    if (k === 'item') return Math.max(1, Math.round(Math.pow(1.7, it.l - 1)));
+    if (k === 'item') return Math.max(1, Math.round(Math.pow(1.5, it.l - 1)));
     if (k === 'chest') return 5 * it.l;
     return 0;
   }
@@ -5684,14 +5838,14 @@ const Game = (() => {
     const it = S.board[i]; if (!it || ch(it.k).kind !== 'mystery' || it.b) return false;
     const pool = availChains(), r = rnd();
     let out;
-    if (r < 0.3) out = { energy: ri(15, 30) };
-    else if (r < 0.52) out = { coins: ri(20, 50) };
+    if (r < 0.3) out = { energy: ri(10, 20) };
+    else if (r < 0.52) out = { coins: ri(12, 30) };
     else if (r < 0.8 && pool.length) { const k = pick(pool); out = { item: [k, Math.min(maxL(k) - 1, ri(3, 5))] }; }
     else if (r < 0.92) out = { item: ['chest', rnd() < 0.7 ? 1 : 2] };
     else { const k = spareGen(); out = k ? { item: [k, 1] } : { coins: 60 }; }
     S.board[i] = null; S.stats.mbox++;
     if (out.item) { const x = genItem(out.item[0], out.item[1]); if (ch(x.k).kind === 'gen') S.gensOwned[x.k] = true; S.board[i] = x; }
-    if (out.energy) S.en += out.energy;
+    if (out.energy) addEn(out.energy);
     if (out.coins) addCoins(out.coins);
     ev('mystery', i, { out });
     if (out.item) discover(out.item[0], out.item[1]);
@@ -5719,7 +5873,7 @@ const Game = (() => {
   function maxOrders() { let n = S.lvl < 2 ? 2 : 3; if (S.area >= 2 && S.lvl >= 5) n = 4; return Math.min(n, villagersAvail().length); }
   function orderReward(items) {
     const value = items.reduce((s, x) => s + Math.pow(2, x[1] - 1), 0);
-    return { coins: Math.round(value * 2.2 + 4), xp: Math.ceil(value * 0.8) + 2, stars: 1 + (value >= 10) + (value >= 40) + (value >= 120) };
+    return { coins: Math.round(value * 1.6 + 3), xp: Math.ceil(value * 0.8) + 2, stars: 1 + (value >= 6) + (value >= 20) + (value >= 60) };
   }
   function genOrder() {
     const busy = new Set(S.orders.map(o => o.who));
@@ -5740,7 +5894,8 @@ const Game = (() => {
     const items = [];
     for (let j = 0; j < n; j++) {
       const k = pick(src);
-      let cap = Math.min(maxL(k) - 1, 2 + Math.floor((S.lvl - 1) * 0.62) - (V.small ? 1 : 0));
+      // Order levels grow slowly with the XP level (a level-l item costs about 2^(l-1) energy).
+      let cap = Math.min(maxL(k) - 1, 2 + Math.floor(Math.sqrt(Math.max(0, S.lvl - 1)) * 0.85) - (V.small ? 1 : 0));
       cap = Math.max(2, cap);
       // Lower levels are more common; one item per order may reach the cap.
       let l = Math.max(2, cap - Math.floor(Math.pow(rnd(), 0.8) * 3));
@@ -5893,6 +6048,7 @@ const Game = (() => {
   function buy(id) {
     const x = shopList().find(s => s.id === id); if (!x || x.soldOut) return false;
     if (S.coins < x.price) { ev('deny', -1, { need: 'coins' }); return false; }
+    if (x.give.energy && S.en + x.give.energy > EN_CAP) { ev('enFull', -1); return false; }
     if (x.give.item || x.give.gen) { if (nearestEmpty(-1) < 0 && S.bag.length >= S.bagSlots) { ev('full', -1); return false; } }
     S.coins -= x.price;
     if (x.give.slot) S.bagSlots++;
@@ -5948,7 +6104,7 @@ const Game = (() => {
     tapItem, store, take, maxOrders, orderStatus, fulfill, refillOrders, genOrder, villagersAvail, curArea, nextTask, doTask,
     ensureDaily, claimGift, claimDaily, claimBonus, giftReward, shopList, buy, tutCheck, tick, newGame, addXp, give, refreshGen,
     group, merge5, openMystery, albumHas, albumPending, albumCount, chainFull, claimAlbum, claimChain,
-    freeEnIn, claimFreeEnergy, orderNeeds,
+    freeEnIn, claimFreeEnergy, orderNeeds, addEn,
     piggyAdd, piggyReady, openPiggy, wheelFree, wheelSpins, spinWheel, addCoins, setStyle, cashEvent,
   };
 })();
@@ -5973,9 +6129,9 @@ const LV = (() => {
   const FIRST = { ice: 2, box: 4, order: 6, web: 8, sand: 12, crate: 15, bubble: 20 };
   // Move limit: the sampler bot (a sloppy, casual player) plays the level 16 times with no limit; the limit is the
   // move count that this share of its tries managed (plus a little), so a casual player wins about that often.
-  const PCT = { easy: 0.9, breather: 0.97, hard: 0.68, boss: 0.72 };
+  const PCT = { easy: 0.9, breather: 0.97, hard: 0.76, boss: 0.78 };
   const EXTRA = { easy: 2, breather: 3, hard: 0, boss: 1 };
-  const CAL_TRIES = 16;
+  const CAL_TRIES = 32;  // 16 tries left some hard levels at 25-40% for other players by bad luck in the sample
   const KMUL = { easy: 1, breather: 0.75, hard: 1.15, boss: 1.25 };
   const CRATE_MOVES = 2, WHO_ORDER = ['liisa', 'muri', 'ants', 'peeter'];
 
@@ -6125,10 +6281,26 @@ const LV = (() => {
       const d = best.d, need = best.need;
       d.need = need;
       const us = [];
-      for (let s = 0; s < CAL_TRIES; s++) { const r = newRun(d, hashStr('samp' + n + ':' + s), 300); play(r, 'sampler', mulberry(hashStr('sbot' + n + ':' + s))); us.push(r.won ? r.used : 999); }
+      // The move limit a try needed: its deepest point (merges made minus the +2 moves from locked chests).
+      for (let s = 0; s < CAL_TRIES; s++) {
+        const r = newRun(d, hashStr('samp' + n + ':' + s), 300), R = mulberry(hashStr('sbot' + n + ':' + s)); let lo = 300, k = 0;
+        while (!r.over && k++ < 600) { if (!botStep(r, 'sampler', R)) break; lo = Math.min(lo, r.moves); }
+        us.push(r.won ? 300 - lo : 999);
+      }
       us.sort((a, b) => a - b);
       const pct = us[Math.min(CAL_TRIES - 1, Math.ceil(PCT[d.kind] * CAL_TRIES) - 1)];
       d.moves = Math.max(8, need + 2, Math.min(pct, Math.ceil(need * 2.2)) + EXTRA[d.kind] + (n <= 10 ? 2 : 0));
+      // Floor: a second, independent sample must win at least 60% of the time (hard and boss levels are meant to
+      // be hard, not a coin flip). If not, the limit grows to that sample's 60% mark (capped like above).
+      const vs = [];
+      for (let s = 0; s < 12; s++) {
+        const r = newRun(d, hashStr('ver' + n + ':' + s), 300), R = mulberry(hashStr('vbot' + n + ':' + s)); let lo = 300, k = 0;
+        while (!r.over && k++ < 600) { if (!botStep(r, 'sampler', R)) break; lo = Math.min(lo, r.moves); }
+        vs.push(r.won ? 300 - lo : 999);
+      }
+      vs.sort((a, b) => a - b);
+      const floor = vs[Math.ceil(0.6 * vs.length) - 1];
+      if (floor < 999 && vs.filter(x => x <= d.moves).length < 0.6 * vs.length) d.moves = Math.max(d.moves, Math.min(floor, Math.ceil(need * 2.4)));
       d.s3 = Math.ceil(need * 1.08);
       d.s2 = Math.ceil(need + (d.moves - need) * 0.5);
       d.seed = hashStr('saarepagar-play-' + n);
@@ -6182,6 +6354,7 @@ const LV = (() => {
   function merge(r, a, b) {
     const A = r.it[a], res = { k: A.k, l: A.l + 1 };
     r.it[a] = null; r.it[b] = res; r.moves--; r.used++; r.popped = false;
+    if (r === cur && S.adv.live && !S.adv.live.used) { S.adv.live.used = 1; saveSoon(); }
     emit(r, 'merge', b, { from: a, k: res.k, l: res.l });
     landed(r, b);
     after(r, true);
@@ -6437,13 +6610,14 @@ const LV = (() => {
     S.adv.plays++;
     cur = newRun(def, (def.seed ^ Math.imul(S.adv.plays, 2654435761)) >>> 0);
     cur.streakBonus = Math.min(3, S.adv.streak); cur.moves += cur.streakBonus;
+    S.adv.live = { n, used: 0 }; // a level left by closing the app after a move still costs a life (see leftOpen)
     saveSoon();
     return cur;
   }
   function winReward(r, first, stars) {
     const n = r.n, rew = {};
     if (first) {
-      rew.coins = 10 + Math.min(25, Math.floor(n / 6)) + 3 * stars + Math.min(12, r.moves) + 2 * Math.min(5, S.adv.streak);
+      rew.coins = 8 + Math.min(16, Math.floor(n / 10)) + 2 * stars + Math.min(6, Math.ceil(r.moves / 2)) + Math.min(5, S.adv.streak);
       if (n % 5 === 0) rew.spins = 1;
       if (r.def.kind === 'boss') rew.boost = BOOST_KEYS[(n / 10) % 4 | 0];
       if (n % 3 === 0) rew.energy = 10;
@@ -6452,7 +6626,7 @@ const LV = (() => {
   }
   function win() {
     const r = cur; if (!r || !r.won || r.paid) return null;
-    r.paid = true;
+    r.paid = true; S.adv.live = null;
     const n = r.n, A = S.adv, first = n === A.top, stars = starsFor(r), prev = A.stars[n] || 0;
     if (stars > prev) A.stars[n] = stars;
     if (first) A.top = n + 1;
@@ -6467,12 +6641,18 @@ const LV = (() => {
   // Losing (or leaving after the first move) costs one life and ends the win streak.
   function lose() {
     const r = cur; if (!r || r.won) return false;
-    loseHeart(); S.adv.streak = 0; cur = null; saveSoon(); return true;
+    loseHeart(); S.adv.streak = 0; cur = null; S.adv.live = null; saveSoon(); return true;
+  }
+  // On boot: a level that was left open (the app closed or reloaded after the first move) costs one life, like
+  // leaving it from the pause window. Returns the level number for a kind note, or 0.
+  function leftOpen() {
+    const L = S.adv.live; S.adv.live = null; if (!L || !L.used) return 0;
+    loseHeart(); S.adv.streak = 0; saveSoon(); return L.n || 1;
   }
   function quit() {
     const r = cur; if (!r) return false;
-    if (r.won) { cur = null; return true; }
-    if (r.used === 0 && !r.over) { cur = null; return true; }
+    if (r.won) { cur = null; S.adv.live = null; return true; }
+    if (r.used === 0 && !r.over) { cur = null; S.adv.live = null; return true; }
     return lose();
   }
   const movesPrice = () => MORE_MOVES_PRICE[Math.min(MORE_MOVES_PRICE.length - 1, cur ? cur.priceIx : 0)];
@@ -6494,7 +6674,7 @@ const LV = (() => {
   return {
     LC, LR, LN, NB, FIRST, kindOf, chapterOf, gen, newRun, canDrop, drop, remaining, starsFor, boostCheck, useBoost, pickable, blocked,
     candidates, botStep, play, botTest, tickHearts, heartNext, refillHearts, start, win, lose, quit, movesPrice, buyMoves, boost, buyBoost,
-    get cur() { return cur; }, set cur(v) { cur = v; }, hasMove, CRATE_MOVES,
+    get cur() { return cur; }, set cur(v) { cur = v; }, hasMove, CRATE_MOVES, leftOpen,
   };
 })();
 
@@ -6713,7 +6893,7 @@ const TOUR = (() => {
     let pick = shuffle(T.tasks.map((x, j) => j), r).slice(0, TOUR_SIZE - 1);
     if (!pick.some(j => T.tasks[j][2])) { const c = T.tasks.findIndex(x => x[2]); pick[pick.length - 1] = c; }
     pick = pick.sort((a, b) => a - b);
-    const base = Math.min(20, 10 + Math.floor(i * 0.7));
+    const base = Math.min(15, 8 + Math.floor(i * 0.5)); // phase C: gentler, so an island is a few days of 25-minute play, not a week
     const tasks = pick.map((j, n) => {
       const d = T.tasks[j], t = { id: 't' + i + '_' + n, name: d[0], cost: base + n, reward: taskReward(i, n, false), story: [d[1].slice()], tour: i };
       if (d[2]) t.choices = STYLE_KEYS.slice();
@@ -6746,9 +6926,10 @@ const TOUR = (() => {
 // ---------------------------------------------------------------- season pass "Hooaja rada"
 const PASS_STEPS = 30;
 const PASS_PTS = { merge: 1, order: 3, task: 6, level: 5, daily: 4, island: 15, week: 2 };
+const PASS_MERGES = 3;  // one pass point per 3 merges (merges are by far the most common action)
 const MONTHS = ['jaanuar', 'veebruar', 'märts', 'aprill', 'mai', 'juuni', 'juuli', 'august', 'september', 'oktoober', 'november', 'detsember'];
 const PASS = (() => {
-  const need = s => 15 + 3 * s;                // points for step s (1-based)
+  const need = s => 30 + 4 * s;                // points for step s (1-based); 2760 for all 30 (about 3 weeks at 25 min a day)
   const cum = s => { let t = 0; for (let j = 1; j <= s; j++) t += need(j); return t; };
   const CUM = []; for (let s = 0; s <= PASS_STEPS; s++) CUM.push(cum(s));
   // Wardrobe pieces on the track: unlocked for good the first time the step is claimed.
@@ -6785,6 +6966,7 @@ const PASS = (() => {
   function add(n, cell) {
     if (!S || !n) return;
     ensure();
+    if (n === 'merge') { S.pass.mc = (S.pass.mc | 0) + 1; if (S.pass.mc < PASS_MERGES) return; S.pass.mc = 0; n = PASS_PTS.merge; }
     const before = reached(); S.pass.pts += n;
     const after = reached();
     if (after > before) xev('passStep', cell, { s: after });
@@ -6809,8 +6991,8 @@ const WEEK_EVENTS = {
 const WEEK_KEYS = ['garden', 'fashion', 'wedding', 'beach'];
 for (const k of WEEK_KEYS) CHAINS['ev_' + k] = { kind: 'item', ev: k, name: WEEK_EVENTS[k].name, color: WEEK_EVENTS[k].color, names: WEEK_EVENTS[k].chain.slice() };
 const WEEK_MIN_LVL = 3;        // the event opens at XP level 3 (the first minutes stay simple)
-const WEEK_SPAWN_P = 0.09;     // share of generator taps that give an event item instead
-const WEEK_CUR = { merge: l => 2 * l, top: 30, order: 2, level: 4 };
+const WEEK_SPAWN_P = 0.06;     // share of generator taps that give an event item instead
+const WEEK_CUR = { merge: l => 2 * l, top: 30, order: 1, level: 3 };  // about 5 days for the full track at 25 min a day
 // Each event's track; the 8th prize is a wardrobe piece of its own.
 const WEEK_TRACK = [
   { need: 10, r: { coins: 30 } },
@@ -6984,7 +7166,7 @@ const REST_MIN = 45;   // minutes of active play before a gentle "take a break?"
 //   FX.update(dt)  FX.draw(ctx)  FX.clear()  FX.count()  FX.active()  FX.busy()  FX.quality = 0 | 1 | 2  FX.onArrive = fn(name)
 const FX = (function () {
   const F = { quality: 2, onArrive: null, spawnDur: 0.42 };
-  const CAP = [110, 260, 480];
+  const CAP = [100, 220, 360]; // phase C: a little lower at the top (a long chain no longer floods weak GPUs)
   const P = [], pool = [], pops = [], flights = [], texts = [], hints = [], shows = [], rockets = [], stamps = [], links = [];
   function get() { return pool.pop() || {}; }
   function add(o) { if (P.length >= CAP[F.quality | 0]) { pool.push(o); return null; } P.push(o); return o; }
@@ -7019,6 +7201,8 @@ const FX = (function () {
         const gr = g.createLinearGradient(0, 0, 0, -128); gr.addColorStop(0, 'rgba(255,255,255,.95)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fill();
       }
     }
+    // round sprites look the same at any angle: they skip the rotated draw (cheaper on weak GPUs)
+    c._sym = name.indexOf('flash') === 0 || name.indexOf('dot') === 0 || name === 'puff' || name === 'cloud';
     return (spr[name] = c);
   }
   function sparkCol(chain) {
@@ -7029,7 +7213,7 @@ const FX = (function () {
   // particle kinds: 0 sprite, 1 ring, 2 confetti, 3 flyer (icon to HUD), 4 rays
   function part(kind, x, y, vx, vy, life, size, img, col) {
     const o = get(); o.k = kind; o.x = x; o.y = y; o.vx = vx; o.vy = vy; o.life = life; o.t = 0; o.size = size; o.img = img; o.col = col;
-    o.rot = Math.random() * 6.28; o.vr = (Math.random() - .5) * 8; o.g = 0; o.drag = 0; o.grow = 0; o.alpha = 1; o.w = 0; o.delay = 0; return add(o);
+    o.rot = Math.random() * 6.28; o.vr = img && img._sym ? 0 : (Math.random() - .5) * 8; o.g = 0; o.drag = 0; o.grow = 0; o.alpha = 1; o.w = 0; o.delay = 0; return add(o);
   }
   function ring(x, y, r0, r1, life, col, w, delay) { const o = part(1, x, y, 0, 0, life, r0, null, col); if (o) { o.grow = r1 - r0; o.w = w || 7; o.delay = delay || 0; } return o; }
   function burst(x, y, n, sp, kinds, size, life, g) {
@@ -7433,6 +7617,8 @@ const FX = (function () {
   window.__fx = F;
   return F;
 })();
+try { ART.perf.apply(); } catch (e) { } // effect quality for this device (ART.perf in 20-art.js)
+try { window.__mgArt = { ART, FX }; } catch (e) { } // test hook for tools/mergeperf.js and tools/artgallery.js
 
 // Saarepagar UI (Mira): layout (portrait first, landscape side by side), drawing, input (drag, tap, long press),
 // screens (board, orders, tasks, story, shop, bag, daily, settings, chain, album, festival, level-up), hints,
@@ -7713,14 +7899,19 @@ const UI = (() => {
     const cs = getComputedStyle(el); return { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
   }
   const slotFor = cs => Math.round(clamp(cs * 0.95, 46, 62));
-  const ordHFor = cs => slotFor(cs) + 52;
+  // Order cards: two rows (portrait and reward over the items) where there is room; on short phones one row
+// (portrait, items, reward) so the scene strip above keeps a visible picture under the HUD.
+let rowOrders = false;
+const ordHFor = cs => slotFor(cs) + (rowOrders ? 14 : 52);
   function layout() {
-    DPR = Math.min(window.devicePixelRatio || 1, 3);
+    DPR = Math.min(window.devicePixelRatio || 1, (typeof ART !== 'undefined' && ART.perf) ? ART.perf.maxDpr() : 3); // ART.perf caps it on weak phones
     W = window.innerWidth; H = window.innerHeight;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     const si = insets(), gap = 6, top = si.t + 6, bot = H - si.b - 4, left = si.l, right = W - si.r;
-    const barH = 78, infoH = 62, OVER = 22, SCENE_MIN = 100;
+    // Short screens (a 360 x 800 Android, an iPhone with its notch and home bar) get a slightly lower tab bar and info bar.
+    const compact = bot - top < 760, barH = compact ? 70 : 78, infoH = compact ? 56 : 62, OVER = 22;
     L.landscape = (right - left) >= 700 && (right - left) > (bot - top) * 1.15;
+    rowOrders = false;
     if (L.landscape) {
       const availB = bot - top - infoH - barH - gap * 2;
       const cs = Math.max(40, Math.min(80, Math.floor(availB / ROWS), Math.floor((right - left) * 0.5 / COLS)));
@@ -7736,8 +7927,13 @@ const UI = (() => {
       const cw = Math.min(right - left, 560), x0 = left + (right - left - cw) / 2;
       L.col = { x: x0, w: cw };
       const avail = bot - top - barH - infoH - gap * 3;
+      // The scene strip (village picture plus the HUD over it) gets about a quarter of the height: the board shrinks
+      // a little on short phones rather than the picture vanishing under the HUD. Cells stay 44 px or more if they can.
+      rowOrders = avail < 700;
+      const need = c => c * ROWS + ordHFor(c) - OVER, want = clamp(Math.round(avail * 0.25), 150, 210);
       let cs = Math.floor((cw - 8) / COLS);
-      while (cs > 34 && cs * ROWS + ordHFor(cs) - OVER + SCENE_MIN > avail) cs--;
+      while (cs > 44 && need(cs) + want > avail) cs--;
+      while (cs > 38 && need(cs) + 124 > avail) cs--;
       const oh = ordHFor(cs);
       let topH = avail - cs * ROWS, y = top;
       const maxTop = oh - OVER + 340;
@@ -7751,19 +7947,23 @@ const UI = (() => {
       L.bar = { x: x0, y, w: cw, h: barH };
     }
     L.board = { x: L.bx, y: L.by, w: L.cs * COLS, h: L.cs * ROWS };
-    // HUD pills over the top of the scene: level, energy, coins, stars; second row: area pill, gift, settings
+    // HUD pills over the top of the scene: level, energy, coins, stars; second row: area pill, Seiklus, wardrobe, gift, settings
     const sx = L.scene.x + 6, sw = L.scene.w - 12, hy = L.scene.y + 6, pw = Math.min(124, (sw - 50 - 3 * 6) / 3);
     L.hud = { lvl: { x: sx, y: hy, w: 44, h: 44 } };
     ['energy', 'coins', 'stars'].forEach((n, j) => { L.hud[n] = { x: sx + 50 + j * (pw + 6), y: hy + 4, w: pw, h: 36 }; });
-    L.hud.look = { x: sx + sw - 140, y: hy + 50, w: 44, h: 44 };
-    L.hud.gift = { x: sx + sw - 92, y: hy + 50, w: 44, h: 44 };
+    L.hud.look = { x: sx + sw - 136, y: hy + 50, w: 44, h: 44 };
+    L.hud.gift = { x: sx + sw - 90, y: hy + 50, w: 44, h: 44 };
     L.hud.settings = { x: sx + sw - 44, y: hy + 50, w: 44, h: 44 };
-    const room = sw - 148, advW = room >= 250 ? Math.min(140, Math.max(110, Math.round(room * 0.45))) : 52;
-    L.hud.area = { x: sx, y: hy + 52, w: Math.min(220, room - advW - 8), h: 40 };
-    L.hud.adv = { x: sx + L.hud.area.w + 8, y: hy + 50, w: advW, h: 44 };
+    // "Seiklus" always keeps its word (it used to shrink to an icon at 390 px and below); the area pill takes the rest.
+    const advW = clamp(Math.round((sw - 142) * 0.45), 108, 150);
+    L.hud.adv = { x: sx + sw - 142 - advW, y: hy + 50, w: advW, h: 44 };
+    L.hud.area = { x: sx, y: hy + 50, w: Math.min(230, L.hud.adv.x - 6 - sx), h: 44 };
     // bottom tabs
-    const names = ['tasks', 'album', 'week', 'pass', 'shop', 'bag'], bw = L.bar.w / names.length;
-    L.btn = {}; names.forEach((n, j) => { L.btn[n] = { x: L.bar.x + j * bw, y: L.bar.y, w: bw, h: L.bar.h }; });
+    // Each tab gets its label's width plus an equal share of the rest, inside the glass panel, so "Remont" no longer
+    // touches the edge on a 360 px phone.
+    const names = ['tasks', 'album', 'week', 'pass', 'shop', 'bag'], labs = ['Remont', 'Album', 'Nädal', 'Rada', 'Pood', 'Kott'];
+    g.font = font(15, 900); const lw = labs.map(s => g.measureText(s).width), inner = L.bar.w - 12, spare = Math.max(0, inner - lw.reduce((a, b) => a + b, 0));
+    L.btn = {}; let bx = L.bar.x + 6; names.forEach((n, j) => { const w = lw[j] + spare / names.length; L.btn[n] = { x: bx, y: L.bar.y, w, h: L.bar.h }; bx += w; });
     dirty = true;
   }
   const inR = (p, r) => r && p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
@@ -7940,6 +8140,7 @@ const UI = (() => {
         else if (d.order !== undefined) toast('Kõik asjad pole veel laual.');
         else toast('Seda ei saa müüa.');
         break;
+      case 'enFull': snd('deny'); toast(cell >= 0 ? 'Energiat on juba ' + EN_CAP + '. Jäta kohv hilisemaks!' : 'Energiat on juba palju. Kasuta enne natuke ära!'); break;
       case 'bagFull': toast('Kott on täis. Poest saab kotti suuremaks osta.'); snd('deny'); break;
       case 'rush': snd('coins'); setAnim(cell, { pop: 1, dur: 0.3 }); break;
       case 'dailyReady': toast('Päevaülesanne tehtud! Auhind ootab kingituse all.'); snd('daily'); break;
@@ -8124,9 +8325,9 @@ const UI = (() => {
     g.fillStyle = DARK; rr(r.x + 8, r.y, r.w - 8, r.h, r.h / 2); g.fill();
     g.lineWidth = 2; g.strokeStyle = 'rgba(255,255,255,0.25)'; g.stroke();
     if (r.w < 104) plus = false; // narrow phones: the whole pill is the button
-    const is = 34 * s; drawIcon(icon, r.x + 4 + (34 - is) / 2, r.y + r.h / 2 - is / 2, is);
-    const tw = r.w - 44 - (plus ? 26 : 4);
-    text(value, r.x + 40 + tw / 2, r.y + r.h / 2 + 1, 19, '#fff', 'center', 900, tw);
+    const ib = r.w < 104 ? 30 : 34, is = ib * s; drawIcon(icon, r.x + 4 + (ib - is) / 2, r.y + r.h / 2 - is / 2, is);
+    const tx = r.x + ib + 6, tw = r.x + r.w - tx - (plus ? 31 : 6);
+    text(value, tx + tw / 2, r.y + r.h / 2 + 1, 19, '#fff', 'center', 900, tw);
     if (plus) { const px = r.x + r.w - 15, py = r.y + r.h / 2; g.fillStyle = MINT; g.beginPath(); g.arc(px, py, 12, 0, 7); g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke(); g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.moveTo(px - 5, py); g.lineTo(px + 5, py); g.moveTo(px, py - 5); g.lineTo(px, py + 5); g.stroke(); }
     hits.push({ x: r.x, y: r.y - 6, w: r.w, h: r.h + 12, hud: 1, fn: () => { snd('tap'); fn(); } });
   }
@@ -8149,9 +8350,13 @@ const UI = (() => {
     // area pill with completion bar
     const area = Game.curArea(), ts = area.tasks, done = ts.filter(x => S.done[x.id]).length, a = H2.area;
     g.fillStyle = 'rgba(255,255,255,0.92)'; rr(a.x, a.y, a.w, a.h, 14); g.fill(); g.lineWidth = 2; g.strokeStyle = EDGE; g.stroke();
-    text(area.name, a.x + 10, a.y + 14, 15, INK, 'left', 900, a.w - 60);
-    text(done + '/' + ts.length, a.x + a.w - 10, a.y + 14, 15, INK2, 'right', 800);
-    bar(a.x + 10, a.y + 27, a.w - 20, 7, done / ts.length, PINK);
+    // Long names (island names, "Vanaema saladus") wrap onto two lines on narrow phones instead of being cut.
+    const cnt = done + '/' + ts.length; g.font = font(15, 800); const cntW = g.measureText(cnt).width + 8;
+    g.font = font(15, 900); const nameW = g.measureText(area.name).width;
+    if (nameW <= a.w - 20 - cntW) { text(area.name, a.x + 10, a.y + 15, 15, INK, 'left', 900); text(cnt, a.x + a.w - 10, a.y + 15, 15, INK2, 'right', 800); }
+    else if (nameW <= a.w - 16) text(area.name, a.x + 8, a.y + 15, 15, INK, 'left', 900);
+    else { let ls = wrap(area.name, a.w - 16, 15, 900); if (ls.length < 2) { const m2 = /^(.{3,}?)(saar|laid|rahu|aed|kiosk)(.*)$/i.exec(area.name); ls = m2 ? [m2[1] + '-', m2[2] + m2[3]] : ls; } text(ls[0], a.x + 8, a.y + 11, 15, INK, 'left', 900, a.w - 14); text(ls.slice(1).join(' '), a.x + 8, a.y + 27, 15, INK, 'left', 900, a.w - 14); }
+    bar(a.x + 8, a.y + a.h - 9, a.w - 16, 5, done / ts.length, PINK);
     hits.push({ x: a.x, y: a.y, w: a.w, h: Math.max(48, a.h), hud: 1, fn: () => { snd('tap'); openModal({ kind: 'tasks' }); } });
     // gift and settings
     const giftOn = !S.daily.gift || S.daily.tasks.some(x => x.n >= x.goal && !x.claimed) || (!S.daily.bonus && S.daily.tasks.length && S.daily.tasks.every(x => x.claimed));
@@ -8166,7 +8371,7 @@ const UI = (() => {
     drawIcon('wardrobe', lk.x + 22 - 16 * ls, lk.y + 22 - 16 * ls, 32 * ls);
     if (LOOK.unseen() > 0) dot(lk.x + 38, lk.y + 6);
     hits.push({ x: lk.x - 2, y: lk.y - 2, w: 48, h: 48, hud: 1, fn: () => { snd('tap'); openModal({ kind: 'xLook' }); } });
-    const av = H2.adv; button(av.x, av.y, av.w, av.h, av.w >= 100 ? 'Seiklus' : '', () => goScreen('map'), { style: 'buttonPink', icon: 'map', isz: 28, size: 17 });
+    const av = H2.adv; button(av.x, av.y, av.w, av.h, 'Seiklus', () => goScreen('map'), { style: 'buttonPink', icon: 'map', isz: av.w < 124 ? 24 : 28, size: av.w < 124 ? 16 : 17 });
     hits[hits.length - 1].hud = 1;
     if (ADV.attention()) dot(av.x + av.w - 4, av.y + 4);
     hits.push({ x: st.x - 2, y: st.y - 2, w: 48, h: 48, hud: 1, fn: () => openModal({ kind: 'settings' }) });
@@ -8200,7 +8405,7 @@ const UI = (() => {
     const fg = g.createLinearGradient(0, r.y + r.h - 40, 0, r.y + r.h); fg.addColorStop(0, 'rgba(255,255,255,0)'); fg.addColorStop(1, 'rgba(255,255,255,0.55)'); g.fillStyle = fg; g.fillRect(r.x, r.y + r.h - 40, r.w, 40);
     g.restore();
     g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,0.9)'; rr(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3, 20); g.stroke();
-    hits.push({ x: r.x, y: r.y + 96, w: r.w, h: Math.max(0, r.h - 96 - 22), fn: () => openModal({ kind: 'tasks' }) });
+    hits.push({ x: r.x, y: r.y + 96, w: r.w, h: Math.max(44, r.h - 96 - 22), fn: () => openModal({ kind: 'tasks' }) });
     drawHud(t);
   }
   const SKY = { bakery: ['#bfe3f2', '#fbe9d0'], garden: ['#cdeccf', '#f5f0d0'], harbour: ['#a9d6ef', '#e6f2f2'], windmill: ['#f7d9b8', '#fbeede'], lighthouse: ['#9db8e0', '#e8dff0'], secret: ['#d9c2e8', '#fbe9d0'] };
@@ -8216,7 +8421,7 @@ const UI = (() => {
   }
 
   // ---- drawing: orders ----
-  function cardW(o) { const sl = L.slot; return Math.max(16 + o.items.length * sl + (o.items.length - 1) * 6, 140); }
+  function cardW(o) { const sl = L.slot; return rowOrders ? 50 + o.items.length * (sl + 6) + 58 : Math.max(16 + o.items.length * sl + (o.items.length - 1) * 6, 140); }
   function drawOrders(t) {
     const r = L.orders, sl = L.slot; cardRects = [];
     let total = 0; for (const o of S.orders) total += cardW(o) + 8;
@@ -8235,6 +8440,15 @@ const UI = (() => {
       if (st.ready) { const gg = g.createLinearGradient(0, yy, 0, yy + h); gg.addColorStop(0, '#6ff0b8'); gg.addColorStop(1, '#19c37f'); g.fillStyle = gg; }
       else g.fillStyle = CARD;
       rr(x, yy, w, h, 18); g.fill(); g.lineWidth = 2.5; g.strokeStyle = st.ready ? '#ffffff' : EDGE; g.stroke();
+      if (rowOrders) {
+        g.save(); rr(x, yy, w, h, 18); g.clip(); drawPortrait(o.who, x + 6, yy + h / 2 - 19, 38); g.restore();
+        const rx = x + w - 58;
+        if (st.ready) { g.fillStyle = '#fff'; rr(rx, yy + h / 2 - 17, 52, 34, 17); g.fill(); text('Anna!', rx + 26, yy + h / 2 + 1, 16, '#0b8a58', 'center', 900, 48); }
+        else {
+          drawIcon('star', rx + 2, yy + h / 2 - 22, 20); text(String(o.stars), rx + 26, yy + h / 2 - 11, 15, INK, 'left', 900);
+          drawIcon('coin', rx + 2, yy + h / 2 + 2, 20); text(String(o.coins), rx + 26, yy + h / 2 + 12, 15, INK, 'left', 900, 30);
+        }
+      } else {
       g.save(); rr(x, yy, w, h, 18); g.clip(); drawPortrait(o.who, x + 6, yy + 5, 38); g.restore();
       if (st.ready) {
         const bw = w - 54, bx = x + 48, byy = yy + 7;
@@ -8245,8 +8459,9 @@ const UI = (() => {
         const rs = String(o.coins); text(rs, rx, yy + 23, 16, INK, 'right', 900); rx -= g.measureText(rs).width + 22; drawIcon('coin', rx, yy + 12, 21);
         if (o.stars) { rx -= 4; const ss = String(o.stars); g.font = font(16, 900); text(ss, rx, yy + 23, 16, INK, 'right', 900); rx -= g.measureText(ss).width + 22; drawIcon('star', rx, yy + 11, 22); }
       }
+      }
       o.items.forEach(([k, l], j) => {
-        const ix = x + 8 + j * (sl + 6), iy = yy + h - sl - 6;
+        const ix = rowOrders ? x + 50 + j * (sl + 6) : x + 8 + j * (sl + 6), iy = rowOrders ? yy + (h - sl) / 2 : yy + h - sl - 6;
         g.fillStyle = st.ready ? 'rgba(255,255,255,0.55)' : st.have[j] ? 'rgba(47,213,154,0.22)' : SOFT; rr(ix, iy, sl, sl, 12); g.fill();
         drawItem(k, l, ix + sl / 2, iy + sl / 2, sl * 0.9);
         if (st.have[j]) drawIcon('check', ix + sl - 20, iy - 4, 24);
@@ -8331,7 +8546,8 @@ const UI = (() => {
       if (hint) { hset = new Set(hint); const u = ((tn() - idleT) % 2.4) / 2.4; hw = u < 0.35 ? Math.sin(u / 0.35 * Math.PI * 4) * 0.16 * Math.sin(u / 0.35 * Math.PI) : 0; }
     }
     needSet = Game.orderNeeds();
-    const isz = cs * FILL;
+    const isz = cs * FILL, q = (typeof FX !== 'undefined' && FX && FX.quality !== undefined) ? FX.quality | 0 : 2;
+    const idleOn = q >= 1 && !drag && artOn('itemIdle'), sparkOn = q >= 1 && fxOn('idle');
     for (let i = 0; i < NCELL; i++) {
       const it = S.board[i]; if (!it || (drag && drag.from === i)) continue;
       const d = itemDrawState(i, t); if (d.hide) continue;
@@ -8347,10 +8563,16 @@ const UI = (() => {
       }
       g.save(); g.translate(d.x, d.y);
       if (hset && hset.has(i)) { g.translate(0, cs * 0.3); g.rotate(hw); g.translate(0, -cs * 0.3); }
-      if (kind === 'mystery') { const q = Math.sin(t * 2.2 + i) * 0.05; g.rotate(q); }
+      else if (kind === 'mystery') { const q = Math.sin(t * 2.2 + i) * 0.05; g.rotate(q); }
+      else if (idleOn && !anim.has(i) && sel !== i) { // Ash's gentle idle breathing and wobble (pivot at the item's bottom)
+        const f = ART.itemIdle(i * 7 + it.l * 131 + (it.k.charCodeAt(0) << 4), t), by = isz * 0.5;
+        g.translate(0, by + f.dy * isz); g.rotate(f.rot); g.scale(f.sx, f.sy); g.translate(0, -by);
+      }
       g.scale(d.s * (1 + d.sq), d.s * (1 - d.sq));
       drawItem(it.k, it.l, 0, 0, isz);
       g.restore();
+      // an occasional sparkle on bigger items (FX.idle is stateless and skips itself on the lowest quality)
+      if (sparkOn && kind === 'item' && it.l >= 3 && !anim.has(i)) { try { FX.idle(g, d.x, d.y, isz, i * 13 + it.l, t); } catch (e) {} }
       if (kind === 'gen') genBadge(it, i, d.x, d.y, t);
       else if (needSet.has(it.k + ':' + it.l) && !(drag && drag.from === i)) {
         // "Tellimus!" badge: a green check bubble on items an order wants
@@ -8457,7 +8679,7 @@ const UI = (() => {
       const b = L.btn[id], cx = b.x + b.w / 2, ps = pressScale(b.x, b.y);
       if (id === 'bag' && dragBag) { g.fillStyle = 'rgba(255,200,90,0.55)'; rr(b.x + 6, b.y + 4, b.w - 12, b.h - 8, 16); g.fill(); }
       const bounce = hot ? Math.abs(Math.sin(t * 4)) * 4 : 0, pu = bump[id] ? Math.sin(clamp(1 - (tn() - bump[id]) / 0.35, 0, 1) * Math.PI) * 0.25 : 0;
-      const isz = Math.min(40, b.w - 18) * ps * (1 + pu);
+      const isz = Math.min(40, b.w - 10) * ps * (1 + pu);
       g.save(); if (id === 'week' && !wOpen) g.globalAlpha = 0.55;
       drawIcon(ic, cx - isz / 2, b.y + 4 - bounce + (40 - isz) / 2, isz);
       if (id === 'week' && wOpen) drawIcon('cur_' + WEEK.info().key, cx + 4, b.y + 22 - bounce, 20);
@@ -8566,7 +8788,10 @@ const UI = (() => {
       if (xx - x > maxW - size) break;
       if (d.boost) ADV.drawBoost(d.boost, xx, y - size / 2, size); else if (d.icon) drawIcon(d.icon, xx, y - size / 2, size); else drawItem(d.item[0], d.item[1], xx + size / 2, y, size);
       xx += size + 2;
-      g.font = font(16, 900); const [tt] = fit(d.t, 16, 900, Math.max(40, maxW - (xx - x))); text(tt, xx, y + 1, 16, INK, 'left', 900); xx += g.measureText(tt).width + 12;
+      // a word that does not fit is left out (the picture says it) rather than cut to "Ke…"
+      g.font = font(16, 900); const room = maxW - (xx - x), [tt] = fit(d.t, 16, 900, Math.max(40, room));
+      if (tt.endsWith('…') && d.t.length > 3) { xx += 8; continue; }
+      text(tt, xx, y + 1, 16, INK, 'left', 900); xx += g.measureText(tt).width + 12;
     }
     return xx - x;
   }
@@ -8585,7 +8810,7 @@ const UI = (() => {
       const P = modalPanel(m, 440, head + ts.length * rowH + foot, area.name);
       const done = ts.filter(x => S.done[x.id]).length;
       let y0 = P.y + 36;
-      if (tour) { text('Saareringreis · ' + area.themeName + ' · ' + (area.i + 1) + '. saar', P.x + P.w / 2, P.y + 40, 15, GRAPE, 'center', 900, P.w - 124); y0 += 20; }
+      if (tour) { text((area.i + 1) + '. saar · ' + area.themeName, P.x + P.w / 2, P.y + 40, 15, GRAPE, 'center', 900, P.w - 124); y0 += 20; }
       drawIcon('star', P.x + 18, y0, 30); text(String(S.stars), P.x + 54, y0 + 16, 20, INK, 'left', 900);
       text(done + '/' + ts.length + ' tehtud', P.x + P.w - 18, y0 + 16, 15, INK2, 'right', 800);
       bar(P.x + 18, y0 + 40, P.w - 36, 10, done / ts.length, PINK);
@@ -8596,7 +8821,9 @@ const UI = (() => {
         const ic = Math.min(30, bh - 16), iy = y + (bh - ic) / 2;
         if (isDone) drawIcon('check', P.x + 18, iy, ic); else if (!isNext) { g.globalAlpha = 0.6; drawIcon('lock', P.x + 18, iy, ic); g.globalAlpha = 1; } else drawIcon('star', P.x + 18, iy - 1, ic + 2);
         const styled = isDone && tk.choices;
-        text(tk.name, P.x + 58, y + bh / 2, 17, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, P.w - (isNext ? 190 : styled ? 170 : 134));
+        const nmW = P.w - (isNext ? 190 : styled ? 170 : 134); g.font = font(17, isDone ? 700 : 900);
+        if (g.measureText(tk.name).width <= nmW || bh < 46) text(tk.name, P.x + 58, y + bh / 2, 17, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, nmW);
+        else { const ls = wrap(tk.name, nmW, 16, isDone ? 700 : 900); text(ls[0], P.x + 58, y + bh / 2 - 10, 16, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, nmW); text(ls.slice(1).join(' '), P.x + 58, y + bh / 2 + 10, 16, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, nmW); }
         if (isNext) { m.nextBtn = { x: P.x + P.w - 120, y: y + 4, w: 104, h: 48 }; button(P.x + P.w - 120, y + (bh - 48) / 2, 104, 48, String(tk.cost), () => Game.doTask(tk.id), Object.assign({ icon: 'star', hot: S.stars >= tk.cost, pulse: S.stars >= tk.cost, offFn: () => Game.doTask(tk.id), size: 19 }, B)); }
         else if (styled) { const st = STYLES[S.style[tk.id]]; button(P.x + P.w - 112, y + (bh - 44) / 2, 96, 44, st ? 'Muuda' : 'Vali', () => closeThen({ kind: 'xStyle', id: tk.id, back: 'tasks' }), Object.assign({ icon: 'brush', isz: 24, size: 16, style: 'buttonPink' }, B)); }
         else if (!isDone) { drawIcon('star', P.x + P.w - 64, y + bh / 2 - 12, 24); text(String(tk.cost), P.x + P.w - 30, y + bh / 2 + 1, 17, INK2, 'center', 900); }
@@ -8722,8 +8949,8 @@ const UI = (() => {
       const P = modalPanel(m, 380, 372, 'Energia'), free = Game.freeEnIn();
       drawIcon('energy', P.x + P.w / 2 - 30, P.y + 34, 60);
       text(S.en < 1 ? 'Energia sai otsa!' : 'Energiat on ' + S.en + '.', P.x + P.w / 2, P.y + 112, 20, INK, 'center', 900);
-      text(S.en < MAXEN ? '+1 iga minut · järgmine ' + fmtTime(Game.enNext()) : 'Täis! Uuel tasemel saad jälle täis paagi.', P.x + P.w / 2, P.y + 140, 15, INK2, 'center', 700, P.w - 24);
-      button(P.x + 24, P.y + 166, P.w - 48, 56, free > 0 ? 'Tasuta: ' + fmtTime(free) : 'Tasuta +' + FREE_EN + '!', () => { if (Game.claimFreeEnergy()) closeModal(true); }, Object.assign({ icon: 'freeEnergy', hot: free <= 0, pulse: free <= 0, off: free > 0, offFn: () => { snd('deny'); toast('Tasuta energia tuleb ' + fmtTime(free) + ' pärast.'); }, size: 19, isz: 30 }, B));
+      text(S.en < MAXEN ? '+1 iga minut · järgmine ' + fmtTime(Game.enNext()) : S.en >= EN_CAP ? 'Täis! Rohkem kui ' + EN_CAP + ' ei mahu.' : 'Täis! Kingitused mahuvad kuni ' + EN_CAP + '-ni.', P.x + P.w / 2, P.y + 140, 15, INK2, 'center', 700, P.w - 24);
+      button(P.x + 24, P.y + 166, P.w - 48, 56, free > 0 ? 'Tasuta: ' + fmtTime(free) : 'Tasuta +' + FREE_EN + '!', () => { if (Game.claimFreeEnergy()) closeModal(true); else if (S.en >= EN_CAP) { snd('deny'); toast('Energiat on juba ' + EN_CAP + '. Kasuta enne natuke ära!'); } }, Object.assign({ icon: 'freeEnergy', hot: free <= 0, pulse: free <= 0, off: free > 0, offFn: () => { snd('deny'); toast('Tasuta energia tuleb ' + fmtTime(free) + ' pärast.'); }, size: 19, isz: 30 }, B));
       const x = SHOP[0];
       button(P.x + 24, P.y + 234, P.w - 48, 52, x.name + ' +25 · ' + x.price, () => { if (Game.buy(x.id)) closeModal(); }, Object.assign({ icon: 'coin', off: S.coins < x.price, offFn: () => Game.buy(x.id), size: 17 }, B));
       text('Vihje: ühenda kohvioad ja toksa neid.', P.x + P.w / 2, P.y + P.h - 26, 15, INK2, 'center', 700, P.w - 24);
@@ -8791,12 +9018,11 @@ const UI = (() => {
     text(C.name, P.x + P.w / 2, P.y + 62, 20, INK, 'center', 900, P.w - 140);
     text(have + '/' + n + ' kogutud', P.x + P.w / 2, P.y + 86, 15, INK2, 'center', 800, P.w - 140);
     bar(P.x + 70, P.y + 102, P.w - 140, 10, have / n, PINK);
-    // page dots (red when that chain has rewards waiting)
+    // page dots (red when that chain has rewards waiting); only a picture: the ‹ › buttons turn the pages (dots are too small to tap)
     const dw = Math.min(26, (P.w - 40) / N), dx0 = P.x + (P.w - dw * N) / 2;
     ALBUM_CHAINS.forEach((c, j) => {
       const pend = Game.albumPending(c) > 0 || (Game.chainFull(c) && !S.albumDone[c]);
       g.fillStyle = j === m.page ? GRAPE : pend ? '#ff3b4a' : 'rgba(110,100,200,0.25)'; g.beginPath(); g.arc(dx0 + dw * (j + 0.5), P.y + 126, j === m.page ? 6 : 5, 0, 7); g.fill();
-      mhits.push({ x: dx0 + dw * j, y: P.y + 114, w: dw, h: 26, fn: () => { m.page = j; snd('tap'); } });
     });
     m.pend = []; const cols = 3, rows = Math.ceil(n / cols), top = P.y + 144, foot = 72, cw = (P.w - 20) / cols, rowH = Math.min(124, (P.h - (top - P.y) - foot) / rows);
     for (let j = 0; j < n; j++) {
@@ -8867,18 +9093,27 @@ const UI = (() => {
     if (WEEK.open()) { const wn = WEEK.info().E.name + ' käib!'; g.fillStyle = PINK; g.font = font(16, 900); const tw = Math.min(W - 30, g.measureText(wn).width + 30); rr(cx - tw / 2, by + 190, tw, 34, 17); g.fill(); text(wn, cx, by + 208, 16, '#fff', 'center', 900, tw - 12); }
   }
 
+  // Toasts never sit on the board or the scene: on the café they cover the info bar under the board, in Seiklus the
+  // free strip under the level board (or the bottom of the map), and while a window is open the top of the screen.
+  // They are drawn after the effects and the windows, so confetti never hides them.
   function drawToasts(t) {
     for (let j = toasts.length - 1; j >= 0; j--) if (t - toasts[j].t0 > toasts[j].dur) toasts.splice(j, 1);
     toasts.forEach(o => {
-      const k = t - o.t0, a = Math.min(1, k / 0.15, (o.dur - k) / 0.3);
-      const TB = scr === 'board' || onTitle ? L.board : ADV.toastRect();
-      const w = Math.min(TB.w - 8, 460), ls = wrap(o.s, w - 28, 16, 800), h = 20 + ls.length * 21;
-      const x = TB.x + (TB.w - w) / 2, y = TB.y + TB.h - h - 10 + (1 - Math.min(1, k / 0.15)) * 14;
+      const k = t - o.t0, a = Math.min(1, k / 0.15, (o.dur - k) / 0.3), slide = (1 - Math.min(1, k / 0.15)) * 14;
+      let TB, mode;
+      if (modal && !onTitle) { const si = insets(); TB = { x: 8, y: si.t + 6, w: W - 16, h: 0 }; mode = 'top'; }
+      else if (scr === 'board' || onTitle) { TB = L.info; mode = 'mid'; }
+      else { TB = ADV.toastRect(); mode = TB.mid ? 'mid' : 'bottom'; }
+      const w = Math.min(TB.w - (mode === 'top' ? 0 : 4), 460), ls = wrap(o.s, w - 28, 16, 800), h = Math.max(mode === 'mid' ? Math.min(TB.h, 52) : 0, 20 + ls.length * 21);
+      const x = TB.x + (TB.w - w) / 2;
+      const y = mode === 'top' ? TB.y - slide : mode === 'mid' ? TB.y + (h <= TB.h ? (TB.h - h) / 2 : TB.h - h) + slide : TB.y + TB.h - h - 10 + slide;
       g.globalAlpha = clamp(a, 0, 1);
-      g.fillStyle = DARK; rr(x, y, w, h, 18); g.fill();
-      ls.forEach((s, q) => text(s, x + w / 2, y + 20 + q * 21, 16, '#ffffff', 'center', 800));
+      g.fillStyle = 'rgba(40,28,96,0.92)'; rr(x, y, w, h, 18); g.fill();
+      ls.forEach((s, q) => text(s, x + w / 2, y + h / 2 + (q - (ls.length - 1) / 2) * 21, 16, '#ffffff', 'center', 800, w - 16));
       g.globalAlpha = 1;
     });
+  }
+  function drawFloaters(t) {
     for (let j = floaters.length - 1; j >= 0; j--) {
       const o = floaters[j], k = (t - o.t0) / 1.0; if (k >= 1) { floaters.splice(j, 1); continue; }
       g.globalAlpha = 1 - k * k; const y = o.y - k * 40;
@@ -8918,25 +9153,46 @@ const UI = (() => {
     if (!onTitle && scr !== 'board') return ms - lastDraw > (ADV.busy() ? 15 : 33);
     if (combo || banners.length || newq.length || (hintActive() && hint)) return ms - lastDraw > 33;
     const pulsing = onTitle || sel >= 0 || (S.tut >= 1 && S.tut <= 4) || S.orders.some(o => Game.orderStatus(o).ready) || S.board.some(it => it && it.b) || artOn('scene') || !!modal || hintActive();
-    return ms - lastDraw > (pulsing ? 50 : 1000);
+    // battery (phase C, Ash): with no touch for 20 s the gentle loops (scene, pulses) drop to 10 fps, after 90 s to 4 fps
+    const idle = onTitle ? 0 : tn() - idleT;
+    return ms - lastDraw > (pulsing ? (idle > 90 ? 250 : idle > 20 ? 100 : 50) : 1000);
   }
+  // Phase C (Ash): while a modal (not a dialog or level-up) sits over the board, the board layers under its dim come
+  // from a snapshot refreshed every 1.5 s instead of being redrawn every frame (the modal and the effects stay live).
+  // Input under a modal only uses mhits, so the board hits are not needed then.
+  const back = { c: null, at: -1e9, key: '' };
   function draw(ms) {
     lastDraw = ms; dirty = false; const t = tn();
     g.setTransform(DPR, 0, 0, DPR, 0, 0);
     hits = [];
-    if (artOn('bg')) { try { ART.bg(g, W, H, t); } catch (e) { g.fillStyle = TH.bgBottom || '#fff1dc'; g.fillRect(0, 0, W, H); } }
+    const fz = !onTitle && scr === 'board' && modal && modal.kind !== 'dialog' && modal.kind !== 'levelup' && !drag && t - (modal.t0 || 0) > 0.35;
+    const bkey = fz ? cv.width + 'x' + cv.height + '|' + modal.kind : '';
+    if (fz && back.c && back.key === bkey && t - back.at < 1.5) {
+      g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(back.c, 0, 0); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+      drawCombo(t); if (fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
+      drawBanners(t); drawPopup(t); drawToasts(t); drawTutorial(t); drawModal(t);
+      return;
+    }
+    if (!fz) back.key = '';
+    if (artOn('bg') && !(scr === 'level' && !onTitle && artOn('levelBg'))) { try { ART.bg(g, W, H, t); } catch (e) { g.fillStyle = TH.bgBottom || '#fff1dc'; g.fillRect(0, 0, W, H); } }
     else { const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, TH.bgTop || '#7fd3ff'); gr.addColorStop(1, TH.bgBottom || '#fff1dc'); g.fillStyle = gr; g.fillRect(0, 0, W, H); }
     if (disp.en === null) tickDisp(1);
     if (onTitle) { drawTitle(t); if (fxOn('draw')) { try { FX.draw(g); } catch (e) {} } return; }
     if (scr !== 'board') {
       if (scr === 'map') ADV.drawMap(t); else ADV.drawLevel(t);
       if (fxOn('draw') && !(modal && modal.fxTop)) { try { FX.draw(g); } catch (e) {} }
-      drawBanners(t); drawToasts(t); drawModal(t);
+      drawBanners(t); drawFloaters(t); drawModal(t);
       if (modal && modal.fxTop && fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
+      drawToasts(t);
       return;
     }
     if (sel >= 0 && !S.board[sel]) sel = -1;
     drawScene(t); drawBoard(t); drawOrders(t); drawInfo(t); drawBar(t);
+    if (fz) { // keep a copy of the board layers for the next frames under the modal
+      if (!back.c) back.c = document.createElement('canvas');
+      if (back.c.width !== cv.width || back.c.height !== cv.height) { back.c.width = cv.width; back.c.height = cv.height; }
+      const bg2 = back.c.getContext('2d'); bg2.clearRect(0, 0, cv.width, cv.height); bg2.drawImage(cv, 0, 0); back.key = bkey; back.at = t;
+    }
     if (drag) {
       const tg = dragTarget(), x = drag.x, y = drag.y - drag.lift, s = L.cs * 1.1;
       g.fillStyle = 'rgba(60,35,15,0.22)'; g.beginPath(); g.ellipse(x, y + s * 0.45 + drag.lift * 0.3, s * 0.34, s * 0.12, 0, 0, 7); g.fill();
@@ -8953,10 +9209,11 @@ const UI = (() => {
     const fxTop = modal && modal.kind === 'levelup';
     if (!fxTop && fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
     drawBanners(t); drawPopup(t);
-    drawToasts(t);
+    drawFloaters(t);
     drawTutorial(t);
     drawModal(t);
     if (fxTop && fxOn('draw')) { try { FX.draw(g); } catch (e) {} }
+    drawToasts(t);
     if (modal && modal.kind === 'tasks' && S.tut === 4 && modal.nextBtn && S.stars >= 1) { const b = modal.nextBtn; drawHand(b.x + b.w / 2 + 8, b.y + b.h / 2 + 10, t, true); }
   }
 
@@ -9193,20 +9450,20 @@ const ADV = (() => {
   function drawMapHud(t, G) {
     const A = S.adv, top = G.top;
     // back to the café
-    button(8, top, 104, 48, '‹ Kohvik', () => UI.goScreen('board'), { style: 'buttonBlue', size: 18 });
-    // lives
-    const hx = 120, hw = Math.min(150, W - 120 - 120 - 16);
+    const narrow = W < 400, backW = narrow ? 96 : 104;
+    button(8, top, backW, 48, '‹ Kohvik', () => UI.goScreen('board'), { style: 'buttonBlue', size: narrow ? 17 : 18 });
+    // coins on the right, lives in between (the "Täis" label or the timer gets its own room, never under the coin)
+    const cw = narrow ? 100 : 118, cx0 = W - cw - 8, hx = backW + 16, hw = Math.min(160, cx0 - 8 - hx);
     g.fillStyle = DARK; rr(hx, top + 4, hw, 40, 20); g.fill();
     drawIcon('heart', hx + 4, top + 6, 36);
     const full = A.hearts >= HEART_MAX;
     text(String(A.hearts), hx + 50, top + 25, 20, '#fff', 'center', 900);
-    if (hw > 90) text(full ? 'Täis' : fmtTime(LV.heartNext()), hx + 64 + (hw - 70) / 2, top + 25, 16, full ? MINT : '#fff', 'center', 800, hw - 72);
+    if (hw > 96) text(full ? 'Täis' : fmtTime(LV.heartNext()), hx + 64 + (hw - 72) / 2, top + 25, 16, full ? MINT : '#fff', 'center', 800, hw - 72);
     H.addHit({ x: hx, y: top, w: hw, h: 48, fn: () => { snd('tap'); H.openModal({ kind: 'advHearts' }); } });
     mapHudR.hearts = { x: hx + 22, y: top + 24 };
-    // coins
-    const cw = Math.min(118, W - hx - hw - 14), cx0 = W - cw - 8;
     g.fillStyle = DARK; rr(cx0, top + 4, cw, 40, 20); g.fill(); drawIcon('coin', cx0 + 4, top + 7, 34);
     text(fmtNum(H.disp.coins === null ? S.coins : H.disp.coins), cx0 + 40 + (cw - 46) / 2, top + 25, 18, '#fff', 'center', 900, cw - 46);
+    H.addHit({ x: cx0, y: top, w: cw, h: 48, fn: () => { snd('tap'); toast('Münte saad tasemetelt, kohviku tellimustelt ja põrsast.'); } });
     mapHudR.coins = { x: cx0 + 20, y: top + 24 };
     // right column: wheel, piggy, calendar
     const col = [
@@ -9215,7 +9472,7 @@ const ADV = (() => {
       ['calendar', 'Kalender', () => H.openModal({ kind: 'daily' }), !S.daily.gift],
     ];
     col.forEach(([ic, lab, fn, hot], j) => {
-      const bx = W - 74, by = top + 62 + j * 84, wig = hot ? Math.sin(t * 8) * 0.12 * (Math.sin(t * 1.6) > 0.5 ? 1 : 0) : 0, ps = H.pressScale(bx, by);
+      const bx = W - 78, by = top + 62 + j * 84, wig = hot ? Math.sin(t * 8) * 0.12 * (Math.sin(t * 1.6) > 0.5 ? 1 : 0) : 0, ps = H.pressScale(bx, by);
       g.fillStyle = 'rgba(255,255,255,0.92)'; g.beginPath(); g.arc(bx + 33, by + 28, 29 * ps, 0, 7); g.fill(); g.lineWidth = 2.5; g.strokeStyle = 'rgba(124,92,255,0.25)'; g.stroke();
       g.save(); g.translate(bx + 33, by + 28); g.rotate(wig); drawIcon(ic, -22 * ps, -22 * ps, 44 * ps); g.restore();
       g.fillStyle = DARK; g.font = H.font(15, 900); const lw = g.measureText(lab).width + 14; rr(bx + 33 - lw / 2, by + 52, lw, 22, 11); g.fill();
@@ -9329,8 +9586,10 @@ const ADV = (() => {
     W = H.W; Hh = H.H; V.G = levelGeo();
     const G = V.G, r = V.r, def = r.def;
     // background: the chapter's colours, softly
-    const col = CH_COL[def.chapter % CH_COL.length], gr = g.createLinearGradient(0, 0, 0, Hh); gr.addColorStop(0, col[0]); gr.addColorStop(1, col[1]); g.fillStyle = gr; g.fillRect(0, 0, W, Hh);
-    if (artOn('mapBg')) { try { g.save(); g.globalAlpha = 0.55; ART.mapBg(g, def.chapter, 0, 0, W, Hh, t); g.restore(); } catch (e) { g.restore(); } }
+    const col = CH_COL[def.chapter % CH_COL.length];
+    if (artOn('levelBg')) { try { ART.levelBg(g, def.chapter, 0, 0, W, Hh, t, col, 0.55); } catch (e) {} } // one cached blit (Ash, phase C)
+    else { const gr = g.createLinearGradient(0, 0, 0, Hh); gr.addColorStop(0, col[0]); gr.addColorStop(1, col[1]); g.fillStyle = gr; g.fillRect(0, 0, W, Hh); }
+    if (!artOn('levelBg') && artOn('mapBg')) { try { g.save(); g.globalAlpha = 0.55; ART.mapBg(g, def.chapter, 0, 0, W, Hh, t); g.restore(); } catch (e) { g.restore(); } }
     drawGoalBar(t, G, r);
     if (G.orders) drawLevelOrders(t, G, r);
     drawLevelBoard(t, G, r);
@@ -9372,7 +9631,7 @@ const ADV = (() => {
       if (done) drawIcon('check', gx + gw - 34, icy - 15, 30);
       else text(String(g2.n - g2.got), gx + 12 + Math.min(44, h - 46) + (gw - 18 - Math.min(44, h - 46)) / 2, icy + 1, 22, INK, 'center', 900, gw - 54);
       V.goalR[gi] = { x: gx, y: gy, w: gw, h: h - 40 };
-      H.addHit({ x: gx, y: gy, w: gw, h: h - 40, fn: () => { snd('tap'); toast(goalText(g2) + ' (' + g2.got + '/' + g2.n + ')'); } });
+      H.addHit({ x: gx, y: gy - Math.max(0, 44 - (h - 40)) / 2, w: gw, h: Math.max(44, h - 40), fn: () => { snd('tap'); toast(goalText(g2) + ' (' + g2.got + '/' + g2.n + ')'); } });
     });
     // moves bubble with the star meter
     const mp = movesPos(), b = V.bump.moves ? clamp(1 - (tn() - V.bump.moves) / 0.35, 0, 1) : 0, low = r.moves <= 5 && !r.won;
@@ -9647,7 +9906,7 @@ const ADV = (() => {
       if (d.obs.length) {
         text('Takistused:', P.x + 24, y + 18, 16, INK2, 'left', 800);
         d.obs.forEach((o, j) => { drawObstacle(o, P.x + 130 + j * 44, y, 36, o === 'crate' ? 1 : 1); });
-        H.addHit({ x: P.x + 120, y, w: P.w - 140, h: 40, fn: () => { snd('tap'); toast(d.obs.map(o => OBST_NAME[o]).join(', ') + '.'); } }, true);
+        H.addHit({ x: P.x + 120, y: y - 2, w: P.w - 140, h: 44, fn: () => { snd('tap'); toast(d.obs.map(o => OBST_NAME[o]).join(', ') + '.'); } }, true);
       } else text('Takistusi pole. Puhka natuke!', P.x + 24, y + 18, 16, INK2, 'left', 800, P.w - 48);
       y += 50;
       // lives
@@ -9669,8 +9928,16 @@ const ADV = (() => {
       if (r) r.goals.forEach((g2, j) => text(goalText(g2) + ': ' + g2.got + '/' + g2.n, P.x + P.w / 2, P.y + 50 + j * 26, 17, INK, 'center', 800, P.w - 30));
       button(P.x + 30, P.y + 110, P.w - 60, 54, 'Jätka', () => H.closeModal(), Object.assign({ hot: true, size: 21 }, B));
       const costs = r && (r.used > 0 || r.over) && !r.won;
-      button(P.x + 30, P.y + 176, P.w - 60, 50, 'Loobu', () => { H.closeModal(true); if (costs) { LV.lose(); toast('Kaotasid ühe elu. Proovi uuesti!'); } else LV.quit(); backToMap(false); }, Object.assign({ style: 'buttonGrey', size: 19 }, B));
-      if (costs) text('Kui loobud, kaotad ühe elu.', P.x + P.w / 2, P.y + P.h - 24, 15, INK2, 'center', 700, P.w - 20);
+      button(P.x + 30, P.y + 176, P.w - 60, 50, 'Lahku', () => { if (costs) { H.closeThen({ kind: 'advLeave', sticky: true }); return; } H.closeModal(true); LV.quit(); backToMap(false); }, Object.assign({ style: 'buttonGrey', size: 19 }, B));
+      if (costs) text('Pärast esimest käiku maksab lahkumine ühe südame.', P.x + P.w / 2, P.y + P.h - 24, 15, INK2, 'center', 700, P.w - 20);
+    } else if (m.kind === 'advLeave') {
+      // A kind confirm: leaving after the first move costs a life (closing the app does too, see LV.leftOpen).
+      const P = H.modalPanel(m, 380, 330, 'Lahkud?');
+      drawIcon('heart', P.x + P.w / 2 - 34, P.y + 34, 68);
+      text('Lahkud? Kaotad ühe südame.', P.x + P.w / 2, P.y + 124, 19, INK, 'center', 900, P.w - 30);
+      text('Südamed tulevad ise tagasi.', P.x + P.w / 2, P.y + 152, 15, INK2, 'center', 700, P.w - 30);
+      button(P.x + 30, P.y + 182, P.w - 60, 56, 'Mängin edasi!', () => H.closeModal(), Object.assign({ hot: true, size: 20 }, B));
+      button(P.x + 50, P.y + 250, P.w - 100, 50, 'Lahku', () => { H.closeModal(true); LV.lose(); toast(S.adv.hearts > 0 ? 'Üks süda läks. Järgmine kord läheb paremini!' : 'Südamed said otsa. Puhka natuke!', 3); backToMap(false); }, Object.assign({ style: 'buttonGrey', size: 19 }, B));
     } else if (m.kind === 'advWin') drawWin(m, t, B);
     else if (m.kind === 'advFail') drawFail(m, t, B);
     else if (m.kind === 'advBuy') {
@@ -9823,8 +10090,10 @@ const ADV = (() => {
     return null;
   }
   function toastRect() {
-    if (UI.scr === 'level' && V && V.G) return { x: V.G.bx, y: V.G.by, w: V.G.bw, h: V.G.bh };
-    return { x: 10, y: Hh * 0.2, w: W - 20, h: Hh * 0.52 };
+    // Under the level board: the free strip above the boosters if it is tall enough, else over the booster row.
+    if (UI.scr === 'level' && V && V.G) { const G = V.G, y0 = G.by + G.bh + 4, gap = G.boostY - y0 - 4; return gap >= 46 ? { x: G.x0, y: y0, w: G.cw, h: gap, mid: true } : { x: G.x0, y: G.boostY, w: G.cw, h: 56, mid: true }; }
+    // The map: above the big play button.
+    const G = mapGeo(); return { x: 10, y: Hh * 0.3, w: W - 20, h: G.bot - 68 - 50 - Hh * 0.3 };
   }
   const busy = () => !!(WH.spin || (V && (V.drag || V.anim.size || V.ghosts.length)) || M.drag || M.walk || Math.abs(M.vel) > 5);
 
@@ -9982,7 +10251,7 @@ const XUI = (() => {
     }
     const by = P.y + P.h - foot + 10;
     if (firstReady) button(P.x + 30, by, P.w - 60, 52, 'Võta kõik auhinnad!', () => { m.tap = { x: P.x + P.w / 2, y: by }; for (let s = 1; s <= n; s++) if (!S.pass.got[s]) PASS.claim(s); }, Object.assign({ hot: true, pulse: 1, size: 19 }, B));
-    else wrap('Punkte saad ühendamisest, tellimustest, remondist, päevaülesannetest ja Seikluse tasemetest.', P.w - 40, 15, 700).slice(0, 2).forEach((s2, j) => text(s2, P.x + P.w / 2, by + 14 + j * 21, 15, INK2, 'center', 700));
+    else { const ls = wrap('Punkte annavad ühendamised, tellimused, remont, päevaülesanded ja Seiklus.', P.w - 30, 15, 700).slice(0, 3); ls.forEach((s2, j) => text(s2, P.x + P.w / 2, by + 26 + (j - (ls.length - 1) / 2) * 20, 15, INK2, 'center', 700)); }
   }
   // The main prize of a reward as one picture.
   function rewardIcon(r, cx, cy, s) {
@@ -10008,8 +10277,9 @@ const XUI = (() => {
     WEEK.ensure();
     const cur = S.week.cur, icon = 'cur_' + e.key;
     drawIcon(icon, P.x + 16, P.y + 34, 44); text(String(cur), P.x + 66, P.y + 56, 24, INK, 'left', 900);
-    text('Lõpuni ' + H.fmtLong(e.left), P.x + 66, P.y + 84, 15, INK2, 'left', 800, P.w - 270);
-    if (e.weekend) { g.fillStyle = PINK; rr(P.x + P.w - 190, P.y + 64, 172, 30, 15); g.fill(); text('Nädalavahetus ×2!', P.x + P.w - 104, P.y + 79, 15, '#fff', 'center', 900, 164); }
+    let bw0 = 0;
+    if (e.weekend) { const wl = P.w >= 420 ? 'Nädalavahetus ×2!' : 'Täna ×2!'; g.font = H.font(15, 900); bw0 = g.measureText(wl).width + 26; g.fillStyle = PINK; rr(P.x + P.w - 18 - bw0, P.y + 64, bw0, 30, 15); g.fill(); text(wl, P.x + P.w - 18 - bw0 / 2, P.y + 79, 15, '#fff', 'center', 900); }
+    text('Lõpuni ' + H.fmtLong(e.left), P.x + 66, P.y + 84, 15, INK2, 'left', 800, P.w - 92 - bw0);
     // the event chain, small, so it is clear what to look for on the board
     const n = E.chain.length, cw = Math.min(58, (P.w - 30) / n), x0 = P.x + (P.w - cw * n) / 2, cy = P.y + 122;
     for (let j = 0; j < n; j++) {
@@ -10031,7 +10301,7 @@ const XUI = (() => {
       g.fillStyle = got ? '#5fc24a' : ready ? PINK : '#c9b49a'; g.beginPath(); g.arc(P.x + 38, y + (rowH - 6) / 2, 20, 0, 7); g.fill();
       text(String(tr.need), P.x + 38, y + (rowH - 6) / 2 + 1, 15, '#fff', 'center', 900);
       if (r.look) { drawIcon('wardrobe', P.x + 68, y + (rowH - 6) / 2 - 15, 30); const [kind, k] = r.look.split(':'); text(LOOK.name(kind, k), P.x + 102, y + (rowH - 6) / 2 + 1, 16, PINK, 'left', 900, P.w - 230); }
-      else H.rewardRow(r, P.x + 70, y + (rowH - 6) / 2, P.w - 200, 28);
+      else H.rewardRow(r, P.x + 70, y + (rowH - 6) / 2, P.w - (ready ? 196 : 136), 28);
       if (got) drawIcon('check', P.x + P.w - 56, y + 9, 32);
       else if (ready) button(P.x + P.w - 112, y + 1, 96, 48, 'Võta!', () => { m.tap = { x: P.x + P.w - 64, y: y + 24 }; WEEK.claim(j); }, Object.assign({ hot: true, pulse: 1, size: 18 }, B));
       else { g.globalAlpha = 0.5; drawIcon('lock', P.x + P.w - 54, y + 11, 28); g.globalAlpha = 1; }
@@ -11688,23 +11958,31 @@ try { window.__saAudio = AU; window.__saMusic = MUSIC; } catch (e) {}
 // redraw only when needed, paused while hidden), saving on hide, and the test hook window.__mg.
 (function () {
   S = load() || Game.newGame();
+  // Hash flags (#fresh=1 ...) have been read by every module now; drop them so a reload keeps the save.
+  try { if (QS._hash && history.replaceState) history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
   S.title = true;
   Game.tickEnergy(); Game.ensureDaily();
+  const leftLevel = LV.leftOpen();
   const cap = (navigator.hardwareConcurrency || 8) <= 4 ? 30 : 60;
-  try { if (typeof FX !== 'undefined' && FX && FX.quality === undefined) FX.quality = cap === 30 ? 1 : 2; } catch (e) {}
+  // FX.quality comes from ART.perf (1 on weak devices, lowered further after slow frames)
   UI.layout();
   addEventListener('resize', () => UI.layout());
   addEventListener('orientationchange', () => setTimeout(() => UI.layout(), 120));
 
-  let raf = 0, last = 0, running = false;
+  let raf = 0, last = 0, running = false, drew = false, jsMs = 0;
+  // ART.perf (Ash) watches drawn frames and lowers the canvas resolution / effect quality on slow phones.
+  const perf = typeof ART !== 'undefined' && ART.perf ? ART.perf : null;
+  if (perf) perf.onChange = (lv, dprChanged) => { if (dprChanged) UI.layout(); UI.markDirty(); };
   function frame(ms) {
     raf = requestAnimationFrame(frame);
+    if (perf) perf.frame(ms, drew, jsMs); drew = false;
     if (ms - last < 1000 / cap - 2) return;
     const dt = Math.min(0.1, (ms - last) / 1000); last = ms;
     try {
+      const t0 = performance.now();
       Game.tick();
       UI.update(dt);
-      if (UI.needsDraw(ms)) UI.draw(ms);
+      if (UI.needsDraw(ms)) { UI.draw(ms); drew = true; jsMs = performance.now() - t0; }
     } catch (e) { console.error(e); }
   }
   function run() { if (running) return; running = true; last = performance.now(); raf = requestAnimationFrame(frame); UI.markDirty(); }
@@ -11716,6 +11994,7 @@ try { window.__saAudio = AU; window.__saMusic = MUSIC; } catch (e) {}
   addEventListener('pagehide', save);
   run();
   const l = document.getElementById('load'); if (l) l.remove();
+  if (leftLevel) setTimeout(() => UI.toast('Tase ' + leftLevel + ' jäi pooleli, nii et üks süda läks. Elud tulevad ise tagasi!', 4), 600);
   try { if (typeof MUSIC !== 'undefined' && MUSIC && MUSIC.scene) MUSIC.scene('title'); } catch (e) {}
 
   // Test hook for QA (tools/mergeqa.js). act.* run game actions directly; UI exposes layout and screen coordinates.

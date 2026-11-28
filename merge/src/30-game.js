@@ -59,8 +59,8 @@ const Game = (() => {
   // ---- free energy every few hours ----
   const freeEnIn = () => Math.max(0, (S.freeEnAt || 0) - now());
   function claimFreeEnergy() {
-    if (freeEnIn() > 0) return false;
-    S.en += FREE_EN; S.freeEnAt = now() + FREE_EN_MS;
+    if (freeEnIn() > 0 || S.en >= EN_CAP) return false;
+    addEn(FREE_EN); S.freeEnAt = now() + FREE_EN_MS;
     ev('freeEnergy', -1, { n: FREE_EN }); after(); return true;
   }
 
@@ -78,6 +78,8 @@ const Game = (() => {
     const k = Math.floor((t - S.enT) / EN_MS);
     if (k > 0) { S.en = Math.min(MAXEN, S.en + k); S.enT += k * EN_MS; if (S.en >= MAXEN) S.enT = t; }
   }
+  // Energy from gifts and coffee: may overflow the 100 regen limit up to EN_CAP; returns what was added.
+  function addEn(n) { const before = S.en; if (n > 0) S.en = Math.max(S.en, Math.min(EN_CAP, S.en + n)); return S.en - before; }
   const enNext = () => S.en >= MAXEN ? 0 : EN_MS - (now() - S.enT);
 
   function addCoins(n) { S.coins += n; if (n > 0) daily('coins', n); }
@@ -116,7 +118,7 @@ const Game = (() => {
   function give(r) {
     if (!r) return;
     if (r.coins) addCoins(r.coins);
-    if (r.energy) S.en += r.energy;
+    if (r.energy) addEn(r.energy);
     if (r.stars) S.stars += r.stars;
     if (r.gen) giveItem(r.gen, 1);
     if (r.chest) giveItem('chest', r.chest);
@@ -168,9 +170,9 @@ const Game = (() => {
     S._combo = t - (S._comboT || 0) < COMBO_MS ? (S._combo || 0) + 1 : 1; S._comboT = t;
     if (S._combo > (S.stats.combo || 0)) S.stats.combo = S._combo;
     const cr = comboReward(S._combo);
-    if (cr) { if (cr.coins) addCoins(cr.coins); if (cr.energy) S.en += cr.energy; }
+    if (cr) { if (cr.coins) addCoins(cr.coins); if (cr.energy) addEn(cr.energy); }
     if (S._combo >= 2) ev('combo', b, { n: S._combo, r: cr });
-    PASS.add(PASS_PTS.merge * n, b);
+    for (let j = 0; j < n; j++) PASS.add('merge', b);
     if (ch(res.k).ev) WEEK.add(WEEK_CUR.merge(res.l) * n, b);
     addXp(n);
   }
@@ -259,7 +261,7 @@ const Game = (() => {
   function collect(i) {
     const it = S.board[i]; if (!it || it.b) return false;
     const c = ch(it.k), n = c.value ? c.value[it.l - 1] : 0;
-    if (c.kind === 'energy') S.en += n; else if (c.kind === 'coin') addCoins(n); else return false;
+    if (c.kind === 'energy') { if (S.en >= EN_CAP) { ev('enFull', i); return false; } addEn(n); } else if (c.kind === 'coin') addCoins(n); else return false;
     S.board[i] = null;
     ev('collect', i, { kind: c.kind, n, k: it.k, l: it.l }); after(); return true;
   }
@@ -294,7 +296,7 @@ const Game = (() => {
   function sellPrice(it) {
     if (!it || it.b) return 0;
     const k = ch(it.k).kind;
-    if (k === 'item') return Math.max(1, Math.round(Math.pow(1.7, it.l - 1)));
+    if (k === 'item') return Math.max(1, Math.round(Math.pow(1.5, it.l - 1)));
     if (k === 'chest') return 5 * it.l;
     return 0;
   }
@@ -329,14 +331,14 @@ const Game = (() => {
     const it = S.board[i]; if (!it || ch(it.k).kind !== 'mystery' || it.b) return false;
     const pool = availChains(), r = rnd();
     let out;
-    if (r < 0.3) out = { energy: ri(15, 30) };
-    else if (r < 0.52) out = { coins: ri(20, 50) };
+    if (r < 0.3) out = { energy: ri(10, 20) };
+    else if (r < 0.52) out = { coins: ri(12, 30) };
     else if (r < 0.8 && pool.length) { const k = pick(pool); out = { item: [k, Math.min(maxL(k) - 1, ri(3, 5))] }; }
     else if (r < 0.92) out = { item: ['chest', rnd() < 0.7 ? 1 : 2] };
     else { const k = spareGen(); out = k ? { item: [k, 1] } : { coins: 60 }; }
     S.board[i] = null; S.stats.mbox++;
     if (out.item) { const x = genItem(out.item[0], out.item[1]); if (ch(x.k).kind === 'gen') S.gensOwned[x.k] = true; S.board[i] = x; }
-    if (out.energy) S.en += out.energy;
+    if (out.energy) addEn(out.energy);
     if (out.coins) addCoins(out.coins);
     ev('mystery', i, { out });
     if (out.item) discover(out.item[0], out.item[1]);
@@ -364,7 +366,7 @@ const Game = (() => {
   function maxOrders() { let n = S.lvl < 2 ? 2 : 3; if (S.area >= 2 && S.lvl >= 5) n = 4; return Math.min(n, villagersAvail().length); }
   function orderReward(items) {
     const value = items.reduce((s, x) => s + Math.pow(2, x[1] - 1), 0);
-    return { coins: Math.round(value * 2.2 + 4), xp: Math.ceil(value * 0.8) + 2, stars: 1 + (value >= 10) + (value >= 40) + (value >= 120) };
+    return { coins: Math.round(value * 1.6 + 3), xp: Math.ceil(value * 0.8) + 2, stars: 1 + (value >= 6) + (value >= 20) + (value >= 60) };
   }
   function genOrder() {
     const busy = new Set(S.orders.map(o => o.who));
@@ -385,7 +387,8 @@ const Game = (() => {
     const items = [];
     for (let j = 0; j < n; j++) {
       const k = pick(src);
-      let cap = Math.min(maxL(k) - 1, 2 + Math.floor((S.lvl - 1) * 0.62) - (V.small ? 1 : 0));
+      // Order levels grow slowly with the XP level (a level-l item costs about 2^(l-1) energy).
+      let cap = Math.min(maxL(k) - 1, 2 + Math.floor(Math.sqrt(Math.max(0, S.lvl - 1)) * 0.85) - (V.small ? 1 : 0));
       cap = Math.max(2, cap);
       // Lower levels are more common; one item per order may reach the cap.
       let l = Math.max(2, cap - Math.floor(Math.pow(rnd(), 0.8) * 3));
@@ -538,6 +541,7 @@ const Game = (() => {
   function buy(id) {
     const x = shopList().find(s => s.id === id); if (!x || x.soldOut) return false;
     if (S.coins < x.price) { ev('deny', -1, { need: 'coins' }); return false; }
+    if (x.give.energy && S.en + x.give.energy > EN_CAP) { ev('enFull', -1); return false; }
     if (x.give.item || x.give.gen) { if (nearestEmpty(-1) < 0 && S.bag.length >= S.bagSlots) { ev('full', -1); return false; } }
     S.coins -= x.price;
     if (x.give.slot) S.bagSlots++;
@@ -593,7 +597,7 @@ const Game = (() => {
     tapItem, store, take, maxOrders, orderStatus, fulfill, refillOrders, genOrder, villagersAvail, curArea, nextTask, doTask,
     ensureDaily, claimGift, claimDaily, claimBonus, giftReward, shopList, buy, tutCheck, tick, newGame, addXp, give, refreshGen,
     group, merge5, openMystery, albumHas, albumPending, albumCount, chainFull, claimAlbum, claimChain,
-    freeEnIn, claimFreeEnergy, orderNeeds,
+    freeEnIn, claimFreeEnergy, orderNeeds, addEn,
     piggyAdd, piggyReady, openPiggy, wheelFree, wheelSpins, spinWheel, addCoins, setStyle, cashEvent,
   };
 })();

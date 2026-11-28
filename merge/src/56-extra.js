@@ -145,7 +145,7 @@ const XUI = (() => {
     }
     const by = P.y + P.h - foot + 10;
     if (firstReady) button(P.x + 30, by, P.w - 60, 52, 'Võta kõik auhinnad!', () => { m.tap = { x: P.x + P.w / 2, y: by }; for (let s = 1; s <= n; s++) if (!S.pass.got[s]) PASS.claim(s); }, Object.assign({ hot: true, pulse: 1, size: 19 }, B));
-    else wrap('Punkte saad ühendamisest, tellimustest, remondist, päevaülesannetest ja Seikluse tasemetest.', P.w - 40, 15, 700).slice(0, 2).forEach((s2, j) => text(s2, P.x + P.w / 2, by + 14 + j * 21, 15, INK2, 'center', 700));
+    else { const ls = wrap('Punkte annavad ühendamised, tellimused, remont, päevaülesanded ja Seiklus.', P.w - 30, 15, 700).slice(0, 3); ls.forEach((s2, j) => text(s2, P.x + P.w / 2, by + 26 + (j - (ls.length - 1) / 2) * 20, 15, INK2, 'center', 700)); }
   }
   // The main prize of a reward as one picture.
   function rewardIcon(r, cx, cy, s) {
@@ -171,8 +171,9 @@ const XUI = (() => {
     WEEK.ensure();
     const cur = S.week.cur, icon = 'cur_' + e.key;
     drawIcon(icon, P.x + 16, P.y + 34, 44); text(String(cur), P.x + 66, P.y + 56, 24, INK, 'left', 900);
-    text('Lõpuni ' + H.fmtLong(e.left), P.x + 66, P.y + 84, 15, INK2, 'left', 800, P.w - 270);
-    if (e.weekend) { g.fillStyle = PINK; rr(P.x + P.w - 190, P.y + 64, 172, 30, 15); g.fill(); text('Nädalavahetus ×2!', P.x + P.w - 104, P.y + 79, 15, '#fff', 'center', 900, 164); }
+    let bw0 = 0;
+    if (e.weekend) { const wl = P.w >= 420 ? 'Nädalavahetus ×2!' : 'Täna ×2!'; g.font = H.font(15, 900); bw0 = g.measureText(wl).width + 26; g.fillStyle = PINK; rr(P.x + P.w - 18 - bw0, P.y + 64, bw0, 30, 15); g.fill(); text(wl, P.x + P.w - 18 - bw0 / 2, P.y + 79, 15, '#fff', 'center', 900); }
+    text('Lõpuni ' + H.fmtLong(e.left), P.x + 66, P.y + 84, 15, INK2, 'left', 800, P.w - 92 - bw0);
     // the event chain, small, so it is clear what to look for on the board
     const n = E.chain.length, cw = Math.min(58, (P.w - 30) / n), x0 = P.x + (P.w - cw * n) / 2, cy = P.y + 122;
     for (let j = 0; j < n; j++) {
@@ -194,7 +195,7 @@ const XUI = (() => {
       g.fillStyle = got ? '#5fc24a' : ready ? PINK : '#c9b49a'; g.beginPath(); g.arc(P.x + 38, y + (rowH - 6) / 2, 20, 0, 7); g.fill();
       text(String(tr.need), P.x + 38, y + (rowH - 6) / 2 + 1, 15, '#fff', 'center', 900);
       if (r.look) { drawIcon('wardrobe', P.x + 68, y + (rowH - 6) / 2 - 15, 30); const [kind, k] = r.look.split(':'); text(LOOK.name(kind, k), P.x + 102, y + (rowH - 6) / 2 + 1, 16, PINK, 'left', 900, P.w - 230); }
-      else H.rewardRow(r, P.x + 70, y + (rowH - 6) / 2, P.w - 200, 28);
+      else H.rewardRow(r, P.x + 70, y + (rowH - 6) / 2, P.w - (ready ? 196 : 136), 28);
       if (got) drawIcon('check', P.x + P.w - 56, y + 9, 32);
       else if (ready) button(P.x + P.w - 112, y + 1, 96, 48, 'Võta!', () => { m.tap = { x: P.x + P.w - 64, y: y + 24 }; WEEK.claim(j); }, Object.assign({ hot: true, pulse: 1, size: 18 }, B));
       else { g.globalAlpha = 0.5; drawIcon('lock', P.x + P.w - 54, y + 11, 28); g.globalAlpha = 1; }

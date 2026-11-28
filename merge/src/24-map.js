@@ -3,6 +3,7 @@
 //   ART.mapTheme(chapter)   -> { key, name, path, accent, ink } (chapter themes cycle forever; each cycle reshuffles the decor)
 //   ART.mapBg(ctx, chapter, x, y, w, h, t, scroll)  fills the rect with the chapter's scenery. scroll = world y (CSS px) of the rect's
 //       top edge: the picture moves up as scroll grows and repeats seamlessly. Cached tile + a light animated layer (QUALITY-scaled).
+//   ART.levelBg(ctx, chapter, x, y, w, h, t, cols, alpha)  the level screen backdrop (gradient + faded scenery), one cached blit
 //   ART.mapDivider(ctx, chapter, x, y, w, t)  a soft mist band with a ribbon "Peatükk n · Name", centred on y (hides the seam between chapters)
 //   ART.mapPath(ctx, points, t, opts)  winding candy path through points ([{x,y}] or [[x,y]] or flat); opts { done: float index of the
 //       last finished point (dots before it are candy coloured, after it pale), width }
@@ -281,7 +282,7 @@
   const tiles = new Map();
   function tileFor(ch, w, sc) {
     const T = THEMES[((ch | 0) % THEMES.length + THEMES.length) % THEMES.length], cyc = Math.floor((ch | 0) / THEMES.length);
-    const rs = Math.min(sc, Q() >= 2 ? 2.5 : 2), Ht = Math.round(w * 2.2), key = ch % 60 + '|' + w + '|' + rs;
+    const rs = Math.min(sc, 3), Ht = Math.round(w * 2.2), key = ch % 60 + '|' + w + '|' + rs;
     let t = tiles.get(key); if (t) return t;
     if (tiles.size >= 2) tiles.delete(tiles.keys().next().value);
     const c = mk(w * rs, Ht * rs), g = c.getContext('2d'); g.scale(rs, rs);
@@ -360,9 +361,30 @@
     const sc = A.scaleOf(ctx), tl = tileFor(ch | 0, Math.round(w), sc), H = tl.H;
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
     const off = ((scroll % H) + H) % H;
-    for (let yy = y - off; yy < y + h; yy += H) ctx.drawImage(tl.c, x, yy, w, H);
-    // animated layer
-    const T = tl.T, q = Q(), n = [8, 16, 26][q];
+    // 1:1 with the backing pixels (tile made at the canvas scale, y snapped to device pixels): no filtering per frame
+    for (let yy = y - off; yy < y + h; yy += H) ctx.drawImage(tl.c, x, Math.round(yy * sc) / sc, w, H);
+    animBits(ctx, tl, x, y, w, h, t, off);
+    ctx.restore();
+  };
+  // ART.levelBg(ctx, chapter, x, y, w, h, t, cols, alpha): the level screen backdrop in one cached blit: a vertical
+  // gradient cols [top, bottom] with the chapter scenery over it at `alpha` (default .55), plus the animated bits.
+  let _lvl = null;
+  A.levelBg = function (ctx, ch, x, y, w, h, t, cols, alpha) {
+    t = t == null ? now() : t; alpha = alpha == null ? .55 : alpha; cols = cols || ['#bfeaff', '#fff0f6'];
+    const sc = A.scaleOf(ctx), tl = tileFor(ch | 0, Math.round(w), sc), key = (ch | 0) + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc + '|' + cols.join() + '|' + alpha;
+    if (!_lvl || _lvl.key !== key) {
+      const c = mk(w * sc, h * sc), g = c.getContext('2d'); g.scale(sc, sc);
+      const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, cols[0]); gr.addColorStop(1, cols[1]); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      g.globalAlpha = alpha; for (let yy = 0; yy < h; yy += tl.H) g.drawImage(tl.c, 0, yy, w, tl.H);
+      _lvl = { key, c };
+    }
+    ctx.drawImage(_lvl.c, x, Math.round(y * sc) / sc, w, h);
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.globalAlpha *= alpha;
+    animBits(ctx, tl, x, y, w, h, t, 0);
+    ctx.restore();
+  };
+  function animBits(ctx, tl, x, y, w, h, t, off) {
+    const H = tl.H, T = tl.T, q = Q(), n = [8, 16, 26][q];
     for (let i = 0; i < n && i < tl.bits.length; i++) {
       const b = tl.bits[i];
       if (T.anim === 'snow') { // falls in screen space
@@ -378,7 +400,7 @@
         const gx = x + ((b.x + t * 18 * b.s) % (w + 40)) - 20, gy = sy + Math.sin(t + b.p) * 6, f = Math.sin(t * 6 + b.p) * 4;
         ctx.beginPath(); ctx.moveTo(gx - 8, gy - f); ctx.quadraticCurveTo(gx - 4, gy - 4, gx, gy); ctx.quadraticCurveTo(gx + 4, gy - 4, gx + 8, gy - f); stroke(ctx, '#ffffff', 2.4);
       } else if (T.anim === 'butterfly' || T.anim === 'bee') {
-        const bx = x + b.x + Math.sin(t * .7 + b.p) * 26, byy = sy + Math.sin(t * 1.1 + b.p * 2) * 14, fl = Math.abs(Math.sin(t * 12 + b.p));
+        const bx = x + b.x + Math.sin(t * .7 + b.p) * 26, byy = sy + Math.sin(t * 1.1 + b.p * 2) * 14, fl = .35 + .65 * Math.abs(Math.sin(t * 9 + b.p)); // wings never fold flat (a bare body read as an 'I')
         if (T.anim === 'bee') {
           E(ctx, bx - 2, byy - 4, 3, 4 * fl + 1); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fill(); E(ctx, bx + 2, byy - 4, 3, 4 * fl + 1); ctx.fill();
           E(ctx, bx, byy, 4.5, 3.2); ctx.fillStyle = '#ffc83d'; ctx.fill(); ctx.fillStyle = '#33285c'; ctx.fillRect(bx - .8, byy - 3, 1.6, 6);
@@ -386,7 +408,8 @@
           const c = ['#ff6fae', '#ffd23f', '#8fdcff', '#b79cff'][i % 4];
           E(ctx, bx - 4 * fl, byy - 2, 4.5 * fl + .8, 5); ctx.fillStyle = c; ctx.fill(); E(ctx, bx + 4 * fl, byy - 2, 4.5 * fl + .8, 5); ctx.fill();
           E(ctx, bx - 3 * fl, byy + 3, 3 * fl + .6, 3); ctx.fill(); E(ctx, bx + 3 * fl, byy + 3, 3 * fl + .6, 3); ctx.fill();
-          ctx.fillStyle = '#33285c'; ctx.fillRect(bx - .8, byy - 4, 1.6, 9);
+          E(ctx, bx, byy + .5, 1.3, 4); ctx.fillStyle = '#33285c'; ctx.fill();
+          ctx.beginPath(); ctx.moveTo(bx - .5, byy - 3.5); ctx.lineTo(bx - 2.5, byy - 7); ctx.moveTo(bx + .5, byy - 3.5); ctx.lineTo(bx + 2.5, byy - 7); ctx.lineWidth = .9; ctx.strokeStyle = '#33285c'; ctx.stroke();
         }
       } else if (T.anim === 'firefly') {
         const a = .5 + .5 * Math.sin(t * 2.6 + b.p), fx = x + b.x + Math.sin(t * .5 + b.p) * 18, fy = sy + Math.cos(t * .6 + b.p) * 12;
@@ -394,8 +417,7 @@
         ctx.fillStyle = gg; ctx.fillRect(fx - 9, fy - 9, 18, 18); dot(ctx, fx, fy, 1.6, 'rgba(255,255,230,' + a.toFixed(2) + ')');
       }
     }
-    ctx.restore();
-  };
+  }
 
   A.mapDivider = function (ctx, ch, x, y, w, t) {
     const T = A.mapTheme(ch), hh = 120;

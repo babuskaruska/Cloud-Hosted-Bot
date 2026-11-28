@@ -107,57 +107,73 @@
   I.cur_beach = g => token(g, '#3db8ff', g => { g.beginPath(); g.moveTo(50, 70); g.bezierCurveTo(28, 62, 28, 34, 50, 30); g.bezierCurveTo(72, 34, 72, 62, 50, 70); g.closePath(); paint(g, '#ffe0c8', 50, 46, 22, 0); for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(50, 68); g.quadraticCurveTo(50 + i * 6, 50, 50 + i * 7, 33 + Math.abs(i) * 2); stroke(g, '#ff9a6a', 1.6); } });
   // ---------- postcard (photo mode) ----------
   function fmtDate(d) { const M = ['jaanuar', 'veebruar', 'märts', 'aprill', 'mai', 'juuni', 'juuli', 'august', 'september', 'oktoober', 'november', 'detsember']; return d.getDate() + '. ' + M[d.getMonth()] + ' ' + d.getFullYear(); }
+  // Cached in two layers per size and caption (phase C): the backdrop and card under the photo, and the stamp, postmark,
+  // tape and caption over it, both with the tilt baked in. Per frame only the photo (rendered unrotated offscreen, then
+  // one rotated blit) and three sparkles are drawn.
+  let _pc = null, _pcOff = null;
   A.postcard = function (ctx, w, h, drawScene, opts) {
-    opts = opts || {}; const t = opts.t || 0, FONT = A.theme.font;
-    ctx.save();
-    // backdrop: soft sky gradient with bokeh
-    const bg = ctx.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#ffd6e8'); bg.addColorStop(.5, '#e6e0ff'); bg.addColorStop(1, '#cdeeff'); ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
-    const r0 = srnd(5); for (let i = 0; i < 16; i++) { const x = r0() * w, y = r0() * h, rr = 8 + r0() * 30; ctx.fillStyle = 'rgba(255,255,255,' + (.12 + r0() * .2) + ')'; ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill(); }
-    // card geometry: a landscape photo with a caption band, as big as fits
+    opts = opts || {}; const t = opts.t || 0, FONT = A.theme.font, sc = Math.min(4, Math.ceil(A.scaleOf(ctx) * 2 - .05) / 2); // half steps: the opening zoom does not rebuild every frame
     const m = Math.max(14, Math.min(w, h) * .05), cw = Math.min(w - m * 2, (h - m * 2) * 1.25), pad = Math.max(8, cw * .035);
     const pw = cw - pad * 2, ph = Math.min(pw * .68, h - m * 2 - pad * 2 - cw * .2), capH = Math.max(54, cw * .2), ch = pad * 2 + ph + capH;
-    const cx = (w - cw) / 2, cy = (h - ch) / 2, tilt = opts.tilt != null ? opts.tilt : -.02;
-    ctx.translate(w / 2, h / 2); ctx.rotate(tilt); ctx.translate(-w / 2, -h / 2);
-    R(ctx, cx + 3, cy + 8, cw, ch, 10); ctx.fillStyle = 'rgba(60,40,120,.22)'; ctx.fill();
-    R(ctx, cx, cy, cw, ch, 10); const cg = ctx.createLinearGradient(0, cy, 0, cy + ch); cg.addColorStop(0, '#ffffff'); cg.addColorStop(1, '#fbf6ff'); ctx.fillStyle = cg; ctx.fill();
-    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(124,92,255,.18)'; ctx.stroke();
-    const px = cx + pad, py = cy + pad;
-    ctx.save(); R(ctx, px, py, pw, ph, 6); ctx.clip(); ctx.fillStyle = '#bfeaff'; ctx.fillRect(px, py, pw, ph);
-    try { drawScene && drawScene(ctx, px, py, pw, ph); } catch (e) { console.error('ART.postcard scene', e); }
-    // a soft vignette and a glossy corner sheen
-    const vg = ctx.createRadialGradient(px + pw / 2, py + ph / 2, Math.min(pw, ph) * .4, px + pw / 2, py + ph / 2, Math.max(pw, ph) * .75); vg.addColorStop(0, 'rgba(255,255,255,0)'); vg.addColorStop(1, 'rgba(80,40,120,.18)'); ctx.fillStyle = vg; ctx.fillRect(px, py, pw, ph);
-    ctx.restore();
-    R(ctx, px, py, pw, ph, 6); ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(60,40,120,.25)'; ctx.stroke();
-    // stamp (top right of the photo): scalloped edge, a kringel and a heart
-    const ss = Math.max(34, pw * .15), sx = px + pw - ss - pad * .6, sy = py + pad * .6;
-    ctx.save(); ctx.translate(sx + ss / 2, sy + ss * .6); ctx.rotate(.08); ctx.translate(-ss / 2, -ss * .6);
-    ctx.fillStyle = 'rgba(60,40,120,.2)'; R(ctx, 2, 3, ss, ss * 1.2, 2); ctx.fill();
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); const sc = ss / 10;
-    for (let i = 0; i <= 10; i++) { ctx.moveTo(i * sc + sc * .35, 0); ctx.arc(i * sc, 0, sc * .35, 0, TAU); ctx.moveTo(i * sc + sc * .35, ss * 1.2); ctx.arc(i * sc, ss * 1.2, sc * .35, 0, TAU); }
-    ctx.rect(0, 0, ss, ss * 1.2); ctx.fill();
-    R(ctx, sc * .6, sc * .6, ss - sc * 1.2, ss * 1.2 - sc * 1.2, 2); const sg = ctx.createLinearGradient(0, 0, 0, ss * 1.2); sg.addColorStop(0, '#ffe0ee'); sg.addColorStop(1, '#ffb0cc'); ctx.fillStyle = sg; ctx.fill();
-    ctx.drawImage(A.item('bread', 7, Math.round(ss * .7 * A.scaleOf(ctx))), ss * .15, ss * .2, ss * .7, ss * .7);
-    ctx.font = '900 ' + (ss * .16) + 'px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#c0306a'; ctx.fillText('EESTI', ss / 2, ss * 1.02);
-    ctx.restore();
-    // postmark rings
-    ctx.save(); ctx.globalAlpha = .45; ctx.strokeStyle = '#7a5aa8'; ctx.lineWidth = 1.4; const pmx = sx - ss * .2, pmy = sy + ss * .9;
-    ctx.beginPath(); ctx.arc(pmx, pmy, ss * .42, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.arc(pmx, pmy, ss * .32, 0, TAU); ctx.stroke();
-    for (let i = 0; i < 3; i++) { ctx.beginPath(); for (let x = 0; x <= ss * 1.2; x += 4) { const yy = pmy - ss * .2 + i * ss * .2 + Math.sin(x * .25) * 2; x ? ctx.lineTo(pmx + ss * .5 + x, yy) : ctx.moveTo(pmx + ss * .5, yy); } ctx.stroke(); }
-    ctx.restore();
-    // washi tape on two corners
-    for (const [tx, ty, a, col] of [[cx + cw * .12, cy, -.5, 'rgba(255,170,200,.82)'], [cx + cw * .9, cy + ch, -.5, 'rgba(160,220,255,.82)']]) {
-      ctx.save(); ctx.translate(tx, ty); ctx.rotate(a); const tw = Math.max(46, cw * .18), th = tw * .32; ctx.fillStyle = col; ctx.fillRect(-tw / 2, -th / 2, tw, th);
-      ctx.fillStyle = 'rgba(255,255,255,.45)'; for (let i = -tw / 2 + 4; i < tw / 2; i += 9) { ctx.beginPath(); ctx.arc(i, 0, th * .16, 0, TAU); ctx.fill(); } ctx.restore();
-    }
-    // caption
-    const capY = py + ph + capH * .42, fs = Math.max(15, Math.min(30, cw * .062));
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 ' + fs + 'px ' + FONT; ctx.lineJoin = 'round';
+    const cx = (w - cw) / 2, cy = (h - ch) / 2, tilt = opts.tilt != null ? opts.tilt : -.02, px = cx + pad, py = cy + pad;
     const cap = opts.caption || 'Tervitused Saarepagarist!';
-    ctx.lineWidth = fs * .22; ctx.strokeStyle = '#ffffff'; ctx.strokeText(cap, cx + cw / 2, capY);
-    const tg = ctx.createLinearGradient(cx, 0, cx + cw, 0); tg.addColorStop(0, '#ff7a6b'); tg.addColorStop(.5, '#ff4f9a'); tg.addColorStop(1, '#7c5cff'); ctx.fillStyle = tg; ctx.fillText(cap, cx + cw / 2, capY);
     const sub = [opts.sub, opts.date === false ? null : (opts.date instanceof Date ? fmtDate(opts.date) : opts.date || fmtDate(new Date()))].filter(Boolean).join(' · ');
-    if (sub) { ctx.font = '800 ' + Math.max(11, fs * .5) + 'px ' + FONT; ctx.fillStyle = A.theme.ink2; ctx.fillText(sub, cx + cw / 2, capY + fs * .95); }
-    for (const s of [-1, 1]) { const hx = cx + cw / 2 + s * (ctx.measureText(sub || '').width / 2 + fs * .6), hy = capY + fs * .95; if (sub) { heart(ctx, hx, hy + fs * .1, fs * .32); ctx.fillStyle = '#ff8fb0'; ctx.fill(); } }
+    const fs = Math.max(15, Math.min(30, cw * .062)), capY = py + ph + capH * .42;
+    const key = Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2) + '|' + tilt + '|' + cap + '|' + sub;
+    if (!_pc || _pc.key !== key) {
+      const mkL = () => { const c = mk(w * sc, h * sc), g = c.getContext('2d'); g.scale(sc, sc); g.translate(w / 2, h / 2); g.rotate(tilt); g.translate(-w / 2, -h / 2); return [c, g]; };
+      const [uc, u] = mkL(), [oc, o] = mkL();
+      // under: backdrop (unrotated) with bokeh, the card shadow and the card
+      u.save(); u.setTransform(sc, 0, 0, sc, 0, 0);
+      const bg = u.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#ffd6e8'); bg.addColorStop(.5, '#e6e0ff'); bg.addColorStop(1, '#cdeeff'); u.fillStyle = bg; u.fillRect(0, 0, w, h);
+      const r0 = srnd(5); for (let i = 0; i < 16; i++) { const x = r0() * w, y = r0() * h, rr = 8 + r0() * 30; u.fillStyle = 'rgba(255,255,255,' + (.12 + r0() * .2) + ')'; u.beginPath(); u.arc(x, y, rr, 0, TAU); u.fill(); }
+      u.restore();
+      R(u, cx + 3, cy + 8, cw, ch, 10); u.fillStyle = 'rgba(60,40,120,.22)'; u.fill();
+      R(u, cx, cy, cw, ch, 10); const cg = u.createLinearGradient(0, cy, 0, cy + ch); cg.addColorStop(0, '#ffffff'); cg.addColorStop(1, '#fbf6ff'); u.fillStyle = cg; u.fill();
+      u.lineWidth = 1.5; u.strokeStyle = 'rgba(124,92,255,.18)'; u.stroke();
+      R(u, px, py, pw, ph, 6); u.fillStyle = '#bfeaff'; u.fill();
+      // over: vignette and frame line of the photo, stamp, postmark, washi tape, caption
+      o.save(); R(o, px, py, pw, ph, 6); o.clip();
+      const vg = o.createRadialGradient(px + pw / 2, py + ph / 2, Math.min(pw, ph) * .4, px + pw / 2, py + ph / 2, Math.max(pw, ph) * .75); vg.addColorStop(0, 'rgba(255,255,255,0)'); vg.addColorStop(1, 'rgba(80,40,120,.18)'); o.fillStyle = vg; o.fillRect(px, py, pw, ph);
+      o.restore();
+      R(o, px, py, pw, ph, 6); o.lineWidth = 1.2; o.strokeStyle = 'rgba(60,40,120,.25)'; o.stroke();
+      const ss = Math.max(34, pw * .15), sx = px + pw - ss - pad * .6, sy = py + pad * .6;
+      o.save(); o.translate(sx + ss / 2, sy + ss * .6); o.rotate(.08); o.translate(-ss / 2, -ss * .6);
+      o.fillStyle = 'rgba(60,40,120,.2)'; R(o, 2, 3, ss, ss * 1.2, 2); o.fill();
+      o.fillStyle = '#ffffff'; o.beginPath(); const sq = ss / 10;
+      for (let i = 0; i <= 10; i++) { o.moveTo(i * sq + sq * .35, 0); o.arc(i * sq, 0, sq * .35, 0, TAU); o.moveTo(i * sq + sq * .35, ss * 1.2); o.arc(i * sq, ss * 1.2, sq * .35, 0, TAU); }
+      o.rect(0, 0, ss, ss * 1.2); o.fill();
+      R(o, sq * .6, sq * .6, ss - sq * 1.2, ss * 1.2 - sq * 1.2, 2); const sg = o.createLinearGradient(0, 0, 0, ss * 1.2); sg.addColorStop(0, '#ffe0ee'); sg.addColorStop(1, '#ffb0cc'); o.fillStyle = sg; o.fill();
+      o.drawImage(A.item('bread', 7, Math.round(ss * .7 * sc)), ss * .15, ss * .2, ss * .7, ss * .7);
+      o.font = '900 ' + (ss * .16) + 'px ' + FONT; o.textAlign = 'center'; o.textBaseline = 'middle'; o.fillStyle = '#c0306a'; o.fillText('EESTI', ss / 2, ss * 1.02);
+      o.restore();
+      o.save(); o.globalAlpha = .45; o.strokeStyle = '#7a5aa8'; o.lineWidth = 1.4; const pmx = sx - ss * .2, pmy = sy + ss * .9;
+      o.beginPath(); o.arc(pmx, pmy, ss * .42, 0, TAU); o.stroke(); o.beginPath(); o.arc(pmx, pmy, ss * .32, 0, TAU); o.stroke();
+      for (let i = 0; i < 3; i++) { o.beginPath(); for (let x = 0; x <= ss * 1.2; x += 4) { const yy = pmy - ss * .2 + i * ss * .2 + Math.sin(x * .25) * 2; x ? o.lineTo(pmx + ss * .5 + x, yy) : o.moveTo(pmx + ss * .5, yy); } o.stroke(); }
+      o.restore();
+      for (const [tx, ty, a, col] of [[cx + cw * .12, cy, -.5, 'rgba(255,170,200,.82)'], [cx + cw * .9, cy + ch, -.5, 'rgba(160,220,255,.82)']]) {
+        o.save(); o.translate(tx, ty); o.rotate(a); const tw = Math.max(46, cw * .18), th = tw * .32; o.fillStyle = col; o.fillRect(-tw / 2, -th / 2, tw, th);
+        o.fillStyle = 'rgba(255,255,255,.45)'; for (let i = -tw / 2 + 4; i < tw / 2; i += 9) { o.beginPath(); o.arc(i, 0, th * .16, 0, TAU); o.fill(); } o.restore();
+      }
+      o.textAlign = 'center'; o.textBaseline = 'middle'; o.font = '900 ' + fs + 'px ' + FONT; o.lineJoin = 'round';
+      o.lineWidth = fs * .22; o.strokeStyle = '#ffffff'; o.strokeText(cap, cx + cw / 2, capY);
+      const tg = o.createLinearGradient(cx, 0, cx + cw, 0); tg.addColorStop(0, '#ff7a6b'); tg.addColorStop(.5, '#ff4f9a'); tg.addColorStop(1, '#7c5cff'); o.fillStyle = tg; o.fillText(cap, cx + cw / 2, capY);
+      if (sub) { o.font = '800 ' + Math.max(11, fs * .5) + 'px ' + FONT; o.fillStyle = A.theme.ink2; o.fillText(sub, cx + cw / 2, capY + fs * .95); }
+      for (const s of [-1, 1]) { const hx = cx + cw / 2 + s * (o.measureText(sub || '').width / 2 + fs * .6), hy = capY + fs * .95; if (sub) { heart(o, hx, hy + fs * .1, fs * .32); o.fillStyle = '#ff8fb0'; o.fill(); } }
+      _pc = { key, uc, oc };
+    }
+    ctx.drawImage(_pc.uc, 0, 0, w, h);
+    // the photo: drawn unrotated offscreen at the backing scale, then one rotated blit under the rounded clip
+    const ow = Math.ceil(pw * sc), oh = Math.ceil(ph * sc);
+    if (!_pcOff) _pcOff = mk(ow, oh); if (_pcOff.width !== ow || _pcOff.height !== oh) { _pcOff.width = ow; _pcOff.height = oh; }
+    const og = _pcOff.getContext('2d'); og.setTransform(1, 0, 0, 1, 0, 0); og.clearRect(0, 0, ow, oh); og.fillStyle = '#bfeaff'; og.fillRect(0, 0, ow, oh);
+    og.setTransform(sc, 0, 0, sc, -px * sc, -py * sc);
+    try { drawScene && drawScene(og, px, py, pw, ph); } catch (e) { console.error('ART.postcard scene', e); }
+    ctx.save(); ctx.translate(w / 2, h / 2); ctx.rotate(tilt); ctx.translate(-w / 2, -h / 2);
+    ctx.save(); R(ctx, px, py, pw, ph, 6); ctx.clip(); ctx.drawImage(_pcOff, px, py, pw, ph); ctx.restore();
+    ctx.restore();
+    ctx.drawImage(_pc.oc, 0, 0, w, h);
+    ctx.save(); ctx.translate(w / 2, h / 2); ctx.rotate(tilt); ctx.translate(-w / 2, -h / 2);
     for (let i = 0; i < 3; i++) { const a = (t * .6 + i / 3) % 1; A.sparkAt(ctx, cx + cw * (.15 + i * .35), cy + ch - capH * .15 - (i % 2) * 6, Math.max(.1, fs * .3 * Math.sin(a * PI)), '#ffd23f'); }
     ctx.restore();
     // the photo rect in unrotated screen space (approximately; the tilt is small)

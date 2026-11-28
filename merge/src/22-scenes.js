@@ -620,8 +620,61 @@
     gr.addColorStop(0, 'rgba(255,236,170,.95)'); gr.addColorStop(.35, 'rgba(255,200,120,.45)'); gr.addColorStop(1, 'rgba(255,190,110,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
     return c;
   }
-  let _animC = null;
-  function scratchAnim(w, h) { if (!_animC) _animC = mk(w, h); if (_animC.width !== w || _animC.height !== h) { _animC.width = w; _animC.height = h; } return _animC; }
+  // ---- tinted drawing for the animated layer (phase C) ----
+  // tinted(ctx, over) returns a stand-in for ctx whose colours (fillStyle, strokeStyle, gradient stops, shadowColor) are
+  // mixed toward `over` (an rgba string) and whose drawImage uses a cached pre-tinted copy of the canvas: the same result
+  // as painting the layer offscreen and filling it 'source-atop', without the offscreen canvas and its full-rect
+  // composite every frame (that cost 4-7 ms per frame at DPR 3 on a throttled phone). Colour results are cached.
+  const _norm = (() => { let c = null; return v => { if (!c) c = mk(1, 1).getContext('2d'); c.fillStyle = '#000'; c.fillStyle = v; return c.fillStyle; }; })();
+  function parseCol(v) {
+    let m;
+    if (v[0] === '#') {
+      const h = v.length === 4 || v.length === 5 ? v.slice(1).split('').map(x => x + x).join('') : v.slice(1);
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16), h.length >= 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1];
+    }
+    if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)$/i.exec(v))) return [+m[1], +m[2], +m[3], m[4] == null ? 1 : m[4].endsWith('%') ? parseFloat(m[4]) / 100 : +m[4]];
+    return null;
+  }
+  const _tintCache = new Map();
+  function tintCol(v, over) {
+    if (typeof v !== 'string') return v;
+    let tc = _tintCache.get(over); if (!tc) { tc = { o: parseCol(over), m: new Map() }; _tintCache.set(over, tc); }
+    let r = tc.m.get(v); if (r !== undefined) return r;
+    let c = parseCol(v); if (!c) { const n = _norm(v); c = parseCol(n); }
+    const o = tc.o;
+    if (!c || !o) r = v;
+    else { const a = o[3], f = x => Math.round(x); r = 'rgba(' + f(c[0] * (1 - a) + o[0] * a) + ',' + f(c[1] * (1 - a) + o[1] * a) + ',' + f(c[2] * (1 - a) + o[2] * a) + ',' + +c[3].toFixed(3) + ')'; }
+    if (tc.m.size > 800) tc.m.clear();
+    tc.m.set(v, r); return r;
+  }
+  const _imgTint = new WeakMap();
+  function tintImg(img, over) {
+    if (!(img instanceof HTMLCanvasElement)) return img;
+    let e = _imgTint.get(img); if (e && e.over === over && e.w === img.width) return e.c;
+    const c = mk(img.width, img.height), g = c.getContext('2d');
+    g.drawImage(img, 0, 0); g.globalCompositeOperation = 'source-atop'; g.fillStyle = over; g.fillRect(0, 0, c.width, c.height);
+    _imgTint.set(img, { over, w: img.width, c }); return c;
+  }
+  const TintProto = (() => {
+    const P = {}, CP = CanvasRenderingContext2D.prototype, special = { fillStyle: 1, strokeStyle: 1, shadowColor: 1 };
+    for (const k of Object.getOwnPropertyNames(CP)) {
+      if (k === 'constructor') continue;
+      const d = Object.getOwnPropertyDescriptor(CP, k);
+      if (typeof d.value === 'function') P[k] = function () { return this._c[k].apply(this._c, arguments); };
+      else if (d.get) Object.defineProperty(P, k, special[k]
+        ? { get() { return this._c[k]; }, set(v) { this._c[k] = v && v._g ? v._g : tintCol(v, this._o); } }
+        : { get() { return this._c[k]; }, set(v) { this._c[k] = v; } });
+    }
+    const grad = (self, gr) => ({ _g: gr, addColorStop(o, c) { gr.addColorStop(o, tintCol(c, self._o)); } });
+    P.createLinearGradient = function () { return grad(this, this._c.createLinearGradient.apply(this._c, arguments)); };
+    P.createRadialGradient = function () { return grad(this, this._c.createRadialGradient.apply(this._c, arguments)); };
+    if (CP.createConicGradient) P.createConicGradient = function () { return grad(this, this._c.createConicGradient.apply(this._c, arguments)); };
+    P.drawImage = function (img) { const a = Array.prototype.slice.call(arguments); a[0] = tintImg(img, this._o); return this._c.drawImage.apply(this._c, a); };
+    return P;
+  })();
+  const _tinted = new WeakMap();
+  function tinted(ctx, over) { let t = _tinted.get(ctx); if (!t) { t = Object.create(TintProto); t._c = ctx; _tinted.set(ctx, t); } t._o = over; return t; }
+  A.tinted = tinted;
   A._renderScene = function (ctx, id, def, on, frac, x, y, w, h, t, opts, sty) {
     if (w < 4 || h < 4) return;
     opts = opts || {}; t = t || 0;
@@ -629,7 +682,9 @@
     // fit the height, but on a short wide strip zoom in (crop some sky and ground) so details stay readable
     const s = Math.max(h / DH, Math.min(w / 520, h / 150)), ox = (w - DW * s) / 2, oy = Math.max(h - DH * s, Math.min(0, h - 204 * s)), L = -ox / s, Rr = DW + ox / s, sc = A.scaleOf(ctx);
     const own = !!def.ownSky, styKey = sty ? Object.keys(sty).sort().map(k => k + '=' + sty[k][0]).join(',') : '';
-    const ck = id + '|' + styKey + '|' + (plain ? 'plain' : env.key) + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
+    const q = (typeof FX !== 'undefined' && FX) ? FX.quality | 0 : 2, hz = Math.max(.3, Math.min(.95, (oy + 132 * s) / h));
+    const bake = !plain && !own && q < 2; // lower quality: the sky (still clouds) is baked into the cached layer, one blit a frame
+    const ck = id + '|' + styKey + '|' + (plain ? 'plain' : env.key) + (bake ? '|b' + Math.round(env.tod * 96) : '') + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
     let c = cache.get(ck);
     if (!c) {
       c = mk(w * sc, h * sc); const g = c.getContext('2d');
@@ -653,25 +708,22 @@
       }
       if (hole) { g.globalCompositeOperation = 'destination-in'; g.drawImage(cp, 0, 0); } // keep the transparent sky hole
       g.globalCompositeOperation = 'source-over';
+      if (bake) {
+        const c2 = mk(w * sc, h * sc), g2 = c2.getContext('2d'); g2.scale(sc, sc);
+        A.sky(g2, 0, 0, w, h, 0, Object.assign({}, env, { horizon: hz })); g2.setTransform(1, 0, 0, 1, 0, 0); g2.drawImage(c, 0, 0); c = c2;
+      }
       if (cache.size > 8) cache.delete(cache.keys().next().value);
       cache.set(ck, c);
     }
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    if (!plain && !own) A.sky(ctx, x, y, w, h, t, Object.assign({}, env, { horizon: Math.max(.3, Math.min(.95, (oy + 132 * s) / h)) }));
+    if (!plain && !own && !bake) A.sky(ctx, x, y, w, h, t, Object.assign({}, env, { horizon: hz }));
     ctx.drawImage(c, x, y, w, h);
     const over = plain ? null : (env.weather === 'rain' && !OVER[env.phase] ? 'rgba(80,90,130,.18)' : OVER[env.phase]);
-    const q = (typeof FX !== 'undefined' && FX) ? FX.quality | 0 : 2;
     SKYOFF = !plain && !own;
-    if (over && q > 1) { // tint the animated layer the same way (offscreen at a capped resolution, one fill; top quality only)
-      const asc = Math.min(sc, 2), aw = Math.ceil(w * asc), ah = Math.ceil(h * asc), ac = scratchAnim(aw, ah), ag = ac.getContext('2d');
-      ag.setTransform(1, 0, 0, 1, 0, 0); ag.globalCompositeOperation = 'source-over'; ag.globalAlpha = 1; ag.clearRect(0, 0, aw, ah);
-      ag.scale(asc, asc); ag.translate(ox, oy); ag.scale(s, s);
-      try { def.anim(ag, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
-      ag.setTransform(1, 0, 0, 1, 0, 0); ag.globalCompositeOperation = 'source-atop'; ag.fillStyle = over; ag.fillRect(0, 0, aw, ah); ag.globalCompositeOperation = 'source-over';
-      ctx.drawImage(ac, 0, 0, aw, ah, x, y, w, h);
-    } else {
+    { // the animated layer, tinted for the hour like the still (colour-mixed drawing, no offscreen pass; every quality)
+      const ac = over ? tinted(ctx, over) : ctx;
       ctx.save(); ctx.translate(x + ox, y + oy); ctx.scale(s, s);
-      try { def.anim(ctx, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
+      try { def.anim(ac, on, t, L, Rr); } catch (e) { console.error('ART.scene anim', id, e); }
       ctx.restore();
     }
     SKYOFF = false;

@@ -24,7 +24,7 @@
 //   FX.update(dt)  FX.draw(ctx)  FX.clear()  FX.count()  FX.active()  FX.busy()  FX.quality = 0 | 1 | 2  FX.onArrive = fn(name)
 const FX = (function () {
   const F = { quality: 2, onArrive: null, spawnDur: 0.42 };
-  const CAP = [110, 260, 480];
+  const CAP = [100, 220, 360]; // phase C: a little lower at the top (a long chain no longer floods weak GPUs)
   const P = [], pool = [], pops = [], flights = [], texts = [], hints = [], shows = [], rockets = [], stamps = [], links = [];
   function get() { return pool.pop() || {}; }
   function add(o) { if (P.length >= CAP[F.quality | 0]) { pool.push(o); return null; } P.push(o); return o; }
@@ -59,6 +59,8 @@ const FX = (function () {
         const gr = g.createLinearGradient(0, 0, 0, -128); gr.addColorStop(0, 'rgba(255,255,255,.95)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fill();
       }
     }
+    // round sprites look the same at any angle: they skip the rotated draw (cheaper on weak GPUs)
+    c._sym = name.indexOf('flash') === 0 || name.indexOf('dot') === 0 || name === 'puff' || name === 'cloud';
     return (spr[name] = c);
   }
   function sparkCol(chain) {
@@ -69,7 +71,7 @@ const FX = (function () {
   // particle kinds: 0 sprite, 1 ring, 2 confetti, 3 flyer (icon to HUD), 4 rays
   function part(kind, x, y, vx, vy, life, size, img, col) {
     const o = get(); o.k = kind; o.x = x; o.y = y; o.vx = vx; o.vy = vy; o.life = life; o.t = 0; o.size = size; o.img = img; o.col = col;
-    o.rot = Math.random() * 6.28; o.vr = (Math.random() - .5) * 8; o.g = 0; o.drag = 0; o.grow = 0; o.alpha = 1; o.w = 0; o.delay = 0; return add(o);
+    o.rot = Math.random() * 6.28; o.vr = img && img._sym ? 0 : (Math.random() - .5) * 8; o.g = 0; o.drag = 0; o.grow = 0; o.alpha = 1; o.w = 0; o.delay = 0; return add(o);
   }
   function ring(x, y, r0, r1, life, col, w, delay) { const o = part(1, x, y, 0, 0, life, r0, null, col); if (o) { o.grow = r1 - r0; o.w = w || 7; o.delay = delay || 0; } return o; }
   function burst(x, y, n, sp, kinds, size, life, g) {
@@ -473,3 +475,5 @@ const FX = (function () {
   window.__fx = F;
   return F;
 })();
+try { ART.perf.apply(); } catch (e) { } // effect quality for this device (ART.perf in 20-art.js)
+try { window.__mgArt = { ART, FX }; } catch (e) { } // test hook for tools/mergeperf.js and tools/artgallery.js

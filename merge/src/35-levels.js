@@ -18,9 +18,9 @@ const LV = (() => {
   const FIRST = { ice: 2, box: 4, order: 6, web: 8, sand: 12, crate: 15, bubble: 20 };
   // Move limit: the sampler bot (a sloppy, casual player) plays the level 16 times with no limit; the limit is the
   // move count that this share of its tries managed (plus a little), so a casual player wins about that often.
-  const PCT = { easy: 0.9, breather: 0.97, hard: 0.68, boss: 0.72 };
+  const PCT = { easy: 0.9, breather: 0.97, hard: 0.76, boss: 0.78 };
   const EXTRA = { easy: 2, breather: 3, hard: 0, boss: 1 };
-  const CAL_TRIES = 16;
+  const CAL_TRIES = 32;  // 16 tries left some hard levels at 25-40% for other players by bad luck in the sample
   const KMUL = { easy: 1, breather: 0.75, hard: 1.15, boss: 1.25 };
   const CRATE_MOVES = 2, WHO_ORDER = ['liisa', 'muri', 'ants', 'peeter'];
 
@@ -170,10 +170,26 @@ const LV = (() => {
       const d = best.d, need = best.need;
       d.need = need;
       const us = [];
-      for (let s = 0; s < CAL_TRIES; s++) { const r = newRun(d, hashStr('samp' + n + ':' + s), 300); play(r, 'sampler', mulberry(hashStr('sbot' + n + ':' + s))); us.push(r.won ? r.used : 999); }
+      // The move limit a try needed: its deepest point (merges made minus the +2 moves from locked chests).
+      for (let s = 0; s < CAL_TRIES; s++) {
+        const r = newRun(d, hashStr('samp' + n + ':' + s), 300), R = mulberry(hashStr('sbot' + n + ':' + s)); let lo = 300, k = 0;
+        while (!r.over && k++ < 600) { if (!botStep(r, 'sampler', R)) break; lo = Math.min(lo, r.moves); }
+        us.push(r.won ? 300 - lo : 999);
+      }
       us.sort((a, b) => a - b);
       const pct = us[Math.min(CAL_TRIES - 1, Math.ceil(PCT[d.kind] * CAL_TRIES) - 1)];
       d.moves = Math.max(8, need + 2, Math.min(pct, Math.ceil(need * 2.2)) + EXTRA[d.kind] + (n <= 10 ? 2 : 0));
+      // Floor: a second, independent sample must win at least 60% of the time (hard and boss levels are meant to
+      // be hard, not a coin flip). If not, the limit grows to that sample's 60% mark (capped like above).
+      const vs = [];
+      for (let s = 0; s < 12; s++) {
+        const r = newRun(d, hashStr('ver' + n + ':' + s), 300), R = mulberry(hashStr('vbot' + n + ':' + s)); let lo = 300, k = 0;
+        while (!r.over && k++ < 600) { if (!botStep(r, 'sampler', R)) break; lo = Math.min(lo, r.moves); }
+        vs.push(r.won ? 300 - lo : 999);
+      }
+      vs.sort((a, b) => a - b);
+      const floor = vs[Math.ceil(0.6 * vs.length) - 1];
+      if (floor < 999 && vs.filter(x => x <= d.moves).length < 0.6 * vs.length) d.moves = Math.max(d.moves, Math.min(floor, Math.ceil(need * 2.4)));
       d.s3 = Math.ceil(need * 1.08);
       d.s2 = Math.ceil(need + (d.moves - need) * 0.5);
       d.seed = hashStr('saarepagar-play-' + n);
@@ -227,6 +243,7 @@ const LV = (() => {
   function merge(r, a, b) {
     const A = r.it[a], res = { k: A.k, l: A.l + 1 };
     r.it[a] = null; r.it[b] = res; r.moves--; r.used++; r.popped = false;
+    if (r === cur && S.adv.live && !S.adv.live.used) { S.adv.live.used = 1; saveSoon(); }
     emit(r, 'merge', b, { from: a, k: res.k, l: res.l });
     landed(r, b);
     after(r, true);
@@ -482,13 +499,14 @@ const LV = (() => {
     S.adv.plays++;
     cur = newRun(def, (def.seed ^ Math.imul(S.adv.plays, 2654435761)) >>> 0);
     cur.streakBonus = Math.min(3, S.adv.streak); cur.moves += cur.streakBonus;
+    S.adv.live = { n, used: 0 }; // a level left by closing the app after a move still costs a life (see leftOpen)
     saveSoon();
     return cur;
   }
   function winReward(r, first, stars) {
     const n = r.n, rew = {};
     if (first) {
-      rew.coins = 10 + Math.min(25, Math.floor(n / 6)) + 3 * stars + Math.min(12, r.moves) + 2 * Math.min(5, S.adv.streak);
+      rew.coins = 8 + Math.min(16, Math.floor(n / 10)) + 2 * stars + Math.min(6, Math.ceil(r.moves / 2)) + Math.min(5, S.adv.streak);
       if (n % 5 === 0) rew.spins = 1;
       if (r.def.kind === 'boss') rew.boost = BOOST_KEYS[(n / 10) % 4 | 0];
       if (n % 3 === 0) rew.energy = 10;
@@ -497,7 +515,7 @@ const LV = (() => {
   }
   function win() {
     const r = cur; if (!r || !r.won || r.paid) return null;
-    r.paid = true;
+    r.paid = true; S.adv.live = null;
     const n = r.n, A = S.adv, first = n === A.top, stars = starsFor(r), prev = A.stars[n] || 0;
     if (stars > prev) A.stars[n] = stars;
     if (first) A.top = n + 1;
@@ -512,12 +530,18 @@ const LV = (() => {
   // Losing (or leaving after the first move) costs one life and ends the win streak.
   function lose() {
     const r = cur; if (!r || r.won) return false;
-    loseHeart(); S.adv.streak = 0; cur = null; saveSoon(); return true;
+    loseHeart(); S.adv.streak = 0; cur = null; S.adv.live = null; saveSoon(); return true;
+  }
+  // On boot: a level that was left open (the app closed or reloaded after the first move) costs one life, like
+  // leaving it from the pause window. Returns the level number for a kind note, or 0.
+  function leftOpen() {
+    const L = S.adv.live; S.adv.live = null; if (!L || !L.used) return 0;
+    loseHeart(); S.adv.streak = 0; saveSoon(); return L.n || 1;
   }
   function quit() {
     const r = cur; if (!r) return false;
-    if (r.won) { cur = null; return true; }
-    if (r.used === 0 && !r.over) { cur = null; return true; }
+    if (r.won) { cur = null; S.adv.live = null; return true; }
+    if (r.used === 0 && !r.over) { cur = null; S.adv.live = null; return true; }
     return lose();
   }
   const movesPrice = () => MORE_MOVES_PRICE[Math.min(MORE_MOVES_PRICE.length - 1, cur ? cur.priceIx : 0)];
@@ -539,6 +563,6 @@ const LV = (() => {
   return {
     LC, LR, LN, NB, FIRST, kindOf, chapterOf, gen, newRun, canDrop, drop, remaining, starsFor, boostCheck, useBoost, pickable, blocked,
     candidates, botStep, play, botTest, tickHearts, heartNext, refillHearts, start, win, lose, quit, movesPrice, buyMoves, boost, buyBoost,
-    get cur() { return cur; }, set cur(v) { cur = v; }, hasMove, CRATE_MOVES,
+    get cur() { return cur; }, set cur(v) { cur = v; }, hasMove, CRATE_MOVES, leftOpen,
   };
 })();
