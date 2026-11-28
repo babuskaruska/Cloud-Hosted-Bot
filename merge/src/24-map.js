@@ -3,6 +3,7 @@
 //   ART.mapTheme(chapter)   -> { key, name, path, accent, ink } (chapter themes cycle forever; each cycle reshuffles the decor)
 //   ART.mapBg(ctx, chapter, x, y, w, h, t, scroll)  fills the rect with the chapter's scenery. scroll = world y (CSS px) of the rect's
 //       top edge: the picture moves up as scroll grows and repeats seamlessly. Cached tile + a light animated layer (QUALITY-scaled).
+//   ART.levelBg(ctx, chapter, x, y, w, h, t, cols, alpha)  the level screen backdrop (gradient + faded scenery), one cached blit
 //   ART.mapDivider(ctx, chapter, x, y, w, t)  a soft mist band with a ribbon "Peatükk n · Name", centred on y (hides the seam between chapters)
 //   ART.mapPath(ctx, points, t, opts)  winding candy path through points ([{x,y}] or [[x,y]] or flat); opts { done: float index of the
 //       last finished point (dots before it are candy coloured, after it pale), width }
@@ -362,8 +363,28 @@
     const off = ((scroll % H) + H) % H;
     // 1:1 with the backing pixels (tile made at the canvas scale, y snapped to device pixels): no filtering per frame
     for (let yy = y - off; yy < y + h; yy += H) ctx.drawImage(tl.c, x, Math.round(yy * sc) / sc, w, H);
-    // animated layer
-    const T = tl.T, q = Q(), n = [8, 16, 26][q];
+    animBits(ctx, tl, x, y, w, h, t, off);
+    ctx.restore();
+  };
+  // ART.levelBg(ctx, chapter, x, y, w, h, t, cols, alpha): the level screen backdrop in one cached blit: a vertical
+  // gradient cols [top, bottom] with the chapter scenery over it at `alpha` (default .55), plus the animated bits.
+  let _lvl = null;
+  A.levelBg = function (ctx, ch, x, y, w, h, t, cols, alpha) {
+    t = t == null ? now() : t; alpha = alpha == null ? .55 : alpha; cols = cols || ['#bfeaff', '#fff0f6'];
+    const sc = A.scaleOf(ctx), tl = tileFor(ch | 0, Math.round(w), sc), key = (ch | 0) + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc + '|' + cols.join() + '|' + alpha;
+    if (!_lvl || _lvl.key !== key) {
+      const c = mk(w * sc, h * sc), g = c.getContext('2d'); g.scale(sc, sc);
+      const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, cols[0]); gr.addColorStop(1, cols[1]); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      g.globalAlpha = alpha; for (let yy = 0; yy < h; yy += tl.H) g.drawImage(tl.c, 0, yy, w, tl.H);
+      _lvl = { key, c };
+    }
+    ctx.drawImage(_lvl.c, x, Math.round(y * sc) / sc, w, h);
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.globalAlpha *= alpha;
+    animBits(ctx, tl, x, y, w, h, t, 0);
+    ctx.restore();
+  };
+  function animBits(ctx, tl, x, y, w, h, t, off) {
+    const H = tl.H, T = tl.T, q = Q(), n = [8, 16, 26][q];
     for (let i = 0; i < n && i < tl.bits.length; i++) {
       const b = tl.bits[i];
       if (T.anim === 'snow') { // falls in screen space
@@ -395,8 +416,7 @@
         ctx.fillStyle = gg; ctx.fillRect(fx - 9, fy - 9, 18, 18); dot(ctx, fx, fy, 1.6, 'rgba(255,255,230,' + a.toFixed(2) + ')');
       }
     }
-    ctx.restore();
-  };
+  }
 
   A.mapDivider = function (ctx, ch, x, y, w, t) {
     const T = A.mapTheme(ch), hh = 120;

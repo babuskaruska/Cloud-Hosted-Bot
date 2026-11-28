@@ -347,8 +347,10 @@ const ADV = (() => {
     W = H.W; Hh = H.H; V.G = levelGeo();
     const G = V.G, r = V.r, def = r.def;
     // background: the chapter's colours, softly
-    const col = CH_COL[def.chapter % CH_COL.length], gr = g.createLinearGradient(0, 0, 0, Hh); gr.addColorStop(0, col[0]); gr.addColorStop(1, col[1]); g.fillStyle = gr; g.fillRect(0, 0, W, Hh);
-    if (artOn('mapBg')) { try { g.save(); g.globalAlpha = 0.55; ART.mapBg(g, def.chapter, 0, 0, W, Hh, t); g.restore(); } catch (e) { g.restore(); } }
+    const col = CH_COL[def.chapter % CH_COL.length];
+    if (artOn('levelBg')) { try { ART.levelBg(g, def.chapter, 0, 0, W, Hh, t, col, 0.55); } catch (e) {} } // one cached blit (Ash, phase C)
+    else { const gr = g.createLinearGradient(0, 0, 0, Hh); gr.addColorStop(0, col[0]); gr.addColorStop(1, col[1]); g.fillStyle = gr; g.fillRect(0, 0, W, Hh); }
+    if (!artOn('levelBg') && artOn('mapBg')) { try { g.save(); g.globalAlpha = 0.55; ART.mapBg(g, def.chapter, 0, 0, W, Hh, t); g.restore(); } catch (e) { g.restore(); } }
     drawGoalBar(t, G, r);
     if (G.orders) drawLevelOrders(t, G, r);
     drawLevelBoard(t, G, r);

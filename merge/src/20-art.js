@@ -129,7 +129,10 @@ const ART = (function () {
   //                         > 14 ms over 36 frames) step one level down, at most every 2.5 s; the level is saved for a week.
   //   ART.perf.onChange     fn(level) set by the UI (relayout when the backing cap changed). URL flag perf=0 = no auto.
   A.perf = (function () {
-    const nav = navigator, cores = nav.hardwareConcurrency || 8, mem = nav.deviceMemory || 8, weak = cores <= 4 || mem <= 4;
+    const nav = navigator, cores = nav.hardwareConcurrency || 8, mem = nav.deviceMemory || 8;
+    // iPhones and iPads are never 'weak' by these numbers (Safari reports few cores and no memory); slow frames still count
+    const ios = /iPhone|iPad|iPod/.test(nav.userAgent || '') || (/Macintosh/.test(nav.userAgent || '') && nav.maxTouchPoints > 1);
+    const weak = !ios && (cores <= 4 || mem <= 4);
     let qs = {}; try { new URLSearchParams(location.search + '&' + location.hash.slice(1)).forEach((v, k) => { qs[k] = v; }); } catch (e) { }
     const KEY = 'saarepagar.perf', P = { weak, level: 0, onChange: null, auto: qs.perf !== '0' && !window.__mgPerfNoAuto };
     try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && P.auto && Date.now() - s.at < 7 * 864e5) P.level = Math.max(0, Math.min(3, s.level | 0)); } catch (e) { }

@@ -81,7 +81,7 @@ async function scene(b, dpr, rate, key) {
     for (let i = 0; i < n; i++) {
       P.fi++;
       if (step === 'scroll') { if (i === 0) ev('pointerdown', 195, y); y += dir * 9; if (y > 700 || y < 150) { dir = -dir; } ev('pointermove', 195, y); }
-      if (step === 'merge' && i % 4 === 0) { // merge a pair (with its burst) and refill so chains keep coming
+      if (step === 'merge' && i % 8 === 0) { // merge a pair (with its burst; about 4 a second, a fast player) and refill
         const B = M.S.board; let done = false;
         for (let x = 0; x < B.length && !done; x++) for (let z = x + 1; z < B.length && !done; z++) if (M.Game.canMerge(B[x], B[z])) { a.merge(x, z); done = true; }
         if (!done || i % 16 === 0) for (let q = 0; q < B.length; q++) if (!B[q]) B[q] = { k: ['bread', 'berry', 'flower'][q % 3], l: 1 + (q % 2) };
@@ -106,7 +106,7 @@ async function scene(b, dpr, rate, key) {
     const iv = setInterval(() => {
       k++;
       if (step === 'scroll') { y += dir * 14; if (y > 700 || y < 150) dir = -dir; ev('pointermove', 195, y); }
-      if (step === 'merge' && k % 3 === 0) { const B = M.S.board; outer: for (let x = 0; x < B.length; x++) for (let z = x + 1; z < B.length; z++) if (M.Game.canMerge(B[x], B[z])) { M.act.merge(x, z); break outer; } for (let q = 0; q < B.length; q++) if (!B[q]) B[q] = { k: 'berry', l: 1 + (q % 2) }; }
+      if (step === 'merge' && k % 8 === 0) { const B = M.S.board; outer: for (let x = 0; x < B.length; x++) for (let z = x + 1; z < B.length; z++) if (M.Game.canMerge(B[x], B[z])) { M.act.merge(x, z); break outer; } for (let q = 0; q < B.length; q++) if (!B[q]) B[q] = { k: 'berry', l: 1 + (q % 2) }; }
       if (step === 'levelBot' && k % 4 === 0) { const r = M.levels.state; if (r && !r.over) M.levels.botStep(); }
     }, 33);
     setTimeout(() => { clearInterval(iv); if (step === 'scroll') ev('pointerup', 195, y); U.draw = orig; const gaps = []; for (let i = 1; i < stamps.length; i++) gaps.push(stamps[i] - stamps[i - 1]); done({ gaps, durs, fps: stamps.length / (ms / 1000) }); }, ms);

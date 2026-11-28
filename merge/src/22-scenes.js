@@ -682,7 +682,9 @@
     // fit the height, but on a short wide strip zoom in (crop some sky and ground) so details stay readable
     const s = Math.max(h / DH, Math.min(w / 520, h / 150)), ox = (w - DW * s) / 2, oy = Math.max(h - DH * s, Math.min(0, h - 204 * s)), L = -ox / s, Rr = DW + ox / s, sc = A.scaleOf(ctx);
     const own = !!def.ownSky, styKey = sty ? Object.keys(sty).sort().map(k => k + '=' + sty[k][0]).join(',') : '';
-    const ck = id + '|' + styKey + '|' + (plain ? 'plain' : env.key) + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
+    const q = (typeof FX !== 'undefined' && FX) ? FX.quality | 0 : 2, hz = Math.max(.3, Math.min(.95, (oy + 132 * s) / h));
+    const bake = !plain && !own && q < 2; // lower quality: the sky (still clouds) is baked into the cached layer, one blit a frame
+    const ck = id + '|' + styKey + '|' + (plain ? 'plain' : env.key) + (bake ? '|b' + Math.round(env.tod * 96) : '') + '|' + Math.round(w) + 'x' + Math.round(h) + '@' + sc.toFixed(2);
     let c = cache.get(ck);
     if (!c) {
       c = mk(w * sc, h * sc); const g = c.getContext('2d');
@@ -706,11 +708,15 @@
       }
       if (hole) { g.globalCompositeOperation = 'destination-in'; g.drawImage(cp, 0, 0); } // keep the transparent sky hole
       g.globalCompositeOperation = 'source-over';
+      if (bake) {
+        const c2 = mk(w * sc, h * sc), g2 = c2.getContext('2d'); g2.scale(sc, sc);
+        A.sky(g2, 0, 0, w, h, 0, Object.assign({}, env, { horizon: hz })); g2.setTransform(1, 0, 0, 1, 0, 0); g2.drawImage(c, 0, 0); c = c2;
+      }
       if (cache.size > 8) cache.delete(cache.keys().next().value);
       cache.set(ck, c);
     }
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    if (!plain && !own) A.sky(ctx, x, y, w, h, t, Object.assign({}, env, { horizon: Math.max(.3, Math.min(.95, (oy + 132 * s) / h)) }));
+    if (!plain && !own && !bake) A.sky(ctx, x, y, w, h, t, Object.assign({}, env, { horizon: hz }));
     ctx.drawImage(c, x, y, w, h);
     const over = plain ? null : (env.weather === 'rain' && !OVER[env.phase] ? 'rgba(80,90,130,.18)' : OVER[env.phase]);
     SKYOFF = !plain && !own;
