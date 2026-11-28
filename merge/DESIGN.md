@@ -79,7 +79,7 @@ Build with `python3 tools/build-merge.py`, which concatenates `merge/src/*.js` i
   - board actions: `'pick'`, `'drop'`, `'swap'`, `'merge'` (`opts.level` raises the pitch), `'mergeMax'`, `'spawn'`, `'noEnergy'`, `'bubble'`, `'bubblePop'`, `'chest'`;
   - orders and progress: `'order'`, `'orderDone'`, `'coins'`, `'stars'`, `'taskDone'`, `'levelUp'`, `'daily'`;
   - UI: `'tap'`, `'open'`, `'close'`, `'sell'`, `'deny'`, `'talk'` (dialogue blip).
-- **Music:** cozy, catchy and gentle (accordion, guitar, kannel, folk-pop with an Estonian folk flavour, chip-like if it fits). Scenes are `'title'`, `'board'` (one calm loop per area) and `'story'`. It must be long-listenable, with variation, and have no harsh highs.
+- **Music:** modern chill-pop and lo-fi (electric piano, plucks, side-chained pads, soft drums, vocal-chop hooks); the earlier folk style was replaced after player feedback. Scenes are `'title'`, `'board'` (one calm loop per area) and `'story'`. It must be long-listenable, with variation, and have no harsh highs.
 - `AU.unlock()` on the first gesture, `AU.setVolume(kind, v)` (kind `'music'` or `'sfx'`), `AU.muted`. iPhone: `navigator.audioSession.type = 'playback'`.
 
 ## Quality bar
