@@ -214,12 +214,26 @@ The owner asked for a merge-style game for his girlfriend. It is original (no co
   - QA: `node tools/mergelevels.js`. Bot win rates for levels 1–200: easy 96%, hard 77% (lowest 25%), boss 75%.
 - **Ash:** `24-map.js` (6 themes), `25-level.js` (obstacles, boosters, wheel), plus the level effects.
 - **Echo:** map and level music (`MUSIC.mood('tense')`) and the level sounds.
-- **Next:** phase B (island tour, season pass, weekly events, design choices, wardrobe and pets, weather, the full Estonian proofread and `merge/GLOSSARY.md`).
+- **Next:** phase B, contracts below; agents are running.
 - **Known:**
   - Some hard levels are too noisy (25%).
   - Leaving a level mid-way costs no life.
   - `drawItemIdle` is unused.
   - 360-wide screens are unchecked.
+
+**Version 3 phase B contracts (in progress).** Base branch for agents: `claude/intelligent-cerf-23obgr`.
+- **Island tour (Mira data and rules, Ash art):** after the 6 story areas (`S.ended`), `S.tour` counts generated islands from 0 forever.
+  - `TOUR.island(i)` (Mira, `10-data.js` or a new `36-tour.js`) is deterministic and returns `{ i, theme, name, tasks:[{id, name, cost, reward, choices?}], intro }`. Task ids are `t<i>_<n>`, so `S.done` keeps working.
+  - Themes (key → Estonian name): `flower` Lillepood, `spa` Spaa, `icecream` Jäätisekiosk, `fashion` Moebutiik, `wedding` Pulmaaed, `beach` Rannaklubi, `xmas` Jõuluturg, `orchard` Sügisene õunaaed. They cycle, and each cycle reshuffles names and tasks.
+  - `ART.tourScene(ctx, island, progress, x, y, w, h, t)` (Ash, new `26-tour.js`): every task visibly changes the scene, like `ART.scene`. Until it lands Mira falls back to `ART.scene` with a story area.
+- **Design choices (Mira rules and UI, Ash art):** a task can carry `choices: ['boho', 'minimal', 'romantic']` (the style keys). The pick is saved in `S.style[taskId]` and can be changed later from the scene. Ash draws the variant: `ART.scene` and `ART.tourScene` read `opts.style` (an object taskId → key) as an optional last argument.
+- **Season pass "Hooaja rada" (Mira):** 30 steps per calendar month, filled by `PASS_PTS` from play, free only. `S.pass = { month, pts, got: {} }`.
+- **Weekly events (Mira):** by ISO week, rotating `garden` Aiapidu, `fashion` Moenädal, `wedding` Pulmad, `beach` Rannafestival. Each has its own currency, a special chain (`CHAINS` keys `ev_garden`, `ev_fashion`, `ev_wedding`, `ev_beach`, 6 levels each; Ash draws them through `ART.item`), and a reward track. `S.week = { id, cur, got: {} }`. URL flag `week=<key>` for tests.
+- **Wardrobe and pets (Mira unlocks, Ash draws):** `S.look = { outfit, hair, acc }` and `S.pets = { muri: { acc }, ... }`. `ART.heroine(px, look)` and `ART.pet(kind, px, acc)` with kinds `muri`, `kutsu` (puppy), `jänku` → key `janku` (bunny). Keys: outfits `casual, summer, chef, gala, cozy, beach`; hair `bun, long, bob, braid`; acc `none, glasses, hat, flower, scarf`; pet acc `none, bow, collar, hat`.
+- **Weather and time of day (Ash):** `ART.sky(ctx, x, y, w, h, t, { tod, weather })` with `tod` in 0..1 from the local clock (`ART.todNow()`) and weather `'clear' | 'rain' | 'snow' | 'petals'`, chosen per day (snow in December–February). Scenes call it behind their art. URL flags `tod=`, `weather=`.
+- **Photo mode (Mira UI, Ash frame):** `ART.postcard(ctx, w, h, drawScene)` draws a frame and a caption; Mira adds a button that shows it full screen for a screenshot.
+- **Audio (Echo):** `MUSIC.scene('board', { area, tour: theme })` plays a theme variant per island theme; `MUSIC.scene('event', { week: key })` for each weekly event; seasonal colour (winter bells December–February, summer brightness June–August) through `MUSIC.season(key)`. New sounds `'passStep'`, `'styleSwap'`, `'wardrobe'`, `'pet'`, `'eventCur'`, `'photo'`, `'islandNew'`.
+- **Language (Mira):** a full Estonian proofread of every string (old and new) and `merge/GLOSSARY.md`. Others write Estonian directly and follow the glossary once it lands.
 
 **Version 2 (live), after the girlfriend's feedback** ("too old-fashioned, not addictive, icons too small" on an iPhone 16 Pro Max):
 - **Ash:** modern glossy restyle (sky gradient, frosted tiles, pill buttons, `ART.theme`, new `FX` effects `combo`, `lucky`, `discover`, `levelUp`, `hint`, `text`).
