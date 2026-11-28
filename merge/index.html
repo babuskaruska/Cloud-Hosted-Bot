@@ -39,7 +39,8 @@ canvas{position:fixed;left:0;top:0;width:100%;height:100%;display:block;touch-ac
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
 const now = () => Date.now();
-const QS = (() => { const o = {}; try { new URLSearchParams(location.search).forEach((v, k) => { o[k] = v; }); } catch (e) {} return o; })();
+// URL flags from the query or the hash (?week=beach or #fresh=1).
+const QS = (() => { const o = {}; try { for (const src of [location.search, location.hash.replace(/^#/, '?')]) new URLSearchParams(src).forEach((v, k) => { o[k] = v; }); } catch (e) {} return o; })();
 
 function mulberry(seed) {
   return function () {
@@ -77,7 +78,7 @@ const FREE_EN = 30, FREE_EN_MS = 4 * 3600000;  // free energy every 4 hours
 
 // Global state. Keys starting with "_" are view-only and never saved.
 let S = null;
-const SAVE_KEY = 'saarepagar.save', SAVE_VER = 2;
+const SAVE_KEY = 'saarepagar.save', SAVE_VER = 3;
 
 function newState() {
   const t = now();
@@ -97,7 +98,14 @@ function newState() {
     wheel: { free: '', extra: 0, n: 0 },
     piggy: { coins: 0, day: '' },
     stats: { merges: 0, orders: 0, taps: 0, tasks: 0, lucky: 0, merge5: 0, combo: 0, mbox: 0 },
-    set: { music: 0.7, sfx: 0.9, muted: false },
+    set: { music: 0.7, sfx: 0.9, muted: false, rest: true },
+    // version 3 phase B: island tour, design choices, season pass, weekly event, wardrobe and pets
+    tour: 0, style: {},
+    pass: { month: '', pts: 0, got: {} },
+    week: { id: '', key: '', cur: 0, got: {} },
+    look: { outfit: 'casual', hair: 'bun', acc: 'none' },
+    pets: { muri: { acc: 'none' } }, petOn: 'muri',
+    owned: {}, lookKnown: {}, lookSeen: {},
   };
 }
 
@@ -118,10 +126,16 @@ function load() {
     for (const k in base) if (!(k in d)) d[k] = base[k];
     for (const k in base.daily) if (!(k in d.daily)) d.daily[k] = base.daily[k];
     for (const k in base.stats) if (!(k in d.stats)) d.stats[k] = base.stats[k];
-    for (const o of ['adv', 'wheel', 'piggy']) { if (!d[o] || typeof d[o] !== 'object') d[o] = base[o]; for (const k in base[o]) if (!(k in d[o])) d[o][k] = base[o][k]; }
+    for (const o of ['adv', 'wheel', 'piggy', 'pass', 'week', 'look', 'set']) { if (!d[o] || typeof d[o] !== 'object') d[o] = base[o]; for (const k in base[o]) if (!(k in d[o])) d[o][k] = base[o][k]; }
     for (const k in base.adv.boost) if (typeof d.adv.boost[k] !== 'number') d.adv.boost[k] = 0;
     if (!d.event || typeof d.event !== 'object') d.event = base.event;
+    for (const o of ['style', 'pets', 'owned', 'lookKnown', 'lookSeen']) if (!d[o] || typeof d[o] !== 'object' || Array.isArray(d[o])) d[o] = base[o];
+    if (!d.pets.muri) d.pets.muri = { acc: 'none' };
+    if (!d.pass.got || typeof d.pass.got !== 'object') d.pass.got = {};
+    if (!d.week.got || typeof d.week.got !== 'object') d.week.got = {};
     // v1 -> v2: the album starts empty, so earlier discoveries wait there as rewards to collect.
+    // v2 -> v3: a finished story goes on to the island tour at island 0 (S.tour); new pieces are announced once.
+    if ((d.v | 0) < 3) d.tour = d.tour | 0;
     d.v = SAVE_VER;
     return d;
   } catch (e) { return null; }
@@ -153,11 +167,11 @@ const GEN_LV = [[20, 60, 0], [26, 50, 0.06], [32, 40, 0.14], [40, 30, 0.24]];
 const GENERATORS = {
   oven:    { names: ['Vana ahi', 'Kahhelahi', 'Leivaahi', 'Suur leivaahi'], color: '#c0603c', spawn: [['bread', 10, 1], ['dairy', 4, 2], ['coffee', 1, 3]] },
   basket:  { names: ['Pajukorv', 'Marjakorv', 'Turukorv', 'Vanaema korv'], color: '#b8864a', spawn: [['berry', 10, 1], ['apple', 6, 2], ['coffee', 1, 3]] },
-  teapot:  { names: ['Plekk-kann', 'Teekann', 'Lillkann', 'Hõbekann'], color: '#5f9a6a', spawn: [['tea', 10, 1], ['dairy', 5, 2], ['coin', 1, 3]] },
+  teapot:  { names: ['Plekk-kann', 'Teekann', 'Portselankann', 'Hõbekann'], color: '#5f9a6a', spawn: [['tea', 10, 1], ['dairy', 5, 2], ['coin', 1, 3]] },
   bed:     { names: ['Aiapeenar', 'Kõrgpeenar', 'Lillepeenar', 'Kasvuhoone'], color: '#6a8a3a', spawn: [['flower', 10, 1], ['apple', 4, 2], ['coffee', 1, 3]] },
   toolbox: { names: ['Tööriistakast', 'Puusepakast', 'Meistrikast', 'Tööriistakapp'], color: '#8a6040', spawn: [['wood', 10, 1], ['coin', 1, 2]] },
   net:     { names: ['Kalavõrk', 'Mõrd', 'Suur võrk', 'Kalapaat'], color: '#4a7aa8', spawn: [['fish', 10, 1], ['sea', 4, 2], ['coffee', 1, 3]] },
-  wheel:   { names: ['Vokk', 'Kedervokk', 'Kangasteljed', 'Vanaema teljed'], color: '#9a6aa8', spawn: [['wool', 10, 1], ['sea', 2, 3], ['coin', 1, 2]] },
+  wheel:   { names: ['Vokk', 'Suur vokk', 'Kangasteljed', 'Vanaema teljed'], color: '#9a6aa8', spawn: [['wool', 10, 1], ['sea', 2, 3], ['coin', 1, 2]] },
 };
 for (const k in GENERATORS) CHAINS[k] = { kind: 'gen', name: GENERATORS[k].names[0], color: GENERATORS[k].color, names: GENERATORS[k].names };
 
@@ -176,7 +190,7 @@ const WHO = {
 // Villagers who place orders: favourite chains and thank-you lines.
 const VILLAGERS = {
   liisa: { likes: ['bread', 'berry', 'dairy', 'apple', 'flower', 'tea'], from: 0,
-    thanks: ['Aitäh! Teen kohe pildi ja panen saare grupti üles.', 'Vau! See on nii ilus, et ma ei raatsi süüa. Söön ikka.', 'Täpselt see! Kuidas sa teadsid? Ahjaa, ma ütlesin ise.', 'Oi! Sa oled päris Maali moodi. Ainult vähem laulad.', '10/10, soovitan sõbrale. Ja kogu külale.'] },
+    thanks: ['Aitäh! Teen kohe pildi ja panen saare gruppi üles.', 'Vau! See on nii ilus, et ma ei raatsi süüa. Söön ikka.', 'Täpselt see! Kuidas sa teadsid? Ahjaa, ma ütlesin ise.', 'Oi! Sa oled päris Maali moodi. Ainult vähem laulad.', '10/10, soovitan sõbrale. Ja kogu külale.'] },
   muri: { likes: ['fish', 'dairy', 'berry', 'bread'], from: 0, small: true,
     thanks: ['Mjäu. (Rahuldav. Võid jätkata.)', 'Nurr-nurr. (Ma ei ütle aitäh. Aga ma mõtlen seda.)', 'Mrr. (Panen selle oma salaladu. Diivani alla.)', 'Mjäu! (Sa oled peaaegu sama hea kui päikeselaik.)', 'Mrr. (Viis tähte. Üks käpp maha, sest see võttis aega.)'] },
   ants: { likes: ['fish', 'sea', 'wood', 'tea', 'bread', 'wool'], from: 0, after: 'b3',
@@ -201,14 +215,14 @@ const AREAS = [
       ['maali', 'Kallis lapselaps! Kui sa seda loed, on mu vana pagarikoda mere ääres nüüd sinu oma.'],
       ['maali', 'Ta on veidi tolmune ja natuke katki. Nagu mina hommikuti. Aga tal on hea süda. Tee temast midagi ägedat!'],
       ['mina', 'Okei. Mul on üks kohver, kaks tühja kätt ja üks suur plaan: saare kõige mõnusam kohvik-pagarikoda.'],
-      ['liisa', 'Tere-tere! Mina olen Liisa, pood üle tee ja saare Facebooki grupi admin. Ma tean kõike. Nüüd ka sind!'],
+      ['liisa', 'Tere-tere! Mina olen Liisa. Mul on pood üle tee ja ma olen saare Facebooki grupi admin. Ma tean kõike. Nüüd ka sind!'],
       ['muri', 'Mjäu. (Mina olen Muri. See on minu maja. Sina võid siin ka elada. Ja mulle süüa tuua.)'],
       ['liisa', 'Hakkame pihta? Küla ootab värsket saia ja mina ootan esimest postitust!'],
     ],
     tasks: [
       { id: 'b1', name: 'Pühi tolm välja', cost: 1, reward: { coins: 20 }, story: [
         ['liisa', 'Apsti! Oi, kui palju tolmu. Aevastasin kolm korda järjest. See toob õnne!'],
-        ['mina', 'Või kevadise nohu.'],
+        ['mina', 'Või kevadnohu.'],
         ['muri', 'Mjäu. (Ämblik Endel kolis minu sahtlisse. Ma ei ole sellega rahul.)'] ] },
       { id: 'b2', name: 'Õlita kriuksuv uks', cost: 2, reward: { gen: 'teapot' }, story: [
         ['muri', 'Mrr. (Uks ei kriuksu enam. Lõpuks saab rahus lõunauinakut teha. Ja hommikuuinakut. Ja õhtuuinakut.)'],
@@ -223,7 +237,7 @@ const AREAS = [
         ['maali', '(Ahju tagant leiad kirja.) Ära karda seda ahju. Ta pahandab ainult esimesed viis minutit. Täpselt nagu mina.'],
         ['maali', 'Kui sul on kaks ühesugust ahju, pane need kokku. Kaks vana teevad ühe parema. Inimestega see nii ei käi, aga ahjudega küll.'],
         ['mina', 'Vanaema, sa oled legend. Lohistan uue ahju vana peale!'] ] },
-      { id: 'b5', name: 'Värvi äge uus silt', cost: 3, reward: { coins: 40 }, story: [
+      { id: 'b5', name: 'Värvi uus silt', cost: 3, reward: { coins: 40 }, story: [
         ['liisa', 'Mis nimi sildile tuleb? „Liisa sõbranna kohvik“ on vaba.'],
         ['mina', 'Saarepagar!'],
         ['liisa', 'Lühike, lahe ja mahub hashtagiks. Kinnitan.'] ] },
@@ -248,15 +262,15 @@ const AREAS = [
         ['mina', 'Rohu alt tuli välja kaks peenart ja üks kummik.'],
         ['liisa', 'See on Antsu kummik! Ta otsib seda juba kolmandat suve.'] ] },
       { id: 'g2', name: 'Paranda aiavärav', cost: 3, reward: { gen: 'toolbox' }, story: [
-        ['liisa', 'Võta mu isa tööriistakast. Ta ütles alati: hea nael peab kauem kui halb idee.'],
+        ['liisa', 'Võta mu isa tööriistakast. Ta ütles alati: hea nael peab kauem vastu kui halb idee.'],
         ['mina', 'Väga tark mees.'],
-        ['liisa', 'Ta ehitas kuuri ilma ukseta. Aga nael pidas.'] ] },
+        ['liisa', 'Ta ehitas kuuri ilma ukseta. Aga naelad pidasid.'] ] },
       { id: 'g3', name: 'Istuta õunapuu', cost: 4, reward: { energy: 25 }, story: [
         ['mina', 'Väike õunapuu. Kunagi on ta suur ja meil on oma õunakook.'],
         ['muri', 'Mrr. (Kui ta suur on, ronin ma otsa ega tule enam alla. Siis peab keegi mind päästma. See on traditsioon.)'] ] },
       { id: 'g4', name: 'Ehita mesitaru', cost: 4, reward: { gen: 'basket' }, story: [
-        ['liisa', 'Mesilased! Mesi kooki, mesi teesse, mesi... ma ei tea veel kuhu, aga ma leian koha.'],
-        ['liisa', 'Võta teine korv. Pane kaks korvi kokku ja sealt tuleb ka õunu.'] ] },
+        ['liisa', 'Mesilased! Mett kooki, mett teesse, mett... ma ei tea veel kuhu, aga ma leian koha.'],
+        ['liisa', 'Võta teine korv. Pane kaks korvi kokku, siis tuleb sealt ka õunu.'] ] },
       { id: 'g5', name: 'Riputa kiik', cost: 5, reward: { coins: 80 }, story: [
         ['mina', 'Vanaema kiik! Ta kiikus siin igal õhtul.'],
         ['liisa', 'Ja laulis. Valjult. Kogu küla teadis kõiki salme. Ka neid, mis ta ise välja mõtles.'] ] },
@@ -280,7 +294,7 @@ const AREAS = [
         ['mina', 'Kuidas ta paati ära mahtus?'],
         ['ants', 'Ei mahtunudki. Ta ujus ise järel.'] ] },
       { id: 'h3', name: 'Riputa võrgud kuivama', cost: 5, reward: { gen: 'teapot' }, story: [
-        ['peeter', 'Tere! Mina olen Peeter, majakavaht ja podcasti „Valgus pimeduses“ host. Mul on kolm kuulajat.'],
+        ['peeter', 'Tere! Mina olen Peeter, majakavaht ja podcasti „Valgus pimeduses“ saatejuht. Mul on kolm kuulajat.'],
         ['peeter', 'Kingin sulle oma teekannu. Mul on neid kaks, aga ainult üks tass.'] ] },
       { id: 'h4', name: 'Ehita suitsuahi', cost: 6, reward: { coins: 90 }, story: [
         ['muri', 'MJÄU! (Suitsukala! See on parim päev mu elus. Eilne oli ka. Homne tuleb ka.)'] ] },
@@ -289,12 +303,12 @@ const AREAS = [
         ['liisa', 'Ants naeratas! Kas keegi filmis? Keegi pidi ju filmima!'] ] },
       { id: 'h6', name: 'Kalurite grilliõhtu', cost: 7, reward: { gen: 'wheel', chest: 2 }, story: [
         ['ants', 'Maali jättis mulle kunagi kirja. Ütles, et annaksin selle sulle siis, kui sadam jälle naerab.'],
-        ['maali', 'Teine vihje: retseptiraamat on seal, kus tuul jahvatab. Võta kaasa mu vokk. Veskis on külm.'],
+        ['maali', 'Teine vihje: retseptiraamat on seal, kus tuul jahvatab. Võta kaasa mu vokk. Veskis on külm ja villased sokid kuluvad ära.'],
         ['mina', 'Tuuleveski! Roadtrip!'] ] },
     ] },
   { key: 'windmill', name: 'Tuuleveski',
     intro: [
-      ['liisa', 'Tuuleveski seisab juba kakskümmend aastat. Tuul puhub, aga tiivad ei viitsi.'],
+      ['liisa', 'Tuuleveski on seisnud juba kakskümmend aastat. Tuul puhub, aga tiivad ei viitsi.'],
       ['peeter', 'Kui veski jälle käib, on saarel oma jahu. Ja oma jahust saab... kõike.'],
     ],
     tasks: [
@@ -310,8 +324,8 @@ const AREAS = [
       { id: 'w4', name: 'Jahvata esimene jahu', cost: 8, reward: { coins: 120 }, story: [
         ['liisa', 'Saare oma jahu! Ma teen sellest kringli. Või kaks. Või kõik.'],
         ['mina', 'Kohalik, käsitöö, meretuulega. Turistid lähevad hulluks.'] ] },
-      { id: 'w5', name: 'Tulukesed tiibadele', cost: 8, reward: { energy: 40 }, story: [
-        ['mina', 'Õhtul hõõgub veski nagu suur tähekaart. Ilusam kui ükski filter.'],
+      { id: 'w5', name: 'Riputa tiibadele tulukesed', cost: 8, reward: { energy: 40 }, story: [
+        ['mina', 'Õhtul helendab veski nagu suur tähekaart. Ilusam kui ükski filter.'],
         ['peeter', 'Majakast on see ilus vaade. Nüüd on mul kaks tuld, mida vaadata.'] ] },
       { id: 'w6', name: 'Tõsta vana veskikivi', cost: 9, reward: { gen: 'toolbox', chest: 2 }, story: [
         ['maali', '(Kivi all on kiri.) Kolmas vihje: retseptiraamatut valvab see, kes kunagi ei maga.'],
@@ -320,17 +334,17 @@ const AREAS = [
     ] },
   { key: 'lighthouse', name: 'Majakas',
     intro: [
-      ['peeter', 'Tere tulemast minu majakasse. Sada kaksteist astet. Olen neid mitu korda lugenud. Iga kord tuleb erinev arv.'],
+      ['peeter', 'Tere tulemast minu majakasse. Sada kaksteist astet. Olen neid mitu korda lugenud. Iga kord tuleb isesugune arv.'],
     ],
     tasks: [
       { id: 'l1', name: 'Paranda keerdtrepp', cost: 8, reward: { coins: 120 }, story: [
-        ['mina', 'Trepp kriuksub igal astmel ise noodiga.'],
+        ['mina', 'Trepp kriuksub igal astmel ise noodis.'],
         ['peeter', 'Ma kutsun seda trepilauluks. Nüüd laulab ta puhtamalt.'] ] },
-      { id: 'l2', name: 'Lääts särama', cost: 9, reward: { energy: 40 }, story: [
+      { id: 'l2', name: 'Nühi lääts särama', cost: 9, reward: { energy: 40 }, story: [
         ['peeter', 'Läbi läätse paistab saar nagu mänguasi. Vaata, Liisa räägib kellegagi. Muidugi räägib.'] ] },
       { id: 'l3', name: 'Paranda vana lamp', cost: 9, reward: { gen: 'wheel' }, story: [
-        ['liisa', 'Tõin sulle teise voki! See seisis mu poes nii kaua, et kliendid arvasid, et see on mööbel.'] ] },
-      { id: 'l4', name: 'Triibud majakale', cost: 10, reward: { coins: 150 }, story: [
+        ['liisa', 'Tõin sulle teise voki! See seisis mu poes nii kaua, et kliendid pidasid seda mööbliks.'] ] },
+      { id: 'l4', name: 'Värvi majakale triibud', cost: 10, reward: { coins: 150 }, story: [
         ['ants', 'Punane ja valge. Nagu õngekork. Väga hea majakas.'] ] },
       { id: 'l5', name: 'Pane majakatuli põlema', cost: 12, reward: { chest: 3 }, story: [
         ['peeter', 'Maali palus mul hoida ühte kirstu. Ta ütles: anna see sellele, kes saare jälle valgeks teeb.'],
@@ -365,9 +379,9 @@ const STORY = {
   tut1: 'Toksa ahju – sealt tuleb jahukott!',
   tut2: 'Lohista jahukott teise peale. Kaks ühesugust = üks parem!',
   tut3: 'Liisa tellimus on valmis. Vajuta „Anna!“',
-  tut4: 'Said tähe! Vajuta „Remont“ ja tee kohvik korda.',
+  tut4: 'Said tähe! Vajuta „Remont“ ja hakka kohvikut korda tegema.',
   tutDone: 'Super! Täida tellimusi, kogu tähti ja tee saarest kõige ägedam koht.',
-  ending: 'Kõik on korras! Küla tellib edasi. Küpseta nii palju, kui süda lustib.',
+  ending: 'Kõik on korras! Aga saari on veel palju. Saareringreis algab!',
 };
 
 // Coins shop. Generator offers are added for every generator kind you have owned.
@@ -384,9 +398,9 @@ const GEN_PRICE = 180;
 const DAILY_POOL = [
   { id: 'merge', text: 'Ühenda {n} korda', goals: [15, 25, 35] },
   { id: 'order', text: 'Täida {n} tellimust', goals: [3, 4, 6] },
-  { id: 'tap', text: 'Too generaatoritest {n} asja', goals: [25, 40, 60] },
+  { id: 'tap', text: 'Võta generaatoritest {n} asja', goals: [25, 40, 60] },
   { id: 'coins', text: 'Teeni {n} münti', goals: [60, 100, 150] },
-  { id: 'hi', text: 'Tee {n} asja 5. tasemel', goals: [1, 2, 3] },
+  { id: 'hi', text: 'Valmista {n} asja 5. või kõrgemal tasemel', goals: [1, 2, 3] },
 ];
 const DAILY_REWARD = { coins: 25, energy: 10 }, DAILY_BONUS = { stars: 2, chest: 1 };
 
@@ -446,9 +460,9 @@ const chapterName = c => 'Peatükk ' + (c + 1) + ' · ' + chapterTitle(c);
 
 // Boosters. price: coins when bought inside a level.
 const BOOSTERS = {
-  wand: { name: 'Võlukepp', desc: 'Teeb ühe asja taseme võrra paremaks.', price: 80, target: true, prompt: 'Toksa asja, mida võluda.' },
-  scissors: { name: 'Käärid', desc: 'Lõikab asja kaheks väiksemaks.', price: 50, target: true, prompt: 'Toksa asja, mida pooleks lõigata.' },
-  shuffle: { name: 'Segamine', desc: 'Annab üksikutele asjadele paarilised.', price: 40 },
+  wand: { name: 'Võlukepp', desc: 'Teeb ühe asja taseme võrra paremaks.', price: 80, target: true, prompt: 'Toksa asja, mida tahad võluda.' },
+  scissors: { name: 'Käärid', desc: 'Lõikab asja kaheks väiksemaks.', price: 50, target: true, prompt: 'Toksa asja, mida tahad pooleks lõigata.' },
+  shuffle: { name: 'Segamine', desc: 'Leiab üksikutele asjadele paarilised.', price: 40 },
   moves: { name: '+5 käiku', desc: 'Annab viis lisakäiku.', price: 60 },
 };
 const BOOST_KEYS = ['wand', 'scissors', 'shuffle', 'moves'];
@@ -466,7 +480,7 @@ const ADV_TIPS = {
   order: 'Külalised ootavad! Tee tellitud asjad valmis, need lähevad ise teele.',
   web: 'Ämblikuvõrk hoiab asja kinni. Ühenda selle kõrval, siis võrk kaob.',
   sand: 'Liivale uusi asju ei tule. Sinna võib ise asju tõsta.',
-  crate: 'Lukus kirst avaneb võtmega. Ühenda võtmed ja lohista võti kirstule.',
+  crate: 'Lukus kirst avaneb võtmega. Ühenda võtmeid ja lohista võti kirstule.',
   bubble: 'Mullid levivad! Ühenda nende kõrval, siis need lõhkevad.',
   boss: 'Suur tellimus! Seekord ootab terve küla. Võta aega ja mõtle enne.',
 };
@@ -4027,7 +4041,7 @@ const Game = (() => {
     const prev = S.disc[k] || 0;
     if (l > prev) {
       S.disc[k] = l;
-      if (ch(k).kind === 'item') { if (!quiet) for (let j = prev + 1; j <= l; j++) ev('discover', -1, { k, l: j }); return true; }
+      if (ch(k).kind === 'item' && !ch(k).ev) { if (!quiet) for (let j = prev + 1; j <= l; j++) ev('discover', -1, { k, l: j }); return true; }
     }
     return false;
   }
@@ -4151,6 +4165,7 @@ const Game = (() => {
     if (r.boost) { const b = typeof r.boost === 'string' ? { [r.boost]: 1 } : r.boost; for (const k in b) if (k in S.adv.boost) S.adv.boost[k] += b[k]; }
     if (r.spins) S.wheel.extra += r.spins;
     if (r.hearts) S.adv.hearts = Math.max(S.adv.hearts, Math.min(HEART_MAX, S.adv.hearts + r.hearts));
+    if (r.look && typeof r.look === 'string') LOOK.unlock(r.look);
     ev('reward', -1, r);
   }
 
@@ -4173,7 +4188,7 @@ const Game = (() => {
     afterMerge(b, res, 1, a, { lucky });
     if (lucky === 'twin') { const e = nearestEmpty(b); if (e >= 0) { S.board[e] = { k: res.k, l: res.l }; ev('spawn', e, { from: b, k: res.k, l: res.l, quiet: true }); } }
     if (lucky === 'mbox') { const e = nearestEmpty(b); if (e >= 0) { S.board[e] = { k: 'mbox', l: 1 }; ev('spawn', e, { from: b, k: 'mbox', l: 1, quiet: true }); } }
-    if (lucky) { ev('lucky', b, { type: lucky, k: res.k, l: res.l }); eventPts(EVENT_PTS.lucky, b); }
+    if (lucky) ev('lucky', b, { type: lucky, k: res.k, l: res.l });
     else if (kind === 'item' && res.l >= 3) {
       const r = rnd();
       if (r < MBOX_P) { const e = nearestEmpty(b); if (e >= 0) { S.board[e] = { k: 'mbox', l: 1 }; ev('spawn', e, { from: b, k: 'mbox', l: 1 }); } }
@@ -4195,7 +4210,8 @@ const Game = (() => {
     const cr = comboReward(S._combo);
     if (cr) { if (cr.coins) addCoins(cr.coins); if (cr.energy) S.en += cr.energy; }
     if (S._combo >= 2) ev('combo', b, { n: S._combo, r: cr });
-    eventPts(n * (res.l >= 4 ? EVENT_PTS.mergeHi : EVENT_PTS.merge), b);
+    PASS.add(PASS_PTS.merge * n, b);
+    if (ch(res.k).ev) WEEK.add(WEEK_CUR.merge(res.l) * n, b);
     addXp(n);
   }
   // Same items connected to cell b (4-neighbours), breadth first from b, skipping cell a (the dragged one).
@@ -4224,7 +4240,6 @@ const Game = (() => {
     S.stats.merge5++;
     afterMerge(b, S.board[b], 2, a, { five: true, cells, outs });
     ev('merge5', b, { cells, outs, k: A.k, l: A.l + 1 });
-    eventPts(EVENT_PTS.merge5, b);
     after(); return true;
   }
   function move(a, b) {
@@ -4261,8 +4276,9 @@ const Game = (() => {
     if (e < 0) { ev('full', i); return false; }
     const [, cd, p2] = GEN_LV[it.l - 1];
     const opts = GENERATORS[it.k].spawn.filter(s => s[2] <= it.l);
-    const k = wpick(opts, s => s[1])[0];
-    const l = ch(k).kind === 'item' && rnd() < p2 ? 2 : 1;
+    let k = wpick(opts, s => s[1])[0];
+    if (S.tut >= 5 && WEEK.open() && rnd() < WEEK_SPAWN_P) k = WEEK.info().chain;
+    const l = ch(k).kind === 'item' && !ch(k).ev && rnd() < p2 ? 2 : 1;
     S.en--;
     it.ch--; if (it.ch <= 0) it.cd = now() + cd * 1000;
     S.board[e] = { k, l };
@@ -4337,7 +4353,16 @@ const Game = (() => {
     if (k === 'energy' || k === 'coin') return collect(i);
     if (k === 'chest') return openChest(i);
     if (k === 'mystery') return openMystery(i);
+    if (ch(it.k).ev && it.l >= maxL(it.k)) return cashEvent(i);
     return false;
+  }
+  // The top level of an event chain is cashed in for event currency and a few coins.
+  function cashEvent(i) {
+    const it = S.board[i]; if (!it || !ch(it.k).ev || it.l < maxL(it.k)) return false;
+    S.board[i] = null; addCoins(10);
+    ev('cashEvent', i, { k: it.k, l: it.l, n: WEEK_CUR.top });
+    WEEK.add(WEEK_CUR.top, i);
+    after(); return true;
   }
   // Mystery box: one surprise, rolled when opened.
   function openMystery(i) {
@@ -4442,7 +4467,7 @@ const Game = (() => {
     S.stats.orders++; S.ordersDone++; daily('order', 1); piggyAdd(PIGGY_ADD.order);
     S.nextOrderAt = now() + 1400;
     ev('order', -1, { oi, o, cells, taken });
-    eventPts(EVENT_PTS.order);
+    PASS.add(PASS_PTS.order); WEEK.add(WEEK_CUR.order);
     if (S.ordersDone % MBOX_ORDER_EVERY === 0) giveItem('mbox', 1);
     addXp(o.xp);
     after(); return true;
@@ -4457,22 +4482,33 @@ const Game = (() => {
   }
 
   // ---- tasks and areas ----
-  const curArea = () => AREAS[Math.min(S.area, AREAS.length - 1)];
-  function nextTask() { const a = AREAS[S.area]; return a ? a.tasks.find(t => !S.done[t.id]) || null : null; }
+  // The current area: a story area, or after the story (S.ended) the current tour island (TOUR.island(S.tour)).
+  const curArea = () => S.ended ? TOUR.cur() : AREAS[Math.min(S.area, AREAS.length - 1)];
+  function nextTask() { const a = S.ended ? TOUR.cur() : AREAS[S.area]; return a ? a.tasks.find(t => !S.done[t.id]) || null : null; }
   function doTask(id) {
-    const t = TASKS[id];
-    if (!t || S.done[id] || nextTask() !== t) return false;
+    const t = nextTask();
+    if (!t || t.id !== id || S.done[id]) return false;
     if (S.stars < t.cost) { ev('deny', -1, { need: 'stars' }); return false; }
     S.stars -= t.cost; S.done[id] = true; S.stats.tasks++;
     give(t.reward);
-    let newArea = null;
-    if (AREAS[S.area].tasks.every(x => S.done[x.id])) {
+    PASS.add(PASS_PTS.task);
+    let newArea = null, ended = false, island = null;
+    if (S.ended) {
+      if (TOUR.cur().tasks.every(x => S.done[x.id])) { S.tour++; island = TOUR.cur(); PASS.add(PASS_PTS.island); }
+    } else if (AREAS[S.area].tasks.every(x => S.done[x.id])) {
       S.area++;
-      if (S.area >= AREAS.length) S.ended = true;
+      if (S.area >= AREAS.length) { S.ended = true; ended = true; island = TOUR.cur(); }
       else { newArea = AREAS[S.area]; if (newArea.introReward) give(newArea.introReward); }
     }
-    ev('task', -1, { t, newArea, ended: S.ended && !newArea });
+    ev('task', -1, { t, newArea, ended, island });
     after(); return true;
+  }
+  // Design choice for a task with t.choices (also changed later from the task list).
+  function setStyle(id, key) {
+    const t = TOUR.task(id);
+    if (!t || !t.choices || !t.choices.includes(key) || !S.done[id]) return false;
+    const was = S.style[id]; S.style[id] = key;
+    ev('style', -1, { id, key, was }); after(); return true;
   }
 
   // ---- daily gift and daily tasks ----
@@ -4526,7 +4562,7 @@ const Game = (() => {
   }
   function claimDaily(ti) {
     const t = S.daily.tasks[ti]; if (!t || t.claimed || t.n < t.goal) return false;
-    t.claimed = true; give(DAILY_REWARD); ev('dailyClaim', -1, { ti }); after(); return true;
+    t.claimed = true; give(DAILY_REWARD); PASS.add(PASS_PTS.daily); ev('dailyClaim', -1, { ti }); after(); return true;
   }
   function claimBonus() {
     if (S.daily.bonus || !S.daily.tasks.length || !S.daily.tasks.every(t => t.claimed)) return false;
@@ -4576,7 +4612,7 @@ const Game = (() => {
     }
     refillOrders();
     if (ensureDaily()) ev('newDay', -1);
-    ensureEvent();
+    if (!S.title) { PASS.ensure(); WEEK.ensure(); LOOK.check(); }
   }
 
   function newGame() {
@@ -4586,7 +4622,7 @@ const Game = (() => {
     put(3, 3, 'oven'); put(1, 5, 'basket'); put(6, 1, 'coin', 1); put(0, 2, 'coffee', 1);
     quiet = false;
     S.tut = 0;
-    ensureDaily(); ensureEvent();
+    ensureDaily(); PASS.ensure(); LOOK.check(true);
     return S;
   }
 
@@ -4597,7 +4633,7 @@ const Game = (() => {
     ensureDaily, claimGift, claimDaily, claimBonus, giftReward, shopList, buy, tutCheck, tick, newGame, addXp, give, refreshGen,
     group, merge5, openMystery, albumHas, albumPending, albumCount, chainFull, claimAlbum, claimChain,
     eventInfo, ensureEvent, claimEvent, eventReady, freeEnIn, claimFreeEnergy, orderNeeds,
-    piggyAdd, piggyReady, openPiggy, wheelFree, wheelSpins, spinWheel, addCoins,
+    piggyAdd, piggyReady, openPiggy, wheelFree, wheelSpins, spinWheel, addCoins, setStyle, cashEvent,
   };
 })();
 
@@ -5108,6 +5144,7 @@ const LV = (() => {
     const rew = winReward(r, first, stars);
     Game.give(Object.assign({ silent: true }, rew));
     Game.piggyAdd(PIGGY_ADD.level);
+    PASS.add(PASS_PTS.level); WEEK.add(WEEK_CUR.level);
     saveSoon();
     return { n, stars, prev, first, rew, streak: A.streak };
   }
@@ -5144,6 +5181,466 @@ const LV = (() => {
     get cur() { return cur; }, set cur(v) { cur = v; }, hasMove, CRATE_MOVES,
   };
 })();
+
+// Saarepagar version 3 phase B (Mira): data and rules for
+//   TOUR   the endless island tour "Saareringreis" after the six story areas (S.tour, TOUR.island(i))
+//   STYLES design choices on decor tasks (S.style[taskId] = 'boho' | 'minimal' | 'romantic')
+//   PASS   the free monthly season pass "Hooaja rada" (S.pass)
+//   WEEK   the weekly event by ISO week (S.week), with its own currency, chain ev_<key> and reward track
+//   LOOK   wardrobe and pets (S.look, S.pets, S.petOn), unlocked through play
+// Game logic never draws: everything is reported through UI.ev(kind, cell, data).
+const xev = (kind, cell, data) => { if (typeof UI !== 'undefined' && UI.ev) UI.ev(kind, cell === undefined ? -1 : cell, data || {}); };
+
+// ---------------------------------------------------------------- design choices
+const STYLES = {
+  boho: { name: 'Boho', desc: 'Mõnus, vaba ja värviline', cols: ['#d9895b', '#e8c27a', '#7aa874'] },
+  minimal: { name: 'Minimalistlik', desc: 'Hele, puhas ja rahulik', cols: ['#f4f1ea', '#c9d3d6', '#8a9aa0'] },
+  romantic: { name: 'Romantiline', desc: 'Roosa, pitsiline ja pehme', cols: ['#f6b6c8', '#fde4ec', '#c97a9a'] },
+};
+const STYLE_KEYS = ['boho', 'minimal', 'romantic'];
+// Story tasks that offer a style choice (Ash draws the variants in ART.scene from opts.style).
+for (const id of ['b5', 'b6', 'g5', 'h5', 'w5']) if (TASKS[id]) TASKS[id].choices = STYLE_KEYS.slice();
+
+// ---------------------------------------------------------------- island tour
+// Each theme: Estonian name, island names, two intros ({name} = the island), regular tasks and a finale.
+// A task: [name, line, choices?]. A line is [who, text]. Six tasks per island: five shuffled regular ones and the finale.
+const TOUR_THEMES = {
+  flower: { name: 'Lillepood', area: 'garden',
+    names: ['Roosisaar', 'Moonilaid', 'Sirelisaar', 'Tulbirahu', 'Kannikeselaid', 'Kullerkupusaar'],
+    intro: [
+      [['liisa', '{name}! Siin on vana kasvuhoone ja tühi lillepood. Lõhn on tasuta!'], ['mina', 'Lillepood mere ääres? Teeme sellest saare kõige lõhnavama koha.'], ['muri', 'Mjäu. (Lilled on ilusad. Aga lillepotis on veel parem magada.)']],
+      [['peeter', 'Tere tulemast saarele {name}! Lilli on siin nii palju, et mesilased töötavad graafiku järgi.'], ['mina', 'Siis avame lillepoe. Mesilased saavad esimese kliendikaardi.']],
+    ],
+    tasks: [
+      ['Pese kasvuhoone klaasid', ['liisa', 'Nüüd paistab päike sisse ja lilled hakkavad kohe poseerima.']],
+      ['Värvi letid', ['mina', 'Valisin värvi, mis sobib iga lillega. Ka nendega, mida veel ei ole.'], 1],
+      ['Paranda kastekann', ['ants', 'Hm. Kann enam ei leki. Kannikesed on tänulikud.']],
+      ['Istuta roosipeenar', ['muri', 'Mjäu. (Roosidel on okkad. Ma tean seda nüüd. Ära küsi.)']],
+      ['Riputa lillekorvid', ['liisa', 'Iga korv on nagu väike pidu. Panen kõik pildid üles!'], 1],
+      ['Ehita lillevitriin', ['peeter', 'Vitriinis on lilled nagu luuletus. Kirjutan sellest neli salmi.']],
+      ['Seo esimesed kimbud', ['mina', 'Üks kimp Liisale, üks Antsule ja üks lihtsalt niisama, rõõmuks.']],
+      ['Pane uksele lillepärg', ['liisa', 'Pärg uksel tähendab: siin elavad toredad inimesed. Ja üks kass.'], 1],
+      ['Kasvata hiidpäevalill', ['ants', 'Hm. Päevalill on pikem kui mina. Ma ei ole kade.']],
+    ],
+    finale: ['Lillepoe avamine', [['liisa', 'Rahvast on nii palju, et lilled peavad järjekorras ootama!'], ['mina', 'Saar lõhnab nüüd nagu suvi. Järgmine saar, me tuleme!']]],
+  },
+  spa: { name: 'Spaa', area: 'secret',
+    names: ['Mullisaar', 'Vahulaid', 'Aurusaar', 'Mudalaid', 'Rahusaar', 'Soojarahu'],
+    intro: [
+      [['liisa', '{name} on kuulus oma sooja allika poolest. Ja mudaga, mis teeb naha siidiseks!'], ['mina', 'Spaa! Mullivann, saun ja rahu. Olen täiesti poolt.'], ['muri', 'Mjäu. (Vesi? Ei, aitäh. Mina lõõgastun kuivalt.)']],
+      [['ants', 'Hm. Saun on vana. Leil on hea. Kõik muu on katki.'], ['mina', 'Siis teeme kõik muu korda. Leil jääb, nagu on.']],
+    ],
+    tasks: [
+      ['Küta saun soojaks', ['ants', 'Hm. Hea leil. Väga hea leil. ... Hm.']],
+      ['Paranda mullivann', ['liisa', 'Mullid on tagasi! Ma ei tule siit enam kunagi välja.']],
+      ['Vali käterätikud', ['mina', 'Pehmed rätikud on pool puhkusest. Teine pool on uni.'], 1],
+      ['Sisusta massaažituba', ['peeter', 'Pärast massaaži hõljun nagu pilv. Väga aeglane pilv.'], 1],
+      ['Täida mudavannid', ['muri', 'Mjäu. (Keegi pani mulle mudamaski. See olin mina ise. Kogemata.)']],
+      ['Istuta lavendlit', ['liisa', 'Lavendel lõhnab nii rahulikult, et isegi mu telefon läks lennukirežiimi.']],
+      ['Lao kividest jalarada', ['mina', 'Paljajalu kividel kõndides ununevad kõik kirjad ja kõned.']],
+      ['Riputa küünlalaternad', ['peeter', 'Küünlavalgus on nagu väike majakas. Ainult sooja vee jaoks.'], 1],
+      ['Keeda taimeteed', ['liisa', 'Kummel, piparmünt ja natuke saladust. Retsepti ma ei ütle.']],
+    ],
+    finale: ['Spaa avapäev', [['liisa', 'Terve küla on rätikutes! See on parim pilt, mis ma eales teinud olen.'], ['ants', 'Hm. Ma jään siia. Natukeseks. Paariks aastaks.']]],
+  },
+  icecream: { name: 'Jäätisekiosk', area: 'harbour',
+    names: ['Vahvlisaar', 'Jäätiselaid', 'Pähklisaar', 'Maasikarahu', 'Vanillilaid', 'Šokolaadisaar'],
+    intro: [
+      [['liisa', '{name}! Siin seisab vana jäätisekiosk. Uks on lukus, aga vahvlilõhn on alles!'], ['mina', 'Jäätis mere ääres. Kas on üldse midagi paremat?'], ['muri', 'Mjäu. (Vanillijäätis on kassidele lubatud. Ma otsustasin nii.)']],
+      [['peeter', 'Lapsena ostsin siit iga päev jäätist. Isegi talvel.'], ['mina', 'Siis avame kioski uuesti. Talvel ka, Peetri pärast.']],
+    ],
+    tasks: [
+      ['Värvi kiosk triibuliseks', ['liisa', 'Triibud! Nüüd näeb kiosk välja nagu kommipaber.'], 1],
+      ['Paranda külmkapp', ['ants', 'Hm. Külm on. Külm on hea. Kalale ka.']],
+      ['Küpseta vahvlitopsid', ['mina', 'Esimene vahvel läks katki. Teise sõin ära. Kolmas on täiuslik.']],
+      ['Vali päikesevarjud', ['peeter', 'Iga vari on nagu väike katus. Ja iga katus on luuletust väärt.'], 1],
+      ['Korja maasikad', ['muri', 'Mjäu. (Ma ei söönud ühtegi. See punane täpp on mu loomulik värv.)']],
+      ['Kujunda jäätisemenüü', ['liisa', 'Uus maitse: meresoolakaramell! Olen sellest juba kolm postitust teinud.'], 1],
+      ['Too pingid', ['ants', 'Hm. Pink. Istun. Söön jäätist. Ei räägi.']],
+      ['Riputa vahvlituled', ['mina', 'Õhtul helendab kiosk nagu suur jäätisepall.']],
+      ['Keeda šokolaadikaste', ['liisa', 'Šokolaadi on igal pool. Ka mu ninaotsas. Ära kellelegi ütle.']],
+    ],
+    finale: ['Jäätisepäev', [['liisa', 'Järjekord ulatub sadamani! Isegi kajakad ootavad viisakalt.'], ['mina', 'Kaks palli igaühele. Muri saab kolm, ta palus väga kenasti.']]],
+  },
+  fashion: { name: 'Moebutiik', area: 'bakery',
+    names: ['Siidisaar', 'Pitsilaid', 'Nööbisaar', 'Sametirahu', 'Litrilaid', 'Moesaar'],
+    intro: [
+      [['liisa', '{name}! Siin on vana rätsepatöökoda. Täis kangaid, nööpe ja unistusi!'], ['mina', 'Moebutiik saarel? Saarestiil! Kudumid, linane ja natuke sära.'], ['muri', 'Mjäu. (Kangarullid on mu uued voodid. Neid ei tohi müüa.)']],
+      [['peeter', 'Mu vanaema õmbles siin kleite kogu saarele. Ka minu ristimiskleidi.'], ['mina', 'Peeter kleidis? Seda pilti tahan näha. Aga enne teeme butiigi korda.']],
+    ],
+    tasks: [
+      ['Puhasta õmblusmasinad', ['liisa', 'Masin surises ja õmbles ise ühe õmbluse. Ta igatses tööd!']],
+      ['Kujunda vaateaken', ['mina', 'Vaateaken on butiigi nägu. Nüüd ta naeratab.'], 1],
+      ['Õmble linased kleidid', ['liisa', 'Linane, mugav ja ilus. Nagu suvepäev, mida saab selga panna.']],
+      ['Sisusta proovikabiin', ['muri', 'Mjäu. (Kabiinis on peegel. Seal elab teine kass. Ta on väga ilus.)'], 1],
+      ['Koo meremehekampsunid', ['ants', 'Hm. Soe. Väga soe. Võtan kaks.']],
+      ['Riputa riidepuud', ['mina', 'Iga riidepuu on nagu väike lava. Kleidid ootavad aplausi.']],
+      ['Vali vaip ja tugitoolid', ['peeter', 'Siin on nii mõnus, et salvestan siin oma podcasti. Kohe praegu.'], 1],
+      ['Sorteeri nööbid', ['liisa', 'Nööbid värvide järgi! See on mu elu parim päev. Tänaseni.']],
+      ['Korralda kangamüük', ['mina', 'Kõik kangad läksid. Peaaegu. Muri magab viimase peal.']],
+    ],
+    finale: ['Moeetendus kai peal', [['liisa', 'Kai on poodium! Ka Ants kõndis. Väga tõsiselt.'], ['ants', 'Hm. Ma olin hea. Ma tean.']]],
+  },
+  wedding: { name: 'Pulmaaed', area: 'garden',
+    names: ['Sõrmusesaar', 'Loorilaid', 'Kimbusaar', 'Tordirahu', 'Südamelaid', 'Armusaar'],
+    intro: [
+      [['liisa', '{name}! Siin on aed, kus peeti kõik saare pulmad. Enne kui see võssa kasvas.'], ['mina', 'Pulmaaed! Lilled, tuled ja pikk laud. Ma juba nutan ja me pole veel alustanudki.'], ['muri', 'Mjäu. (Pulmades on tort. Olen pulmade suur austaja.)']],
+      [['peeter', 'Selle tamme all tegin kunagi abieluettepaneku. Ta ütles: „Ma mõtlen.“ Mõtleb siiani.'], ['mina', 'Oi, Peeter! Teeme aia nii ilusaks, et vastus tuleb iseenesest.']],
+    ],
+    tasks: [
+      ['Niida aed', ['mina', 'Rohu alt tuli välja vana pink ja üks kadunud kingake.']],
+      ['Ehita lillekaar', ['liisa', 'Kaare all tuleb iga pilt nagu ajakirjast. Proovisin. Kolmkümmend korda.'], 1],
+      ['Pane püsti pikk laud', ['ants', 'Hm. Pikk laud. Palju toole. Palju inimesi. Hm.']],
+      ['Vali laudlinad ja küünlad', ['mina', 'Küünlad, linad ja lillevaasid. Nüüd on laud peoks valmis.'], 1],
+      ['Riputa tuledeketid', ['peeter', 'Tuled puude vahel. Nagu tähed, kes tulid lähemale vaatama.']],
+      ['Küpseta pulmatort', ['muri', 'Mjäu. (Ma ei puutunud torti. Ma ainult nuusutasin. Põhjalikult.)']],
+      ['Ehita tantsupõrand', ['liisa', 'Tantsupõrand on valmis! Ants, sina tantsid esimesena.'], 1],
+      ['Seo pruudikimbud', ['mina', 'Kimbud on nii ilusad, et mesilased lendavad kohale lihtsalt vaatama.']],
+      ['Kutsu kokku külaorkester', ['peeter', 'Orkestris on kannel, akordion ja Ants trummi taga. Ants veel ei tea.']],
+    ],
+    finale: ['Suur pulmapidu', [['liisa', 'Terve saar tantsib! Isegi Ants. Kaks korda!'], ['ants', 'Hm. Kolm korda. Aga ära kellelegi ütle.']]],
+  },
+  beach: { name: 'Rannaklubi', area: 'harbour',
+    names: ['Liivasaar', 'Päikeselaid', 'Lainerahu', 'Karbisaar', 'Rannalaid', 'Tuulesaar'],
+    intro: [
+      [['liisa', '{name}! Valge liiv, soe meri ja üks väga üksik rannabaar.'], ['mina', 'Rannaklubi! Lamamistoolid, smuutid ja päikeseloojang.'], ['muri', 'Mjäu. (Liiv on hiiglaslik liivakast. Olen vaimustuses.)']],
+      [['ants', 'Hm. Siin õppisin ujuma. Või õppis meri mind kandma.'], ['mina', 'Teeme sellest ranna, kus kõik tahavad ujuma õppida.']],
+    ],
+    tasks: [
+      ['Korista rand', ['mina', 'Liivast tuli välja kolm kühvlit, üks kummik ja Antsu päikeseprillid.']],
+      ['Ehita rannabaar', ['liisa', 'Baar on valmis! Esimene smuuti on minu oma. Broneerisin.'], 1],
+      ['Too lamamistoolid', ['peeter', 'Päike, lained ja lamamistool. Kirjutan sellest luuletuse. Hiljem.'], 1],
+      ['Paranda vetelpäästetorn', ['ants', 'Hm. Torn on kõrge. Näen kõike. Ka Liisat, kes jälle telefoniga räägib.']],
+      ['Tõmba üles võrkpallivõrk', ['liisa', 'Võrkpallis olen ma meister! Peaaegu. Natuke. Pall on mu vaenlane.']],
+      ['Riputa laternad', ['mina', 'Õhtul on rand nagu muinasjutt. Isegi lained sosistavad vaiksemalt.'], 1],
+      ['Koosta smuutimenüü', ['muri', 'Mjäu. (Kalasmuutit menüüs ei ole. Ma kaeban.)']],
+      ['Too välja aerulauad', ['ants', 'Hm. Laud. Aer. Seisad püsti. Kukud. Proovid uuesti. Hea sport.']],
+      ['Ehita liivaloss', ['mina', 'Liivalossil on neli torni ja vallikraav. Muri arvab, et see on tema oma.']],
+    ],
+    finale: ['Rannapidu', [['liisa', 'DJ Peeter! Ma ei teadnudki, et sa oskad!'], ['peeter', 'Ei oskagi. Aga nupud on ilusad.']]],
+  },
+  xmas: { name: 'Jõuluturg', area: 'windmill',
+    names: ['Piparkoogisaar', 'Kuuselaid', 'Lumesaar', 'Kingirahu', 'Tähelaid', 'Küünlasaar'],
+    intro: [
+      [['liisa', '{name}! Siin on vana turuplats. Kunagi oli siin saare kõige ilusam jõuluturg.'], ['mina', 'Jõuluturg! Piparkoogid, kuum mahl ja tuled igal pool.'], ['muri', 'Mjäu. (Jõulukuusk on kassidele ronimiseks. Seda teavad kõik.)']],
+      [['peeter', 'Jõuluvana elab kuskil siin lähedal. Ma pole teda näinud, aga keegi sõi mu piparkoogid ära.'], ['muri', 'Mjäu. (Ma ei tea midagi.)']],
+    ],
+    tasks: [
+      ['Lükka lumi platsilt', ['ants', 'Hm. Lumi. Labidas. Lumi. Labidas. Hea.']],
+      ['Ehita turuputkad', ['liisa', 'Iga putka on nagu piparkoogimaja! Tahan kõigisse korraga.'], 1],
+      ['Küpseta piparkoogid', ['mina', 'Esimene plaat kõrbes. Teise sõi keegi ära. Muri, mis sul vurrude peal on?']],
+      ['Too jõulukuusk', ['peeter', 'Kuusk lõhnab nagu metsatuul ja lapsepõlv korraga.'], 1],
+      ['Riputa jõulutuled', ['liisa', 'Tuled põlevad! Nüüd paistab saar vist ka kosmosesse.']],
+      ['Keeda kuuma mahla', ['ants', 'Hm. Kuum. Magus. Võtan veel.']],
+      ['Koo villased sokid', ['mina', 'Sokid müüdi tunniga läbi. Antsul on nüüd kolm paari.']],
+      ['Sea üles kingiletti', ['liisa', 'Pakid on nii ilusad, et keegi ei raatsi neid avada. Mina raatsin.'], 1],
+      ['Tee uisuväljak', ['muri', 'Mjäu. (Jää on libe. Ma kõnnin väga väärikalt. Ja aeglaselt.)']],
+    ],
+    finale: ['Jõuluturu avamine', [['peeter', 'Kuuse otsas särab täht ja kõik laulavad. Isegi Ants ümiseb.'], ['ants', 'Hm. Hmm-hmm-hmm. ... See oli laul.']]],
+  },
+  orchard: { name: 'Sügisene õunaaed', area: 'garden',
+    names: ['Õunasaar', 'Pirnilaid', 'Ploomisaar', 'Mahlarahu', 'Korvilaid', 'Sügisesaar'],
+    intro: [
+      [['liisa', '{name}! Siin on vana õunaaed. Õunu on nii palju, et puud on väsinud.'], ['mina', 'Sügisene õunaaed! Õunamahl, õunakook ja õunapidu.'], ['muri', 'Mjäu. (Kukkuvad õunad on ohtlikud. Ma valvan neid magades.)']],
+      [['ants', 'Hm. Maali korjas siit õunu. Alati kõige kõrgemalt oksalt.'], ['mina', 'Siis korjame meie ka. Redeliga. Ja Antsuga.']],
+    ],
+    tasks: [
+      ['Riisu lehed kokku', ['mina', 'Lehehunnik on nii suur, et Muri kadus sinna ära. Kaks korda.']],
+      ['Paranda vana mahlapress', ['ants', 'Hm. Press töötab. Mahl on hea. Väga hea.']],
+      ['Korja õunad', ['liisa', 'Kolmkümmend korvi! Tegin igast korvist pildi. Igast õunast ka.']],
+      ['Ehita aiakohvik', ['mina', 'Kohv, õunakook ja sügisvärvid. Mis võiks veel parem olla?'], 1],
+      ['Vali padjad ja pleedid', ['peeter', 'Siin on nii hubane, et tahaks terve talve istuda.'], 1],
+      ['Küpseta õunakook', ['muri', 'Mjäu. (Kook on soe. Istun selle kõrval. Valvan.)']],
+      ['Riputa kõrvitsalaternad', ['liisa', 'Kõrvitsad naeratavad! Üks näeb välja täpselt nagu Ants.'], 1],
+      ['Keeda õunamoosi', ['ants', 'Hm. Moos. Leivale. Kalale ei pane.']],
+      ['Pane üles õunapuukiik', ['mina', 'Kiik õunapuu all. Vanaemale oleks see väga meeldinud.']],
+    ],
+    finale: ['Õunapidu', [['liisa', 'Kõik on siin! Õunamahl voolab ja muusika mängib!'], ['peeter', 'Sügis on nagu hea luuletus: soe, kuldne ja natuke kurb. Aga peamiselt soe.']]],
+  },
+};
+const TOUR_KEYS = ['flower', 'spa', 'icecream', 'fashion', 'wedding', 'beach', 'xmas', 'orchard'];
+const TOUR_SIZE = 6;
+
+const TOUR = (() => {
+  // Seeded Fisher-Yates (does not touch the gameplay stream rnd).
+  function shuffle(a, r) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  const orderCache = new Map();
+  // Theme order of one cycle of 8 islands: reshuffled per cycle, never the same theme twice in a row.
+  function cycleOrder(c) {
+    let o = orderCache.get(c); if (o) return o;
+    o = c === 0 ? TOUR_KEYS.slice() : shuffle(TOUR_KEYS, mulberry(hashStr('tour-cycle-' + c)));
+    if (c > 0) { const prev = cycleOrder(c - 1); if (o[0] === prev[prev.length - 1]) { const t = o[0]; o[0] = o[1]; o[1] = t; } }
+    orderCache.set(c, o); return o;
+  }
+  const themeOf = i => cycleOrder(Math.floor(i / TOUR_KEYS.length))[i % TOUR_KEYS.length];
+  const fill = (s, name) => s.replace('{name}', name);
+  const cache = new Map();
+  // Rewards and costs grow slowly and stay friendly (stars come from orders, 1–4 each).
+  function taskReward(i, n, last) {
+    const c = Math.min(300, 80 + i * 10);
+    if (last) return { coins: c * 2, chest: 2, spins: 1 };
+    switch ((n + i) % 5) {
+      case 0: return { coins: c };
+      case 1: return { energy: Math.min(60, 30 + i * 2) };
+      case 2: return { coins: Math.round(c * 0.6), item: ['mbox', 1] };
+      case 3: return { chest: 1, energy: 20 };
+      default: return { coins: Math.round(c * 0.8), spins: 1 };
+    }
+  }
+  function island(i) {
+    i = Math.max(0, i | 0);
+    let o = cache.get(i); if (o) return o;
+    const key = themeOf(i), T = TOUR_THEMES[key], cyc = Math.floor(i / TOUR_KEYS.length), r = mulberry(hashStr('tour-island-' + i));
+    const round = Math.floor(cyc / T.names.length);
+    const name = T.names[cyc % T.names.length] + (round > 0 ? ' ' + (round + 1) : '');
+    // five regular tasks (at least one with a style choice), then the finale
+    let pick = shuffle(T.tasks.map((x, j) => j), r).slice(0, TOUR_SIZE - 1);
+    if (!pick.some(j => T.tasks[j][2])) { const c = T.tasks.findIndex(x => x[2]); pick[pick.length - 1] = c; }
+    pick = pick.sort((a, b) => a - b);
+    const base = Math.min(20, 10 + Math.floor(i * 0.7));
+    const tasks = pick.map((j, n) => {
+      const d = T.tasks[j], t = { id: 't' + i + '_' + n, name: d[0], cost: base + n, reward: taskReward(i, n, false), story: [d[1].slice()], tour: i };
+      if (d[2]) t.choices = STYLE_KEYS.slice();
+      return t;
+    });
+    tasks.push({ id: 't' + i + '_' + (TOUR_SIZE - 1), name: T.finale[0], cost: base + TOUR_SIZE + 1, reward: taskReward(i, TOUR_SIZE - 1, true), story: T.finale[1].map(l => [l[0], fill(l[1], name)]), tour: i, finale: true });
+    const intro = T.intro[cyc % T.intro.length].map(l => [l[0], fill(l[1], name)]);
+    o = { i, theme: key, themeName: T.name, name, key: 'tour', area: T.area, tasks, intro };
+    if (cache.size > 12) cache.delete(cache.keys().next().value);
+    cache.set(i, o); return o;
+  }
+  // Task lookup by id: story TASKS or a tour task "t<i>_<n>".
+  function task(id) {
+    if (TASKS[id]) return TASKS[id];
+    const m = /^t(\d+)_(\d+)$/.exec(id || ''); if (!m) return null;
+    return island(+m[1]).tasks[+m[2]] || null;
+  }
+  // The story area whose art stands in until ART.tourScene exists, with a share of its tasks marked done.
+  function fallbackProgress(isl, done) {
+    const a = AREAS.find(x => x.key === isl.area) || AREAS[0], n = isl.tasks.filter(t => done[t.id]).length;
+    const k = Math.round(n / isl.tasks.length * a.tasks.length), set = new Set();
+    a.tasks.slice(0, k).forEach(t => set.add(t.id));
+    return { area: a.key, set };
+  }
+  const on = () => !!(S && S.ended);
+  const cur = () => island(S.tour || 0);
+  return { island, task, themeOf, cur, on, fallbackProgress, THEMES: TOUR_THEMES, KEYS: TOUR_KEYS };
+})();
+
+// ---------------------------------------------------------------- season pass "Hooaja rada"
+const PASS_STEPS = 30;
+const PASS_PTS = { merge: 1, order: 3, task: 6, level: 5, daily: 4, island: 15, week: 2 };
+const MONTHS = ['jaanuar', 'veebruar', 'märts', 'aprill', 'mai', 'juuni', 'juuli', 'august', 'september', 'oktoober', 'november', 'detsember'];
+const PASS = (() => {
+  const need = s => 15 + 3 * s;                // points for step s (1-based)
+  const cum = s => { let t = 0; for (let j = 1; j <= s; j++) t += need(j); return t; };
+  const CUM = []; for (let s = 0; s <= PASS_STEPS; s++) CUM.push(cum(s));
+  // Wardrobe pieces on the track: unlocked for good the first time the step is claimed.
+  const LOOK_AT = { 5: 'hair:braid', 15: 'outfit:cozy', 25: 'acc:hat', 30: 'petAcc:hat' };
+  function reward(s) {
+    let r;
+    if (s % 10 === 0) r = { coins: 60 * s / 10 + 40, chest: 2, spins: 1 };
+    else if (s % 5 === 0) r = { coins: 40, boost: 'wand' };
+    else if (s % 3 === 0) r = { spins: 1, coins: 15 };
+    else if (s % 2 === 0) r = { energy: 15 + s };
+    else r = { coins: 20 + 2 * s };
+    if (s === 7 || s === 22) r = { item: ['mbox', 1], coins: 25 };
+    if (s === 12 || s === 27) r = { boost: s === 12 ? 'scissors' : 'shuffle', energy: 20 };
+    if (LOOK_AT[s]) r = Object.assign({ look: LOOK_AT[s] }, r);
+    return r;
+  }
+  function monthKey(t) { const d = new Date(t || now()); return d.getFullYear() + '-' + (d.getMonth() + 1); }
+  function monthName(t) { return MONTHS[new Date(t || now()).getMonth()]; }
+  function left(t) { t = t || now(); const d = new Date(t); return new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime() - t; }
+  const reached = () => { let s = 0; while (s < PASS_STEPS && S.pass.pts >= CUM[s + 1]) s++; return s; };
+  const ready = () => { const n = reached(); for (let s = 1; s <= n; s++) if (!S.pass.got[s]) return s; return 0; };
+  // A new month: rewards reached but not taken are given right away (nothing is lost), then a fresh track.
+  function ensure() {
+    const m = monthKey();
+    if (S.pass.month === m) return false;
+    const old = S.pass.month ? reached() : 0, late = {};
+    for (let s = 1; s <= old; s++) if (!S.pass.got[s]) { const r = reward(s); for (const k in r) late[k] = typeof r[k] === 'number' ? (late[k] || 0) + r[k] : r[k]; }
+    const had = !!S.pass.month;
+    S.pass = { month: m, pts: 0, got: {} };
+    if (Object.keys(late).length) { Game.give(Object.assign({ silent: true }, late)); xev('passLate', -1, { r: late }); }
+    if (had) xev('passNew', -1, {});
+    return true;
+  }
+  function add(n, cell) {
+    if (!S || !n) return;
+    ensure();
+    const before = reached(); S.pass.pts += n;
+    const after = reached();
+    if (after > before) xev('passStep', cell, { s: after });
+  }
+  function claim(s) {
+    if (!s || s > reached() || S.pass.got[s]) return false;
+    S.pass.got[s] = 1; const r = reward(s);
+    Game.give(Object.assign({ silent: true }, r));
+    xev('passClaim', -1, { s, r }); saveSoon(); return true;
+  }
+  return { need, CUM, reward, reached, ready, ensure, add, claim, monthKey, monthName, left, LOOK_AT };
+})();
+
+// ---------------------------------------------------------------- weekly events
+// ev_<key> chains: 6 levels each. Tap the top level to cash it in for event currency.
+const WEEK_EVENTS = {
+  garden: { name: 'Aiapidu', cur: ['õied', 'õit'], color: '#6fc25a', chain: ['Seemnepakk', 'Lilleidu', 'Pottlill', 'Lillekast', 'Roosipõõsas', 'Aiapaviljon'] },
+  fashion: { name: 'Moenädal', cur: ['nööbid', 'nööpi'], color: '#b07cff', chain: ['Nööp', 'Niidirull', 'Kangarull', 'Kleidilõige', 'Suvekleit', 'Moeetenduse kleit'] },
+  wedding: { name: 'Pulmad', cur: ['kellukesed', 'kellukest'], color: '#ff8ab8', chain: ['Pits', 'Pulmakutse', 'Pruudikimp', 'Sõrmusekarp', 'Pulmakleit', 'Pulmakaar'] },
+  beach: { name: 'Rannafestival', cur: ['karbid', 'karpi'], color: '#3db8ff', chain: ['Liivakühvel', 'Liivaämber', 'Rannapall', 'Päikesevari', 'Lamamistool', 'Liivaloss'] },
+};
+const WEEK_KEYS = ['garden', 'fashion', 'wedding', 'beach'];
+for (const k of WEEK_KEYS) CHAINS['ev_' + k] = { kind: 'item', ev: k, name: WEEK_EVENTS[k].name, color: WEEK_EVENTS[k].color, names: WEEK_EVENTS[k].chain.slice() };
+const WEEK_MIN_LVL = 3;        // the event opens at XP level 3 (the first minutes stay simple)
+const WEEK_SPAWN_P = 0.09;     // share of generator taps that give an event item instead
+const WEEK_CUR = { merge: l => 2 * l, top: 30, order: 2, level: 4 };
+// Each event's track; the 8th prize is a wardrobe piece of its own.
+const WEEK_TRACK = [
+  { need: 10, r: { coins: 30 } },
+  { need: 25, r: { energy: 30 } },
+  { need: 45, r: { item: ['mbox', 1] } },
+  { need: 70, r: { coins: 80, spins: 1 } },
+  { need: 100, r: { item: ['chest', 2] } },
+  { need: 140, r: { energy: 60 } },
+  { need: 190, r: { stars: 3 } },
+  { need: 250, r: { look: true, coins: 100 } },
+  { need: 320, r: { item: ['chest', 3], boost: 'wand' } },
+  { need: 400, r: { genUp: true, stars: 5 } },
+];
+const WEEK_LOOK = { garden: 'acc:flower', fashion: 'outfit:gala', wedding: 'petAcc:bow', beach: 'outfit:beach' };
+const WEEK = (() => {
+  function isoWeek(t) {
+    const d = new Date(t || now()), u = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const day = u.getUTCDay() || 7; u.setUTCDate(u.getUTCDate() + 4 - day);
+    const y0 = new Date(Date.UTC(u.getUTCFullYear(), 0, 1));
+    return { year: u.getUTCFullYear(), week: Math.ceil(((u - y0) / 86400000 + 1) / 7) };
+  }
+  function info(t) {
+    t = t || now();
+    const w = isoWeek(t), forced = QS.week && WEEK_EVENTS[QS.week] ? QS.week : null;
+    const key = forced || WEEK_KEYS[(w.year * 53 + w.week) % WEEK_KEYS.length];
+    const d = new Date(t), dow = (d.getDay() + 6) % 7; // 0 = Monday
+    const end = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow + 7).getTime();
+    return { id: w.year + '-W' + w.week + (forced ? ':' + forced : ''), key, E: WEEK_EVENTS[key], left: end - t, weekend: dow >= 5, chain: 'ev_' + key };
+  }
+  const open = () => !!S && S.lvl >= WEEK_MIN_LVL;
+  // A new week: event items of the old week on the board and in the bag turn into coins.
+  function ensure() {
+    const e = info();
+    if (S.week.id === e.id) return false;
+    let coins = 0;
+    const old = k => CHAINS[k] && CHAINS[k].ev && k !== e.chain;
+    for (let i = 0; i < NCELL; i++) { const it = S.board[i]; if (it && old(it.k)) { coins += 5 * it.l; S.board[i] = null; } }
+    for (let j = S.bag.length - 1; j >= 0; j--) if (old(S.bag[j].k)) { coins += 5 * S.bag[j].l; S.bag.splice(j, 1); }
+    const had = !!S.week.id;
+    S.week = { id: e.id, key: e.key, cur: 0, got: {} };
+    if (coins) Game.addCoins(coins);
+    if (had || open()) xev('weekStart', -1, { e, coins });
+    return true;
+  }
+  function add(n, cell) {
+    if (!S || !open() || !n) return;
+    ensure();
+    const e = info(); if (e.weekend) n *= 2;
+    const before = S.week.cur; S.week.cur += n;
+    const nx = WEEK_TRACK.find((x, j) => !S.week.got[j] && x.need > before);
+    xev('weekCur', cell, { n, ready: !!(nx && S.week.cur >= nx.need) });
+  }
+  function reward(j) {
+    const r = Object.assign({}, WEEK_TRACK[j].r);
+    if (r.look) r.look = WEEK_LOOK[info().key];
+    return r;
+  }
+  const readyIdx = () => { for (let j = 0; j < WEEK_TRACK.length; j++) if (!S.week.got[j] && S.week.cur >= WEEK_TRACK[j].need) return j; return -1; };
+  function claim(j) {
+    if (!open() || S.week.got[j] || S.week.cur < WEEK_TRACK[j].need) return false;
+    S.week.got[j] = 1; const r = reward(j);
+    Game.give(Object.assign({ silent: true }, r));
+    xev('weekClaim', -1, { j, r }); saveSoon(); return true;
+  }
+  return { info, isoWeek, open, ensure, add, reward, claim, readyIdx };
+})();
+
+// ---------------------------------------------------------------- wardrobe and pets
+// how: a check on S (unlocked while true), or 'pass' / 'week' (unlocked once by a prize). why: the hint on a locked piece.
+const LOOKS = {
+  outfit: {
+    casual: { name: 'Igapäevane' },
+    summer: { name: 'Suvekleit', how: () => S.lvl >= 4, why: 'Tase 4' },
+    chef: { name: 'Pagari põll', how: () => !!S.done.b7, why: 'Kohvik korda' },
+    cozy: { name: 'Kudumikomplekt', why: 'Hooaja raja 15. samm' },
+    beach: { name: 'Rannariided', why: 'Rannafestivali auhind' },
+    gala: { name: 'Peokleit', why: 'Moenädala auhind' },
+  },
+  hair: {
+    bun: { name: 'Nuts' },
+    long: { name: 'Pikad juuksed', how: () => S.lvl >= 3, why: 'Tase 3' },
+    bob: { name: 'Bobisoeng', how: () => S.adv.top > 15, why: 'Seikluse 15. tase' },
+    braid: { name: 'Pats', why: 'Hooaja raja 5. samm' },
+  },
+  acc: {
+    none: { name: 'Ilma' },
+    glasses: { name: 'Prillid', how: () => S.stats.orders >= 25, why: '25 tellimust' },
+    hat: { name: 'Kübar', why: 'Hooaja raja 25. samm' },
+    flower: { name: 'Lill juustes', why: 'Aiapeo auhind' },
+    scarf: { name: 'Sall', how: () => (S.tour || 0) >= 2, why: 'Saareringreisi 2 saart' },
+  },
+  petAcc: {
+    none: { name: 'Ilma' },
+    collar: { name: 'Kaelarihm', how: () => S.stats.orders >= 50, why: '50 tellimust' },
+    bow: { name: 'Lips', why: 'Pulmade auhind' },
+    hat: { name: 'Mütsike', why: 'Hooaja raja 30. samm' },
+  },
+};
+const LOOK_KINDS = ['outfit', 'hair', 'acc'];
+const PETS = {
+  muri: { name: 'Muri', desc: 'Kohviku kass. Arvab, et kohvik on tema oma.' },
+  kutsu: { name: 'Kutsu', desc: 'Sadama kutsikas. Toob kõike, ka seda, mida ei paluta.', how: () => !!S.done.h6, why: 'Sadam korda' },
+  janku: { name: 'Jänku', desc: 'Aia jänes. Sööb porgandeid ja kuulab saladusi.', how: () => S.adv.top > 20, why: 'Seikluse 20. tase' },
+};
+const LOOK = (() => {
+  const keyOf = (kind, k) => kind + ':' + k;
+  function has(kind, k) {
+    const d = kind === 'pet' ? PETS[k] : LOOKS[kind] && LOOKS[kind][k];
+    if (!d) return false;
+    if (S.owned[keyOf(kind, k)]) return true;
+    if (!d.why) return true;
+    try { return !!(d.how && d.how()); } catch (e) { return false; }
+  }
+  function all() { const out = []; for (const kind in LOOKS) for (const k in LOOKS[kind]) out.push([kind, k]); for (const k in PETS) out.push(['pet', k]); return out; }
+  function unlock(key) { if (!key || S.owned[key]) return false; S.owned[key] = 1; check(); return true; }
+  // New pieces: announced once; the wardrobe button shows a dot until the wardrobe is opened.
+  function check(silent) {
+    const fresh = [];
+    for (const [kind, k] of all()) {
+      const key = keyOf(kind, k);
+      if (S.lookKnown[key] || !has(kind, k)) continue;
+      S.lookKnown[key] = 1;
+      if (kind === 'pet' && !S.pets[k]) S.pets[k] = { acc: 'none' };
+      if (LOOKS[kind] && !LOOKS[kind][k].why) continue; // the starting pieces are not news
+      if (kind === 'pet' && !PETS[k].why) continue;
+      fresh.push([kind, k]);
+    }
+    if (fresh.length && !silent) xev('lookNew', -1, { list: fresh });
+    return fresh;
+  }
+  const unseen = () => Object.keys(S.lookKnown).filter(k => !S.lookSeen[k]).length;
+  function seeAll() { for (const k in S.lookKnown) S.lookSeen[k] = 1; }
+  function wear(kind, k) {
+    if (!has(kind, k)) return false;
+    if (kind === 'pet') { S.petOn = k; if (!S.pets[k]) S.pets[k] = { acc: 'none' }; xev('pet', -1, { k }); }
+    else if (kind === 'petAcc') { const p = S.pets[S.petOn] || (S.pets[S.petOn] = { acc: 'none' }); p.acc = k; xev('wear', -1, { kind, k }); }
+    else { S.look[kind] = k; xev('wear', -1, { kind, k }); }
+    saveSoon(); return true;
+  }
+  const name = (kind, k) => kind === 'pet' ? PETS[k].name : LOOKS[kind][k].name;
+  const why = (kind, k) => kind === 'pet' ? PETS[k].why : LOOKS[kind][k].why;
+  return { has, all, unlock, check, unseen, seeAll, wear, name, why, keyOf };
+})();
+
+// ---------------------------------------------------------------- rest reminder
+const REST_MIN = 45;   // minutes of active play before a gentle "take a break?" note
 
 // ===== FX (Ash): juicy merge bursts, spawn arcs, flying rewards, confetti, combo / lucky / discover / level-up. =====
 // Coordinates are CSS pixels in the same space the game draws in (ctx already scaled by devicePixelRatio).
@@ -5822,7 +6319,7 @@ const UI = (() => {
   }
 
   // ---- icons and portraits ----
-  const ICON_ALIAS = { album: 'book', event: 'star', order: 'check', freeEnergy: 'energy' };
+  const ICON_ALIAS = { album: 'book', event: 'star', order: 'check', freeEnergy: 'energy', pass: 'crown', week: 'event' };
   const icCache = new Map();
   function iconImg(name, px) {
     px = Math.max(8, Math.round(px));
@@ -5837,7 +6334,7 @@ const UI = (() => {
     return c;
   }
   // Placeholders that are better than an alias until Ash draws them.
-  const PH_OWN = { event: 1, order: 1 };
+  const PH_OWN = { event: 1, order: 1, wardrobe: 1, camera: 1, brush: 1, cur_garden: 1, cur_fashion: 1, cur_wedding: 1, cur_beach: 1 };
   function phIcon(name, s) {
     const c = document.createElement('canvas'); c.width = c.height = s; const x = c.getContext('2d');
     const cx = s / 2, cy = s / 2, r = s * 0.42; x.lineWidth = Math.max(1.5, s * 0.07); x.lineJoin = 'round'; x.lineCap = 'round';
@@ -5864,6 +6361,16 @@ const UI = (() => {
       case 'calendar': x.fillStyle = '#fff'; x.strokeStyle = '#7a4a26'; x.fillRect(cx - r * 0.85, cy - r * 0.7, r * 1.7, r * 1.6); x.strokeRect(cx - r * 0.85, cy - r * 0.7, r * 1.7, r * 1.6); x.fillStyle = '#ff4f7a'; x.fillRect(cx - r * 0.85, cy - r * 0.7, r * 1.7, r * 0.45); x.fillStyle = '#33285c'; x.font = '900 ' + Math.round(r * 0.9) + 'px ' + FONT; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('7', cx, cy + r * 0.38); break;
       case 'map': x.fillStyle = '#ffe9b8'; x.strokeStyle = '#a06a2a'; x.beginPath(); x.moveTo(cx - r, cy - r * 0.7); x.lineTo(cx - r * 0.33, cy - r * 0.9); x.lineTo(cx + r * 0.33, cy - r * 0.7); x.lineTo(cx + r, cy - r * 0.9); x.lineTo(cx + r, cy + r * 0.7); x.lineTo(cx + r * 0.33, cy + r * 0.9); x.lineTo(cx - r * 0.33, cy + r * 0.7); x.lineTo(cx - r, cy + r * 0.9); x.closePath(); x.fill(); x.stroke(); x.setLineDash([s * 0.06, s * 0.05]); x.strokeStyle = '#e0457a'; x.beginPath(); x.moveTo(cx - r * 0.7, cy + r * 0.5); x.quadraticCurveTo(cx - r * 0.1, cy - r * 0.4, cx + r * 0.5, cy - r * 0.3); x.stroke(); x.setLineDash([]); x.fillStyle = '#e0457a'; x.beginPath(); x.arc(cx + r * 0.55, cy - r * 0.35, r * 0.17, 0, 7); x.fill(); break;
       case 'moves': circ(r, '#5ac0ff', '#1a6fd0'); x.strokeStyle = '#fff'; x.lineWidth = s * 0.09; x.beginPath(); x.arc(cx, cy, r * 0.5, -0.4, Math.PI * 1.4); x.stroke(); break;
+      case 'wardrobe': { // a dress on a hanger
+        x.strokeStyle = '#7a4a26'; x.lineWidth = s * 0.06; x.beginPath(); x.arc(cx, cy - r * 0.78, r * 0.16, Math.PI, Math.PI * 2.4); x.moveTo(cx, cy - r * 0.62); x.lineTo(cx - r * 0.85, cy - r * 0.2); x.lineTo(cx + r * 0.85, cy - r * 0.2); x.closePath(); x.stroke();
+        x.fillStyle = '#ff7ab8'; x.strokeStyle = '#c01f6a'; x.lineWidth = s * 0.05; x.beginPath(); x.moveTo(cx - r * 0.35, cy - r * 0.2); x.lineTo(cx + r * 0.35, cy - r * 0.2); x.lineTo(cx + r * 0.25, cy + r * 0.15); x.lineTo(cx + r * 0.75, cy + r * 0.95); x.lineTo(cx - r * 0.75, cy + r * 0.95); x.lineTo(cx - r * 0.25, cy + r * 0.15); x.closePath(); x.fill(); x.stroke();
+        x.fillStyle = '#fff'; x.beginPath(); x.arc(cx, cy + r * 0.05, r * 0.09, 0, 7); x.fill(); break; }
+      case 'camera': x.fillStyle = '#5a6a8a'; x.strokeStyle = '#2a3450'; x.beginPath(); x.roundRect ? x.roundRect(cx - r * 0.95, cy - r * 0.5, r * 1.9, r * 1.3, r * 0.25) : x.rect(cx - r * 0.95, cy - r * 0.5, r * 1.9, r * 1.3); x.fill(); x.stroke(); x.fillRect(cx - r * 0.35, cy - r * 0.75, r * 0.7, r * 0.3); circ(r * 0.42, '#bfe3ff', '#2a3450'); x.fillStyle = '#fff'; x.beginPath(); x.arc(cx - r * 0.12, cy - r * 0.12, r * 0.12, 0, 7); x.fill(); x.fillStyle = '#ffd23f'; x.fillRect(cx + r * 0.55, cy - r * 0.38, r * 0.22, r * 0.14); break;
+      case 'brush': x.save(); x.translate(cx, cy); x.rotate(0.7); x.fillStyle = '#c99a5a'; x.strokeStyle = '#7a5226'; x.fillRect(-r * 0.12, -r * 0.1, r * 0.24, r * 1.0); x.strokeRect(-r * 0.12, -r * 0.1, r * 0.24, r * 1.0); x.fillStyle = '#c0c4d0'; x.fillRect(-r * 0.2, -r * 0.35, r * 0.4, r * 0.28); x.fillStyle = '#ff4f9a'; x.beginPath(); x.moveTo(-r * 0.22, -r * 0.35); x.quadraticCurveTo(0, -r * 1.25, r * 0.22, -r * 0.35); x.fill(); x.restore(); break;
+      case 'cur_garden': for (let j = 0; j < 5; j++) { const a = j / 5 * Math.PI * 2 - Math.PI / 2; x.beginPath(); x.ellipse(cx + Math.cos(a) * r * 0.48, cy + Math.sin(a) * r * 0.48, r * 0.42, r * 0.3, a, 0, 7); x.fillStyle = '#ff9ac8'; x.fill(); x.strokeStyle = '#c0457a'; x.stroke(); } circ(r * 0.3, '#ffd23f', '#c08a10'); break;
+      case 'cur_fashion': circ(r * 0.9, '#b07cff', '#5a2aa8'); x.fillStyle = '#5a2aa8'; for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { x.beginPath(); x.arc(cx + dx * r * 0.25, cy + dy * r * 0.25, r * 0.12, 0, 7); x.fill(); } break;
+      case 'cur_wedding': x.fillStyle = '#ffd86a'; x.strokeStyle = '#b07a10'; x.beginPath(); x.moveTo(cx - r * 0.8, cy + r * 0.55); x.quadraticCurveTo(cx - r * 0.7, cy - r * 0.9, cx, cy - r * 0.9); x.quadraticCurveTo(cx + r * 0.7, cy - r * 0.9, cx + r * 0.8, cy + r * 0.55); x.closePath(); x.fill(); x.stroke(); x.beginPath(); x.arc(cx, cy + r * 0.7, r * 0.2, 0, 7); x.fill(); x.stroke(); x.fillStyle = '#ff8ab8'; x.beginPath(); x.arc(cx, cy - r * 0.95, r * 0.14, 0, 7); x.fill(); break;
+      case 'cur_beach': x.fillStyle = '#ffd0b0'; x.strokeStyle = '#c0704a'; x.beginPath(); x.moveTo(cx, cy + r * 0.85); for (let j = 0; j <= 8; j++) { const a = Math.PI + j / 8 * Math.PI; x.lineTo(cx + Math.cos(a) * r * 0.95, cy + r * 0.15 + Math.sin(a) * r * 0.95); } x.closePath(); x.fill(); x.stroke(); for (let j = 1; j < 8; j += 2) { const a = Math.PI + j / 8 * Math.PI; x.beginPath(); x.moveTo(cx, cy + r * 0.85); x.lineTo(cx + Math.cos(a) * r * 0.9, cy + r * 0.15 + Math.sin(a) * r * 0.9); x.stroke(); } break;
       default: circ(r, '#ccc');
     }
     return c;
@@ -5932,12 +6439,14 @@ const UI = (() => {
     const sx = L.scene.x + 6, sw = L.scene.w - 12, hy = L.scene.y + 6, pw = Math.min(124, (sw - 50 - 3 * 6) / 3);
     L.hud = { lvl: { x: sx, y: hy, w: 44, h: 44 } };
     ['energy', 'coins', 'stars'].forEach((n, j) => { L.hud[n] = { x: sx + 50 + j * (pw + 6), y: hy + 4, w: pw, h: 36 }; });
+    L.hud.look = { x: sx + sw - 140, y: hy + 50, w: 44, h: 44 };
     L.hud.gift = { x: sx + sw - 92, y: hy + 50, w: 44, h: 44 };
     L.hud.settings = { x: sx + sw - 44, y: hy + 50, w: 44, h: 44 };
-    L.hud.area = { x: sx, y: hy + 52, w: Math.min(200, sw - 104 - 128), h: 40 };
-    L.hud.adv = { x: sx + L.hud.area.w + 8, y: hy + 50, w: Math.min(140, sw - 104 - L.hud.area.w - 14), h: 44 };
+    const room = sw - 148, advW = room >= 250 ? Math.min(140, Math.max(110, Math.round(room * 0.45))) : 52;
+    L.hud.area = { x: sx, y: hy + 52, w: Math.min(220, room - advW - 8), h: 40 };
+    L.hud.adv = { x: sx + L.hud.area.w + 8, y: hy + 50, w: advW, h: 44 };
     // bottom tabs
-    const names = ['tasks', 'album', 'event', 'shop', 'bag'], bw = L.bar.w / names.length;
+    const names = ['tasks', 'album', 'week', 'pass', 'shop', 'bag'], bw = L.bar.w / names.length;
     L.btn = {}; names.forEach((n, j) => { L.btn[n] = { x: L.bar.x + j * bw, y: L.bar.y, w: bw, h: L.bar.h }; });
     dirty = true;
   }
@@ -6070,15 +6579,41 @@ const UI = (() => {
       case 'levelUp':
         snd('levelUp'); fx('confetti', 1);
         d.cells.forEach(c => setAnim(c, { unlock: 1, dur: 0.8 }));
-        openModal({ kind: 'levelup', lvl: d.lvl, cells: d.cells.length, got: d.got }, true); break;
+        openModal({ kind: 'levelup', lvl: d.lvl, cells: d.cells.length, got: d.got }, true);
+        if (d.lvl === WEEK_MIN_LVL) setTimeout(() => toast('Uus: nädala sündmus! Vajuta „Nädal“.', 3.6), 1500);
+        break;
       case 'task': {
         closeModal(true);
         snd('taskDone'); fx('confetti', 1); flash = { t0: tn() }; keep(0.9);
+        if (d.t.choices) openModal({ kind: 'xStyle', id: d.t.id, first: true, sticky: true }, true);
         openModal({ kind: 'dialog', lines: d.t.story, title: d.t.name }, true);
         if (d.newArea) openModal({ kind: 'dialog', lines: d.newArea.intro, title: 'Uus koht: ' + d.newArea.name, onDone: () => boardMusic() }, true);
         if (d.ended) openModal({ kind: 'dialog', lines: [['mina', STORY.ending]], title: 'Lõpp ja uus algus' }, true);
+        if (d.island) openModal({ kind: 'dialog', lines: d.island.intro, title: (d.ended ? 'Saareringreis: ' : 'Uus saar: ') + d.island.name, onShow: () => snd2('islandNew', 'taskDone'), onDone: () => boardMusic() }, true);
         break;
       }
+      case 'style': snd2('styleSwap', 'tap'); flash = { t0: tn() - 0.45 }; keep(0.5); break;
+      case 'passStep': toast('Hooaja rada: ' + d.s + '. samm on käes!'); snd2('passStep', 'claim'); bump.pass = tn(); keep(0.4); break;
+      case 'passClaim': { const p = modal && modal.tap || { x: W / 2, y: H / 2 }; rewardFx(d.r, p.x, p.y); fx('sparkle', p.x, p.y, 10, 40); snd2('passStep', 'claim'); break; }
+      case 'passLate': toast('Eelmise kuu raja auhinnad on nüüd sinu!', 3.4); rewardFx(d.r, W / 2, H * 0.45); break;
+      case 'passNew': if (S.tut >= 5) toast('Uus hooaja rada algas! Mängi ja kogu auhindu.', 3.4); break;
+      case 'weekCur': {
+        if (cell >= 0 && onBoard()) floater(C.x + L.cs * 0.25, C.y - L.cs * 0.35, '+' + d.n, PINK, 'cur_' + WEEK.info().key);
+        if (cell >= 0) snd2('eventCur', 'coins');
+        if (d.ready && onBoard()) { toast(WEEK.info().E.name + ': auhind ootab! Vajuta „Nädal“.'); bump.week = tn(); }
+        break;
+      }
+      case 'weekClaim': { const p = modal && modal.tap || { x: W / 2, y: H / 2 }; fx('confetti', 0.4, p.x, p.y); rewardFx(d.r, p.x, p.y); snd2('claim', 'daily'); break; }
+      case 'weekStart': if (onBoard() && WEEK.open()) toast(d.e.E.name + ' algas! Kogu ' + d.e.E.cur[0] + ' ja võida auhindu.' + (d.coins ? ' Eelmise nädala asjad andsid ' + d.coins + ' münti.' : ''), 3.6); break;
+      case 'cashEvent': { const b = L.btn.week; ghost({ k: d.k, l: d.l, x0: C.x, y0: C.y, x1: b.x + b.w / 2, y1: b.y + 24, dur: 0.5, s0: 1, s1: 0.3 }); fx('sparkle', C.x, C.y, 12, L.cs * 0.6); snd2('claim', 'coins'); if (sel === cell) sel = -1; break; }
+      case 'lookNew': {
+        const pets = d.list.filter(x => x[0] === 'pet'), rest = d.list.filter(x => x[0] !== 'pet');
+        if (pets.length) { toast('Uus sõber: ' + pets.map(x => LOOK.name(x[0], x[1])).join(', ') + '! Vaata garderoobi.', 3.6); snd2('pet', 'discover'); }
+        else if (rest.length) { toast('Garderoobis on uus asi: ' + rest.map(x => LOOK.name(x[0], x[1])).join(', ') + '!', 3.4); snd2('wardrobe', 'discover'); }
+        bump.look = tn(); keep(0.4); break;
+      }
+      case 'wear': snd2('wardrobe', 'tap'); break;
+      case 'pet': snd2('pet', 'tap'); break;
       case 'reward': if (!d.silent) rewardFx(d, W / 2, H * 0.45); break;
       case 'gift': if (cell >= 0 && onBoard()) { setAnim(cell, { pop: 1, dur: 0.5 }); if (!d.silent) snd('drop'); } if (d.daily) { snd2('calendar', 'daily'); const p = modal && modal.tap || { x: W / 2, y: H * 0.4 }; rewardFx(Object.assign({}, d.g.r, d.g.m30 ? { coins: (d.g.r.coins || 0) + (d.g.m30.coins || 0) } : {}), p.x, p.y); fx('confetti', 0.5, p.x, p.y); } break;
       case 'toBag': toast('Laud oli täis, kingitus läks kotti.'); break;
@@ -6109,19 +6644,25 @@ const UI = (() => {
   function openModal(m, queue) {
     m.t0 = tn(); m.i = 0;
     if (modal) { if (queue) mq.push(m); return; }
-    modal = m; if (m.kind === 'dialog') storyMusic(); else snd('open'); dirty = true;
+    modal = m; if (m.kind === 'dialog') storyMusic(); else if (m.kind !== 'xPhoto') snd('open'); if (m.onShow) m.onShow(); dirty = true;
   }
-  const boardMusic = () => music('board', { area: Math.min(S.area, AREAS.length - 1) });
+  // Board music: the story area, or on the island tour the stand-in area plus the island theme.
+  function boardMusic() {
+    if (S.ended) { const isl = TOUR.cur(); music('board', { area: Math.max(0, AREAS.findIndex(a => a.key === isl.area)), tour: isl.theme }); }
+    else music('board', { area: Math.min(S.area, AREAS.length - 1) });
+  }
   function storyMusic() { if (modal && modal.kind === 'dialog' && modal.title) music('story'); }
   function closeModal(silent) {
     const m = modal; modal = null; mhits = [];
     if (m && m.onDone) m.onDone();
     if (!silent && m && m.kind !== 'dialog') snd('close');
-    if (mq.length && !modal) { modal = mq.shift(); modal.t0 = tn(); modal.i = 0; if (modal.kind === 'dialog') storyMusic(); }
+    if (mq.length && !modal) { modal = mq.shift(); modal.t0 = tn(); modal.i = 0; if (modal.kind === 'dialog') storyMusic(); if (modal.onShow) modal.onShow(); }
     if (m && m.kind === 'dialog' && m.title && !(modal && modal.kind === 'dialog') && onBoard()) boardMusic();
     idleT = tn(); dirty = true;
   }
   const modalActive = () => !!modal || onTitle;
+  // Close the open modal (quietly) and open another in its place.
+  function closeThen(m) { closeModal(true); openModal(m); }
 
   // ---- input ----
   function pos(e) { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
@@ -6208,6 +6749,7 @@ const UI = (() => {
     const it = S.board[c]; if (!it) return;
     const kind = CHAINS[it.k].kind;
     if (it.b) { sel = c; snd('tap'); return; }
+    if (kind === 'item' && CHAINS[it.k].ev && it.l >= Game.maxL(it.k)) { sel = c; Game.tapItem(c); return; }
     if (kind === 'item') { if (sel === c) openChain(it.k, it.l); else { sel = c; snd('tap'); setAnim(c, { squash: 1, dur: 0.22 }); } return; }
     sel = c;
     Game.tapItem(c);
@@ -6300,7 +6842,12 @@ const UI = (() => {
     drawIcon('settings', st.x + 7, st.y + 7, 30);
     if (giftOn && S.tut >= 5) dot(gr.x + 38, gr.y + 6);
     hits.push({ x: gr.x - 2, y: gr.y - 2, w: 48, h: 48, hud: 1, fn: () => openModal({ kind: 'daily' }) });
-    const av = H2.adv; button(av.x, av.y, av.w, av.h, 'Seiklus', () => goScreen('map'), { style: 'buttonPink', icon: 'map', isz: 28, size: 17 });
+    const lk = H2.look, lb = bump.look ? clamp(1 - (tn() - bump.look) / 0.35, 0, 1) : 0, ls = 1 + 0.25 * Math.sin(lb * Math.PI);
+    g.fillStyle = 'rgba(255,255,255,0.92)'; g.beginPath(); g.arc(lk.x + 22, lk.y + 22, 21, 0, 7); g.fill();
+    drawIcon('wardrobe', lk.x + 22 - 16 * ls, lk.y + 22 - 16 * ls, 32 * ls);
+    if (LOOK.unseen() > 0) dot(lk.x + 38, lk.y + 6);
+    hits.push({ x: lk.x - 2, y: lk.y - 2, w: 48, h: 48, hud: 1, fn: () => { snd('tap'); openModal({ kind: 'xLook' }); } });
+    const av = H2.adv; button(av.x, av.y, av.w, av.h, av.w >= 100 ? 'Seiklus' : '', () => goScreen('map'), { style: 'buttonPink', icon: 'map', isz: 28, size: 17 });
     hits[hits.length - 1].hud = 1;
     if (ADV.attention()) dot(av.x + av.w - 4, av.y + 4);
     hits.push({ x: st.x - 2, y: st.y - 2, w: 48, h: 48, hud: 1, fn: () => openModal({ kind: 'settings' }) });
@@ -6311,13 +6858,24 @@ const UI = (() => {
   }
 
   // ---- drawing: scene strip ----
-  function drawScene(t) {
-    const r = L.scene, area = Game.curArea();
+  // The current area's illustration in any rect (the scene strip and the photo postcard). Tour islands use
+  // Ash's ART.tourScene, or a story area's scene until it exists. opts.style carries the design choices.
+  function paintScene(c, x, y, w, h, t) {
+    const area = Game.curArea(), sty = { style: S.style };
     const n = Object.keys(S.done).length; if (n !== progressN) { progressN = n; progressSet = new Set(Object.keys(S.done)); }
+    const gg = g; let drawn = false;
+    try {
+      if (S.ended && artOn('tourScene')) { ART.tourScene(c, area, progressSet, x, y, w, h, t, sty); drawn = true; }
+      else if (S.ended && artOn('scene')) { const fb = TOUR.fallbackProgress(area, S.done); ART.scene(c, fb.area, fb.set, x, y, w, h, t, sty); drawn = true; }
+      else if (artOn('scene')) { ART.scene(c, area.key, progressSet, x, y, w, h, t, sty); drawn = true; }
+    } catch (e) {}
+    if (!drawn && c === gg) phScene(area, { x, y, w, h }, t);
+    return drawn;
+  }
+  function drawScene(t) {
+    const r = L.scene;
     g.save(); rr(r.x, r.y, r.w, r.h, 20); g.clip();
-    let drawn = false;
-    if (artOn('scene')) { try { ART.scene(g, area.key, progressSet, r.x, r.y, r.w, r.h, t); drawn = true; } catch (e) {} }
-    if (!drawn) phScene(area, r, t);
+    paintScene(g, r.x, r.y, r.w, r.h, t);
     if (flash) { const k = (tn() - flash.t0) / 0.9; if (k < 1) { g.fillStyle = 'rgba(255,240,200,' + (0.6 * (1 - k)) + ')'; g.fillRect(r.x, r.y, r.w, r.h); } else flash = null; }
     // soft fade at the bottom where the order cards sit
     const fg = g.createLinearGradient(0, r.y + r.h - 40, 0, r.y + r.h); fg.addColorStop(0, 'rgba(255,255,255,0)'); fg.addColorStop(1, 'rgba(255,255,255,0.55)'); g.fillStyle = fg; g.fillRect(r.x, r.y + r.h - 40, r.w, 40);
@@ -6513,7 +7071,7 @@ const UI = (() => {
       if (tutTxt) { const ls = wrap(tutTxt, r.w - 24, 16, 800); ls.slice(0, 2).forEach((s, j) => text(s, r.x + r.w / 2, r.y + r.h / 2 + (j - (Math.min(2, ls.length) - 1) / 2) * 20, 16, GRAPE, 'center', 800, r.w - 20)); return; }
       // next goal with a progress bar
       const nt = Game.nextTask();
-      if (!nt) { text(S.ended ? 'Kõik on korras! Küpseta edasi.' : 'Lohista ühesugused asjad kokku.', r.x + r.w / 2, r.y + r.h / 2, 16, INK, 'center', 800, r.w - 20); return; }
+      if (!nt) { text('Lohista ühesugused asjad kokku.', r.x + r.w / 2, r.y + r.h / 2, 16, INK, 'center', 800, r.w - 20); return; }
       const can = S.stars >= nt.cost, bw = can ? 112 : 0;
       drawIcon('star', r.x + 10, r.y + 13, 36);
       text(nt.name, r.x + 54, r.y + 20, 16, INK, 'left', 900, r.w - 66 - bw);
@@ -6543,6 +7101,10 @@ const UI = (() => {
       nb.push({ label: '+' + Game.sellPrice(it), icon: 'coin', w: 86, fn: () => Game.sell(sel) });
     } else if (kind === 'mystery') {
       l2 = 'Toksa ja vaata, mis sees on!';
+    } else if (C.ev) {
+      const E = WEEK_EVENTS[C.ev]; l1 += ' · ' + it.l + '/' + mx;
+      l2 = it.l >= mx ? 'Toksa: +' + WEEK_CUR.top + ' ' + E.cur[1] + '!' : 'Ühenda: +' + WEEK_CUR.merge(it.l + 1) + ' ' + E.cur[1];
+      nb.push({ icon: 'album', w: 52, fn: () => openChain(it.k, it.l) });
     } else {
       l1 += ' · ' + it.l + '/' + mx;
       l2 = needSet.has(it.k + ':' + it.l) ? 'Tellimus! Keegi ootab seda.' : it.l < mx ? 'Järgmine: ' + nm(it.k, it.l + 1) : 'Tipptase!';
@@ -6560,11 +7122,14 @@ const UI = (() => {
   function drawBar(t) {
     const r = L.bar;
     panel(r.x + 4, r.y, r.w - 8, r.h, 'glass');
-    const nt = Game.nextTask(), canTask = nt && S.stars >= nt.cost, ei = Game.eventInfo(), aN = Game.albumCount();
+    const nt = Game.nextTask(), canTask = nt && S.stars >= nt.cost, aN = Game.albumCount();
+    const wOpen = WEEK.open(), wReady = wOpen && WEEK.readyIdx() >= 0, pReady = PASS.ready() > 0;
+    const wName = WEEK.info().E.name; g.font = font(15, 900);
     const items = [
       ['tasks', 'tasks', 'Remont', canTask ? -1 : 0, () => openModal({ kind: 'tasks' }), canTask && (S.tut >= 4 || S.tut === 0)],
       ['album', 'album', 'Album', aN, () => openAlbum(), false],
-      ['event', 'event', ei.on ? 'Festival' : 'Festival', Game.eventReady() ? -1 : 0, () => openModal({ kind: 'event' }), Game.eventReady()],
+      ['week', 'week', wOpen && g.measureText(wName).width <= L.btn.week.w - 6 ? wName : 'Nädal', wReady ? -1 : 0, () => openModal({ kind: 'xWeek' }), wReady],
+      ['pass', 'pass', 'Rada', pReady ? -1 : 0, () => openModal({ kind: 'xPass' }), pReady && S.tut >= 5],
       ['shop', 'shop', 'Pood', 0, () => openModal({ kind: 'shop' }), false],
       ['bag', 'bag', 'Kott', 0, () => openModal({ kind: 'bag' }), false],
     ];
@@ -6573,11 +7138,12 @@ const UI = (() => {
       const b = L.btn[id], cx = b.x + b.w / 2, ps = pressScale(b.x, b.y);
       if (id === 'bag' && dragBag) { g.fillStyle = 'rgba(255,200,90,0.55)'; rr(b.x + 6, b.y + 4, b.w - 12, b.h - 8, 16); g.fill(); }
       const bounce = hot ? Math.abs(Math.sin(t * 4)) * 4 : 0, pu = bump[id] ? Math.sin(clamp(1 - (tn() - bump[id]) / 0.35, 0, 1) * Math.PI) * 0.25 : 0;
-      const isz = 40 * ps * (1 + pu);
-      g.save(); if (id === 'event' && !ei.on) g.globalAlpha = 0.55;
+      const isz = Math.min(40, b.w - 18) * ps * (1 + pu);
+      g.save(); if (id === 'week' && !wOpen) g.globalAlpha = 0.55;
       drawIcon(ic, cx - isz / 2, b.y + 4 - bounce + (40 - isz) / 2, isz);
+      if (id === 'week' && wOpen) drawIcon('cur_' + WEEK.info().key, cx + 4, b.y + 22 - bounce, 20);
       g.restore();
-      text(label, cx, b.y + 60, 15, INK, 'center', 900, b.w - 4);
+      text(label, cx, b.y + 60, 15, INK, 'center', 900, b.w + 2);
       if (badge > 0) dot(cx + 18, b.y + 10, badge); else if (badge < 0) dot(cx + 16, b.y + 8);
       if (id === 'bag' && S.bag.length) { g.fillStyle = GRAPE; rr(cx + 6, b.y + 30, 30, 20, 10); g.fill(); text(String(S.bag.length), cx + 21, b.y + 40, 15, '#fff', 'center', 900); }
       hits.push({ x: b.x, y: b.y, w: b.w, h: b.h, bx: b.x, by: b.y, fn: () => { snd('tap'); fn(); } });
@@ -6693,22 +7259,34 @@ const UI = (() => {
     if (m.kind === 'levelup') { drawLevelUp(m, t); g.restore(); return; }
     dim(); const B = { modal: true };
     if (m.kind === 'tasks') {
-      const area = Game.curArea(), ts = area.tasks, rowH = 62, P = modalPanel(m, 440, 128 + ts.length * rowH + 30, area.name);
+      // The story area or tour island: tasks in order, the next one with its star button, design choices on done
+      // tasks ("Stiil"), and at the bottom the photo mode and the wardrobe.
+      const area = Game.curArea(), ts = area.tasks, tour = !!S.ended, head = tour ? 150 : 128, foot = 96;
+      const rowH = clamp(Math.floor((H - 24 - head - foot) / ts.length), 52, 62);
+      const P = modalPanel(m, 440, head + ts.length * rowH + foot, area.name);
       const done = ts.filter(x => S.done[x.id]).length;
-      drawIcon('star', P.x + 18, P.y + 36, 30); text(String(S.stars), P.x + 54, P.y + 52, 20, INK, 'left', 900);
-      text(done + '/' + ts.length + ' tehtud', P.x + P.w - 18, P.y + 52, 15, INK2, 'right', 800);
-      bar(P.x + 18, P.y + 76, P.w - 36, 10, done / ts.length, PINK);
-      const nt = Game.nextTask();
+      let y0 = P.y + 36;
+      if (tour) { text('Saareringreis · ' + area.themeName + ' · ' + (area.i + 1) + '. saar', P.x + P.w / 2, P.y + 40, 15, GRAPE, 'center', 900, P.w - 70); y0 += 20; }
+      drawIcon('star', P.x + 18, y0, 30); text(String(S.stars), P.x + 54, y0 + 16, 20, INK, 'left', 900);
+      text(done + '/' + ts.length + ' tehtud', P.x + P.w - 18, y0 + 16, 15, INK2, 'right', 800);
+      bar(P.x + 18, y0 + 40, P.w - 36, 10, done / ts.length, PINK);
+      const nt = Game.nextTask(), top = y0 + 60;
       ts.forEach((tk, j) => {
-        const y = P.y + 96 + j * rowH, isDone = S.done[tk.id], isNext = nt === tk;
-        g.fillStyle = isNext ? 'rgba(255,210,63,0.28)' : SOFT; rr(P.x + 10, y, P.w - 20, rowH - 6, 14); g.fill();
-        if (isDone) drawIcon('check', P.x + 18, y + 13, 30); else if (!isNext) { g.globalAlpha = 0.6; drawIcon('lock', P.x + 18, y + 13, 30); g.globalAlpha = 1; } else drawIcon('star', P.x + 18, y + 12, 32);
-        text(tk.name, P.x + 58, y + (rowH - 6) / 2, 17, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, P.w - (isNext ? 190 : 120));
-        if (isNext) { m.nextBtn = { x: P.x + P.w - 120, y: y + 4, w: 104, h: 48 }; button(P.x + P.w - 120, y + 4, 104, rowH - 14, String(tk.cost), () => Game.doTask(tk.id), Object.assign({ icon: 'star', hot: S.stars >= tk.cost, pulse: S.stars >= tk.cost, offFn: () => Game.doTask(tk.id), size: 19 }, B)); }
-        else if (!isDone) { drawIcon('star', P.x + P.w - 64, y + 15, 24); text(String(tk.cost), P.x + P.w - 30, y + 28, 17, INK2, 'center', 900); }
+        const y = top + j * rowH, isDone = S.done[tk.id], isNext = nt === tk, bh = rowH - 6;
+        g.fillStyle = isNext ? 'rgba(255,210,63,0.28)' : SOFT; rr(P.x + 10, y, P.w - 20, bh, 14); g.fill();
+        const ic = Math.min(30, bh - 16), iy = y + (bh - ic) / 2;
+        if (isDone) drawIcon('check', P.x + 18, iy, ic); else if (!isNext) { g.globalAlpha = 0.6; drawIcon('lock', P.x + 18, iy, ic); g.globalAlpha = 1; } else drawIcon('star', P.x + 18, iy - 1, ic + 2);
+        const styled = isDone && tk.choices;
+        text(tk.name, P.x + 58, y + bh / 2, 17, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, P.w - (isNext ? 190 : styled ? 170 : 120));
+        if (isNext) { m.nextBtn = { x: P.x + P.w - 120, y: y + 4, w: 104, h: 48 }; button(P.x + P.w - 120, y + (bh - 48) / 2, 104, 48, String(tk.cost), () => Game.doTask(tk.id), Object.assign({ icon: 'star', hot: S.stars >= tk.cost, pulse: S.stars >= tk.cost, offFn: () => Game.doTask(tk.id), size: 19 }, B)); }
+        else if (styled) { const st = STYLES[S.style[tk.id]]; button(P.x + P.w - 112, y + (bh - 44) / 2, 96, 44, st ? 'Muuda' : 'Vali', () => closeThen({ kind: 'xStyle', id: tk.id, back: 'tasks' }), Object.assign({ icon: 'brush', isz: 24, size: 16, style: 'buttonPink' }, B)); }
+        else if (!isDone) { drawIcon('star', P.x + P.w - 64, y + bh / 2 - 12, 24); text(String(tk.cost), P.x + P.w - 30, y + bh / 2 + 1, 17, INK2, 'center', 900); }
       });
-      const na = AREAS[S.area + 1];
-      text(S.ended ? STORY.ending : na ? 'Järgmine koht: ' + na.name : 'Viimane koht!', P.x + P.w / 2, P.y + P.h - 22, 15, INK2, 'center', 700, P.w - 24);
+      const na = !tour && AREAS[S.area + 1], fy = P.y + P.h - foot;
+      text(tour ? 'Pärast seda saart ootab järgmine!' : na ? 'Järgmine koht: ' + na.name : 'Viimane koht! Siis algab Saareringreis.', P.x + P.w / 2, fy + 16, 15, INK2, 'center', 700, P.w - 24);
+      const bw = (P.w - 50) / 2;
+      button(P.x + 20, fy + 34, bw, 50, 'Foto', () => closeThen({ kind: 'xPhoto' }), Object.assign({ icon: 'camera', isz: 30, size: 18, style: 'buttonBlue' }, B));
+      button(P.x + 30 + bw, fy + 34, bw, 50, 'Garderoob', () => closeThen({ kind: 'xLook' }), Object.assign({ icon: 'wardrobe', isz: 30, size: 18, style: 'buttonPink' }, B));
     } else if (m.kind === 'shop') {
       const list = Game.shopList(), cols = 2, rows = Math.ceil(list.length / cols), ch = 118;
       const P = modalPanel(m, 440, 84 + rows * (ch + 10), 'Pood');
@@ -6782,13 +7360,13 @@ const UI = (() => {
         const bw2 = P.w - 190; bar(P.x + 22, y + 34, bw2, 13, tk.n / tk.goal, '#5fc24a');
         text(tk.n + '/' + tk.goal, P.x + 22 + bw2 + 6, y + 41, 15, INK2, 'left', 800, 52);
         if (tk.claimed) drawIcon('check', P.x + P.w - 58, y + 12, 34);
-        else button(P.x + P.w - 104, y + 5, 88, 48, '+' + DAILY_REWARD.coins, () => Game.claimDaily(j), Object.assign({ icon: 'coin', hot: tk.n >= tk.goal, pulse: tk.n >= tk.goal, off: tk.n < tk.goal, offFn: () => { snd('deny'); toast('Veel ' + (tk.goal - tk.n) + ' jäänud.'); }, size: 17 }, B));
+        else button(P.x + P.w - 104, y + 5, 88, 48, '+' + DAILY_REWARD.coins, () => Game.claimDaily(j), Object.assign({ icon: 'coin', hot: tk.n >= tk.goal, pulse: tk.n >= tk.goal, off: tk.n < tk.goal, offFn: () => { snd('deny'); toast('Veel ' + (tk.goal - tk.n) + ' puudu.'); }, size: 17 }, B));
       });
       const allC = D.tasks.length && D.tasks.every(x => x.claimed), by = P.y + P.h - 60;
       if (D.bonus) text('Kõik tänased tehtud. Tubli!', P.x + P.w / 2, by + 24, 16, GOOD, 'center', 900, P.w - 20);
       else button(P.x + 24, by, P.w - 48, 50, 'Kõik 3: +' + DAILY_BONUS.stars + ' tähte ja kirst', () => Game.claimBonus(), Object.assign({ hot: allC, off: !allC, offFn: () => { snd('deny'); toast('Tee enne kõik kolm ülesannet.'); }, size: 17 }, B));
     } else if (m.kind === 'settings') {
-      const P = modalPanel(m, 380, 380, 'Seaded');
+      const P = modalPanel(m, 380, 442, 'Seaded');
       const row = (y, label, key) => {
         text(label, P.x + 24, y + 24, 18, INK, 'left', 900);
         text(Math.round(S.set[key] * 100) + '%', P.x + P.w - 124, y + 24, 18, INK, 'center', 900);
@@ -6797,7 +7375,8 @@ const UI = (() => {
       };
       row(P.y + 44, 'Muusika', 'music'); row(P.y + 104, 'Helid', 'sfx');
       button(P.x + 36, P.y + 168, P.w - 72, 50, S.set.muted ? 'Heli: vaigistatud' : 'Heli: sees', () => { S.set.muted = !S.set.muted; const a = au(); try { if (a && a.setMuted) a.setMuted(S.set.muted); } catch (e) {} snd('tap'); saveSoon(); }, Object.assign({ hot: !S.set.muted }, B));
-      button(P.x + 36, P.y + 230, P.w - 72, 50, 'Alusta otsast', () => { closeModal(true); openModal({ kind: 'confirm', text: 'Kas kustutada kogu edenemine ja alustada otsast?', yes: () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} Game.newGame(); resetView(); onTitle = true; save(); } }); }, Object.assign({ style: 'buttonGrey' }, B));
+      button(P.x + 36, P.y + 230, P.w - 72, 50, S.set.rest ? 'Puhkuse meeldetuletus: sees' : 'Puhkuse meeldetuletus: väljas', () => { S.set.rest = !S.set.rest; snd('tap'); saveSoon(); }, Object.assign({ hot: !!S.set.rest, size: 16 }, B));
+      button(P.x + 36, P.y + 292, P.w - 72, 50, 'Alusta otsast', () => { closeModal(true); openModal({ kind: 'confirm', text: 'Kas kustutada kogu edenemine ja alustada otsast?', yes: () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} Game.newGame(); resetView(); onTitle = true; save(); } }); }, Object.assign({ style: 'buttonGrey' }, B));
       text('Saarepagar · tehtud armastusega', P.x + P.w / 2, P.y + P.h - 46, 15, INK2, 'center', 700, P.w - 20);
       text('Töötab ka ilma internetita.', P.x + P.w / 2, P.y + P.h - 24, 15, INK2, 'center', 700, P.w - 20);
     } else if (m.kind === 'confirm') {
@@ -6832,6 +7411,7 @@ const UI = (() => {
     } else if (m.kind === 'album') drawAlbum(m, t, B);
     else if (m.kind === 'event') drawEvent(m, t, B);
     else if (m.kind.startsWith('adv')) ADV.drawModal(m, t, B);
+    else if (m.kind[0] === 'x') XUI.drawModal(m, t, B);
     g.restore();
   }
 
@@ -6884,7 +7464,7 @@ const UI = (() => {
 
   // Collection album: one page per chain; tap a glowing card to collect its reward.
   function drawAlbum(m, t, B) {
-    const P = modalPanel(m, 440, Math.min(H - 24, 700), 'Kollektsioon');
+    const P = modalPanel(m, 440, Math.min(H - 24, 700), 'Album');
     const N = ALBUM_CHAINS.length; m.page = (m.page + N) % N;
     const k = ALBUM_CHAINS[m.page], C = CHAINS[k], n = C.names.length, disc = S.disc[k] || 0;
     let have = 0; for (let l = 1; l <= n; l++) if (Game.albumHas(k, l)) have++;
@@ -6996,8 +7576,8 @@ const UI = (() => {
     g.restore();
     button(cx - bw / 2, by + 78, bw, 60, 'Seiklus · tase ' + S.adv.top, () => startAdv(), { style: 'buttonPink', modal: true, size: 21, icon: 'map', isz: 34 });
     if (ADV.attention()) dot(cx + bw / 2 - 6, by + 82);
-    if (S.tut > 0) text('Tase ' + S.lvl + ' · ' + Game.curArea().name, cx, by + 166, 17, INK, 'center', 800);
-    const e = Game.eventInfo(); if (e.on) { g.fillStyle = PINK; g.font = font(16, 900); const tw = g.measureText(e.name + ' käib!').width + 30; rr(cx - tw / 2, by + 190, tw, 34, 17); g.fill(); text(e.name + ' käib!', cx, by + 208, 16, '#fff', 'center', 900); }
+    if (S.tut > 0) text('Tase ' + S.lvl + ' · ' + (S.ended ? 'Saareringreis, ' + (S.tour + 1) + '. saar' : Game.curArea().name), cx, by + 166, 17, INK, 'center', 800, W - 30);
+    if (WEEK.open()) { const wn = WEEK.info().E.name + ' käib!'; g.fillStyle = PINK; g.font = font(16, 900); const tw = Math.min(W - 30, g.measureText(wn).width + 30); rr(cx - tw / 2, by + 190, tw, 34, 17); g.fill(); text(wn, cx, by + 208, 16, '#fff', 'center', 900, tw - 12); }
   }
 
   function drawToasts(t) {
@@ -7036,7 +7616,15 @@ const UI = (() => {
     const t0 = performance.now();
     while (warm.length && performance.now() - t0 < 6) { const [k, l] = warm.shift(); const b = itemBox(k, l), full = L.cs * FILL * clamp(1 / b.s, 1, 1.7); itemImg(k, l, Math.ceil(full * DPR / 8) * 8); }
   }
-  function update(dt) { if (fxOn('update')) { try { FX.update(dt); } catch (e) {} } if (S) { tickDisp(dt); if (onTitle && (!warm || warm.length)) prewarm(); if (!onTitle && scr !== 'board') ADV.update(dt); } }
+  // Rest reminder: active play time (input in the last two minutes) counts up; after REST_MIN minutes a gentle note
+  // appears once (then again after 30 more minutes). Off in the settings. URL flag rest=<seconds> for tests.
+  let playT = 0, restAt = QS.rest ? +QS.rest || 5 : REST_MIN * 60;
+  function restTick(dt) {
+    if (onTitle || document.hidden || tn() - idleT > 120) return;
+    playT += dt;
+    if (playT >= restAt && S.set.rest && !modal && !drag && scr !== 'level') { playT = 0; restAt = 30 * 60; openModal({ kind: 'xRest' }); }
+  }
+  function update(dt) { if (fxOn('update')) { try { FX.update(dt); } catch (e) {} } if (S) { tickDisp(dt); restTick(dt); if (onTitle && (!warm || warm.length)) prewarm(); if (!onTitle && scr !== 'board') ADV.update(dt); } }
   function needsDraw(ms) {
     if (dirty || drag || ms < animUntil || fxActive()) return true;
     if (modal && (modal.kind === 'dialog' || modal.kind === 'levelup')) return ms - lastDraw > 33;
@@ -7097,7 +7685,7 @@ const UI = (() => {
       C: { INK, INK2, CARD, EDGE, GOOD, GOLD, PINK, GRAPE, MINT, SHADOW, DARK, SOFT, OUTL, MINF },
       rr, shade, font, fit, text, textO, wrap, bar, panel, pressScale, button, drawItem, itemImg, itemBox, drawSilhouette, drawIcon, iconImg, drawPortrait, dot, dim, modalPanel, rewardRow, describe,
       snd, snd2, music, fx, artOn, fxOn, keep, tn, toast, banner, floater, rewardFx, inR, insets, disp, bump, boardMusic,
-      openModal, closeModal, addHit: (h, modal) => (modal ? mhits : hits).push(h), fmtLong,
+      openModal, closeModal, closeThen, addHit: (h, modal) => (modal ? mhits : hits).push(h), fmtLong, paintScene, portraitImg, goScreen,
     },
     get L() { return L; }, get modal() { return modal; }, get sel() { return sel; }, set sel(v) { sel = v; dirty = true; },
     get onTitle() { return onTitle; }, get cards() { return cardRects; }, get hits() { return hits; }, get mhits() { return mhits; },
@@ -7958,6 +8546,338 @@ const ADV = (() => {
     openStart, play, backToMap, openWheel,
     get view() { return V; }, cellCenter: i => V ? cellC(i) : null, get map() { return M; }, get wheel() { return WH; },
   };
+})();
+
+// Saarepagar version 3 phase B screens (Mira): the style picker (xStyle), the season pass "Hooaja rada" (xPass),
+// the weekly event (xWeek), the wardrobe "Garderoob" (xLook), photo mode (xPhoto) and the rest note (xRest).
+// Rules live in 36-tour.js; drawing helpers come from UI.H (50-ui.js). Ash's art is used when it exists:
+//   ART.heroine(px, look) -> canvas        look = { outfit, hair, acc }
+//   ART.pet(kind, px, acc) -> canvas       kind 'muri' | 'kutsu' | 'janku'; acc 'none' | 'bow' | 'collar' | 'hat'
+//   ART.postcard(ctx, w, h, drawScene)     drawScene(ctx, x, y, w, h, t) paints the picture inside the frame
+//   ART.icon('wardrobe' | 'camera' | 'brush' | 'pass' | 'week' | 'cur_<event key>')
+const XUI = (() => {
+  const H = UI.H, C = H.C, g = H.g;
+  const { INK, INK2, CARD, GOOD, GOLD, PINK, GRAPE, SOFT, DARK } = C;
+  const { rr, text, textO, wrap, bar, button, drawItem, drawIcon, dot, snd, snd2, fx, artOn, tn, toast, inR } = H;
+  const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+
+  // ---------- placeholder heroine and pets (cached) until Ash's ART.heroine / ART.pet land ----------
+  const cache = new Map();
+  function mk(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h || w; return c; }
+  const OUTFIT_COL = { casual: ['#5a8ad8', '#ffffff'], summer: ['#ffd23f', '#ff9ac8'], chef: ['#ffffff', '#e8605a'], gala: ['#7c5cff', '#ffd23f'], cozy: ['#d8604a', '#f4e2c8'], beach: ['#3ac8c0', '#ffe08a'] };
+  function heroineImg(px, look) {
+    px = Math.max(16, Math.round(px));
+    if (artOn('heroine')) { try { const c = ART.heroine(px, look); if (c && c.width) return c; } catch (e) {} }
+    const key = 'h:' + px + ':' + look.outfit + look.hair + look.acc; let c = cache.get(key); if (c) return c;
+    c = mk(px); const x = c.getContext('2d'), s = px, cx = s / 2, hr = s * 0.15, hy = s * 0.26;
+    const [c1, c2] = OUTFIT_COL[look.outfit] || OUTFIT_COL.casual, hair = '#6a3a22', skin = '#f6d2b8';
+    x.lineJoin = 'round'; x.lineWidth = Math.max(1.5, s * 0.018); x.strokeStyle = '#3a1f4a';
+    // hair behind
+    x.fillStyle = hair;
+    if (look.hair === 'long') { x.beginPath(); x.roundRect ? x.roundRect(cx - hr * 1.15, hy - hr * 0.6, hr * 2.3, hr * 3.1, hr) : x.rect(cx - hr * 1.15, hy - hr * 0.6, hr * 2.3, hr * 3.1); x.fill(); x.stroke(); }
+    if (look.hair === 'braid') { for (let j = 0; j < 5; j++) { x.beginPath(); x.ellipse(cx + hr * 0.9, hy + hr * 0.5 + j * hr * 0.45, hr * 0.28, hr * 0.26, 0, 0, 7); x.fill(); x.stroke(); } }
+    // body (dress / outfit)
+    x.fillStyle = c1; x.beginPath(); x.moveTo(cx - s * 0.1, hy + hr * 1.05); x.lineTo(cx + s * 0.1, hy + hr * 1.05); x.lineTo(cx + s * 0.25, s * 0.86); x.lineTo(cx - s * 0.25, s * 0.86); x.closePath(); x.fill(); x.stroke();
+    x.fillStyle = c2;
+    if (look.outfit === 'chef') { x.fillRect(cx - s * 0.12, hy + hr * 1.8, s * 0.24, s * 0.3); x.strokeRect(cx - s * 0.12, hy + hr * 1.8, s * 0.24, s * 0.3); }
+    else { x.beginPath(); x.moveTo(cx - s * 0.2, s * 0.72); x.lineTo(cx + s * 0.2, s * 0.72); x.lineTo(cx + s * 0.25, s * 0.86); x.lineTo(cx - s * 0.25, s * 0.86); x.closePath(); x.fill(); x.stroke(); }
+    // legs
+    x.fillStyle = skin; x.fillRect(cx - s * 0.09, s * 0.86, s * 0.05, s * 0.1); x.fillRect(cx + s * 0.04, s * 0.86, s * 0.05, s * 0.1);
+    // head
+    x.fillStyle = skin; x.beginPath(); x.arc(cx, hy + hr * 0.2, hr, 0, 7); x.fill(); x.stroke();
+    x.fillStyle = '#3a1f4a'; for (const d of [-1, 1]) { x.beginPath(); x.arc(cx + d * hr * 0.38, hy + hr * 0.2, hr * 0.12, 0, 7); x.fill(); }
+    x.strokeStyle = '#c0457a'; x.beginPath(); x.arc(cx, hy + hr * 0.45, hr * 0.3, 0.2, Math.PI - 0.2); x.stroke(); x.strokeStyle = '#3a1f4a';
+    x.fillStyle = 'rgba(255,120,150,0.35)'; for (const d of [-1, 1]) { x.beginPath(); x.arc(cx + d * hr * 0.6, hy + hr * 0.5, hr * 0.18, 0, 7); x.fill(); }
+    // hair on top
+    x.fillStyle = hair; x.beginPath(); x.arc(cx, hy + hr * 0.05, hr * 1.05, Math.PI * 1.05, Math.PI * 1.95); x.closePath(); x.fill(); x.stroke();
+    if (look.hair === 'bun') { x.beginPath(); x.arc(cx, hy - hr * 1.05, hr * 0.42, 0, 7); x.fill(); x.stroke(); }
+    if (look.hair === 'bob') { for (const d of [-1, 1]) { x.beginPath(); x.ellipse(cx + d * hr * 0.95, hy + hr * 0.5, hr * 0.3, hr * 0.7, 0, 0, 7); x.fill(); x.stroke(); } }
+    // accessory
+    if (look.acc === 'glasses') { x.lineWidth = s * 0.014; for (const d of [-1, 1]) { x.beginPath(); x.arc(cx + d * hr * 0.4, hy + hr * 0.2, hr * 0.26, 0, 7); x.stroke(); } x.beginPath(); x.moveTo(cx - hr * 0.14, hy + hr * 0.2); x.lineTo(cx + hr * 0.14, hy + hr * 0.2); x.stroke(); }
+    if (look.acc === 'hat') { x.fillStyle = '#e8c27a'; x.beginPath(); x.ellipse(cx, hy - hr * 0.55, hr * 1.6, hr * 0.32, 0, 0, 7); x.fill(); x.stroke(); x.beginPath(); x.ellipse(cx, hy - hr * 0.85, hr * 0.8, hr * 0.5, 0, Math.PI, 0); x.fill(); x.stroke(); x.fillStyle = '#ff4f9a'; x.fillRect(cx - hr * 0.8, hy - hr * 0.78, hr * 1.6, hr * 0.16); }
+    if (look.acc === 'flower') { x.fillStyle = '#ff6fa8'; for (let j = 0; j < 5; j++) { const a = j / 5 * 7; x.beginPath(); x.arc(cx - hr * 0.75 + Math.cos(a) * hr * 0.2, hy - hr * 0.45 + Math.sin(a) * hr * 0.2, hr * 0.17, 0, 7); x.fill(); } x.fillStyle = '#ffd23f'; x.beginPath(); x.arc(cx - hr * 0.75, hy - hr * 0.45, hr * 0.12, 0, 7); x.fill(); }
+    if (look.acc === 'scarf') { x.fillStyle = '#ff4f7a'; x.fillRect(cx - hr * 0.9, hy + hr * 1.0, hr * 1.8, hr * 0.38); x.strokeRect(cx - hr * 0.9, hy + hr * 1.0, hr * 1.8, hr * 0.38); x.fillRect(cx + hr * 0.3, hy + hr * 1.3, hr * 0.38, hr * 1.0); }
+    cache.set(key, c); return c;
+  }
+  const PET_COL = { muri: ['#8a8a96', '#5a5a66'], kutsu: ['#c8925a', '#7a5226'], janku: ['#f4f0ea', '#b8a894'] };
+  function petImg(kind, px, acc) {
+    px = Math.max(16, Math.round(px));
+    if (artOn('pet')) { try { const c = ART.pet(kind, px, acc); if (c && c.width) return c; } catch (e) {} }
+    const key = 'p:' + kind + ':' + px + ':' + acc; let c = cache.get(key); if (c) return c;
+    c = mk(px); const x = c.getContext('2d'), s = px, cx = s / 2, [f, d] = PET_COL[kind] || PET_COL.muri;
+    x.lineJoin = 'round'; x.lineWidth = Math.max(1.5, s * 0.025); x.strokeStyle = '#3a2a3a'; x.fillStyle = f;
+    x.beginPath(); x.ellipse(cx, s * 0.72, s * 0.26, s * 0.2, 0, 0, 7); x.fill(); x.stroke();          // body
+    const hy = s * 0.44, hr = s * 0.2;
+    if (kind === 'janku') for (const q of [-1, 1]) { x.beginPath(); x.ellipse(cx + q * hr * 0.45, hy - hr * 1.3, hr * 0.26, hr * 0.8, q * 0.15, 0, 7); x.fill(); x.stroke(); }
+    if (kind === 'muri') for (const q of [-1, 1]) { x.beginPath(); x.moveTo(cx + q * hr * 0.9, hy - hr * 0.2); x.lineTo(cx + q * hr * 0.65, hy - hr * 1.25); x.lineTo(cx + q * hr * 0.1, hy - hr * 0.8); x.closePath(); x.fill(); x.stroke(); }
+    x.beginPath(); x.arc(cx, hy, hr, 0, 7); x.fill(); x.stroke();                                         // head
+    if (kind === 'kutsu') { x.fillStyle = d; for (const q of [-1, 1]) { x.beginPath(); x.ellipse(cx + q * hr * 1.0, hy + hr * 0.15, hr * 0.3, hr * 0.65, q * -0.3, 0, 7); x.fill(); x.stroke(); } }
+    x.fillStyle = '#2a1a2a'; for (const q of [-1, 1]) { x.beginPath(); x.arc(cx + q * hr * 0.38, hy - hr * 0.05, hr * 0.13, 0, 7); x.fill(); }
+    x.fillStyle = kind === 'kutsu' ? '#2a1a2a' : '#ff8ab0'; x.beginPath(); x.arc(cx, hy + hr * 0.3, hr * 0.12, 0, 7); x.fill();
+    if (acc === 'bow') { x.fillStyle = '#ff4f9a'; for (const q of [-1, 1]) { x.beginPath(); x.moveTo(cx, hy + hr * 1.05); x.lineTo(cx + q * hr * 0.6, hy + hr * 0.8); x.lineTo(cx + q * hr * 0.6, hy + hr * 1.3); x.closePath(); x.fill(); x.stroke(); } }
+    if (acc === 'collar') { x.strokeStyle = '#e8303a'; x.lineWidth = s * 0.05; x.beginPath(); x.arc(cx, hy + hr * 0.1, hr * 0.95, 0.5, Math.PI - 0.5); x.stroke(); x.fillStyle = '#ffd23f'; x.beginPath(); x.arc(cx, hy + hr * 1.05, hr * 0.16, 0, 7); x.fill(); }
+    if (acc === 'hat') { x.fillStyle = '#7c5cff'; x.strokeStyle = '#3a2a3a'; x.lineWidth = s * 0.02; x.beginPath(); x.moveTo(cx - hr * 0.55, hy - hr * 0.8); x.lineTo(cx + hr * 0.15, hy - hr * 1.9); x.lineTo(cx + hr * 0.6, hy - hr * 0.75); x.closePath(); x.fill(); x.stroke(); x.fillStyle = '#ffd23f'; x.beginPath(); x.arc(cx + hr * 0.15, hy - hr * 1.9, hr * 0.15, 0, 7); x.fill(); }
+    cache.set(key, c); return c;
+  }
+  function drawHeroine(x, y, s, look) { g.drawImage(heroineImg(s * H.DPR, look || S.look), x, y, s, s); }
+  function drawPet(kind, x, y, s, acc) { g.drawImage(petImg(kind, s * H.DPR, acc), x, y, s, s); }
+
+  // ---------- style picker ----------
+  function drawStyle(m, t, B) {
+    const tk = TOUR.task(m.id); if (!tk) { H.closeModal(true); return; }
+    const cardH = 104, P = H.modalPanel(m, 420, 120 + 3 * (cardH + 10) + 70, 'Vali stiil');
+    text(tk.name, P.x + P.w / 2, P.y + 42, 17, INK, 'center', 900, P.w - 70);
+    text(m.first ? 'Vali, mis meeldib. Hiljem saab muuta.' : 'Vali uus stiil. Seda saab alati muuta.', P.x + P.w / 2, P.y + 68, 15, INK2, 'center', 700, P.w - 30);
+    const cur = S.style[m.id];
+    STYLE_KEYS.forEach((k, j) => {
+      const st = STYLES[k], x = P.x + 16, y = P.y + 92 + j * (cardH + 10), w = P.w - 32, on = cur === k;
+      const ps = H.pressScale(x, y);
+      g.save(); g.translate(x + w / 2, y + cardH / 2); g.scale(ps, ps); g.translate(-x - w / 2, -y - cardH / 2);
+      g.fillStyle = on ? 'rgba(47,213,154,0.18)' : SOFT; rr(x, y, w, cardH, 18); g.fill();
+      if (on) { g.lineWidth = 3; g.strokeStyle = GOOD; rr(x, y, w, cardH, 18); g.stroke(); }
+      // swatch: three colour bands with a soft pattern for the style
+      g.save(); rr(x + 10, y + 10, 84, cardH - 20, 14); g.clip();
+      st.cols.forEach((c, q) => { g.fillStyle = c; g.fillRect(x + 10, y + 10 + q * (cardH - 20) / 3, 84, (cardH - 20) / 3 + 1); });
+      g.fillStyle = 'rgba(255,255,255,0.35)';
+      if (k === 'boho') for (let q = 0; q < 6; q++) { g.beginPath(); g.moveTo(x + 10 + q * 16, y + 10); g.lineTo(x + 18 + q * 16, y + 24); g.lineTo(x + 26 + q * 16, y + 10); g.fill(); }
+      if (k === 'romantic') for (let q = 0; q < 5; q++) { g.beginPath(); g.arc(x + 20 + q * 16, y + cardH - 10, 7, Math.PI, 0); g.fill(); }
+      if (k === 'minimal') { g.fillRect(x + 50, y + 10, 3, cardH - 20); }
+      g.restore();
+      g.lineWidth = 2; g.strokeStyle = 'rgba(60,40,120,0.18)'; rr(x + 10, y + 10, 84, cardH - 20, 14); g.stroke();
+      text(st.name, x + 108, y + 36, 20, INK, 'left', 900, w - 160);
+      text(st.desc, x + 108, y + 64, 15, INK2, 'left', 700, w - 160);
+      if (on) drawIcon('check', x + w - 46, y + cardH / 2 - 17, 34);
+      g.restore();
+      H.addHit({ x, y, w, h: cardH, bx: x, by: y, fn: () => { if (S.style[m.id] !== k) Game.setStyle(m.id, k); else snd('tap'); if (m.first) setTimeout(() => { if (H.modal === m) H.closeModal(true); }, 350); } }, true);
+    });
+    const by = P.y + P.h - 64;
+    button(P.x + 40, by, P.w - 80, 52, cur ? 'Valmis' : 'Hiljem', () => m.back ? H.closeThen({ kind: m.back }) : H.closeModal(), Object.assign({ hot: !!cur, size: 19 }, B));
+  }
+
+  // ---------- season pass ----------
+  function drawPass(m, t, B) {
+    PASS.ensure();
+    const P = H.modalPanel(m, 440, Math.min(H.H - 24, 700), 'Hooaja rada'), pts = S.pass.pts, n = PASS.reached();
+    text(cap(PASS.monthName()) + ' · lõpuni ' + H.fmtLong(PASS.left()), P.x + P.w / 2, P.y + 42, 15, INK2, 'center', 800, P.w - 70);
+    // progress to the next step
+    const next = Math.min(PASS_STEPS, n + 1), lo = PASS.CUM[next - 1], hi = PASS.CUM[next], done = n >= PASS_STEPS;
+    drawIcon('pass', P.x + 16, P.y + 58, 40);
+    text(done ? 'Rada on läbitud! Tubli!' : 'Samm ' + next + ' / ' + PASS_STEPS, P.x + 64, P.y + 70, 18, INK, 'left', 900, P.w - 90);
+    if (!done) { bar(P.x + 64, P.y + 86, P.w - 150, 12, (pts - lo) / (hi - lo), PINK); text((pts - lo) + '/' + (hi - lo), P.x + P.w - 20, P.y + 93, 15, INK2, 'right', 800, 80); }
+    // 30 tiles, 5 per row
+    const cols = 5, rows = 6, top = P.y + 116, foot = 78, gap = 6;
+    const tw = (P.w - 20 - gap * (cols - 1)) / cols, th = Math.min(86, (P.h - (top - P.y) - foot - gap * (rows - 1)) / rows);
+    let firstReady = 0;
+    for (let s = 1; s <= PASS_STEPS; s++) {
+      const j = s - 1, x = P.x + 10 + (j % cols) * (tw + gap), y = top + Math.floor(j / cols) * (th + gap);
+      const got = !!S.pass.got[s], ready = s <= n && !got, r = PASS.reward(s), look = !!r.look;
+      if (ready && !firstReady) firstReady = s;
+      const pu = ready ? 1 + Math.sin(t * 5 + s) * 0.03 : 1;
+      g.save(); g.translate(x + tw / 2, y + th / 2); g.scale(pu, pu); g.translate(-x - tw / 2, -y - th / 2);
+      if (ready) { const gg = g.createLinearGradient(0, y, 0, y + th); gg.addColorStop(0, '#fff6b0'); gg.addColorStop(1, '#ffd23f'); g.fillStyle = gg; }
+      else g.fillStyle = got ? 'rgba(47,213,154,0.18)' : look ? 'rgba(255,79,154,0.14)' : SOFT;
+      rr(x, y, tw, th, 14); g.fill();
+      if (ready || look) { g.lineWidth = 2.5; g.strokeStyle = ready ? '#fff' : 'rgba(255,79,154,0.55)'; rr(x, y, tw, th, 14); g.stroke(); }
+      text(String(s), x + 14, y + 13, 15, got ? GOOD : INK2, 'center', 900);
+      const is = Math.min(tw - 22, th - 30), ix = x + tw / 2 - is / 2, iy = y + 16 + (th - 30 - is) / 2;
+      g.globalAlpha = s > n && !got ? 0.6 : 1;
+      if (look) drawIcon(r.look.startsWith('petAcc') ? 'heart' : 'wardrobe', ix, iy, is);
+      else rewardIcon(r, x + tw / 2, iy + is / 2, is);
+      g.globalAlpha = 1;
+      const lab = r.coins && !look && !r.item && !r.boost && !r.chest ? '+' + r.coins : r.energy && !r.coins && !r.boost ? '+' + r.energy : '';
+      if (lab) text(lab, x + tw / 2, y + th - 11, 15, INK, 'center', 900, tw - 4);
+      if (got) drawIcon('check', x + tw - 22, y - 4, 24);
+      g.restore();
+      H.addHit({ x, y, w: tw, h: th, bx: x, by: y, fn: () => {
+        if (ready) { m.tap = { x: x + tw / 2, y: y + th / 2 }; PASS.claim(s); }
+        else { snd('tap'); toast(s + '. samm: ' + H.describe(r).map(d => d.t).concat(look ? ['uus asi garderoobi'] : []).join(', ') + (got ? ' (käes)' : s > n ? ' · veel ' + (PASS.CUM[s] - pts) + ' punkti' : '')); }
+      } }, true);
+    }
+    const by = P.y + P.h - foot + 10;
+    if (firstReady) button(P.x + 30, by, P.w - 60, 52, 'Võta kõik auhinnad!', () => { m.tap = { x: P.x + P.w / 2, y: by }; for (let s = 1; s <= n; s++) if (!S.pass.got[s]) PASS.claim(s); }, Object.assign({ hot: true, pulse: 1, size: 19 }, B));
+    else wrap('Punkte saad ühendamisest, tellimustest, remondist, päevaülesannetest ja Seikluse tasemetest.', P.w - 40, 15, 700).slice(0, 2).forEach((s2, j) => text(s2, P.x + P.w / 2, by + 14 + j * 21, 15, INK2, 'center', 700));
+  }
+  // The main prize of a reward as one picture.
+  function rewardIcon(r, cx, cy, s) {
+    if (r.boost) ADV.drawBoost(typeof r.boost === 'string' ? r.boost : Object.keys(r.boost)[0], cx - s / 2, cy - s / 2, s);
+    else if (r.item) drawItem(r.item[0], r.item[1], cx, cy, s);
+    else if (r.chest) drawItem('chest', Math.min(3, r.chest), cx, cy, s);
+    else if (r.spins) drawIcon('wheel', cx - s / 2, cy - s / 2, s);
+    else if (r.genUp) drawItem('oven', 2, cx, cy, s);
+    else if (r.stars) drawIcon('star', cx - s / 2, cy - s / 2, s);
+    else if (r.energy && !r.coins) drawIcon('energy', cx - s / 2, cy - s / 2, s);
+    else drawIcon('coin', cx - s / 2, cy - s / 2, s);
+  }
+
+  // ---------- weekly event ----------
+  function drawWeek(m, t, B) {
+    const e = WEEK.info(), E = e.E, P = H.modalPanel(m, 440, Math.min(H.H - 24, 700), E.name);
+    if (!WEEK.open()) {
+      drawIcon('week', P.x + P.w / 2 - 40, P.y + 50, 80);
+      text('Nädala sündmus avaneb tasemel ' + WEEK_MIN_LVL + '.', P.x + P.w / 2, P.y + 160, 19, INK, 'center', 900, P.w - 30);
+      wrap('Igal nädalal on uus pidu: Aiapidu, Moenädal, Pulmad või Rannafestival. Igaühel on oma asjad, oma märgid ja oma auhinnad, ka uued riided garderoobi!', P.w - 48, 16, 700).forEach((s, j) => text(s, P.x + P.w / 2, P.y + 200 + j * 22, 16, INK2, 'center', 700));
+      return;
+    }
+    WEEK.ensure();
+    const cur = S.week.cur, icon = 'cur_' + e.key;
+    drawIcon(icon, P.x + 16, P.y + 34, 44); text(String(cur), P.x + 66, P.y + 56, 24, INK, 'left', 900);
+    text('Lõpuni ' + H.fmtLong(e.left), P.x + 66, P.y + 84, 15, INK2, 'left', 800, P.w - 270);
+    if (e.weekend) { g.fillStyle = PINK; rr(P.x + P.w - 190, P.y + 64, 172, 30, 15); g.fill(); text('Nädalavahetus ×2!', P.x + P.w - 104, P.y + 79, 15, '#fff', 'center', 900, 164); }
+    // the event chain, small, so it is clear what to look for on the board
+    const n = E.chain.length, cw = Math.min(58, (P.w - 30) / n), x0 = P.x + (P.w - cw * n) / 2, cy = P.y + 122;
+    for (let j = 0; j < n; j++) {
+      const known = j === 0 || (S.disc[e.chain] || 0) > j;
+      g.fillStyle = SOFT; rr(x0 + j * cw + 2, cy - cw / 2 + 2, cw - 4, cw - 4, 12); g.fill();
+      if (known) drawItem(e.chain, j + 1, x0 + j * cw + cw / 2, cy, cw * 0.78); else H.drawSilhouette(e.chain, j + 1, x0 + j * cw + cw / 2, cy, cw * 0.78);
+    }
+    H.addHit({ x: x0, y: cy - cw / 2, w: cw * n, h: cw, fn: () => { snd('tap'); H.closeThen({ kind: 'chain', k: e.chain, l: 1 }); } }, true);
+    const info = 'Generaatoritest tuleb vahel ' + E.chain[0].toLowerCase() + '. Ühenda neid! Tipptaseme asja toksamine annab ' + WEEK_CUR.top + ' ' + E.cur[1] + '.';
+    const il = wrap(info, P.w - 36, 15, 700).slice(0, 3);
+    il.forEach((s, j) => text(s, P.x + P.w / 2, cy + cw / 2 + 18 + j * 20, 15, INK2, 'center', 700));
+    // reward track (a window around the next prize)
+    const top = cy + cw / 2 + 26 + il.length * 20, rowH = 56, N = WEEK_TRACK.length, nRows = Math.max(3, Math.floor((P.y + P.h - top - 52) / rowH));
+    let nx = 0; while (nx < N && S.week.got[nx]) nx++;
+    const s0 = clamp(nx - 1, 0, Math.max(0, N - nRows));
+    for (let j = s0; j < Math.min(N, s0 + nRows); j++) {
+      const tr = WEEK_TRACK[j], y = top + (j - s0) * rowH, got = !!S.week.got[j], ready = !got && cur >= tr.need, r = WEEK.reward(j);
+      g.fillStyle = ready ? 'rgba(255,95,143,0.18)' : got ? 'rgba(95,194,74,0.12)' : SOFT; rr(P.x + 10, y, P.w - 20, rowH - 6, 14); g.fill();
+      g.fillStyle = got ? '#5fc24a' : ready ? PINK : '#c9b49a'; g.beginPath(); g.arc(P.x + 38, y + (rowH - 6) / 2, 20, 0, 7); g.fill();
+      text(String(tr.need), P.x + 38, y + (rowH - 6) / 2 + 1, 15, '#fff', 'center', 900);
+      if (r.look) { drawIcon('wardrobe', P.x + 68, y + (rowH - 6) / 2 - 15, 30); const [kind, k] = r.look.split(':'); text(LOOK.name(kind, k), P.x + 102, y + (rowH - 6) / 2 + 1, 16, PINK, 'left', 900, P.w - 230); }
+      else H.rewardRow(r, P.x + 70, y + (rowH - 6) / 2, P.w - 200, 28);
+      if (got) drawIcon('check', P.x + P.w - 56, y + 9, 32);
+      else if (ready) button(P.x + P.w - 112, y + 1, 96, 48, 'Võta!', () => { m.tap = { x: P.x + P.w - 64, y: y + 24 }; WEEK.claim(j); }, Object.assign({ hot: true, pulse: 1, size: 18 }, B));
+      else { g.globalAlpha = 0.5; drawIcon('lock', P.x + P.w - 54, y + 11, 28); g.globalAlpha = 1; }
+    }
+    wrap(cap(E.cur[0]) + ' tulevad ühendamisest, tellimustest ja Seikluse tasemetest.', P.w - 30, 15, 700).slice(0, 2).forEach((s2, j, a) => text(s2, P.x + P.w / 2, P.y + P.h - 14 - (a.length - j) * 20, 15, INK2, 'center', 700));
+  }
+  function weekMusic() {
+    try {
+      if (typeof MUSIC === 'undefined' || !MUSIC || !MUSIC.scene) return;
+      const k = MUSIC.scene('event', { week: WEEK.info().key });
+      if (!k) H.boardMusic();
+    } catch (e) {}
+  }
+
+  // ---------- wardrobe ----------
+  const TABS = [['outfit', 'Riided'], ['hair', 'Soeng'], ['acc', 'Lisad'], ['pet', 'Lemmik']];
+  function drawLook(m, t, B) {
+    if (!m.seen) { m.seen = 1; LOOK.seeAll(); }
+    const P = H.modalPanel(m, 440, Math.min(H.H - 24, 720), 'Garderoob'), tab = m.tab || 'outfit';
+    // preview: the heroine and her pet in front of the scene
+    const pv = { x: P.x + 12, y: P.y + 56, w: P.w - 24, h: Math.min(190, P.h * 0.28) };
+    g.save(); rr(pv.x, pv.y, pv.w, pv.h, 16); g.clip();
+    if (!H.paintScene(g, pv.x, pv.y, pv.w, pv.h, t)) { const gr = g.createLinearGradient(0, pv.y, 0, pv.y + pv.h); gr.addColorStop(0, '#bfe3f2'); gr.addColorStop(1, '#fbe9d0'); g.fillStyle = gr; g.fillRect(pv.x, pv.y, pv.w, pv.h); }
+    g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(pv.x, pv.y, pv.w, pv.h);
+    const hs = pv.h * 0.95, bob = Math.sin(t * 2) * 2;
+    drawHeroine(pv.x + pv.w / 2 - hs * 0.62, pv.y + pv.h - hs + bob, hs);
+    const ps = pv.h * 0.5, pet = S.petOn;
+    drawPet(pet, pv.x + pv.w / 2 + hs * 0.12, pv.y + pv.h - ps - 2 + Math.abs(Math.sin(t * 3)) * -3, ps, (S.pets[pet] || {}).acc || 'none');
+    g.restore();
+    g.lineWidth = 3; g.strokeStyle = '#fff'; rr(pv.x, pv.y, pv.w, pv.h, 16); g.stroke();
+    // tabs
+    const ty = pv.y + pv.h + 10, tw = (P.w - 24) / TABS.length;
+    TABS.forEach(([k, lab], j) => {
+      const x = P.x + 12 + j * tw, on = tab === k;
+      g.fillStyle = on ? GRAPE : SOFT; rr(x + 2, ty, tw - 4, 46, 14); g.fill();
+      text(lab, x + tw / 2, ty + 24, 16, on ? '#fff' : INK, 'center', 900, tw - 10);
+      H.addHit({ x, y: ty, w: tw, h: 48, fn: () => { m.tab = k; snd('tap'); } }, true);
+    });
+    // option cards
+    const top = ty + 58, foot = 70;
+    const list = tab === 'pet' ? Object.keys(PETS).map(k => ['pet', k]).concat(Object.keys(LOOKS.petAcc).map(k => ['petAcc', k])) : Object.keys(LOOKS[tab]).map(k => [tab, k]);
+    const cols = tab === 'pet' ? 4 : 3, rows = Math.ceil(list.length / cols), cw = (P.w - 20) / cols;
+    const ch = Math.min(122, (P.y + P.h - foot - top) / rows);
+    list.forEach(([kind, k], j) => {
+      const x = P.x + 10 + (j % cols) * cw, y = top + Math.floor(j / cols) * ch, has = LOOK.has(kind, k);
+      const on = kind === 'pet' ? S.petOn === k : kind === 'petAcc' ? ((S.pets[S.petOn] || {}).acc || 'none') === k : S.look[kind] === k;
+      g.fillStyle = on ? 'rgba(47,213,154,0.2)' : has ? SOFT : 'rgba(110,100,200,0.05)'; rr(x + 3, y + 2, cw - 6, ch - 6, 14); g.fill();
+      if (on) { g.lineWidth = 3; g.strokeStyle = GOOD; rr(x + 3, y + 2, cw - 6, ch - 6, 14); g.stroke(); }
+      const why = has ? null : wrap(LOOK.why(kind, k), cw - 12, 15, 700).slice(0, 2), is = Math.min(cw - 16, ch - (why && why.length > 1 ? 62 : 44));
+      g.globalAlpha = has ? 1 : 0.35;
+      if (kind === 'pet') drawPet(k, x + cw / 2 - is / 2, y + 6, is, 'none');
+      else if (kind === 'petAcc') drawPet(S.petOn, x + cw / 2 - is / 2, y + 6, is, k);
+      else drawHeroine(x + cw / 2 - is / 2, y + 6, is, Object.assign({}, S.look, { [kind]: k }));
+      g.globalAlpha = 1;
+      if (!has) drawIcon('lock', x + cw - 34, y + 8, 24);
+      if (has) text(LOOK.name(kind, k), x + cw / 2, y + ch - 22, 15, INK, 'center', 900, cw - 12);
+      else why.forEach((s2, q) => text(s2, x + cw / 2, y + ch - 22 - (why.length - 1 - q) * 18, 15, INK2, 'center', 700, cw - 12));
+      H.addHit({ x: x + 3, y: y + 2, w: cw - 6, h: ch - 6, fn: () => {
+        if (!has) { snd('deny'); toast(LOOK.name(kind, k) + ': ' + LOOK.why(kind, k) + '.'); return; }
+        if (!on) LOOK.wear(kind, k); else snd('tap');
+      } }, true);
+    });
+    const by = P.y + P.h - 62;
+    button(P.x + 30, by, P.w - 60, 50, 'Tee foto', () => H.closeThen({ kind: 'xPhoto' }), Object.assign({ icon: 'camera', isz: 30, style: 'buttonBlue', size: 19 }, B));
+  }
+
+  // ---------- photo mode ----------
+  // A postcard of the current area with the heroine and her pet, full screen, ready for a screenshot.
+  // The hints and the close button fade out after a few seconds so the screenshot stays clean.
+  function drawPhoto(m, t) {
+    const W = H.W, Hh = H.H, age = tn() - m.t0;
+    if (!m.snd) { m.snd = 1; snd2('photo', 'open'); fx('confetti', 0.3, W / 2, Hh * 0.3); }
+    g.fillStyle = 'rgba(20,14,48,0.92)'; g.fillRect(0, 0, W, Hh);
+    const si = H.insets(), cw = Math.min(W - 28, 520), chh = Math.min(Hh - si.t - si.b - 120, cw * 1.25);
+    const x = (W - cw) / 2, y = Math.max(si.t + 20, (Hh - chh) / 2 - 10);
+    const area = Game.curArea(), when = new Date(), dateS = when.getDate() + '. ' + MONTHS[when.getMonth()] + ' ' + when.getFullYear();
+    const k = clamp(age / 0.45, 0, 1), s = 0.85 + 0.15 * ease.outBack(k);
+    const paint = (c, px, py, pw, ph, tt) => {
+      c.save(); c.beginPath(); c.rect(px, py, pw, ph); c.clip();
+      if (!H.paintScene(c, px, py, pw, ph, tt === undefined ? t : tt)) { const gr = c.createLinearGradient(0, py, 0, py + ph); gr.addColorStop(0, '#bfe3f2'); gr.addColorStop(1, '#fbe9d0'); c.fillStyle = gr; c.fillRect(px, py, pw, ph); }
+      const hs = Math.min(ph * 0.55, pw * 0.5), pet = S.petOn;
+      c.drawImage(heroineImg(hs * H.DPR, S.look), px + pw * 0.08, py + ph - hs, hs, hs);
+      c.drawImage(petImg(pet, hs * 0.5 * H.DPR, (S.pets[pet] || {}).acc || 'none'), px + pw * 0.08 + hs * 0.72, py + ph - hs * 0.52, hs * 0.5, hs * 0.5);
+      c.restore();
+    };
+    g.save(); g.globalAlpha = Math.min(1, k * 2); g.translate(W / 2, y + chh / 2); g.rotate(-0.015 * (1 - k)); g.scale(s, s); g.translate(-W / 2, -y - chh / 2);
+    let framed = false;
+    if (artOn('postcard')) { try { g.save(); g.translate(x, y); ART.postcard(g, cw, chh, paint, { title: area.name, date: dateS, t }); g.restore(); framed = true; } catch (e) { g.restore(); } }
+    if (!framed) {
+      g.fillStyle = 'rgba(0,0,0,0.3)'; rr(x + 4, y + 8, cw, chh, 10); g.fill();
+      g.fillStyle = '#fffdf6'; rr(x, y, cw, chh, 10); g.fill();
+      const pad = 14, ph = chh - pad - 74;
+      paint(g, x + pad, y + pad, cw - pad * 2, ph);
+      g.lineWidth = 1.5; g.strokeStyle = 'rgba(0,0,0,0.12)'; g.strokeRect(x + pad, y + pad, cw - pad * 2, ph);
+      text('Tervitused saarelt!', x + cw / 2, y + pad + ph + 26, 22, '#a04a6a', 'center', 900, cw - 30);
+      text(area.name + ' · ' + dateS, x + cw / 2, y + pad + ph + 54, 15, INK2, 'center', 700, cw - 30);
+    }
+    g.restore();
+    // hints and the close button fade out
+    const ha = clamp(1 - (age - 3) / 0.6, 0, 1);
+    if (ha > 0) {
+      g.globalAlpha = ha;
+      text('Tee ekraanipilt ja jaga!', W / 2, Math.min(Hh - si.b - 30, y + chh + 34), 17, '#fff', 'center', 900, W - 30);
+      const cx = W - 58, cy = si.t + 10;
+      g.fillStyle = 'rgba(255,255,255,0.2)'; g.beginPath(); g.arc(cx + 24, cy + 24, 20, 0, 7); g.fill();
+      g.strokeStyle = '#fff'; g.lineWidth = 3.5; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx + 17, cy + 17); g.lineTo(cx + 31, cy + 31); g.moveTo(cx + 31, cy + 17); g.lineTo(cx + 17, cy + 31); g.stroke(); g.lineCap = 'butt';
+      g.globalAlpha = 1;
+    }
+    H.addHit({ x: 0, y: 0, w: W, h: Hh, fn: () => { if (age > 0.4) H.closeModal(); } }, true);
+    H.keep(0.1);
+  }
+
+  // ---------- rest note ----------
+  function drawRest(m, t, B) {
+    const P = H.modalPanel(m, 380, 430, 'Väike paus?');
+    drawIcon('rest', P.x + P.w / 2 - 36, P.y + 36, 72);
+    const ls = wrap('Oled juba tükk aega mänginud. Silmad ja kael tänavad sind väikese pausi eest. Saar ootab sind siin, energia koguneb vahepeal ise.', P.w - 40, 17, 800);
+    ls.forEach((s, j) => text(s, P.x + P.w / 2, P.y + 132 + j * 24, 17, INK, 'center', 800));
+    const by = P.y + P.h - 150;
+    button(P.x + 30, by, P.w - 60, 52, 'Teen pausi', () => { H.closeModal(true); toast('Kohtumiseni! Muri hoiab sul kohta soojas.', 3.4); }, Object.assign({ hot: true, size: 19 }, B));
+    button(P.x + 30, by + 60, P.w - 60, 48, 'Mängin veel natuke', () => H.closeModal(), Object.assign({ style: 'buttonGrey', size: 17 }, B));
+    text('Meeldetuletuse saab seadetes välja lülitada.', P.x + P.w / 2, P.y + P.h - 20, 15, INK2, 'center', 700, P.w - 20);
+  }
+
+  function drawModal(m, t, B) {
+    if (m.kind === 'xStyle') drawStyle(m, t, B);
+    else if (m.kind === 'xPass') drawPass(m, t, B);
+    else if (m.kind === 'xWeek') { if (!m.mus) { m.mus = 1; weekMusic(); m.onDone = () => H.boardMusic(); } drawWeek(m, t, B); }
+    else if (m.kind === 'xLook') drawLook(m, t, B);
+    else if (m.kind === 'xPhoto') drawPhoto(m, t);
+    else if (m.kind === 'xRest') drawRest(m, t, B);
+  }
+  return { drawModal, heroineImg, petImg };
 })();
 
 // ---- Saarepagar audio (Echo): every sound and all the music, synthesized with WebAudio. No files, no network.

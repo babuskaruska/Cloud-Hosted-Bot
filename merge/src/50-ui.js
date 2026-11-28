@@ -199,7 +199,7 @@ const UI = (() => {
   }
 
   // ---- icons and portraits ----
-  const ICON_ALIAS = { album: 'book', event: 'star', order: 'check', freeEnergy: 'energy' };
+  const ICON_ALIAS = { album: 'book', event: 'star', order: 'check', freeEnergy: 'energy', pass: 'crown', week: 'event' };
   const icCache = new Map();
   function iconImg(name, px) {
     px = Math.max(8, Math.round(px));
@@ -214,7 +214,7 @@ const UI = (() => {
     return c;
   }
   // Placeholders that are better than an alias until Ash draws them.
-  const PH_OWN = { event: 1, order: 1 };
+  const PH_OWN = { event: 1, order: 1, wardrobe: 1, camera: 1, brush: 1, cur_garden: 1, cur_fashion: 1, cur_wedding: 1, cur_beach: 1 };
   function phIcon(name, s) {
     const c = document.createElement('canvas'); c.width = c.height = s; const x = c.getContext('2d');
     const cx = s / 2, cy = s / 2, r = s * 0.42; x.lineWidth = Math.max(1.5, s * 0.07); x.lineJoin = 'round'; x.lineCap = 'round';
@@ -241,6 +241,16 @@ const UI = (() => {
       case 'calendar': x.fillStyle = '#fff'; x.strokeStyle = '#7a4a26'; x.fillRect(cx - r * 0.85, cy - r * 0.7, r * 1.7, r * 1.6); x.strokeRect(cx - r * 0.85, cy - r * 0.7, r * 1.7, r * 1.6); x.fillStyle = '#ff4f7a'; x.fillRect(cx - r * 0.85, cy - r * 0.7, r * 1.7, r * 0.45); x.fillStyle = '#33285c'; x.font = '900 ' + Math.round(r * 0.9) + 'px ' + FONT; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('7', cx, cy + r * 0.38); break;
       case 'map': x.fillStyle = '#ffe9b8'; x.strokeStyle = '#a06a2a'; x.beginPath(); x.moveTo(cx - r, cy - r * 0.7); x.lineTo(cx - r * 0.33, cy - r * 0.9); x.lineTo(cx + r * 0.33, cy - r * 0.7); x.lineTo(cx + r, cy - r * 0.9); x.lineTo(cx + r, cy + r * 0.7); x.lineTo(cx + r * 0.33, cy + r * 0.9); x.lineTo(cx - r * 0.33, cy + r * 0.7); x.lineTo(cx - r, cy + r * 0.9); x.closePath(); x.fill(); x.stroke(); x.setLineDash([s * 0.06, s * 0.05]); x.strokeStyle = '#e0457a'; x.beginPath(); x.moveTo(cx - r * 0.7, cy + r * 0.5); x.quadraticCurveTo(cx - r * 0.1, cy - r * 0.4, cx + r * 0.5, cy - r * 0.3); x.stroke(); x.setLineDash([]); x.fillStyle = '#e0457a'; x.beginPath(); x.arc(cx + r * 0.55, cy - r * 0.35, r * 0.17, 0, 7); x.fill(); break;
       case 'moves': circ(r, '#5ac0ff', '#1a6fd0'); x.strokeStyle = '#fff'; x.lineWidth = s * 0.09; x.beginPath(); x.arc(cx, cy, r * 0.5, -0.4, Math.PI * 1.4); x.stroke(); break;
+      case 'wardrobe': { // a dress on a hanger
+        x.strokeStyle = '#7a4a26'; x.lineWidth = s * 0.06; x.beginPath(); x.arc(cx, cy - r * 0.78, r * 0.16, Math.PI, Math.PI * 2.4); x.moveTo(cx, cy - r * 0.62); x.lineTo(cx - r * 0.85, cy - r * 0.2); x.lineTo(cx + r * 0.85, cy - r * 0.2); x.closePath(); x.stroke();
+        x.fillStyle = '#ff7ab8'; x.strokeStyle = '#c01f6a'; x.lineWidth = s * 0.05; x.beginPath(); x.moveTo(cx - r * 0.35, cy - r * 0.2); x.lineTo(cx + r * 0.35, cy - r * 0.2); x.lineTo(cx + r * 0.25, cy + r * 0.15); x.lineTo(cx + r * 0.75, cy + r * 0.95); x.lineTo(cx - r * 0.75, cy + r * 0.95); x.lineTo(cx - r * 0.25, cy + r * 0.15); x.closePath(); x.fill(); x.stroke();
+        x.fillStyle = '#fff'; x.beginPath(); x.arc(cx, cy + r * 0.05, r * 0.09, 0, 7); x.fill(); break; }
+      case 'camera': x.fillStyle = '#5a6a8a'; x.strokeStyle = '#2a3450'; x.beginPath(); x.roundRect ? x.roundRect(cx - r * 0.95, cy - r * 0.5, r * 1.9, r * 1.3, r * 0.25) : x.rect(cx - r * 0.95, cy - r * 0.5, r * 1.9, r * 1.3); x.fill(); x.stroke(); x.fillRect(cx - r * 0.35, cy - r * 0.75, r * 0.7, r * 0.3); circ(r * 0.42, '#bfe3ff', '#2a3450'); x.fillStyle = '#fff'; x.beginPath(); x.arc(cx - r * 0.12, cy - r * 0.12, r * 0.12, 0, 7); x.fill(); x.fillStyle = '#ffd23f'; x.fillRect(cx + r * 0.55, cy - r * 0.38, r * 0.22, r * 0.14); break;
+      case 'brush': x.save(); x.translate(cx, cy); x.rotate(0.7); x.fillStyle = '#c99a5a'; x.strokeStyle = '#7a5226'; x.fillRect(-r * 0.12, -r * 0.1, r * 0.24, r * 1.0); x.strokeRect(-r * 0.12, -r * 0.1, r * 0.24, r * 1.0); x.fillStyle = '#c0c4d0'; x.fillRect(-r * 0.2, -r * 0.35, r * 0.4, r * 0.28); x.fillStyle = '#ff4f9a'; x.beginPath(); x.moveTo(-r * 0.22, -r * 0.35); x.quadraticCurveTo(0, -r * 1.25, r * 0.22, -r * 0.35); x.fill(); x.restore(); break;
+      case 'cur_garden': for (let j = 0; j < 5; j++) { const a = j / 5 * Math.PI * 2 - Math.PI / 2; x.beginPath(); x.ellipse(cx + Math.cos(a) * r * 0.48, cy + Math.sin(a) * r * 0.48, r * 0.42, r * 0.3, a, 0, 7); x.fillStyle = '#ff9ac8'; x.fill(); x.strokeStyle = '#c0457a'; x.stroke(); } circ(r * 0.3, '#ffd23f', '#c08a10'); break;
+      case 'cur_fashion': circ(r * 0.9, '#b07cff', '#5a2aa8'); x.fillStyle = '#5a2aa8'; for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { x.beginPath(); x.arc(cx + dx * r * 0.25, cy + dy * r * 0.25, r * 0.12, 0, 7); x.fill(); } break;
+      case 'cur_wedding': x.fillStyle = '#ffd86a'; x.strokeStyle = '#b07a10'; x.beginPath(); x.moveTo(cx - r * 0.8, cy + r * 0.55); x.quadraticCurveTo(cx - r * 0.7, cy - r * 0.9, cx, cy - r * 0.9); x.quadraticCurveTo(cx + r * 0.7, cy - r * 0.9, cx + r * 0.8, cy + r * 0.55); x.closePath(); x.fill(); x.stroke(); x.beginPath(); x.arc(cx, cy + r * 0.7, r * 0.2, 0, 7); x.fill(); x.stroke(); x.fillStyle = '#ff8ab8'; x.beginPath(); x.arc(cx, cy - r * 0.95, r * 0.14, 0, 7); x.fill(); break;
+      case 'cur_beach': x.fillStyle = '#ffd0b0'; x.strokeStyle = '#c0704a'; x.beginPath(); x.moveTo(cx, cy + r * 0.85); for (let j = 0; j <= 8; j++) { const a = Math.PI + j / 8 * Math.PI; x.lineTo(cx + Math.cos(a) * r * 0.95, cy + r * 0.15 + Math.sin(a) * r * 0.95); } x.closePath(); x.fill(); x.stroke(); for (let j = 1; j < 8; j += 2) { const a = Math.PI + j / 8 * Math.PI; x.beginPath(); x.moveTo(cx, cy + r * 0.85); x.lineTo(cx + Math.cos(a) * r * 0.9, cy + r * 0.15 + Math.sin(a) * r * 0.9); x.stroke(); } break;
       default: circ(r, '#ccc');
     }
     return c;
@@ -309,12 +319,14 @@ const UI = (() => {
     const sx = L.scene.x + 6, sw = L.scene.w - 12, hy = L.scene.y + 6, pw = Math.min(124, (sw - 50 - 3 * 6) / 3);
     L.hud = { lvl: { x: sx, y: hy, w: 44, h: 44 } };
     ['energy', 'coins', 'stars'].forEach((n, j) => { L.hud[n] = { x: sx + 50 + j * (pw + 6), y: hy + 4, w: pw, h: 36 }; });
+    L.hud.look = { x: sx + sw - 140, y: hy + 50, w: 44, h: 44 };
     L.hud.gift = { x: sx + sw - 92, y: hy + 50, w: 44, h: 44 };
     L.hud.settings = { x: sx + sw - 44, y: hy + 50, w: 44, h: 44 };
-    L.hud.area = { x: sx, y: hy + 52, w: Math.min(200, sw - 104 - 128), h: 40 };
-    L.hud.adv = { x: sx + L.hud.area.w + 8, y: hy + 50, w: Math.min(140, sw - 104 - L.hud.area.w - 14), h: 44 };
+    const room = sw - 148, advW = room >= 250 ? Math.min(140, Math.max(110, Math.round(room * 0.45))) : 52;
+    L.hud.area = { x: sx, y: hy + 52, w: Math.min(220, room - advW - 8), h: 40 };
+    L.hud.adv = { x: sx + L.hud.area.w + 8, y: hy + 50, w: advW, h: 44 };
     // bottom tabs
-    const names = ['tasks', 'album', 'event', 'shop', 'bag'], bw = L.bar.w / names.length;
+    const names = ['tasks', 'album', 'week', 'pass', 'shop', 'bag'], bw = L.bar.w / names.length;
     L.btn = {}; names.forEach((n, j) => { L.btn[n] = { x: L.bar.x + j * bw, y: L.bar.y, w: bw, h: L.bar.h }; });
     dirty = true;
   }
@@ -447,15 +459,41 @@ const UI = (() => {
       case 'levelUp':
         snd('levelUp'); fx('confetti', 1);
         d.cells.forEach(c => setAnim(c, { unlock: 1, dur: 0.8 }));
-        openModal({ kind: 'levelup', lvl: d.lvl, cells: d.cells.length, got: d.got }, true); break;
+        openModal({ kind: 'levelup', lvl: d.lvl, cells: d.cells.length, got: d.got }, true);
+        if (d.lvl === WEEK_MIN_LVL) setTimeout(() => toast('Uus: nädala sündmus! Vajuta „Nädal“.', 3.6), 1500);
+        break;
       case 'task': {
         closeModal(true);
         snd('taskDone'); fx('confetti', 1); flash = { t0: tn() }; keep(0.9);
+        if (d.t.choices) openModal({ kind: 'xStyle', id: d.t.id, first: true, sticky: true }, true);
         openModal({ kind: 'dialog', lines: d.t.story, title: d.t.name }, true);
         if (d.newArea) openModal({ kind: 'dialog', lines: d.newArea.intro, title: 'Uus koht: ' + d.newArea.name, onDone: () => boardMusic() }, true);
         if (d.ended) openModal({ kind: 'dialog', lines: [['mina', STORY.ending]], title: 'Lõpp ja uus algus' }, true);
+        if (d.island) openModal({ kind: 'dialog', lines: d.island.intro, title: (d.ended ? 'Saareringreis: ' : 'Uus saar: ') + d.island.name, onShow: () => snd2('islandNew', 'taskDone'), onDone: () => boardMusic() }, true);
         break;
       }
+      case 'style': snd2('styleSwap', 'tap'); flash = { t0: tn() - 0.45 }; keep(0.5); break;
+      case 'passStep': toast('Hooaja rada: ' + d.s + '. samm on käes!'); snd2('passStep', 'claim'); bump.pass = tn(); keep(0.4); break;
+      case 'passClaim': { const p = modal && modal.tap || { x: W / 2, y: H / 2 }; rewardFx(d.r, p.x, p.y); fx('sparkle', p.x, p.y, 10, 40); snd2('passStep', 'claim'); break; }
+      case 'passLate': toast('Eelmise kuu raja auhinnad on nüüd sinu!', 3.4); rewardFx(d.r, W / 2, H * 0.45); break;
+      case 'passNew': if (S.tut >= 5) toast('Uus hooaja rada algas! Mängi ja kogu auhindu.', 3.4); break;
+      case 'weekCur': {
+        if (cell >= 0 && onBoard()) floater(C.x + L.cs * 0.25, C.y - L.cs * 0.35, '+' + d.n, PINK, 'cur_' + WEEK.info().key);
+        if (cell >= 0) snd2('eventCur', 'coins');
+        if (d.ready && onBoard()) { toast(WEEK.info().E.name + ': auhind ootab! Vajuta „Nädal“.'); bump.week = tn(); }
+        break;
+      }
+      case 'weekClaim': { const p = modal && modal.tap || { x: W / 2, y: H / 2 }; fx('confetti', 0.4, p.x, p.y); rewardFx(d.r, p.x, p.y); snd2('claim', 'daily'); break; }
+      case 'weekStart': if (onBoard() && WEEK.open()) toast(d.e.E.name + ' algas! Kogu ' + d.e.E.cur[0] + ' ja võida auhindu.' + (d.coins ? ' Eelmise nädala asjad andsid ' + d.coins + ' münti.' : ''), 3.6); break;
+      case 'cashEvent': { const b = L.btn.week; ghost({ k: d.k, l: d.l, x0: C.x, y0: C.y, x1: b.x + b.w / 2, y1: b.y + 24, dur: 0.5, s0: 1, s1: 0.3 }); fx('sparkle', C.x, C.y, 12, L.cs * 0.6); snd2('claim', 'coins'); if (sel === cell) sel = -1; break; }
+      case 'lookNew': {
+        const pets = d.list.filter(x => x[0] === 'pet'), rest = d.list.filter(x => x[0] !== 'pet');
+        if (pets.length) { toast('Uus sõber: ' + pets.map(x => LOOK.name(x[0], x[1])).join(', ') + '! Vaata garderoobi.', 3.6); snd2('pet', 'discover'); }
+        else if (rest.length) { toast('Garderoobis on uus asi: ' + rest.map(x => LOOK.name(x[0], x[1])).join(', ') + '!', 3.4); snd2('wardrobe', 'discover'); }
+        bump.look = tn(); keep(0.4); break;
+      }
+      case 'wear': snd2('wardrobe', 'tap'); break;
+      case 'pet': snd2('pet', 'tap'); break;
       case 'reward': if (!d.silent) rewardFx(d, W / 2, H * 0.45); break;
       case 'gift': if (cell >= 0 && onBoard()) { setAnim(cell, { pop: 1, dur: 0.5 }); if (!d.silent) snd('drop'); } if (d.daily) { snd2('calendar', 'daily'); const p = modal && modal.tap || { x: W / 2, y: H * 0.4 }; rewardFx(Object.assign({}, d.g.r, d.g.m30 ? { coins: (d.g.r.coins || 0) + (d.g.m30.coins || 0) } : {}), p.x, p.y); fx('confetti', 0.5, p.x, p.y); } break;
       case 'toBag': toast('Laud oli täis, kingitus läks kotti.'); break;
@@ -486,19 +524,25 @@ const UI = (() => {
   function openModal(m, queue) {
     m.t0 = tn(); m.i = 0;
     if (modal) { if (queue) mq.push(m); return; }
-    modal = m; if (m.kind === 'dialog') storyMusic(); else snd('open'); dirty = true;
+    modal = m; if (m.kind === 'dialog') storyMusic(); else if (m.kind !== 'xPhoto') snd('open'); if (m.onShow) m.onShow(); dirty = true;
   }
-  const boardMusic = () => music('board', { area: Math.min(S.area, AREAS.length - 1) });
+  // Board music: the story area, or on the island tour the stand-in area plus the island theme.
+  function boardMusic() {
+    if (S.ended) { const isl = TOUR.cur(); music('board', { area: Math.max(0, AREAS.findIndex(a => a.key === isl.area)), tour: isl.theme }); }
+    else music('board', { area: Math.min(S.area, AREAS.length - 1) });
+  }
   function storyMusic() { if (modal && modal.kind === 'dialog' && modal.title) music('story'); }
   function closeModal(silent) {
     const m = modal; modal = null; mhits = [];
     if (m && m.onDone) m.onDone();
     if (!silent && m && m.kind !== 'dialog') snd('close');
-    if (mq.length && !modal) { modal = mq.shift(); modal.t0 = tn(); modal.i = 0; if (modal.kind === 'dialog') storyMusic(); }
+    if (mq.length && !modal) { modal = mq.shift(); modal.t0 = tn(); modal.i = 0; if (modal.kind === 'dialog') storyMusic(); if (modal.onShow) modal.onShow(); }
     if (m && m.kind === 'dialog' && m.title && !(modal && modal.kind === 'dialog') && onBoard()) boardMusic();
     idleT = tn(); dirty = true;
   }
   const modalActive = () => !!modal || onTitle;
+  // Close the open modal (quietly) and open another in its place.
+  function closeThen(m) { closeModal(true); openModal(m); }
 
   // ---- input ----
   function pos(e) { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
@@ -585,6 +629,7 @@ const UI = (() => {
     const it = S.board[c]; if (!it) return;
     const kind = CHAINS[it.k].kind;
     if (it.b) { sel = c; snd('tap'); return; }
+    if (kind === 'item' && CHAINS[it.k].ev && it.l >= Game.maxL(it.k)) { sel = c; Game.tapItem(c); return; }
     if (kind === 'item') { if (sel === c) openChain(it.k, it.l); else { sel = c; snd('tap'); setAnim(c, { squash: 1, dur: 0.22 }); } return; }
     sel = c;
     Game.tapItem(c);
@@ -677,7 +722,12 @@ const UI = (() => {
     drawIcon('settings', st.x + 7, st.y + 7, 30);
     if (giftOn && S.tut >= 5) dot(gr.x + 38, gr.y + 6);
     hits.push({ x: gr.x - 2, y: gr.y - 2, w: 48, h: 48, hud: 1, fn: () => openModal({ kind: 'daily' }) });
-    const av = H2.adv; button(av.x, av.y, av.w, av.h, 'Seiklus', () => goScreen('map'), { style: 'buttonPink', icon: 'map', isz: 28, size: 17 });
+    const lk = H2.look, lb = bump.look ? clamp(1 - (tn() - bump.look) / 0.35, 0, 1) : 0, ls = 1 + 0.25 * Math.sin(lb * Math.PI);
+    g.fillStyle = 'rgba(255,255,255,0.92)'; g.beginPath(); g.arc(lk.x + 22, lk.y + 22, 21, 0, 7); g.fill();
+    drawIcon('wardrobe', lk.x + 22 - 16 * ls, lk.y + 22 - 16 * ls, 32 * ls);
+    if (LOOK.unseen() > 0) dot(lk.x + 38, lk.y + 6);
+    hits.push({ x: lk.x - 2, y: lk.y - 2, w: 48, h: 48, hud: 1, fn: () => { snd('tap'); openModal({ kind: 'xLook' }); } });
+    const av = H2.adv; button(av.x, av.y, av.w, av.h, av.w >= 100 ? 'Seiklus' : '', () => goScreen('map'), { style: 'buttonPink', icon: 'map', isz: 28, size: 17 });
     hits[hits.length - 1].hud = 1;
     if (ADV.attention()) dot(av.x + av.w - 4, av.y + 4);
     hits.push({ x: st.x - 2, y: st.y - 2, w: 48, h: 48, hud: 1, fn: () => openModal({ kind: 'settings' }) });
@@ -688,13 +738,24 @@ const UI = (() => {
   }
 
   // ---- drawing: scene strip ----
-  function drawScene(t) {
-    const r = L.scene, area = Game.curArea();
+  // The current area's illustration in any rect (the scene strip and the photo postcard). Tour islands use
+  // Ash's ART.tourScene, or a story area's scene until it exists. opts.style carries the design choices.
+  function paintScene(c, x, y, w, h, t) {
+    const area = Game.curArea(), sty = { style: S.style };
     const n = Object.keys(S.done).length; if (n !== progressN) { progressN = n; progressSet = new Set(Object.keys(S.done)); }
+    const gg = g; let drawn = false;
+    try {
+      if (S.ended && artOn('tourScene')) { ART.tourScene(c, area, progressSet, x, y, w, h, t, sty); drawn = true; }
+      else if (S.ended && artOn('scene')) { const fb = TOUR.fallbackProgress(area, S.done); ART.scene(c, fb.area, fb.set, x, y, w, h, t, sty); drawn = true; }
+      else if (artOn('scene')) { ART.scene(c, area.key, progressSet, x, y, w, h, t, sty); drawn = true; }
+    } catch (e) {}
+    if (!drawn && c === gg) phScene(area, { x, y, w, h }, t);
+    return drawn;
+  }
+  function drawScene(t) {
+    const r = L.scene;
     g.save(); rr(r.x, r.y, r.w, r.h, 20); g.clip();
-    let drawn = false;
-    if (artOn('scene')) { try { ART.scene(g, area.key, progressSet, r.x, r.y, r.w, r.h, t); drawn = true; } catch (e) {} }
-    if (!drawn) phScene(area, r, t);
+    paintScene(g, r.x, r.y, r.w, r.h, t);
     if (flash) { const k = (tn() - flash.t0) / 0.9; if (k < 1) { g.fillStyle = 'rgba(255,240,200,' + (0.6 * (1 - k)) + ')'; g.fillRect(r.x, r.y, r.w, r.h); } else flash = null; }
     // soft fade at the bottom where the order cards sit
     const fg = g.createLinearGradient(0, r.y + r.h - 40, 0, r.y + r.h); fg.addColorStop(0, 'rgba(255,255,255,0)'); fg.addColorStop(1, 'rgba(255,255,255,0.55)'); g.fillStyle = fg; g.fillRect(r.x, r.y + r.h - 40, r.w, 40);
@@ -890,7 +951,7 @@ const UI = (() => {
       if (tutTxt) { const ls = wrap(tutTxt, r.w - 24, 16, 800); ls.slice(0, 2).forEach((s, j) => text(s, r.x + r.w / 2, r.y + r.h / 2 + (j - (Math.min(2, ls.length) - 1) / 2) * 20, 16, GRAPE, 'center', 800, r.w - 20)); return; }
       // next goal with a progress bar
       const nt = Game.nextTask();
-      if (!nt) { text(S.ended ? 'Kõik on korras! Küpseta edasi.' : 'Lohista ühesugused asjad kokku.', r.x + r.w / 2, r.y + r.h / 2, 16, INK, 'center', 800, r.w - 20); return; }
+      if (!nt) { text('Lohista ühesugused asjad kokku.', r.x + r.w / 2, r.y + r.h / 2, 16, INK, 'center', 800, r.w - 20); return; }
       const can = S.stars >= nt.cost, bw = can ? 112 : 0;
       drawIcon('star', r.x + 10, r.y + 13, 36);
       text(nt.name, r.x + 54, r.y + 20, 16, INK, 'left', 900, r.w - 66 - bw);
@@ -920,6 +981,10 @@ const UI = (() => {
       nb.push({ label: '+' + Game.sellPrice(it), icon: 'coin', w: 86, fn: () => Game.sell(sel) });
     } else if (kind === 'mystery') {
       l2 = 'Toksa ja vaata, mis sees on!';
+    } else if (C.ev) {
+      const E = WEEK_EVENTS[C.ev]; l1 += ' · ' + it.l + '/' + mx;
+      l2 = it.l >= mx ? 'Toksa: +' + WEEK_CUR.top + ' ' + E.cur[1] + '!' : 'Ühenda: +' + WEEK_CUR.merge(it.l + 1) + ' ' + E.cur[1];
+      nb.push({ icon: 'album', w: 52, fn: () => openChain(it.k, it.l) });
     } else {
       l1 += ' · ' + it.l + '/' + mx;
       l2 = needSet.has(it.k + ':' + it.l) ? 'Tellimus! Keegi ootab seda.' : it.l < mx ? 'Järgmine: ' + nm(it.k, it.l + 1) : 'Tipptase!';
@@ -937,11 +1002,14 @@ const UI = (() => {
   function drawBar(t) {
     const r = L.bar;
     panel(r.x + 4, r.y, r.w - 8, r.h, 'glass');
-    const nt = Game.nextTask(), canTask = nt && S.stars >= nt.cost, ei = Game.eventInfo(), aN = Game.albumCount();
+    const nt = Game.nextTask(), canTask = nt && S.stars >= nt.cost, aN = Game.albumCount();
+    const wOpen = WEEK.open(), wReady = wOpen && WEEK.readyIdx() >= 0, pReady = PASS.ready() > 0;
+    const wName = WEEK.info().E.name; g.font = font(15, 900);
     const items = [
       ['tasks', 'tasks', 'Remont', canTask ? -1 : 0, () => openModal({ kind: 'tasks' }), canTask && (S.tut >= 4 || S.tut === 0)],
       ['album', 'album', 'Album', aN, () => openAlbum(), false],
-      ['event', 'event', ei.on ? 'Festival' : 'Festival', Game.eventReady() ? -1 : 0, () => openModal({ kind: 'event' }), Game.eventReady()],
+      ['week', 'week', wOpen && g.measureText(wName).width <= L.btn.week.w - 6 ? wName : 'Nädal', wReady ? -1 : 0, () => openModal({ kind: 'xWeek' }), wReady],
+      ['pass', 'pass', 'Rada', pReady ? -1 : 0, () => openModal({ kind: 'xPass' }), pReady && S.tut >= 5],
       ['shop', 'shop', 'Pood', 0, () => openModal({ kind: 'shop' }), false],
       ['bag', 'bag', 'Kott', 0, () => openModal({ kind: 'bag' }), false],
     ];
@@ -950,11 +1018,12 @@ const UI = (() => {
       const b = L.btn[id], cx = b.x + b.w / 2, ps = pressScale(b.x, b.y);
       if (id === 'bag' && dragBag) { g.fillStyle = 'rgba(255,200,90,0.55)'; rr(b.x + 6, b.y + 4, b.w - 12, b.h - 8, 16); g.fill(); }
       const bounce = hot ? Math.abs(Math.sin(t * 4)) * 4 : 0, pu = bump[id] ? Math.sin(clamp(1 - (tn() - bump[id]) / 0.35, 0, 1) * Math.PI) * 0.25 : 0;
-      const isz = 40 * ps * (1 + pu);
-      g.save(); if (id === 'event' && !ei.on) g.globalAlpha = 0.55;
+      const isz = Math.min(40, b.w - 18) * ps * (1 + pu);
+      g.save(); if (id === 'week' && !wOpen) g.globalAlpha = 0.55;
       drawIcon(ic, cx - isz / 2, b.y + 4 - bounce + (40 - isz) / 2, isz);
+      if (id === 'week' && wOpen) drawIcon('cur_' + WEEK.info().key, cx + 4, b.y + 22 - bounce, 20);
       g.restore();
-      text(label, cx, b.y + 60, 15, INK, 'center', 900, b.w - 4);
+      text(label, cx, b.y + 60, 15, INK, 'center', 900, b.w + 2);
       if (badge > 0) dot(cx + 18, b.y + 10, badge); else if (badge < 0) dot(cx + 16, b.y + 8);
       if (id === 'bag' && S.bag.length) { g.fillStyle = GRAPE; rr(cx + 6, b.y + 30, 30, 20, 10); g.fill(); text(String(S.bag.length), cx + 21, b.y + 40, 15, '#fff', 'center', 900); }
       hits.push({ x: b.x, y: b.y, w: b.w, h: b.h, bx: b.x, by: b.y, fn: () => { snd('tap'); fn(); } });
@@ -1070,22 +1139,34 @@ const UI = (() => {
     if (m.kind === 'levelup') { drawLevelUp(m, t); g.restore(); return; }
     dim(); const B = { modal: true };
     if (m.kind === 'tasks') {
-      const area = Game.curArea(), ts = area.tasks, rowH = 62, P = modalPanel(m, 440, 128 + ts.length * rowH + 30, area.name);
+      // The story area or tour island: tasks in order, the next one with its star button, design choices on done
+      // tasks ("Stiil"), and at the bottom the photo mode and the wardrobe.
+      const area = Game.curArea(), ts = area.tasks, tour = !!S.ended, head = tour ? 150 : 128, foot = 96;
+      const rowH = clamp(Math.floor((H - 24 - head - foot) / ts.length), 52, 62);
+      const P = modalPanel(m, 440, head + ts.length * rowH + foot, area.name);
       const done = ts.filter(x => S.done[x.id]).length;
-      drawIcon('star', P.x + 18, P.y + 36, 30); text(String(S.stars), P.x + 54, P.y + 52, 20, INK, 'left', 900);
-      text(done + '/' + ts.length + ' tehtud', P.x + P.w - 18, P.y + 52, 15, INK2, 'right', 800);
-      bar(P.x + 18, P.y + 76, P.w - 36, 10, done / ts.length, PINK);
-      const nt = Game.nextTask();
+      let y0 = P.y + 36;
+      if (tour) { text('Saareringreis · ' + area.themeName + ' · ' + (area.i + 1) + '. saar', P.x + P.w / 2, P.y + 40, 15, GRAPE, 'center', 900, P.w - 70); y0 += 20; }
+      drawIcon('star', P.x + 18, y0, 30); text(String(S.stars), P.x + 54, y0 + 16, 20, INK, 'left', 900);
+      text(done + '/' + ts.length + ' tehtud', P.x + P.w - 18, y0 + 16, 15, INK2, 'right', 800);
+      bar(P.x + 18, y0 + 40, P.w - 36, 10, done / ts.length, PINK);
+      const nt = Game.nextTask(), top = y0 + 60;
       ts.forEach((tk, j) => {
-        const y = P.y + 96 + j * rowH, isDone = S.done[tk.id], isNext = nt === tk;
-        g.fillStyle = isNext ? 'rgba(255,210,63,0.28)' : SOFT; rr(P.x + 10, y, P.w - 20, rowH - 6, 14); g.fill();
-        if (isDone) drawIcon('check', P.x + 18, y + 13, 30); else if (!isNext) { g.globalAlpha = 0.6; drawIcon('lock', P.x + 18, y + 13, 30); g.globalAlpha = 1; } else drawIcon('star', P.x + 18, y + 12, 32);
-        text(tk.name, P.x + 58, y + (rowH - 6) / 2, 17, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, P.w - (isNext ? 190 : 120));
-        if (isNext) { m.nextBtn = { x: P.x + P.w - 120, y: y + 4, w: 104, h: 48 }; button(P.x + P.w - 120, y + 4, 104, rowH - 14, String(tk.cost), () => Game.doTask(tk.id), Object.assign({ icon: 'star', hot: S.stars >= tk.cost, pulse: S.stars >= tk.cost, offFn: () => Game.doTask(tk.id), size: 19 }, B)); }
-        else if (!isDone) { drawIcon('star', P.x + P.w - 64, y + 15, 24); text(String(tk.cost), P.x + P.w - 30, y + 28, 17, INK2, 'center', 900); }
+        const y = top + j * rowH, isDone = S.done[tk.id], isNext = nt === tk, bh = rowH - 6;
+        g.fillStyle = isNext ? 'rgba(255,210,63,0.28)' : SOFT; rr(P.x + 10, y, P.w - 20, bh, 14); g.fill();
+        const ic = Math.min(30, bh - 16), iy = y + (bh - ic) / 2;
+        if (isDone) drawIcon('check', P.x + 18, iy, ic); else if (!isNext) { g.globalAlpha = 0.6; drawIcon('lock', P.x + 18, iy, ic); g.globalAlpha = 1; } else drawIcon('star', P.x + 18, iy - 1, ic + 2);
+        const styled = isDone && tk.choices;
+        text(tk.name, P.x + 58, y + bh / 2, 17, isDone ? INK2 : INK, 'left', isDone ? 700 : 900, P.w - (isNext ? 190 : styled ? 170 : 120));
+        if (isNext) { m.nextBtn = { x: P.x + P.w - 120, y: y + 4, w: 104, h: 48 }; button(P.x + P.w - 120, y + (bh - 48) / 2, 104, 48, String(tk.cost), () => Game.doTask(tk.id), Object.assign({ icon: 'star', hot: S.stars >= tk.cost, pulse: S.stars >= tk.cost, offFn: () => Game.doTask(tk.id), size: 19 }, B)); }
+        else if (styled) { const st = STYLES[S.style[tk.id]]; button(P.x + P.w - 112, y + (bh - 44) / 2, 96, 44, st ? 'Muuda' : 'Vali', () => closeThen({ kind: 'xStyle', id: tk.id, back: 'tasks' }), Object.assign({ icon: 'brush', isz: 24, size: 16, style: 'buttonPink' }, B)); }
+        else if (!isDone) { drawIcon('star', P.x + P.w - 64, y + bh / 2 - 12, 24); text(String(tk.cost), P.x + P.w - 30, y + bh / 2 + 1, 17, INK2, 'center', 900); }
       });
-      const na = AREAS[S.area + 1];
-      text(S.ended ? STORY.ending : na ? 'Järgmine koht: ' + na.name : 'Viimane koht!', P.x + P.w / 2, P.y + P.h - 22, 15, INK2, 'center', 700, P.w - 24);
+      const na = !tour && AREAS[S.area + 1], fy = P.y + P.h - foot;
+      text(tour ? 'Pärast seda saart ootab järgmine!' : na ? 'Järgmine koht: ' + na.name : 'Viimane koht! Siis algab Saareringreis.', P.x + P.w / 2, fy + 16, 15, INK2, 'center', 700, P.w - 24);
+      const bw = (P.w - 50) / 2;
+      button(P.x + 20, fy + 34, bw, 50, 'Foto', () => closeThen({ kind: 'xPhoto' }), Object.assign({ icon: 'camera', isz: 30, size: 18, style: 'buttonBlue' }, B));
+      button(P.x + 30 + bw, fy + 34, bw, 50, 'Garderoob', () => closeThen({ kind: 'xLook' }), Object.assign({ icon: 'wardrobe', isz: 30, size: 18, style: 'buttonPink' }, B));
     } else if (m.kind === 'shop') {
       const list = Game.shopList(), cols = 2, rows = Math.ceil(list.length / cols), ch = 118;
       const P = modalPanel(m, 440, 84 + rows * (ch + 10), 'Pood');
@@ -1159,13 +1240,13 @@ const UI = (() => {
         const bw2 = P.w - 190; bar(P.x + 22, y + 34, bw2, 13, tk.n / tk.goal, '#5fc24a');
         text(tk.n + '/' + tk.goal, P.x + 22 + bw2 + 6, y + 41, 15, INK2, 'left', 800, 52);
         if (tk.claimed) drawIcon('check', P.x + P.w - 58, y + 12, 34);
-        else button(P.x + P.w - 104, y + 5, 88, 48, '+' + DAILY_REWARD.coins, () => Game.claimDaily(j), Object.assign({ icon: 'coin', hot: tk.n >= tk.goal, pulse: tk.n >= tk.goal, off: tk.n < tk.goal, offFn: () => { snd('deny'); toast('Veel ' + (tk.goal - tk.n) + ' jäänud.'); }, size: 17 }, B));
+        else button(P.x + P.w - 104, y + 5, 88, 48, '+' + DAILY_REWARD.coins, () => Game.claimDaily(j), Object.assign({ icon: 'coin', hot: tk.n >= tk.goal, pulse: tk.n >= tk.goal, off: tk.n < tk.goal, offFn: () => { snd('deny'); toast('Veel ' + (tk.goal - tk.n) + ' puudu.'); }, size: 17 }, B));
       });
       const allC = D.tasks.length && D.tasks.every(x => x.claimed), by = P.y + P.h - 60;
       if (D.bonus) text('Kõik tänased tehtud. Tubli!', P.x + P.w / 2, by + 24, 16, GOOD, 'center', 900, P.w - 20);
       else button(P.x + 24, by, P.w - 48, 50, 'Kõik 3: +' + DAILY_BONUS.stars + ' tähte ja kirst', () => Game.claimBonus(), Object.assign({ hot: allC, off: !allC, offFn: () => { snd('deny'); toast('Tee enne kõik kolm ülesannet.'); }, size: 17 }, B));
     } else if (m.kind === 'settings') {
-      const P = modalPanel(m, 380, 380, 'Seaded');
+      const P = modalPanel(m, 380, 442, 'Seaded');
       const row = (y, label, key) => {
         text(label, P.x + 24, y + 24, 18, INK, 'left', 900);
         text(Math.round(S.set[key] * 100) + '%', P.x + P.w - 124, y + 24, 18, INK, 'center', 900);
@@ -1174,7 +1255,8 @@ const UI = (() => {
       };
       row(P.y + 44, 'Muusika', 'music'); row(P.y + 104, 'Helid', 'sfx');
       button(P.x + 36, P.y + 168, P.w - 72, 50, S.set.muted ? 'Heli: vaigistatud' : 'Heli: sees', () => { S.set.muted = !S.set.muted; const a = au(); try { if (a && a.setMuted) a.setMuted(S.set.muted); } catch (e) {} snd('tap'); saveSoon(); }, Object.assign({ hot: !S.set.muted }, B));
-      button(P.x + 36, P.y + 230, P.w - 72, 50, 'Alusta otsast', () => { closeModal(true); openModal({ kind: 'confirm', text: 'Kas kustutada kogu edenemine ja alustada otsast?', yes: () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} Game.newGame(); resetView(); onTitle = true; save(); } }); }, Object.assign({ style: 'buttonGrey' }, B));
+      button(P.x + 36, P.y + 230, P.w - 72, 50, S.set.rest ? 'Puhkuse meeldetuletus: sees' : 'Puhkuse meeldetuletus: väljas', () => { S.set.rest = !S.set.rest; snd('tap'); saveSoon(); }, Object.assign({ hot: !!S.set.rest, size: 16 }, B));
+      button(P.x + 36, P.y + 292, P.w - 72, 50, 'Alusta otsast', () => { closeModal(true); openModal({ kind: 'confirm', text: 'Kas kustutada kogu edenemine ja alustada otsast?', yes: () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} Game.newGame(); resetView(); onTitle = true; save(); } }); }, Object.assign({ style: 'buttonGrey' }, B));
       text('Saarepagar · tehtud armastusega', P.x + P.w / 2, P.y + P.h - 46, 15, INK2, 'center', 700, P.w - 20);
       text('Töötab ka ilma internetita.', P.x + P.w / 2, P.y + P.h - 24, 15, INK2, 'center', 700, P.w - 20);
     } else if (m.kind === 'confirm') {
@@ -1209,6 +1291,7 @@ const UI = (() => {
     } else if (m.kind === 'album') drawAlbum(m, t, B);
     else if (m.kind === 'event') drawEvent(m, t, B);
     else if (m.kind.startsWith('adv')) ADV.drawModal(m, t, B);
+    else if (m.kind[0] === 'x') XUI.drawModal(m, t, B);
     g.restore();
   }
 
@@ -1261,7 +1344,7 @@ const UI = (() => {
 
   // Collection album: one page per chain; tap a glowing card to collect its reward.
   function drawAlbum(m, t, B) {
-    const P = modalPanel(m, 440, Math.min(H - 24, 700), 'Kollektsioon');
+    const P = modalPanel(m, 440, Math.min(H - 24, 700), 'Album');
     const N = ALBUM_CHAINS.length; m.page = (m.page + N) % N;
     const k = ALBUM_CHAINS[m.page], C = CHAINS[k], n = C.names.length, disc = S.disc[k] || 0;
     let have = 0; for (let l = 1; l <= n; l++) if (Game.albumHas(k, l)) have++;
@@ -1373,8 +1456,8 @@ const UI = (() => {
     g.restore();
     button(cx - bw / 2, by + 78, bw, 60, 'Seiklus · tase ' + S.adv.top, () => startAdv(), { style: 'buttonPink', modal: true, size: 21, icon: 'map', isz: 34 });
     if (ADV.attention()) dot(cx + bw / 2 - 6, by + 82);
-    if (S.tut > 0) text('Tase ' + S.lvl + ' · ' + Game.curArea().name, cx, by + 166, 17, INK, 'center', 800);
-    const e = Game.eventInfo(); if (e.on) { g.fillStyle = PINK; g.font = font(16, 900); const tw = g.measureText(e.name + ' käib!').width + 30; rr(cx - tw / 2, by + 190, tw, 34, 17); g.fill(); text(e.name + ' käib!', cx, by + 208, 16, '#fff', 'center', 900); }
+    if (S.tut > 0) text('Tase ' + S.lvl + ' · ' + (S.ended ? 'Saareringreis, ' + (S.tour + 1) + '. saar' : Game.curArea().name), cx, by + 166, 17, INK, 'center', 800, W - 30);
+    if (WEEK.open()) { const wn = WEEK.info().E.name + ' käib!'; g.fillStyle = PINK; g.font = font(16, 900); const tw = Math.min(W - 30, g.measureText(wn).width + 30); rr(cx - tw / 2, by + 190, tw, 34, 17); g.fill(); text(wn, cx, by + 208, 16, '#fff', 'center', 900, tw - 12); }
   }
 
   function drawToasts(t) {
@@ -1413,7 +1496,15 @@ const UI = (() => {
     const t0 = performance.now();
     while (warm.length && performance.now() - t0 < 6) { const [k, l] = warm.shift(); const b = itemBox(k, l), full = L.cs * FILL * clamp(1 / b.s, 1, 1.7); itemImg(k, l, Math.ceil(full * DPR / 8) * 8); }
   }
-  function update(dt) { if (fxOn('update')) { try { FX.update(dt); } catch (e) {} } if (S) { tickDisp(dt); if (onTitle && (!warm || warm.length)) prewarm(); if (!onTitle && scr !== 'board') ADV.update(dt); } }
+  // Rest reminder: active play time (input in the last two minutes) counts up; after REST_MIN minutes a gentle note
+  // appears once (then again after 30 more minutes). Off in the settings. URL flag rest=<seconds> for tests.
+  let playT = 0, restAt = QS.rest ? +QS.rest || 5 : REST_MIN * 60;
+  function restTick(dt) {
+    if (onTitle || document.hidden || tn() - idleT > 120) return;
+    playT += dt;
+    if (playT >= restAt && S.set.rest && !modal && !drag && scr !== 'level') { playT = 0; restAt = 30 * 60; openModal({ kind: 'xRest' }); }
+  }
+  function update(dt) { if (fxOn('update')) { try { FX.update(dt); } catch (e) {} } if (S) { tickDisp(dt); restTick(dt); if (onTitle && (!warm || warm.length)) prewarm(); if (!onTitle && scr !== 'board') ADV.update(dt); } }
   function needsDraw(ms) {
     if (dirty || drag || ms < animUntil || fxActive()) return true;
     if (modal && (modal.kind === 'dialog' || modal.kind === 'levelup')) return ms - lastDraw > 33;
@@ -1474,7 +1565,7 @@ const UI = (() => {
       C: { INK, INK2, CARD, EDGE, GOOD, GOLD, PINK, GRAPE, MINT, SHADOW, DARK, SOFT, OUTL, MINF },
       rr, shade, font, fit, text, textO, wrap, bar, panel, pressScale, button, drawItem, itemImg, itemBox, drawSilhouette, drawIcon, iconImg, drawPortrait, dot, dim, modalPanel, rewardRow, describe,
       snd, snd2, music, fx, artOn, fxOn, keep, tn, toast, banner, floater, rewardFx, inR, insets, disp, bump, boardMusic,
-      openModal, closeModal, addHit: (h, modal) => (modal ? mhits : hits).push(h), fmtLong,
+      openModal, closeModal, closeThen, addHit: (h, modal) => (modal ? mhits : hits).push(h), fmtLong, paintScene, portraitImg, goScreen,
     },
     get L() { return L; }, get modal() { return modal; }, get sel() { return sel; }, set sel(v) { sel = v; dirty = true; },
     get onTitle() { return onTitle; }, get cards() { return cardRects; }, get hits() { return hits; }, get mhits() { return mhits; },

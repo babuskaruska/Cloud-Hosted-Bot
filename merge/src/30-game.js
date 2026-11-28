@@ -35,7 +35,7 @@ const Game = (() => {
     const prev = S.disc[k] || 0;
     if (l > prev) {
       S.disc[k] = l;
-      if (ch(k).kind === 'item') { if (!quiet) for (let j = prev + 1; j <= l; j++) ev('discover', -1, { k, l: j }); return true; }
+      if (ch(k).kind === 'item' && !ch(k).ev) { if (!quiet) for (let j = prev + 1; j <= l; j++) ev('discover', -1, { k, l: j }); return true; }
     }
     return false;
   }
@@ -159,6 +159,7 @@ const Game = (() => {
     if (r.boost) { const b = typeof r.boost === 'string' ? { [r.boost]: 1 } : r.boost; for (const k in b) if (k in S.adv.boost) S.adv.boost[k] += b[k]; }
     if (r.spins) S.wheel.extra += r.spins;
     if (r.hearts) S.adv.hearts = Math.max(S.adv.hearts, Math.min(HEART_MAX, S.adv.hearts + r.hearts));
+    if (r.look && typeof r.look === 'string') LOOK.unlock(r.look);
     ev('reward', -1, r);
   }
 
@@ -181,7 +182,7 @@ const Game = (() => {
     afterMerge(b, res, 1, a, { lucky });
     if (lucky === 'twin') { const e = nearestEmpty(b); if (e >= 0) { S.board[e] = { k: res.k, l: res.l }; ev('spawn', e, { from: b, k: res.k, l: res.l, quiet: true }); } }
     if (lucky === 'mbox') { const e = nearestEmpty(b); if (e >= 0) { S.board[e] = { k: 'mbox', l: 1 }; ev('spawn', e, { from: b, k: 'mbox', l: 1, quiet: true }); } }
-    if (lucky) { ev('lucky', b, { type: lucky, k: res.k, l: res.l }); eventPts(EVENT_PTS.lucky, b); }
+    if (lucky) ev('lucky', b, { type: lucky, k: res.k, l: res.l });
     else if (kind === 'item' && res.l >= 3) {
       const r = rnd();
       if (r < MBOX_P) { const e = nearestEmpty(b); if (e >= 0) { S.board[e] = { k: 'mbox', l: 1 }; ev('spawn', e, { from: b, k: 'mbox', l: 1 }); } }
@@ -203,7 +204,8 @@ const Game = (() => {
     const cr = comboReward(S._combo);
     if (cr) { if (cr.coins) addCoins(cr.coins); if (cr.energy) S.en += cr.energy; }
     if (S._combo >= 2) ev('combo', b, { n: S._combo, r: cr });
-    eventPts(n * (res.l >= 4 ? EVENT_PTS.mergeHi : EVENT_PTS.merge), b);
+    PASS.add(PASS_PTS.merge * n, b);
+    if (ch(res.k).ev) WEEK.add(WEEK_CUR.merge(res.l) * n, b);
     addXp(n);
   }
   // Same items connected to cell b (4-neighbours), breadth first from b, skipping cell a (the dragged one).
@@ -232,7 +234,6 @@ const Game = (() => {
     S.stats.merge5++;
     afterMerge(b, S.board[b], 2, a, { five: true, cells, outs });
     ev('merge5', b, { cells, outs, k: A.k, l: A.l + 1 });
-    eventPts(EVENT_PTS.merge5, b);
     after(); return true;
   }
   function move(a, b) {
@@ -269,8 +270,9 @@ const Game = (() => {
     if (e < 0) { ev('full', i); return false; }
     const [, cd, p2] = GEN_LV[it.l - 1];
     const opts = GENERATORS[it.k].spawn.filter(s => s[2] <= it.l);
-    const k = wpick(opts, s => s[1])[0];
-    const l = ch(k).kind === 'item' && rnd() < p2 ? 2 : 1;
+    let k = wpick(opts, s => s[1])[0];
+    if (S.tut >= 5 && WEEK.open() && rnd() < WEEK_SPAWN_P) k = WEEK.info().chain;
+    const l = ch(k).kind === 'item' && !ch(k).ev && rnd() < p2 ? 2 : 1;
     S.en--;
     it.ch--; if (it.ch <= 0) it.cd = now() + cd * 1000;
     S.board[e] = { k, l };
@@ -345,7 +347,16 @@ const Game = (() => {
     if (k === 'energy' || k === 'coin') return collect(i);
     if (k === 'chest') return openChest(i);
     if (k === 'mystery') return openMystery(i);
+    if (ch(it.k).ev && it.l >= maxL(it.k)) return cashEvent(i);
     return false;
+  }
+  // The top level of an event chain is cashed in for event currency and a few coins.
+  function cashEvent(i) {
+    const it = S.board[i]; if (!it || !ch(it.k).ev || it.l < maxL(it.k)) return false;
+    S.board[i] = null; addCoins(10);
+    ev('cashEvent', i, { k: it.k, l: it.l, n: WEEK_CUR.top });
+    WEEK.add(WEEK_CUR.top, i);
+    after(); return true;
   }
   // Mystery box: one surprise, rolled when opened.
   function openMystery(i) {
@@ -450,7 +461,7 @@ const Game = (() => {
     S.stats.orders++; S.ordersDone++; daily('order', 1); piggyAdd(PIGGY_ADD.order);
     S.nextOrderAt = now() + 1400;
     ev('order', -1, { oi, o, cells, taken });
-    eventPts(EVENT_PTS.order);
+    PASS.add(PASS_PTS.order); WEEK.add(WEEK_CUR.order);
     if (S.ordersDone % MBOX_ORDER_EVERY === 0) giveItem('mbox', 1);
     addXp(o.xp);
     after(); return true;
@@ -465,22 +476,33 @@ const Game = (() => {
   }
 
   // ---- tasks and areas ----
-  const curArea = () => AREAS[Math.min(S.area, AREAS.length - 1)];
-  function nextTask() { const a = AREAS[S.area]; return a ? a.tasks.find(t => !S.done[t.id]) || null : null; }
+  // The current area: a story area, or after the story (S.ended) the current tour island (TOUR.island(S.tour)).
+  const curArea = () => S.ended ? TOUR.cur() : AREAS[Math.min(S.area, AREAS.length - 1)];
+  function nextTask() { const a = S.ended ? TOUR.cur() : AREAS[S.area]; return a ? a.tasks.find(t => !S.done[t.id]) || null : null; }
   function doTask(id) {
-    const t = TASKS[id];
-    if (!t || S.done[id] || nextTask() !== t) return false;
+    const t = nextTask();
+    if (!t || t.id !== id || S.done[id]) return false;
     if (S.stars < t.cost) { ev('deny', -1, { need: 'stars' }); return false; }
     S.stars -= t.cost; S.done[id] = true; S.stats.tasks++;
     give(t.reward);
-    let newArea = null;
-    if (AREAS[S.area].tasks.every(x => S.done[x.id])) {
+    PASS.add(PASS_PTS.task);
+    let newArea = null, ended = false, island = null;
+    if (S.ended) {
+      if (TOUR.cur().tasks.every(x => S.done[x.id])) { S.tour++; island = TOUR.cur(); PASS.add(PASS_PTS.island); }
+    } else if (AREAS[S.area].tasks.every(x => S.done[x.id])) {
       S.area++;
-      if (S.area >= AREAS.length) S.ended = true;
+      if (S.area >= AREAS.length) { S.ended = true; ended = true; island = TOUR.cur(); }
       else { newArea = AREAS[S.area]; if (newArea.introReward) give(newArea.introReward); }
     }
-    ev('task', -1, { t, newArea, ended: S.ended && !newArea });
+    ev('task', -1, { t, newArea, ended, island });
     after(); return true;
+  }
+  // Design choice for a task with t.choices (also changed later from the task list).
+  function setStyle(id, key) {
+    const t = TOUR.task(id);
+    if (!t || !t.choices || !t.choices.includes(key) || !S.done[id]) return false;
+    const was = S.style[id]; S.style[id] = key;
+    ev('style', -1, { id, key, was }); after(); return true;
   }
 
   // ---- daily gift and daily tasks ----
@@ -534,7 +556,7 @@ const Game = (() => {
   }
   function claimDaily(ti) {
     const t = S.daily.tasks[ti]; if (!t || t.claimed || t.n < t.goal) return false;
-    t.claimed = true; give(DAILY_REWARD); ev('dailyClaim', -1, { ti }); after(); return true;
+    t.claimed = true; give(DAILY_REWARD); PASS.add(PASS_PTS.daily); ev('dailyClaim', -1, { ti }); after(); return true;
   }
   function claimBonus() {
     if (S.daily.bonus || !S.daily.tasks.length || !S.daily.tasks.every(t => t.claimed)) return false;
@@ -584,7 +606,7 @@ const Game = (() => {
     }
     refillOrders();
     if (ensureDaily()) ev('newDay', -1);
-    ensureEvent();
+    if (!S.title) { PASS.ensure(); WEEK.ensure(); LOOK.check(); }
   }
 
   function newGame() {
@@ -594,7 +616,7 @@ const Game = (() => {
     put(3, 3, 'oven'); put(1, 5, 'basket'); put(6, 1, 'coin', 1); put(0, 2, 'coffee', 1);
     quiet = false;
     S.tut = 0;
-    ensureDaily(); ensureEvent();
+    ensureDaily(); PASS.ensure(); LOOK.check(true);
     return S;
   }
 
@@ -605,6 +627,6 @@ const Game = (() => {
     ensureDaily, claimGift, claimDaily, claimBonus, giftReward, shopList, buy, tutCheck, tick, newGame, addXp, give, refreshGen,
     group, merge5, openMystery, albumHas, albumPending, albumCount, chainFull, claimAlbum, claimChain,
     eventInfo, ensureEvent, claimEvent, eventReady, freeEnIn, claimFreeEnergy, orderNeeds,
-    piggyAdd, piggyReady, openPiggy, wheelFree, wheelSpins, spinWheel, addCoins,
+    piggyAdd, piggyReady, openPiggy, wheelFree, wheelSpins, spinWheel, addCoins, setStyle, cashEvent,
   };
 })();

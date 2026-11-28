@@ -2,7 +2,8 @@
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
 const now = () => Date.now();
-const QS = (() => { const o = {}; try { new URLSearchParams(location.search).forEach((v, k) => { o[k] = v; }); } catch (e) {} return o; })();
+// URL flags from the query or the hash (?week=beach or #fresh=1).
+const QS = (() => { const o = {}; try { for (const src of [location.search, location.hash.replace(/^#/, '?')]) new URLSearchParams(src).forEach((v, k) => { o[k] = v; }); } catch (e) {} return o; })();
 
 function mulberry(seed) {
   return function () {
@@ -40,7 +41,7 @@ const FREE_EN = 30, FREE_EN_MS = 4 * 3600000;  // free energy every 4 hours
 
 // Global state. Keys starting with "_" are view-only and never saved.
 let S = null;
-const SAVE_KEY = 'saarepagar.save', SAVE_VER = 2;
+const SAVE_KEY = 'saarepagar.save', SAVE_VER = 3;
 
 function newState() {
   const t = now();
@@ -60,7 +61,14 @@ function newState() {
     wheel: { free: '', extra: 0, n: 0 },
     piggy: { coins: 0, day: '' },
     stats: { merges: 0, orders: 0, taps: 0, tasks: 0, lucky: 0, merge5: 0, combo: 0, mbox: 0 },
-    set: { music: 0.7, sfx: 0.9, muted: false },
+    set: { music: 0.7, sfx: 0.9, muted: false, rest: true },
+    // version 3 phase B: island tour, design choices, season pass, weekly event, wardrobe and pets
+    tour: 0, style: {},
+    pass: { month: '', pts: 0, got: {} },
+    week: { id: '', key: '', cur: 0, got: {} },
+    look: { outfit: 'casual', hair: 'bun', acc: 'none' },
+    pets: { muri: { acc: 'none' } }, petOn: 'muri',
+    owned: {}, lookKnown: {}, lookSeen: {},
   };
 }
 
@@ -81,10 +89,16 @@ function load() {
     for (const k in base) if (!(k in d)) d[k] = base[k];
     for (const k in base.daily) if (!(k in d.daily)) d.daily[k] = base.daily[k];
     for (const k in base.stats) if (!(k in d.stats)) d.stats[k] = base.stats[k];
-    for (const o of ['adv', 'wheel', 'piggy']) { if (!d[o] || typeof d[o] !== 'object') d[o] = base[o]; for (const k in base[o]) if (!(k in d[o])) d[o][k] = base[o][k]; }
+    for (const o of ['adv', 'wheel', 'piggy', 'pass', 'week', 'look', 'set']) { if (!d[o] || typeof d[o] !== 'object') d[o] = base[o]; for (const k in base[o]) if (!(k in d[o])) d[o][k] = base[o][k]; }
     for (const k in base.adv.boost) if (typeof d.adv.boost[k] !== 'number') d.adv.boost[k] = 0;
     if (!d.event || typeof d.event !== 'object') d.event = base.event;
+    for (const o of ['style', 'pets', 'owned', 'lookKnown', 'lookSeen']) if (!d[o] || typeof d[o] !== 'object' || Array.isArray(d[o])) d[o] = base[o];
+    if (!d.pets.muri) d.pets.muri = { acc: 'none' };
+    if (!d.pass.got || typeof d.pass.got !== 'object') d.pass.got = {};
+    if (!d.week.got || typeof d.week.got !== 'object') d.week.got = {};
     // v1 -> v2: the album starts empty, so earlier discoveries wait there as rewards to collect.
+    // v2 -> v3: a finished story goes on to the island tour at island 0 (S.tour); new pieces are announced once.
+    if ((d.v | 0) < 3) d.tour = d.tour | 0;
     d.v = SAVE_VER;
     return d;
   } catch (e) { return null; }

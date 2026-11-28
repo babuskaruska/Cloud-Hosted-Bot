@@ -24,11 +24,11 @@ const GEN_LV = [[20, 60, 0], [26, 50, 0.06], [32, 40, 0.14], [40, 30, 0.24]];
 const GENERATORS = {
   oven:    { names: ['Vana ahi', 'Kahhelahi', 'Leivaahi', 'Suur leivaahi'], color: '#c0603c', spawn: [['bread', 10, 1], ['dairy', 4, 2], ['coffee', 1, 3]] },
   basket:  { names: ['Pajukorv', 'Marjakorv', 'Turukorv', 'Vanaema korv'], color: '#b8864a', spawn: [['berry', 10, 1], ['apple', 6, 2], ['coffee', 1, 3]] },
-  teapot:  { names: ['Plekk-kann', 'Teekann', 'Lillkann', 'Hõbekann'], color: '#5f9a6a', spawn: [['tea', 10, 1], ['dairy', 5, 2], ['coin', 1, 3]] },
+  teapot:  { names: ['Plekk-kann', 'Teekann', 'Portselankann', 'Hõbekann'], color: '#5f9a6a', spawn: [['tea', 10, 1], ['dairy', 5, 2], ['coin', 1, 3]] },
   bed:     { names: ['Aiapeenar', 'Kõrgpeenar', 'Lillepeenar', 'Kasvuhoone'], color: '#6a8a3a', spawn: [['flower', 10, 1], ['apple', 4, 2], ['coffee', 1, 3]] },
   toolbox: { names: ['Tööriistakast', 'Puusepakast', 'Meistrikast', 'Tööriistakapp'], color: '#8a6040', spawn: [['wood', 10, 1], ['coin', 1, 2]] },
   net:     { names: ['Kalavõrk', 'Mõrd', 'Suur võrk', 'Kalapaat'], color: '#4a7aa8', spawn: [['fish', 10, 1], ['sea', 4, 2], ['coffee', 1, 3]] },
-  wheel:   { names: ['Vokk', 'Kedervokk', 'Kangasteljed', 'Vanaema teljed'], color: '#9a6aa8', spawn: [['wool', 10, 1], ['sea', 2, 3], ['coin', 1, 2]] },
+  wheel:   { names: ['Vokk', 'Suur vokk', 'Kangasteljed', 'Vanaema teljed'], color: '#9a6aa8', spawn: [['wool', 10, 1], ['sea', 2, 3], ['coin', 1, 2]] },
 };
 for (const k in GENERATORS) CHAINS[k] = { kind: 'gen', name: GENERATORS[k].names[0], color: GENERATORS[k].color, names: GENERATORS[k].names };
 
@@ -47,7 +47,7 @@ const WHO = {
 // Villagers who place orders: favourite chains and thank-you lines.
 const VILLAGERS = {
   liisa: { likes: ['bread', 'berry', 'dairy', 'apple', 'flower', 'tea'], from: 0,
-    thanks: ['Aitäh! Teen kohe pildi ja panen saare grupti üles.', 'Vau! See on nii ilus, et ma ei raatsi süüa. Söön ikka.', 'Täpselt see! Kuidas sa teadsid? Ahjaa, ma ütlesin ise.', 'Oi! Sa oled päris Maali moodi. Ainult vähem laulad.', '10/10, soovitan sõbrale. Ja kogu külale.'] },
+    thanks: ['Aitäh! Teen kohe pildi ja panen saare gruppi üles.', 'Vau! See on nii ilus, et ma ei raatsi süüa. Söön ikka.', 'Täpselt see! Kuidas sa teadsid? Ahjaa, ma ütlesin ise.', 'Oi! Sa oled päris Maali moodi. Ainult vähem laulad.', '10/10, soovitan sõbrale. Ja kogu külale.'] },
   muri: { likes: ['fish', 'dairy', 'berry', 'bread'], from: 0, small: true,
     thanks: ['Mjäu. (Rahuldav. Võid jätkata.)', 'Nurr-nurr. (Ma ei ütle aitäh. Aga ma mõtlen seda.)', 'Mrr. (Panen selle oma salaladu. Diivani alla.)', 'Mjäu! (Sa oled peaaegu sama hea kui päikeselaik.)', 'Mrr. (Viis tähte. Üks käpp maha, sest see võttis aega.)'] },
   ants: { likes: ['fish', 'sea', 'wood', 'tea', 'bread', 'wool'], from: 0, after: 'b3',
@@ -72,14 +72,14 @@ const AREAS = [
       ['maali', 'Kallis lapselaps! Kui sa seda loed, on mu vana pagarikoda mere ääres nüüd sinu oma.'],
       ['maali', 'Ta on veidi tolmune ja natuke katki. Nagu mina hommikuti. Aga tal on hea süda. Tee temast midagi ägedat!'],
       ['mina', 'Okei. Mul on üks kohver, kaks tühja kätt ja üks suur plaan: saare kõige mõnusam kohvik-pagarikoda.'],
-      ['liisa', 'Tere-tere! Mina olen Liisa, pood üle tee ja saare Facebooki grupi admin. Ma tean kõike. Nüüd ka sind!'],
+      ['liisa', 'Tere-tere! Mina olen Liisa. Mul on pood üle tee ja ma olen saare Facebooki grupi admin. Ma tean kõike. Nüüd ka sind!'],
       ['muri', 'Mjäu. (Mina olen Muri. See on minu maja. Sina võid siin ka elada. Ja mulle süüa tuua.)'],
       ['liisa', 'Hakkame pihta? Küla ootab värsket saia ja mina ootan esimest postitust!'],
     ],
     tasks: [
       { id: 'b1', name: 'Pühi tolm välja', cost: 1, reward: { coins: 20 }, story: [
         ['liisa', 'Apsti! Oi, kui palju tolmu. Aevastasin kolm korda järjest. See toob õnne!'],
-        ['mina', 'Või kevadise nohu.'],
+        ['mina', 'Või kevadnohu.'],
         ['muri', 'Mjäu. (Ämblik Endel kolis minu sahtlisse. Ma ei ole sellega rahul.)'] ] },
       { id: 'b2', name: 'Õlita kriuksuv uks', cost: 2, reward: { gen: 'teapot' }, story: [
         ['muri', 'Mrr. (Uks ei kriuksu enam. Lõpuks saab rahus lõunauinakut teha. Ja hommikuuinakut. Ja õhtuuinakut.)'],
@@ -94,7 +94,7 @@ const AREAS = [
         ['maali', '(Ahju tagant leiad kirja.) Ära karda seda ahju. Ta pahandab ainult esimesed viis minutit. Täpselt nagu mina.'],
         ['maali', 'Kui sul on kaks ühesugust ahju, pane need kokku. Kaks vana teevad ühe parema. Inimestega see nii ei käi, aga ahjudega küll.'],
         ['mina', 'Vanaema, sa oled legend. Lohistan uue ahju vana peale!'] ] },
-      { id: 'b5', name: 'Värvi äge uus silt', cost: 3, reward: { coins: 40 }, story: [
+      { id: 'b5', name: 'Värvi uus silt', cost: 3, reward: { coins: 40 }, story: [
         ['liisa', 'Mis nimi sildile tuleb? „Liisa sõbranna kohvik“ on vaba.'],
         ['mina', 'Saarepagar!'],
         ['liisa', 'Lühike, lahe ja mahub hashtagiks. Kinnitan.'] ] },
@@ -119,15 +119,15 @@ const AREAS = [
         ['mina', 'Rohu alt tuli välja kaks peenart ja üks kummik.'],
         ['liisa', 'See on Antsu kummik! Ta otsib seda juba kolmandat suve.'] ] },
       { id: 'g2', name: 'Paranda aiavärav', cost: 3, reward: { gen: 'toolbox' }, story: [
-        ['liisa', 'Võta mu isa tööriistakast. Ta ütles alati: hea nael peab kauem kui halb idee.'],
+        ['liisa', 'Võta mu isa tööriistakast. Ta ütles alati: hea nael peab kauem vastu kui halb idee.'],
         ['mina', 'Väga tark mees.'],
-        ['liisa', 'Ta ehitas kuuri ilma ukseta. Aga nael pidas.'] ] },
+        ['liisa', 'Ta ehitas kuuri ilma ukseta. Aga naelad pidasid.'] ] },
       { id: 'g3', name: 'Istuta õunapuu', cost: 4, reward: { energy: 25 }, story: [
         ['mina', 'Väike õunapuu. Kunagi on ta suur ja meil on oma õunakook.'],
         ['muri', 'Mrr. (Kui ta suur on, ronin ma otsa ega tule enam alla. Siis peab keegi mind päästma. See on traditsioon.)'] ] },
       { id: 'g4', name: 'Ehita mesitaru', cost: 4, reward: { gen: 'basket' }, story: [
-        ['liisa', 'Mesilased! Mesi kooki, mesi teesse, mesi... ma ei tea veel kuhu, aga ma leian koha.'],
-        ['liisa', 'Võta teine korv. Pane kaks korvi kokku ja sealt tuleb ka õunu.'] ] },
+        ['liisa', 'Mesilased! Mett kooki, mett teesse, mett... ma ei tea veel kuhu, aga ma leian koha.'],
+        ['liisa', 'Võta teine korv. Pane kaks korvi kokku, siis tuleb sealt ka õunu.'] ] },
       { id: 'g5', name: 'Riputa kiik', cost: 5, reward: { coins: 80 }, story: [
         ['mina', 'Vanaema kiik! Ta kiikus siin igal õhtul.'],
         ['liisa', 'Ja laulis. Valjult. Kogu küla teadis kõiki salme. Ka neid, mis ta ise välja mõtles.'] ] },
@@ -151,7 +151,7 @@ const AREAS = [
         ['mina', 'Kuidas ta paati ära mahtus?'],
         ['ants', 'Ei mahtunudki. Ta ujus ise järel.'] ] },
       { id: 'h3', name: 'Riputa võrgud kuivama', cost: 5, reward: { gen: 'teapot' }, story: [
-        ['peeter', 'Tere! Mina olen Peeter, majakavaht ja podcasti „Valgus pimeduses“ host. Mul on kolm kuulajat.'],
+        ['peeter', 'Tere! Mina olen Peeter, majakavaht ja podcasti „Valgus pimeduses“ saatejuht. Mul on kolm kuulajat.'],
         ['peeter', 'Kingin sulle oma teekannu. Mul on neid kaks, aga ainult üks tass.'] ] },
       { id: 'h4', name: 'Ehita suitsuahi', cost: 6, reward: { coins: 90 }, story: [
         ['muri', 'MJÄU! (Suitsukala! See on parim päev mu elus. Eilne oli ka. Homne tuleb ka.)'] ] },
@@ -160,12 +160,12 @@ const AREAS = [
         ['liisa', 'Ants naeratas! Kas keegi filmis? Keegi pidi ju filmima!'] ] },
       { id: 'h6', name: 'Kalurite grilliõhtu', cost: 7, reward: { gen: 'wheel', chest: 2 }, story: [
         ['ants', 'Maali jättis mulle kunagi kirja. Ütles, et annaksin selle sulle siis, kui sadam jälle naerab.'],
-        ['maali', 'Teine vihje: retseptiraamat on seal, kus tuul jahvatab. Võta kaasa mu vokk. Veskis on külm.'],
+        ['maali', 'Teine vihje: retseptiraamat on seal, kus tuul jahvatab. Võta kaasa mu vokk. Veskis on külm ja villased sokid kuluvad ära.'],
         ['mina', 'Tuuleveski! Roadtrip!'] ] },
     ] },
   { key: 'windmill', name: 'Tuuleveski',
     intro: [
-      ['liisa', 'Tuuleveski seisab juba kakskümmend aastat. Tuul puhub, aga tiivad ei viitsi.'],
+      ['liisa', 'Tuuleveski on seisnud juba kakskümmend aastat. Tuul puhub, aga tiivad ei viitsi.'],
       ['peeter', 'Kui veski jälle käib, on saarel oma jahu. Ja oma jahust saab... kõike.'],
     ],
     tasks: [
@@ -181,8 +181,8 @@ const AREAS = [
       { id: 'w4', name: 'Jahvata esimene jahu', cost: 8, reward: { coins: 120 }, story: [
         ['liisa', 'Saare oma jahu! Ma teen sellest kringli. Või kaks. Või kõik.'],
         ['mina', 'Kohalik, käsitöö, meretuulega. Turistid lähevad hulluks.'] ] },
-      { id: 'w5', name: 'Tulukesed tiibadele', cost: 8, reward: { energy: 40 }, story: [
-        ['mina', 'Õhtul hõõgub veski nagu suur tähekaart. Ilusam kui ükski filter.'],
+      { id: 'w5', name: 'Riputa tiibadele tulukesed', cost: 8, reward: { energy: 40 }, story: [
+        ['mina', 'Õhtul helendab veski nagu suur tähekaart. Ilusam kui ükski filter.'],
         ['peeter', 'Majakast on see ilus vaade. Nüüd on mul kaks tuld, mida vaadata.'] ] },
       { id: 'w6', name: 'Tõsta vana veskikivi', cost: 9, reward: { gen: 'toolbox', chest: 2 }, story: [
         ['maali', '(Kivi all on kiri.) Kolmas vihje: retseptiraamatut valvab see, kes kunagi ei maga.'],
@@ -191,17 +191,17 @@ const AREAS = [
     ] },
   { key: 'lighthouse', name: 'Majakas',
     intro: [
-      ['peeter', 'Tere tulemast minu majakasse. Sada kaksteist astet. Olen neid mitu korda lugenud. Iga kord tuleb erinev arv.'],
+      ['peeter', 'Tere tulemast minu majakasse. Sada kaksteist astet. Olen neid mitu korda lugenud. Iga kord tuleb isesugune arv.'],
     ],
     tasks: [
       { id: 'l1', name: 'Paranda keerdtrepp', cost: 8, reward: { coins: 120 }, story: [
-        ['mina', 'Trepp kriuksub igal astmel ise noodiga.'],
+        ['mina', 'Trepp kriuksub igal astmel ise noodis.'],
         ['peeter', 'Ma kutsun seda trepilauluks. Nüüd laulab ta puhtamalt.'] ] },
-      { id: 'l2', name: 'Lääts särama', cost: 9, reward: { energy: 40 }, story: [
+      { id: 'l2', name: 'Nühi lääts särama', cost: 9, reward: { energy: 40 }, story: [
         ['peeter', 'Läbi läätse paistab saar nagu mänguasi. Vaata, Liisa räägib kellegagi. Muidugi räägib.'] ] },
       { id: 'l3', name: 'Paranda vana lamp', cost: 9, reward: { gen: 'wheel' }, story: [
-        ['liisa', 'Tõin sulle teise voki! See seisis mu poes nii kaua, et kliendid arvasid, et see on mööbel.'] ] },
-      { id: 'l4', name: 'Triibud majakale', cost: 10, reward: { coins: 150 }, story: [
+        ['liisa', 'Tõin sulle teise voki! See seisis mu poes nii kaua, et kliendid pidasid seda mööbliks.'] ] },
+      { id: 'l4', name: 'Värvi majakale triibud', cost: 10, reward: { coins: 150 }, story: [
         ['ants', 'Punane ja valge. Nagu õngekork. Väga hea majakas.'] ] },
       { id: 'l5', name: 'Pane majakatuli põlema', cost: 12, reward: { chest: 3 }, story: [
         ['peeter', 'Maali palus mul hoida ühte kirstu. Ta ütles: anna see sellele, kes saare jälle valgeks teeb.'],
@@ -236,9 +236,9 @@ const STORY = {
   tut1: 'Toksa ahju – sealt tuleb jahukott!',
   tut2: 'Lohista jahukott teise peale. Kaks ühesugust = üks parem!',
   tut3: 'Liisa tellimus on valmis. Vajuta „Anna!“',
-  tut4: 'Said tähe! Vajuta „Remont“ ja tee kohvik korda.',
+  tut4: 'Said tähe! Vajuta „Remont“ ja hakka kohvikut korda tegema.',
   tutDone: 'Super! Täida tellimusi, kogu tähti ja tee saarest kõige ägedam koht.',
-  ending: 'Kõik on korras! Küla tellib edasi. Küpseta nii palju, kui süda lustib.',
+  ending: 'Kõik on korras! Aga saari on veel palju. Saareringreis algab!',
 };
 
 // Coins shop. Generator offers are added for every generator kind you have owned.
@@ -255,9 +255,9 @@ const GEN_PRICE = 180;
 const DAILY_POOL = [
   { id: 'merge', text: 'Ühenda {n} korda', goals: [15, 25, 35] },
   { id: 'order', text: 'Täida {n} tellimust', goals: [3, 4, 6] },
-  { id: 'tap', text: 'Too generaatoritest {n} asja', goals: [25, 40, 60] },
+  { id: 'tap', text: 'Võta generaatoritest {n} asja', goals: [25, 40, 60] },
   { id: 'coins', text: 'Teeni {n} münti', goals: [60, 100, 150] },
-  { id: 'hi', text: 'Tee {n} asja 5. tasemel', goals: [1, 2, 3] },
+  { id: 'hi', text: 'Valmista {n} asja 5. või kõrgemal tasemel', goals: [1, 2, 3] },
 ];
 const DAILY_REWARD = { coins: 25, energy: 10 }, DAILY_BONUS = { stars: 2, chest: 1 };
 
@@ -317,9 +317,9 @@ const chapterName = c => 'Peatükk ' + (c + 1) + ' · ' + chapterTitle(c);
 
 // Boosters. price: coins when bought inside a level.
 const BOOSTERS = {
-  wand: { name: 'Võlukepp', desc: 'Teeb ühe asja taseme võrra paremaks.', price: 80, target: true, prompt: 'Toksa asja, mida võluda.' },
-  scissors: { name: 'Käärid', desc: 'Lõikab asja kaheks väiksemaks.', price: 50, target: true, prompt: 'Toksa asja, mida pooleks lõigata.' },
-  shuffle: { name: 'Segamine', desc: 'Annab üksikutele asjadele paarilised.', price: 40 },
+  wand: { name: 'Võlukepp', desc: 'Teeb ühe asja taseme võrra paremaks.', price: 80, target: true, prompt: 'Toksa asja, mida tahad võluda.' },
+  scissors: { name: 'Käärid', desc: 'Lõikab asja kaheks väiksemaks.', price: 50, target: true, prompt: 'Toksa asja, mida tahad pooleks lõigata.' },
+  shuffle: { name: 'Segamine', desc: 'Leiab üksikutele asjadele paarilised.', price: 40 },
   moves: { name: '+5 käiku', desc: 'Annab viis lisakäiku.', price: 60 },
 };
 const BOOST_KEYS = ['wand', 'scissors', 'shuffle', 'moves'];
@@ -337,7 +337,7 @@ const ADV_TIPS = {
   order: 'Külalised ootavad! Tee tellitud asjad valmis, need lähevad ise teele.',
   web: 'Ämblikuvõrk hoiab asja kinni. Ühenda selle kõrval, siis võrk kaob.',
   sand: 'Liivale uusi asju ei tule. Sinna võib ise asju tõsta.',
-  crate: 'Lukus kirst avaneb võtmega. Ühenda võtmed ja lohista võti kirstule.',
+  crate: 'Lukus kirst avaneb võtmega. Ühenda võtmeid ja lohista võti kirstule.',
   bubble: 'Mullid levivad! Ühenda nende kõrval, siis need lõhkevad.',
   boss: 'Suur tellimus! Seekord ootab terve küla. Võta aega ja mõtle enne.',
 };

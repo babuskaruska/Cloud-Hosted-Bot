@@ -505,6 +505,7 @@ const LV = (() => {
     const rew = winReward(r, first, stars);
     Game.give(Object.assign({ silent: true }, rew));
     Game.piggyAdd(PIGGY_ADD.level);
+    PASS.add(PASS_PTS.level); WEEK.add(WEEK_CUR.level);
     saveSoon();
     return { n, stars, prev, first, rew, streak: A.streak };
   }
