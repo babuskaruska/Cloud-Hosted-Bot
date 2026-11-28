@@ -203,6 +203,10 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
   - QA coverage for menu flows (Playwright clicks through title → campaign → results).
   - Merges.
 
+## Second game: Saarepagar (merge game, `merge/`)
+
+The owner asked for a merge-style game for his girlfriend. It is original (no copying of any existing game), fully Estonian and phone first. Design and team contracts are in **`merge/DESIGN.md`**. Build with `python3 tools/build-merge.py` (writes `merge/index.html` and icons). It is live at `https://babuskaruska.github.io/Cloud-Hosted-Bot/merge/` and installable on its own (`merge/manifest.webmanifest`, `merge/sw.js`). The same team works on it: Mira (game, UI, story), Ash (art, effects), Echo (audio) and Forge (QA, merges).
+
 ## Round 14 results (merged; build version 20, live)
 
 - **Mira:**
