@@ -63,6 +63,17 @@ Build with `python3 tools/build-merge.py`, which concatenates `merge/src/*.js` i
 - `ART.panel(ctx, x, y, w, h, style)` draws rounded cozy panels and buttons. `style` is `'paper' | 'wood' | 'button' | 'buttonHot' | 'ribbon'`.
 - `ART.logo(ctx, x, y, w, t)` draws the title logo.
 - `ART.bg(ctx, w, h, t)` draws the background behind the board (warm tablecloth or wood).
+- **Version 3, level map (`24-map.js`, `25-level.js`):**
+  - `ART.mapBg(ctx, chapter, x, y, w, h, t, scroll)`: the chapter scenery (cached seamless tile plus a light animated layer). `scroll` is the world y of the rect's top. Chapter 0 is levels 1–50 (`ART.mapChapterOf(level)`). Six themes cycle (`ART.mapTheme(ch)` gives `{name, path, accent}`), and each cycle reshuffles the decor.
+  - `ART.mapDivider(ctx, chapter, x, y, w, t)`: a mist band with a "Peatükk n · nimi" ribbon that hides the seam between chapters.
+  - `ART.mapPath(ctx, points, t, {done, width})`: the candy path; dots up to point index `done` are coloured.
+  - `ART.mapNode(ctx, x, y, r, state, stars, n, t)`: `'locked' | 'open' | 'current' | 'done'`. Every 10th level is a boss (drawn larger, with a crown).
+  - `ART.wheel(ctx, x, y, r, slices, angle, t)` and `ART.wheelIndex(angle, n)`. Slice i sits under the pointer at `angle = -i·2π/n`.
+  - `ART.obstacle(kind, px, state)`: `ice | box | cobweb | lockedCrate | sand | bubble`, state 0..2. Ice and cobweb are see-through, so draw the item first.
+  - `ART.booster(kind, px, badge)`: `wand | scissors | shuffle | moves5`.
+  - `ART.item('key', 1, px)`. Unknown item keys draw as a gem or a gift whose look grows with the level.
+  - Icons `piggy, calendar, heart, wheel, map, crown, moves, trophy, rest, key, streak`.
+  - Idle: `ART.itemIdle(seed, t)` returns `{sx, sy, rot, dy}` (pivot at the item's bottom centre). `ART.drawItemIdle(ctx, img, cx, cy, s, seed, t)` applies it.
 
 ## Effects API (Ash; Mira calls it)
 
@@ -71,6 +82,12 @@ Build with `python3 tools/build-merge.py`, which concatenates `merge/src/*.js` i
 - `FX.coins(x, y, n)`, `FX.stars(x, y, n)`, `FX.energy(x, y, n)`: they fly to the HUD counters. Positions come from `UI.hudPos(name)`.
 - `FX.confetti()`: celebration when a task completes or the player levels up.
 - `FX.update(dt)`, `FX.draw(ctx)`.
+- **Version 3:**
+  - `FX.levelWin({stars})` ("Tubli!", fireworks, star rain) and `FX.levelFail()` (a soft "Peaaegu!").
+  - Obstacles: `FX.iceCrack(x, y, s)`, `FX.boxBreak(x, y, s)` and `FX.obstacleClear(kind, x, y, s)`.
+  - `FX.boosterUse(kind, x, y)`. For shuffle, x, y is the board centre.
+  - Chained merges: `FX.rainbowLink(x0, y0, x1, y1)` between them and `FX.trail(x, y)` while dragging.
+  - `FX.idle(ctx, x, y, s, seed, t)`: an occasional sparkle on an idle item.
 - Everything is cheap on low-end Android: pooled particles, no `shadowBlur` in hot paths, and a cap. `FX.quality` is 0, 1 or 2.
 
 ## Audio API (Echo; Mira calls `sfx(name, opts)` and `MUSIC.scene(name)`)

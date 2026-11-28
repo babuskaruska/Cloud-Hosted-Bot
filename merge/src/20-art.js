@@ -293,11 +293,30 @@ const ART = (function () {
     }
   }
   A.clearCache = function () { cache.clear(); cacheN = 0; for (const k in _ic) delete _ic[k]; A._sceneCache && A._sceneCache.clear(); for (const k in _cell) delete _cell[k]; };
+  // unknown keys (new goal items before their art lands): a pretty faceted gem or a wrapped gift, chosen and coloured
+  // by the key's hash; higher levels grow a gold rim, more sparkle and finally a crown
   function fallback(g, k, lv) {
     let h = 0; for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
-    const cols = [C.rose, C.blue, C.leaf, C.gold, C.lilac, C.teal, C.coral], col = cols[h % cols.length];
-    R(g, 18, 18, 64, 64, 22); paint(g, col, 50, 50, 40); HL(g, 36, 32, 12, 7, -.5, .5);
-    for (let i = 0; i < Math.min(lv, 6); i++) { dot(g, 50 + (i - (Math.min(lv, 6) - 1) / 2) * 9, 66, 3.2, '#fff'); }
+    const cols = ['#ff4f9a', '#3db8ff', '#2fd59a', '#ffb21e', '#9a6bff', '#14c8b8', '#ff6b5a'], col = cols[h % cols.length], L = Math.min(lv | 0 || 1, 9);
+    const gold = L >= 4, r = 30 + Math.min(L, 6) * 2.4;
+    if ((h >> 3) % 2) { // gem
+      const n = L >= 3 ? 8 : 6, pts = [], top = 50 - r * .55;
+      for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + (i + .5) * Math.PI * 2 / n; pts.push(50 + Math.cos(a) * r, 52 + Math.sin(a) * r * .9); }
+      PL(g, pts); paint(g, col, 50, 50, r, gold ? 5 : 4); if (gold) { PL(g, pts); stroke(g, '#ffd23f', 2.4); }
+      PL(g, [50 - r * .5, top + 6, 50 + r * .5, top + 6, 50 + r * .3, 52, 50 - r * .3, 52]); g.fillStyle = 'rgba(255,255,255,.35)'; g.fill();
+      PL(g, [50 - r * .3, 52, 50 + r * .3, 52, 50, 52 + r * .78]); g.fillStyle = rgba(dk(col, .3), .35); g.fill();
+      PL(g, [50 - r * .45, top + 10, 50 - r * .15, top + 10, 50 - r * .32, top + 20]); g.fillStyle = 'rgba(255,255,255,.85)'; g.fill();
+    } else { // gift box
+      const w = r * 1.6, y0 = 50 - r * .45;
+      R(g, 50 - w / 2, y0 + 12, w, r * 1.2, 9); paint(g, col, 50, y0 + 30, r, 4);
+      R(g, 50 - w / 2 - 4, y0, w + 8, 18, 7); paint(g, lt(col, .25), 50, y0 + 8, r, 4);
+      R(g, 44, y0, 12, r * 1.2 + 12, 2); g.fillStyle = gold ? '#ffd23f' : '#ffffff'; g.fill();
+      for (const s of [-1, 1]) { E(g, 50 + s * 10, y0 - 6, 11, 7, s * .5); paint(g, gold ? '#ffd23f' : '#ffffff', 50 + s * 10, y0 - 7, 10, 3); }
+      dot(g, 50, y0 - 3, 5, gold ? '#ffb21e' : '#ffe0f0');
+      HL(g, 50 - w / 2 + 9, y0 + 30, 4, 10, 0, .45);
+    }
+    for (let i = 0; i < Math.min(L - 1, 4); i++) { const a = -2.2 + i * 1.3; sparkAt(g, 50 + Math.cos(a) * (r + 12), 50 + Math.sin(a) * (r + 10), 5 + i, i % 2 ? '#fff6c0' : '#ffffff'); }
+    if (L >= 5) { const s = 22, x0 = 50 - s / 2, y0 = 50 - r - 16; PL(g, [x0, y0 + 14, x0, y0 + 2, x0 + 6, y0 + 8, x0 + 11, y0, x0 + 16, y0 + 8, x0 + 22, y0 + 2, x0 + 22, y0 + 14]); paint(g, '#ffd23f', 50, y0 + 8, 12, 3); }
   }
 
   // ---- bubble overlay for bonus items: a glossy soap bubble with a rainbow sheen ----

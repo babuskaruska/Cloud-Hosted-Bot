@@ -8,7 +8,7 @@ const files = fs.readdirSync(SRC).filter(f => /^(2\d|40)-.*\.js$/.test(f)).sort(
 const code = files.map(f => fs.readFileSync(path.join(SRC, f), 'utf8')).join('\n');
 const gallery = `
 const cv = document.getElementById('cv'), d = window.devicePixelRatio || 1, mode = location.hash.slice(1) || 'items';
-const W = innerWidth, Hh = { items: 1500, gens: 900, scenes: 1700, people: 520, ui: 900, fx: 700 }[mode] || 1200;
+const W = innerWidth, Hh = { items: 1500, gens: 900, scenes: 1700, people: 520, ui: 900, fx: 700 }[mode] || 956;
 cv.width = W * d; cv.height = Hh * d; cv.style.width = W + 'px'; cv.style.height = Hh + 'px';
 document.body.style.height = Hh + 'px';
 const g = cv.getContext('2d'); g.scale(d, d);
@@ -58,15 +58,56 @@ if (mode === 'items') {
   const NF = +(new URLSearchParams(location.search).get('f') || 12); for (let i = 0; i < NF; i++) FX.update(1 / 60);
   ART.bg(g, W, Hh, 0); FX.draw(g); const sq = FX.squash(100, 200); label('squash ' + (sq ? sq.map(v=>v.toFixed(2)).join(',') : 'none'), 10, 680);
   label('live ' + FX.count(), 200, 680);
+} else if (mode === 'map') {
+  // one chapter: background, path through 12 nodes in all states, a divider
+  const qs = new URLSearchParams(location.search), ch = +(qs.get('c') || 0), scroll = +(qs.get('y') || 0), tt = +(qs.get('t') || 1.2);
+  ART.mapBg(g, ch, 0, 0, W, Hh, tt, scroll);
+  const pts = []; for (let i = 0; i < 11; i++) pts.push({ x: W / 2 + Math.sin(i * 1.1) * W * .26, y: Hh - 60 - i * 86 });
+  const cur = 5; ART.mapPath(g, pts, tt, { done: cur });
+  pts.forEach((p, i) => { const n = (+(qs.get('n') || 1)) + i, st = i < cur ? 'done' : i === cur ? 'current' : i === cur + 1 ? 'open' : 'locked'; ART.mapNode(g, p.x, p.y, 26, st, i < cur ? [3, 2, 1, 3, 0][i % 5] : 0, n, tt); });
+  label(ART.mapTheme(ch).name, 8, 16);
+} else if (mode === 'themes') {
+  const n = ART.mapThemes.length, hh = Hh / n;
+  for (let i = 0; i < n; i++) { ART.mapBg(g, i, 0, i * hh, W, hh, 1.2, 300); if (i) ART.mapDivider(g, i, 0, i * hh, W, 1); else label(ART.mapTheme(0).name, 8, 16); }
+} else if (mode === 'obst') {
+  let y = 14; const s = 64;
+  const row = (title, list) => { label(title, 8, y + 8); list.forEach((f, i) => { const x = 6 + i * (s + 8); f(x, y + 16); }); y += s + 40; };
+  const kinds = ['ice', 'box', 'cobweb', 'lockedCrate', 'sand', 'bubble'];
+  row('obstacles state 0 (over item)', kinds.map(k => (x, yy) => { ART.cell(g, x, yy, s, 'empty'); if (k === 'ice' || k === 'cobweb') g.drawImage(ART.item('bread', 4, s * d), x + 4, yy + 4, s - 8, s - 8); g.drawImage(ART.obstacle(k, s * d, 0), x, yy, s, s); }));
+  row('state 1', kinds.map(k => (x, yy) => { ART.cell(g, x, yy, s, 'empty'); if (k === 'ice' || k === 'cobweb') g.drawImage(ART.item('flower', 5, s * d), x + 4, yy + 4, s - 8, s - 8); g.drawImage(ART.obstacle(k, s * d, 1), x, yy, s, s); }));
+  row('state 2', kinds.map(k => (x, yy) => { ART.cell(g, x, yy, s, 'empty'); if (k === 'ice' || k === 'cobweb') g.drawImage(ART.item('berry', 3, s * d), x + 4, yy + 4, s - 8, s - 8); g.drawImage(ART.obstacle(k, s * d, 2), x, yy, s, s); }));
+  row('boosters', ['wand', 'scissors', 'shuffle', 'moves5'].map(k => (x, yy) => g.drawImage(ART.booster(k, s * d), x, yy, s, s)).concat([(x, yy) => g.drawImage(ART.booster('wand', s * d, true), x, yy, s, s), (x, yy) => g.drawImage(ART.booster('moves5', s * d, true), x, yy, s, s)]));
+  row('key + new icons', [(x, yy) => { ART.cell(g, x, yy, s, 'empty'); g.drawImage(ART.item('key', 1, s * d), x + 3, yy + 3, s - 6, s - 6); }].concat(['piggy', 'calendar', 'heart', 'wheel', 'map'].map(k => (x, yy) => g.drawImage(ART.icon(k, s * d), x, yy, s, s))));
+  row('icons 2', ['crown', 'moves', 'trophy', 'rest', 'key', 'streak'].map(k => (x, yy) => g.drawImage(ART.icon(k, s * d), x, yy, s, s)));
+  row('unknown item keys (fallback)', ['kass', 'cake3', 'goalX', 'teddy', 'ribbon', 'zzz'].map((k, i) => (x, yy) => { ART.cell(g, x, yy, s, 'empty'); g.drawImage(ART.item(k, i + 1, s * d), x + 3, yy + 3, s - 6, s - 6); }));
+  label('idle: ' + JSON.stringify(ART.itemIdle(3, 1.7)), 8, y + 10);
+} else if (mode === 'wheel') {
+  const sl = [{ icon: 'coin', label: '50' }, { icon: 'energy', label: '20' }, { icon: 'wand', label: '1' }, { icon: 'star', label: '3' }, { icon: 'coin', label: '200' }, { icon: 'heart', label: '∞ 15 min' }, { icon: 'shuffle', label: '1' }, { icon: 'gift', label: 'Kingitus' }];
+  ART.wheel(g, W / 2, 330, Math.min(190, W * .43), sl, +(new URLSearchParams(location.search).get('a') || 0), 1);
+  label('index ' + ART.wheelIndex(0, 8) + ' ' + ART.wheelIndex(-Math.PI / 4, 8), 8, 16);
+  ART.wheel(g, W / 2 - 100, 740, 90, sl.slice(0, 6), .5, 1.4);
+  ART.wheel(g, W / 2 + 100, 740, 90, sl.slice(0, 4).concat(sl.slice(0, 4), sl.slice(0, 4)), 1, 1.4);
+} else if (mode === 'win' || mode === 'fail' || mode === 'fx2') {
+  window.UI = { hudPos: n => ({ coins: [W - 60, 20], stars: [W - 140, 20], energy: [60, 20] })[n] };
+  const qs = new URLSearchParams(location.search); FX.quality = +(qs.get('q') || 2);
+  const NF = +(qs.get('f') || 40), img = ART.item('bread', 4, 64 * d);
+  if (mode === 'win') FX.levelWin({ stars: 3 });
+  else if (mode === 'fail') FX.levelFail();
+  else { FX.iceCrack(80, 140, 70); FX.boxBreak(220, 140, 70); FX.obstacleClear('cobweb', 360, 140, 70); FX.obstacleClear('sand', 80, 330, 70); FX.obstacleClear('bubble', 220, 330, 70); FX.obstacleClear('lockedCrate', 360, 330, 70);
+    FX.boosterUse('wand', 90, 560); FX.boosterUse('scissors', 220, 560); FX.boosterUse('moves5', 350, 560); FX.boosterUse('shuffle', W / 2, 800); FX.rainbowLink(60, 680, 380, 700); }
+  for (let i = 0; i < NF; i++) FX.update(1 / 60);
+  ART.mapBg(g, 1, 0, 0, W, Hh, 1, 0);
+  if (mode === 'fx2') for (let i = 0; i < 5; i++) { const x = 40 + i * 80, y = 450; ART.cell(g, x - 32, y - 32, 64, 'empty'); const tf = ART.itemIdle(i, 1 + i * .3); g.save(); g.translate(x, y + 30); g.rotate(tf.rot); g.scale(tf.sx, tf.sy); g.drawImage(img, -30, -60 + tf.dy, 60, 60); g.restore(); FX.idle(g, x, y, 60, i, 2.3 + i * 1.7); }
+  FX.draw(g); label('live ' + FX.count() + ' f' + NF, 8, Hh - 10);
 }
 window.__done = true;
 `;
 const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#fbe9d0}canvas{display:block}</style><canvas id="cv"></canvas><script>(function(){'use strict';\n${code}\n${gallery}\n})();</script>`;
 const page = path.join(OUT, 'artgallery.html'); fs.writeFileSync(page, html);
-const modes = (process.argv[2] || 'items') === 'all' ? ['items', 'gens', 'scenes', 'people', 'ui', 'fx'] : [process.argv[2] || 'items'];
+const modes = (process.argv[2] || 'items') === 'all' ? ['items', 'gens', 'scenes', 'people', 'ui', 'fx', 'map', 'themes', 'obst', 'wheel', 'win'] : [process.argv[2] || 'items'];
 const dpr = process.argv[3] || '1', extra = process.argv[4] || '';
 for (const m of modes) {
-  const H = { items: 1500, gens: 900, scenes: 1700, people: 520, ui: 900, fx: 700 }[m] || 1200;
+  const H = { items: 1500, gens: 900, scenes: 1700, people: 520, ui: 900, fx: 700 }[m] || 956;
   const out = execFileSync('node', [path.join(__dirname, 'cdp.js'), '', (process.env.GW || '420') + ',' + H, 'wait:700', 'shot:art-' + m + extra + '-' + dpr + 'x'], { env: Object.assign({}, process.env, { DPR: dpr, PAGE: 'file://' + page + (extra ? '?' + extra : '') + '#' + m }) }).toString();
   process.stdout.write(out);
 }
