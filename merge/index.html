@@ -430,7 +430,7 @@ const Game = (() => {
     while (S.xp >= xpNeed(S.lvl)) {
       S.xp -= xpNeed(S.lvl); S.lvl++;
       const before = S.unl; S.unl = Math.min(LOCK_ORDER.length, S.unl + 3);
-      S.en += 20;
+      S.en += 10;
       ev('levelUp', -1, { lvl: S.lvl, cells: LOCK_ORDER.slice(before, S.unl) });
     }
   }
@@ -1647,7 +1647,7 @@ const UI = (() => {
     } else if (m.kind === 'levelup') {
       const P = modalPanel(m, 320, 250, 'Uus tase!');
       text(String(m.lvl), P.x + P.w / 2, P.y + 72, 46, '#c07a20', 'center', 800);
-      text('+20 energiat', P.x + P.w / 2, P.y + 118, 15, INK, 'center', 800);
+      text('+10 energiat', P.x + P.w / 2, P.y + 118, 15, INK, 'center', 800);
       text(m.cells ? '+' + m.cells + ' uut ruutu laual' : 'Tellimused muutuvad põnevamaks', P.x + P.w / 2, P.y + 142, 14, INK2, 'center', 700);
       button(P.x + 60, P.y + P.h - 62, P.w - 120, 46, 'Tore!', () => closeModal(), Object.assign({ hot: true }, B));
     }

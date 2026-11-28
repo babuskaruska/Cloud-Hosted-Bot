@@ -58,7 +58,7 @@ const Game = (() => {
     while (S.xp >= xpNeed(S.lvl)) {
       S.xp -= xpNeed(S.lvl); S.lvl++;
       const before = S.unl; S.unl = Math.min(LOCK_ORDER.length, S.unl + 3);
-      S.en += 20;
+      S.en += 10;
       ev('levelUp', -1, { lvl: S.lvl, cells: LOCK_ORDER.slice(before, S.unl) });
     }
   }

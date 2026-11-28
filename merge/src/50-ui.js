@@ -859,7 +859,7 @@ const UI = (() => {
     } else if (m.kind === 'levelup') {
       const P = modalPanel(m, 320, 250, 'Uus tase!');
       text(String(m.lvl), P.x + P.w / 2, P.y + 72, 46, '#c07a20', 'center', 800);
-      text('+20 energiat', P.x + P.w / 2, P.y + 118, 15, INK, 'center', 800);
+      text('+10 energiat', P.x + P.w / 2, P.y + 118, 15, INK, 'center', 800);
       text(m.cells ? '+' + m.cells + ' uut ruutu laual' : 'Tellimused muutuvad põnevamaks', P.x + P.w / 2, P.y + 142, 14, INK2, 'center', 700);
       button(P.x + 60, P.y + P.h - 62, P.w - 120, 46, 'Tore!', () => closeModal(), Object.assign({ hot: true }, B));
     }
