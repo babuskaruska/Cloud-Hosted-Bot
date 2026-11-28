@@ -207,6 +207,20 @@ A storm-lashed sea cliff at night: wet black rock, crashing surf below, rain, li
 
 The owner asked for a merge-style game for his girlfriend. It is original (no copying of any existing game), fully Estonian and phone first. Design and team contracts are in **`merge/DESIGN.md`**. Build with `python3 tools/build-merge.py` (writes `merge/index.html` and icons). It is live at `https://babuskaruska.github.io/Cloud-Hosted-Bot/merge/` and installable on its own (`merge/manifest.webmanifest`, `merge/sw.js`). The same team works on it: Mira (game, UI, story), Ash (art, effects), Echo (audio) and Forge (QA, merges).
 
+**Version 3 phase A (live):** the plan is in `merge/PLAN.md`.
+- **Mira:**
+  - `35-levels.js` (`LV`): endless deterministic levels on a 6×7 board, with goals, obstacles, boosters, 5 lives, win streaks, a boss every 10th level and a chapter every 50.
+  - `55-map.js` (`ADV`): the map, the level screen, Õnneratas and Hoiupõrsas; plus a 7- and 30-day calendar.
+  - QA: `node tools/mergelevels.js`. Bot win rates for levels 1–200: easy 96%, hard 77% (lowest 25%), boss 75%.
+- **Ash:** `24-map.js` (6 themes), `25-level.js` (obstacles, boosters, wheel), plus the level effects.
+- **Echo:** map and level music (`MUSIC.mood('tense')`) and the level sounds.
+- **Next:** phase B (island tour, season pass, weekly events, design choices, wardrobe and pets, weather, the full Estonian proofread and `merge/GLOSSARY.md`).
+- **Known:**
+  - Some hard levels are too noisy (25%).
+  - Leaving a level mid-way costs no life.
+  - `drawItemIdle` is unused.
+  - 360-wide screens are unchecked.
+
 **Version 2 (live), after the girlfriend's feedback** ("too old-fashioned, not addictive, icons too small" on an iPhone 16 Pro Max):
 - **Ash:** modern glossy restyle (sky gradient, frosted tiles, pill buttons, `ART.theme`, new `FX` effects `combo`, `lucky`, `discover`, `levelUp`, `hint`, `text`).
 - **Mira:** items fill 92% of a cell, bigger UI, tabs Remont/Album/Festival/Pood/Kott.
