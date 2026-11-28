@@ -35,11 +35,12 @@ function fmtNum(n) { n = Math.floor(n); return n >= 10000 ? (n / 1000).toFixed(n
 
 // Board geometry
 const COLS = 7, ROWS = 9, NCELL = COLS * ROWS;
-const MAXEN = 100, EN_MS = 120000;  // +1 energy every 2 minutes
+const MAXEN = 100, EN_MS = 60000;  // +1 energy every minute (generous)
+const FREE_EN = 30, FREE_EN_MS = 4 * 3600000;  // free energy every 4 hours
 
 // Global state. Keys starting with "_" are view-only and never saved.
 let S = null;
-const SAVE_KEY = 'saarepagar.save', SAVE_VER = 1;
+const SAVE_KEY = 'saarepagar.save', SAVE_VER = 2;
 
 function newState() {
   const t = now();
@@ -51,9 +52,10 @@ function newState() {
     done: {}, area: 0, areaSeen: {}, ended: false,
     bag: [], bagSlots: 4,
     disc: {}, gensOwned: {},
+    album: {}, albumDone: {}, event: { id: '', pts: 0, got: 0 }, freeEnAt: 0,
     tut: 0, title: true,
     daily: { day: '', gift: false, streak: 0, lastGift: '', tasks: [], bonus: false },
-    stats: { merges: 0, orders: 0, taps: 0, tasks: 0 },
+    stats: { merges: 0, orders: 0, taps: 0, tasks: 0, lucky: 0, merge5: 0, combo: 0, mbox: 0 },
     set: { music: 0.7, sfx: 0.9, muted: false },
   };
 }
@@ -75,6 +77,8 @@ function load() {
     for (const k in base) if (!(k in d)) d[k] = base[k];
     for (const k in base.daily) if (!(k in d.daily)) d.daily[k] = base.daily[k];
     for (const k in base.stats) if (!(k in d.stats)) d.stats[k] = base.stats[k];
+    if (!d.event || typeof d.event !== 'object') d.event = base.event;
+    // v1 -> v2: the album starts empty, so earlier discoveries wait there as rewards to collect.
     d.v = SAVE_VER;
     return d;
   } catch (e) { return null; }

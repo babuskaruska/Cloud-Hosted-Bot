@@ -15,7 +15,6 @@ const Game = (() => {
   const maxL = k => CHAINS[k].names.length;
   const nameOf = it => CHAINS[it.k].names[it.l - 1];
   const kindOf = it => CHAINS[it.k].kind;
-  const xpNeed = L => 10 + (L - 1) * 8;
   const ev = (kind, cell, data) => { if (typeof UI !== 'undefined' && UI.ev) UI.ev(kind, cell, data || {}); };
 
   function canMerge(A, B) { return !!(A && B && A !== B && A.k === B.k && A.l === B.l && A.l < maxL(A.k) && !A.b && !B.b); }
@@ -30,10 +29,73 @@ const Game = (() => {
 
   function genItem(k, l) { const it = { k, l: l || 1 }; if (ch(k).kind === 'gen') { it.ch = GEN_LV[it.l - 1][0]; it.cd = 0; } return it; }
 
+  // A new item level fills the collection album (the reward waits there) and shows a "UUS!" popup.
+  let quiet = false;
   function discover(k, l) {
     const prev = S.disc[k] || 0;
-    if (l > prev) { S.disc[k] = l; if (prev > 0 && ch(k).kind === 'item' && l > 1) { addCoins(l * 2); addXp(1); return true; } }
+    if (l > prev) {
+      S.disc[k] = l;
+      if (ch(k).kind === 'item') { if (!quiet) for (let j = prev + 1; j <= l; j++) ev('discover', -1, { k, l: j }); return true; }
+    }
     return false;
+  }
+  // ---- collection album ----
+  const albumHas = (k, l) => ((S.album[k] | 0) >> l & 1) === 1;
+  function albumPending(k) { let n = 0; const d = S.disc[k] || 0; for (let l = 1; l <= d; l++) if (!albumHas(k, l)) n++; return n; }
+  const chainFull = k => (S.disc[k] || 0) >= maxL(k) && albumPending(k) === 0;
+  function albumCount() { let n = 0; for (const k of ALBUM_CHAINS) { n += albumPending(k); if (chainFull(k) && !S.albumDone[k]) n++; } return n; }
+  function claimAlbum(k, l) {
+    if (!CHAINS[k] || l > (S.disc[k] || 0) || albumHas(k, l)) return false;
+    S.album[k] = (S.album[k] | 0) | (1 << l);
+    const r = albumReward(l); give(Object.assign({ silent: true }, r)); addXp(1);
+    ev('albumClaim', -1, { k, l, r }); after(); return true;
+  }
+  function claimChain(k) {
+    if (S.albumDone[k] || !chainFull(k)) return false;
+    S.albumDone[k] = true; give(Object.assign({ silent: true }, ALBUM_CHAIN));
+    ev('albumChain', -1, { k, r: ALBUM_CHAIN }); after(); return true;
+  }
+
+  // ---- weekend festival (local time) ----
+  function eventInfo(t) {
+    t = t || now();
+    const d = new Date(t), dow = d.getDay(); // 0 Sun .. 6 Sat
+    const back = dow === 5 ? 0 : dow === 6 ? 1 : dow === 0 ? 2 : -1;
+    const force = !!QS.event;
+    if (back < 0 && !force) {
+      const fri = new Date(d.getFullYear(), d.getMonth(), d.getDate() + (5 - dow));
+      return { on: false, startsIn: fri.getTime() - t, name: EVENT_SEASON(fri.getMonth()) };
+    }
+    const start = force && back < 0 ? new Date(d.getFullYear(), d.getMonth(), d.getDate()) : new Date(d.getFullYear(), d.getMonth(), d.getDate() - back);
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 3);
+    return { on: true, id: dayKey(start.getTime()), left: end.getTime() - t, name: EVENT_SEASON(start.getMonth()) };
+  }
+  function ensureEvent() {
+    const e = eventInfo();
+    if (e.on && S.event.id !== e.id) { S.event = { id: e.id, pts: 0, got: 0 }; ev('eventStart', -1, { e }); return true; }
+    return false;
+  }
+  function eventPts(n, cell) {
+    const e = eventInfo(); if (!e.on) return;
+    if (S.event.id !== e.id) ensureEvent();
+    const before = S.event.pts; S.event.pts += n;
+    const nx = EVENT_TRACK[S.event.got];
+    ev('eventPts', cell === undefined ? -1 : cell, { n, ready: !!(nx && before < nx.need && S.event.pts >= nx.need) });
+  }
+  function claimEvent() {
+    const e = eventInfo(), tier = EVENT_TRACK[S.event.got];
+    if (!e.on || S.event.id !== e.id || !tier || S.event.pts < tier.need) return false;
+    S.event.got++; give(tier.r);
+    ev('eventClaim', -1, { tier, i: S.event.got - 1 }); after(); return true;
+  }
+  const eventReady = () => { const e = eventInfo(), tier = EVENT_TRACK[S.event.got]; return !!(e.on && S.event.id === e.id && tier && S.event.pts >= tier.need); };
+
+  // ---- free energy every few hours ----
+  const freeEnIn = () => Math.max(0, (S.freeEnAt || 0) - now());
+  function claimFreeEnergy() {
+    if (freeEnIn() > 0) return false;
+    S.en += FREE_EN; S.freeEnAt = now() + FREE_EN_MS;
+    ev('freeEnergy', -1, { n: FREE_EN }); after(); return true;
   }
 
   // Chains the player can currently make (from generators on the board and in the bag).
@@ -58,20 +120,32 @@ const Game = (() => {
     while (S.xp >= xpNeed(S.lvl)) {
       S.xp -= xpNeed(S.lvl); S.lvl++;
       const before = S.unl; S.unl = Math.min(LOCK_ORDER.length, S.unl + 3);
-      S.en += 10;
-      ev('levelUp', -1, { lvl: S.lvl, cells: LOCK_ORDER.slice(before, S.unl) });
+      const r = levelReward(S.lvl), got = { coins: r.coins, energy: Math.max(0, MAXEN - S.en), chest: r.chest, mbox: r.mbox || 0, gen: null };
+      addCoins(r.coins); S.en = Math.max(S.en, MAXEN);
+      giveItem('chest', r.chest, true);
+      if (r.mbox) giveItem('mbox', 1, true);
+      if (r.genCopy) { const k = spareGen(); if (k) { giveItem(k, 1, true); got.gen = k; } }
+      ev('levelUp', -1, { lvl: S.lvl, cells: LOCK_ORDER.slice(before, S.unl), got });
     }
   }
 
   // Place a reward item on the board near the middle, or in the bag if the board is full.
-  function giveItem(k, l) {
+  function giveItem(k, l, silent) {
     const it = genItem(k, l);
     if (ch(k).kind === 'gen') S.gensOwned[k] = true;
     discover(k, it.l);
     const e = nearestEmpty(idx(3, 4));
-    if (e >= 0) { S.board[e] = it; ev('gift', e, { k, l: it.l }); return e; }
+    if (e >= 0) { S.board[e] = it; ev('gift', e, { k, l: it.l, silent }); return e; }
     S.bag.push(it); ev('toBag', -1, { k, l: it.l });
     return -1;
+  }
+  // The owned generator kind with the fewest copies (a spare one lets her merge generators sooner).
+  function spareGen() {
+    const n = {};
+    for (const k in S.gensOwned) n[k] = 0;
+    for (const it of S.board.concat(S.bag)) if (it && ch(it.k).kind === 'gen' && it.k in n) n[it.k]++;
+    const ks = Object.keys(n); if (!ks.length) return null;
+    ks.sort((a, b) => n[a] - n[b] || a.localeCompare(b)); return ks[0];
   }
   function give(r) {
     if (!r) return;
@@ -81,6 +155,7 @@ const Game = (() => {
     if (r.gen) giveItem(r.gen, 1);
     if (r.chest) giveItem('chest', r.chest);
     if (r.item) giveItem(r.item[0], r.item[1]);
+    if (r.genUp) { const k = spareGen(); if (k) giveItem(k, 2); }
     ev('reward', -1, r);
   }
 
@@ -90,15 +165,71 @@ const Game = (() => {
     if (a === b || !canMerge(A, B)) return false;
     const res = genItem(A.k, A.l + 1);
     S.board[a] = null; S.board[b] = res;
-    S.stats.merges++; daily('merge', 1);
     const kind = ch(res.k).kind;
-    if (kind === 'item' && res.l >= 5) daily('hi', 1);
-    const isNew = discover(res.k, res.l);
-    ev('merge', b, { from: a, k: res.k, l: res.l, max: res.l === maxL(res.k), isNew });
-    if (kind === 'item' && res.l >= 3 && rnd() < 0.07) {
-      const e = nearestEmpty(b);
-      if (e >= 0) { S.board[e] = { k: res.k, l: res.l, b: now() + 60000 }; ev('bubble', e, { from: b }); }
+    // Lucky merge: jump one more level, a free twin, or a mystery box.
+    let lucky = null;
+    if (kind === 'item' && res.l >= 2 && (rnd() < LUCKY_P || (S.stats.lucky === 0 && S.stats.merges === 5))) {
+      const r = rnd();
+      if (res.l + 1 < maxL(res.k) && r < 0.4) { res.l++; lucky = 'jump'; }
+      else if (r < 0.75 && nearestEmpty(b) >= 0) lucky = 'twin';
+      else if (nearestEmpty(b) >= 0) lucky = 'mbox';
+      if (lucky) S.stats.lucky++;
     }
+    afterMerge(b, res, 1, a, { lucky });
+    if (lucky === 'twin') { const e = nearestEmpty(b); if (e >= 0) { S.board[e] = { k: res.k, l: res.l }; ev('spawn', e, { from: b, k: res.k, l: res.l, quiet: true }); } }
+    if (lucky === 'mbox') { const e = nearestEmpty(b); if (e >= 0) { S.board[e] = { k: 'mbox', l: 1 }; ev('spawn', e, { from: b, k: 'mbox', l: 1, quiet: true }); } }
+    if (lucky) { ev('lucky', b, { type: lucky, k: res.k, l: res.l }); eventPts(EVENT_PTS.lucky, b); }
+    else if (kind === 'item' && res.l >= 3) {
+      const r = rnd();
+      if (r < MBOX_P) { const e = nearestEmpty(b); if (e >= 0) { S.board[e] = { k: 'mbox', l: 1 }; ev('spawn', e, { from: b, k: 'mbox', l: 1 }); } }
+      else if (r < MBOX_P + 0.06) { const e = nearestEmpty(b); if (e >= 0) { S.board[e] = { k: res.k, l: res.l, b: now() + 60000 }; ev('bubble', e, { from: b }); } }
+    }
+    after(); return true;
+  }
+  // Shared bookkeeping for a merge that made n items at cell b: stats, daily, XP, combo, festival points, events.
+  function afterMerge(b, res, n, from, extra) {
+    S.stats.merges += n; daily('merge', n);
+    const kind = ch(res.k).kind;
+    if (kind === 'item' && res.l >= 5) daily('hi', n);
+    ev('merge', b, Object.assign({ from, k: res.k, l: res.l, max: res.l === maxL(res.k) }, extra || {}));
+    discover(res.k, res.l);
+    // combo
+    const t = now();
+    S._combo = t - (S._comboT || 0) < COMBO_MS ? (S._combo || 0) + 1 : 1; S._comboT = t;
+    if (S._combo > (S.stats.combo || 0)) S.stats.combo = S._combo;
+    const cr = comboReward(S._combo);
+    if (cr) { if (cr.coins) addCoins(cr.coins); if (cr.energy) S.en += cr.energy; }
+    if (S._combo >= 2) ev('combo', b, { n: S._combo, r: cr });
+    eventPts(n * (res.l >= 4 ? EVENT_PTS.mergeHi : EVENT_PTS.merge), b);
+    addXp(n);
+  }
+  // Same items connected to cell b (4-neighbours), breadth first from b, skipping cell a (the dragged one).
+  function group(b, a) {
+    const B = S.board[b]; if (!B || B.b) return [];
+    const out = [b], seen = new Set([b, a]);
+    for (let q = 0; q < out.length; q++) {
+      const [c, r] = cr(out[q]);
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nc = c + dc, nr = r + dr; if (nc < 0 || nr < 0 || nc >= COLS || nr >= ROWS) continue;
+        const j = idx(nc, nr), it = S.board[j];
+        if (!seen.has(j) && it && !it.b && it.k === B.k && it.l === B.l) { seen.add(j); out.push(j); }
+      }
+    }
+    return out;
+  }
+  // Merge 5: the dragged item plus four connected identical items give two of the next level.
+  function merge5(a, b) {
+    const A = S.board[a], B = S.board[b];
+    if (!canMerge(A, B)) return false;
+    const gr = group(b, a); if (gr.length < 4) return false;
+    const used = gr.slice(0, 4), outs = [b, used[1]];
+    const cells = [a].concat(used);
+    for (const c of cells) S.board[c] = null;
+    for (const c of outs) S.board[c] = genItem(A.k, A.l + 1);
+    S.stats.merge5++;
+    afterMerge(b, S.board[b], 2, a, { five: true, cells, outs });
+    ev('merge5', b, { cells, outs, k: A.k, l: A.l + 1 });
+    eventPts(EVENT_PTS.merge5, b);
     after(); return true;
   }
   function move(a, b) {
@@ -117,7 +248,7 @@ const Game = (() => {
     const A = S.board[a], B = S.board[b];
     if (!A) return false;
     if (!B) return move(a, b);
-    if (canMerge(A, B)) return merge(a, b);
+    if (canMerge(A, B)) return group(b, a).length >= 4 ? merge5(a, b) : merge(a, b);
     if (B.b) return false;
     return swap(a, b);
   }
@@ -210,7 +341,26 @@ const Game = (() => {
     if (k === 'gen') return tapGen(i);
     if (k === 'energy' || k === 'coin') return collect(i);
     if (k === 'chest') return openChest(i);
+    if (k === 'mystery') return openMystery(i);
     return false;
+  }
+  // Mystery box: one surprise, rolled when opened.
+  function openMystery(i) {
+    const it = S.board[i]; if (!it || ch(it.k).kind !== 'mystery' || it.b) return false;
+    const pool = availChains(), r = rnd();
+    let out;
+    if (r < 0.3) out = { energy: ri(15, 30) };
+    else if (r < 0.52) out = { coins: ri(20, 50) };
+    else if (r < 0.8 && pool.length) { const k = pick(pool); out = { item: [k, Math.min(maxL(k) - 1, ri(3, 5))] }; }
+    else if (r < 0.92) out = { item: ['chest', rnd() < 0.7 ? 1 : 2] };
+    else { const k = spareGen(); out = k ? { item: [k, 1] } : { coins: 60 }; }
+    S.board[i] = null; S.stats.mbox++;
+    if (out.item) { const x = genItem(out.item[0], out.item[1]); if (ch(x.k).kind === 'gen') S.gensOwned[x.k] = true; S.board[i] = x; }
+    if (out.energy) S.en += out.energy;
+    if (out.coins) addCoins(out.coins);
+    ev('mystery', i, { out });
+    if (out.item) discover(out.item[0], out.item[1]);
+    after(); return true;
   }
 
   // ---- bag ----
@@ -275,6 +425,12 @@ const Game = (() => {
     const have = o.items.map(([k, l]) => { const key = k + ':' + l; if (avail[key] > 0) { avail[key]--; return true; } return false; });
     return { have, ready: have.every(Boolean) };
   }
+  // Item keys ("k:l") the current orders still ask for (for the "Tellimus!" badges on the board).
+  function orderNeeds() {
+    const need = new Set();
+    for (const o of S.orders) for (const [k, l] of o.items) need.add(k + ':' + l);
+    return need;
+  }
   function fulfill(oi) {
     const o = S.orders[oi]; if (!o) return false;
     if (!orderStatus(o).ready) { ev('deny', -1, { order: oi }); return false; }
@@ -291,6 +447,8 @@ const Game = (() => {
     S.stats.orders++; S.ordersDone++; daily('order', 1);
     S.nextOrderAt = now() + 1400;
     ev('order', -1, { oi, o, cells, taken });
+    eventPts(EVENT_PTS.order);
+    if (S.ordersDone % MBOX_ORDER_EVERY === 0) giveItem('mbox', 1);
     addXp(o.xp);
     after(); return true;
   }
@@ -395,14 +553,17 @@ const Game = (() => {
     }
     refillOrders();
     if (ensureDaily()) ev('newDay', -1);
+    ensureEvent();
   }
 
   function newGame() {
     S = newState();
+    quiet = true;
     const put = (c, r, k, l) => { S.board[idx(c, r)] = genItem(k, l); discover(k, l || 1); if (ch(k).kind === 'gen') S.gensOwned[k] = true; };
     put(3, 3, 'oven'); put(1, 5, 'basket'); put(6, 1, 'coin', 1); put(0, 2, 'coffee', 1);
+    quiet = false;
     S.tut = 0;
-    ensureDaily();
+    ensureDaily(); ensureEvent();
     return S;
   }
 
@@ -411,5 +572,7 @@ const Game = (() => {
     tickEnergy, enNext, merge, move, swap, drop, tapGen, rushGen, rushPrice, collect, openChest, popBubble, bubblePrice, sell, sellPrice,
     tapItem, store, take, maxOrders, orderStatus, fulfill, refillOrders, genOrder, villagersAvail, curArea, nextTask, doTask,
     ensureDaily, claimGift, claimDaily, claimBonus, giftReward, shopList, buy, tutCheck, tick, newGame, addXp, give, refreshGen,
+    group, merge5, openMystery, albumHas, albumPending, albumCount, chainFull, claimAlbum, claimChain,
+    eventInfo, ensureEvent, claimEvent, eventReady, freeEnIn, claimFreeEnergy, orderNeeds,
   };
 })();
