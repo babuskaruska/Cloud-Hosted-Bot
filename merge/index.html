@@ -7967,6 +7967,12 @@ const ADV = (() => {
 //            levelWin{stars 1..3} levelFail star{n 1..3} piggy calendar heart movesLow   AU.setVolume('music'|'sfx', v)
 //                   AU.muted / AU.setMuted(b)   AU.stats()   AU.lite (no reverb, fewer nodes; auto on <= 4 cores)
 //                   AU.suspend() / AU.resume() (same as a hidden / shown page)
+//   v3 phase B: MUSIC.scene('board', {area, tour: theme}) with theme flower|spa|icecream|fashion|wedding|beach|xmas|orchard
+//       (also an Estonian name, an island object {theme} or an index; anything else falls back to the area's song)
+//       MUSIC.scene('event', {week: garden|fashion|wedding|beach}) (unknown -> garden)
+//       MUSIC.season(key) winter|spring|summer|autumn|'auto' (default: from the date; URL flag season=), layered on every scene
+//       sfx: passStep{n} styleSwap{style: boho|minimal|romantic} wardrobe pet{kind: muri|kutsu|janku} eventCur{n, week}
+//            photo islandNew. Unknown sound names and unknown options never throw (sfx returns false).
 // Tests: window.__saAudio (= AU), window.__saMusic (= MUSIC), AU.meter(true) then AU.stats().meter (LUFS, true peak, bands).
 // Style (v2): modern chill-pop / lo-fi / tropical-lite. Electric piano, plucks, side-chained pads, soft claps and snaps,
 // a phone-friendly bass and vocal-chop hooks; every sound is in the music's key, and merges climb across a combo.
@@ -7989,7 +7995,7 @@ const AU = (function () {
   const B = {}; // buses
   const WV = {}; // periodic waves
   const VOL = { music: 1, sfx: 1 };
-  const ST = { names: {}, made: 0, dropped: 0, err: '', nodeRate: 0, nrMade: 0, nrT: 0 };
+  const ST = { names: {}, made: 0, dropped: 0, err: '', nodeRate: 0, nrMade: 0, nrT: 0, live: 0 }; // live: started sources not yet ended
   const act = []; // live sfx events {name, end}
   let muted = false;
 
@@ -7997,7 +8003,7 @@ const AU = (function () {
   function G(dest, v) { const g = ctx.createGain(); g.gain.value = v; if (dest) g.connect(dest); ST.made++; return g; }
   function F(dest, type, f, q) { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; if (q !== undefined) b.Q.value = q; if (dest) b.connect(dest); ST.made++; return b; }
   function O(w, f, t) { const o = ctx.createOscillator(); if (typeof w === 'string') o.type = w; else o.setPeriodicWave(w); o.frequency.setValueAtTime(f, t); ST.made++; return o; }
-  function fin(src, t0, t1, last) { src.start(t0); src.stop(t1); src.onended = () => { try { last.disconnect(); } catch (e) {} }; }
+  function fin(src, t0, t1, last) { src.start(t0); src.stop(t1); ST.live++; src.onended = () => { ST.live--; try { last.disconnect(); } catch (e) {} }; }
   function wave(h) { const re = new Float32Array(h.length), im = new Float32Array(h.length); for (let i = 1; i < h.length; i++) im[i] = h[i]; return ctx.createPeriodicWave(re, im); }
   // Optional stereo spread for sparkles (headphones); skipped in lite.
   function panTo(dest, p) { if (!p || LITE || !ctx.createStereoPanner) return dest; const s = ctx.createStereoPanner(); s.pan.value = cl(p, -1, 1); s.connect(dest); ST.made++; return s; }
@@ -8022,7 +8028,7 @@ const AU = (function () {
     if (o.f2) { f.frequency.setValueAtTime(o.f, t); f.frequency.exponentialRampToValueAtTime(o.f2, t + a + d); }
     const s = ctx.createBufferSource(); ST.made++; s.buffer = NB; s.connect(f);
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + a); g.gain.exponentialRampToValueAtTime(0.0003, t + a + d);
-    const len = a + d + 0.03; if (len > NB.duration - 0.05) { s.loop = true; s.start(t, 0); s.stop(t + len); } else s.start(t, rnd() * (NB.duration - len - 0.01), len); s.onended = () => { try { g.disconnect(); } catch (e) {} };
+    const len = a + d + 0.03; if (len > NB.duration - 0.05) { s.loop = true; s.start(t, 0); s.stop(t + len); } else s.start(t, rnd() * (NB.duration - len - 0.01), len); ST.live++; s.onended = () => { ST.live--; try { g.disconnect(); } catch (e) {} };
     return t + len;
   }
 
@@ -8096,6 +8102,13 @@ const AU = (function () {
       if (!LITE) { const o2 = O(WV.saw, f, t); o2.detune.value = 11; o2.connect(lp); o2.start(t); o2.stop(e); }
       g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.006); g.gain.exponentialRampToValueAtTime(v * 0.5, t + 0.2); g.gain.setValueAtTime(v * 0.5, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + 0.3);
       fin(o1, t, e, g);
+    },
+    // Steel pan (beach themes): a sine with an octave and a soft twelfth that fade first. 6 nodes (2 in lite).
+    steel(t, m, dur, v, dest, p) {
+      const f = mtof(m), d = cl(0.75 - (m - 72) * 0.015, 0.3, 0.9);
+      tone(t, { f: f, a: 0.004, d: d, v: v, dest: dest, pan: p });
+      if (!LITE && f * 2 < 5000) tone(t, { f: f * 2, a: 0.003, d: d * 0.45, v: v * 0.32, dest: dest, pan: p });
+      if (!LITE && f * 3 < 4200) tone(t, { f: f * 3.01, a: 0.002, d: d * 0.2, v: v * 0.1, dest: dest, pan: p });
     },
     // Drums: punchy but soft.
     kick(t, v, dest) {
@@ -8499,7 +8512,115 @@ const AU = (function () {
       tone(t + 0.13, { w: 'triangle', f: mtof(m - 5), a: 0.001, d: 0.05, v: 0.045, lp: 2600 });
       return t + 0.25;
     },
+
+    // ---- v3 phase B: season pass, design choices, wardrobe, pets, weekly events, photo mode, new islands ----
+    passStep(t, o) { // a step on the season track: a soft footstep and a two-note climb; every 5th a little chord, the 30th a fanfare
+      const n = Math.max(1, (+o.n || +o.step || 1) | 0), r = kr(5), m = top(r + pent(n % 10), 94), big = n % 5 === 0, last = n >= 30;
+      tone(t, { f: 210, f2: 115, gt: 0.05, a: 0.002, d: 0.08, v: 0.13 });
+      noise(t, { f: 1800, q: 0.9, a: 0.001, d: 0.02, v: 0.03 });
+      INS.mallet(t + 0.03, m, 0.2, 0.085, B.sfxIn, ((n % 3) - 1) * 0.25); INS.mallet(t + 0.1, top(m + 7, 96), 0.25, 0.065, B.sfxIn, ((n % 3) - 1) * 0.25);
+      if (!big && !last) return t + 0.45;
+      duck(last ? 0.4 : 0.6, last ? 1.6 : 1);
+      chord(t + 0.17, r, last ? [0, 4, 7, 12, 14] : [0, 4, 7, 12], last ? 0.6 : 0.35, last ? 0.03 : 0.022, last ? 'stab' : 'ep');
+      if (last) { INS.kick(t + 0.17, 0.22, B.sfxIn); INS.clap(t + 0.17, 0.06, B.sfxIn); INS.bass(t + 0.17, r - 12, 0.6, 0.16, B.sfxIn); }
+      sparkle(t + 0.2, r + 12, last ? 6 : 4, 0.035, 0.04);
+      return t + (last ? 1.4 : 0.9);
+    },
+    styleSwap(t, o) { // a design choice changes: a swish, the new look's "voice", a soft settle pop
+      const st = slug(o.style || o.key || o.choice), r = kr(5);
+      whoosh(t, 0.14, 0.032, true);
+      if (st === 'boho') { // warm and woody: mallets and a little shaker
+        INS.mallet(t + 0.06, top(r + 7, 92), 0.2, 0.08, B.sfxIn, -0.2); INS.mallet(t + 0.13, top(r + 9, 92), 0.2, 0.075, B.sfxIn, 0.1); INS.mallet(t + 0.2, top(r + 14, 94), 0.3, 0.07, B.sfxIn, 0.25);
+        noise(t + 0.06, { f: 3800, q: 0.8, a: 0.02, d: 0.05, v: 0.02 }); noise(t + 0.2, { f: 3800, q: 0.8, a: 0.02, d: 0.05, v: 0.018 });
+      } else if (st === 'minimal') { // clean: two pure pings, nothing else
+        tone(t + 0.07, { f: mtof(top(r + 12, 94)), a: 0.002, d: 0.18, v: 0.06, pan: -0.15 }); tone(t + 0.15, { f: mtof(top(r + 19, 96)), a: 0.002, d: 0.25, v: 0.055, pan: 0.15 });
+      } else if (st === 'romantic') { // soft: bells over a gentle electric-piano chord
+        chord(t + 0.06, r, [4, 7, 11], 0.4, 0.02, 'ep');
+        INS.bell(t + 0.08, top(r + 16, 98), 0.4, 0.04, B.sfxIn, -0.25); INS.bell(t + 0.18, top(r + 19, 98), 0.5, 0.035, B.sfxIn, 0.25); shimmer(t + 0.1, 0.3, 0.008);
+      } else { INS.bell(t + 0.07, top(r + 12, 98), 0.3, 0.04, B.sfxIn, -0.2); INS.bell(t + 0.15, top(r + 16, 98), 0.4, 0.035, B.sfxIn, 0.2); }
+      pop(t + 0.26, top(r + 7, 86), 0.55, false);
+      return t + 0.7;
+    },
+    wardrobe(t) { // a fabric rustle, a hanger click, a twirl and a little "ta-da"
+      const r = kr(5);
+      noise(t, { f: 1400, f2: 850, q: 0.7, a: 0.03, d: 0.12, v: 0.045 });
+      tone(t + 0.02, { w: 'triangle', f: 2300, f2: 1800, a: 0.001, d: 0.018, v: 0.035 }); noise(t + 0.02, { f: 3000, q: 3, a: 0.001, d: 0.01, v: 0.035 });
+      noise(t + 0.13, { f: 900, f2: 1700, q: 0.7, a: 0.04, d: 0.1, v: 0.04 });
+      INS.mallet(t + 0.24, top(r + 7, 92), 0.2, 0.08, B.sfxIn, -0.2); INS.mallet(t + 0.33, top(r + 12, 94), 0.3, 0.085, B.sfxIn, 0.2);
+      INS.bell(t + 0.36, top(r + 19, 98), 0.4, 0.03, B.sfxIn); shimmer(t + 0.3, 0.3, 0.009);
+      return t + 0.85;
+    },
+    pet(t, o) { return petSound(t, o.kind || o.who || o.pet); },
+    eventCur(t, o) { // weekly-event currency: gem-like chimes (each week its own timbre), a light shimmer
+      const n = cl((+o.n) | 0 || 3, 1, 6), w = slug(o.week || o.event), ins = { garden: 'mallet', fashion: 'pluck', wedding: 'bell', beach: 'steel' }[w] || 'bell';
+      const v = { mallet: 0.07, pluck: 0.06, bell: 0.045, steel: 0.06 }[ins], base = kr(6) + 0, iv = [0, 4, 7, 9, 12, 16];
+      for (let i = 0; i < n; i++) INS[ins](t + i * 0.055 + rnd() * 0.006, top(base + iv[i], ins === 'bell' ? 98 : 94), 0.2, v * (1 - i * 0.05), B.sfxIn, i % 2 ? 0.3 : -0.3);
+      shimmer(t + 0.02, 0.2 + n * 0.03, 0.009);
+      return t + n * 0.055 + 0.4;
+    },
+    photo(t) { // a camera shutter: a crisp front click, the mirror clack, a soft "flash" twinkle
+      noise(t, { f: 3400, q: 1.2, a: 0.001, d: 0.012, v: 0.1 });
+      tone(t, { w: 'triangle', f: 1600, f2: 1050, a: 0.001, d: 0.02, v: 0.045 });
+      tone(t, { f: 320, f2: 190, a: 0.001, d: 0.04, v: 0.07 });
+      noise(t + 0.06, { f: 2100, q: 1.5, a: 0.001, d: 0.02, v: 0.085 });
+      tone(t + 0.06, { w: 'triangle', f: 880, f2: 600, a: 0.001, d: 0.025, v: 0.055 });
+      INS.bell(t + 0.11, top(kr(6) + 7, 98), 0.3, 0.03, B.sfxIn, 0.2); shimmer(t + 0.09, 0.25, 0.008);
+      return t + 0.5;
+    },
+    islandNew(t) { // a new island: waves swell, a friendly boat horn, then the reveal (chord, "hey-ah", sparkles)
+      duck(0.35, 2.8);
+      const r = kr(5), hz = kr(3) + 7;
+      noise(t, { type: 'lowpass', f: 450, f2: 1400, q: 0.5, a: 0.5, d: 0.7, v: 0.05 });
+      whoosh(t + 0.25, 0.5, 0.025, true);
+      tone(t + 0.08, { w: 'triangle', f: mtof(hz), a: 0.06, h: 0.22, d: 0.25, v: 0.09, lp: 900 });
+      if (!LITE) tone(t + 0.08, { w: 'triangle', f: mtof(hz + 7), a: 0.06, h: 0.22, d: 0.25, v: 0.05, lp: 1000 });
+      tone(t + 0.42, { w: 'triangle', f: mtof(hz + 5), a: 0.04, h: 0.08, d: 0.3, v: 0.08, lp: 900 });
+      const tc = t + 0.85;
+      chord(tc, r, [0, 4, 7, 12, 14], 0.9, 0.032); INS.kick(tc, 0.24, B.sfxIn); INS.clap(tc, 0.07, B.sfxIn); INS.bass(tc, r - 12, 0.9, 0.18, B.sfxIn);
+      INS.vox(tc, r + 16, 0.12, 0.18, B.sfxIn, 'e'); INS.vox(tc + 0.15, r + 19, 0.4, 0.18, B.sfxIn, 'a');
+      sparkle(tc + 0.1, r + 12, 7, 0.045, 0.045); shimmer(tc, 0.7, 0.016);
+      return tc + 1.5;
+    },
   };
+  // Pets: Muri the cat (a "mi-aau"), Kutsu the puppy (a small "vuf-vuf"), Jänku the bunny (a soft squeak and a foot thump).
+  const PET_ALIAS = { cat: 'muri', kass: 'muri', kiisu: 'muri', dog: 'kutsu', koer: 'kutsu', puppy: 'kutsu', kutsikas: 'kutsu', bunny: 'janku', rabbit: 'janku', janes: 'janku', jankus: 'janku' };
+  // A formant voice: a saw whose pitch and two band-passes glide through the given points [time, f0, F1, F2]. 6 nodes (5 in lite).
+  function formant(t, pts, v, q) {
+    const end = t + pts[pts.length - 1][0], g = G(B.sfxIn, 0), o = O(WV.saw, pts[0][1], t);
+    const f1 = F(g, 'bandpass', pts[0][2], q || 5), f2 = LITE ? null : F(g, 'bandpass', pts[0][3], (q || 5) * 1.5);
+    o.connect(f1); if (f2) o.connect(f2);
+    for (let i = 1; i < pts.length; i++) { const tt = t + pts[i][0]; o.frequency.linearRampToValueAtTime(pts[i][1], tt); f1.frequency.linearRampToValueAtTime(pts[i][2], tt); if (f2) f2.frequency.linearRampToValueAtTime(pts[i][3], tt); }
+    const dur = end - t;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + Math.min(0.04, dur * 0.2)); g.gain.setValueAtTime(v * 0.85, t + dur * 0.6); g.gain.linearRampToValueAtTime(0, end);
+    fin(o, t, end + 0.02, g);
+    return end;
+  }
+  function petSound(t, kind) {
+    let k = slug(kind); if (PET_ALIAS[k]) k = PET_ALIAS[k];
+    const j = Math.pow(2, (rnd() - 0.5) / 12); // a little variety each time
+    if (k === 'kutsu') { // two small barks, the second a touch higher
+      for (let i = 0; i < 2; i++) {
+        const tt = t + i * 0.17, p = j * (i ? 1.08 : 1);
+        formant(tt, [[0, 520 * p, 900, 1900], [0.03, 600 * p, 1150, 2100], [0.09, 380 * p, 700, 1600]], 0.2, 3);
+        noise(tt, { f: 1300, q: 1, a: 0.002, d: 0.05, v: 0.035 });
+      }
+      INS.bell(t + 0.42, top(kr(6) + 4, 96), 0.3, 0.025, B.sfxIn, 0.2);
+      return t + 0.7;
+    }
+    if (k === 'janku') { // a soft high squeak, then a foot thump (with a body tone the phone can play)
+      tone(t, { f: 1250 * j, f2: 1700 * j, gt: 0.05, a: 0.008, d: 0.07, v: 0.045 });
+      tone(t + 0.07, { f: 1600 * j, f2: 1350 * j, gt: 0.04, a: 0.004, d: 0.05, v: 0.035 });
+      tone(t + 0.2, { f: 150, f2: 75, gt: 0.05, a: 0.002, d: 0.1, v: 0.2 });
+      tone(t + 0.2, { w: 'triangle', f: 300, f2: 160, gt: 0.04, a: 0.002, d: 0.06, v: 0.06 });
+      noise(t + 0.2, { type: 'lowpass', f: 700, q: 0.7, a: 0.002, d: 0.05, v: 0.06 });
+      INS.bell(t + 0.32, top(kr(6) + 7, 96), 0.3, 0.025, B.sfxIn, -0.2);
+      return t + 0.6;
+    }
+    // muri (and anything unknown): "mi" -> "aa" -> "u"
+    formant(t, [[0, 560 * j, 450, 2300], [0.12, 740 * j, 950, 1800], [0.3, 640 * j, 850, 1500], [0.48, 500 * j, 520, 1100]], 0.14, 6);
+    INS.bell(t + 0.5, top(kr(6) + 7, 96), 0.3, 0.022, B.sfxIn, 0.2);
+    return t + 0.75;
+  }
 
   // Cute voice blips. Each character has its own pitch, timbre and lilt; opts.ch (the letter) picks the vowel colour.
   const WHO = {
@@ -8526,8 +8647,9 @@ const AU = (function () {
 
   // Voice limits: a minimum gap per sound, a cap per sound, and a cap on everything at once.
   const LIM = { merge: [0.04, 4], merge5: [0.08, 2], combo: [0.12, 1], talk: [0.055, 2], coins: [0.07, 2], tap: [0.03, 2], hint: [0.2, 1], pick: [0.04, 2], drop: [0.04, 3], swap: [0.05, 2], spawn: [0.05, 3], bubble: [0.1, 2], bubblePop: [0.04, 3], stars: [0.15, 1], mergeMax: [0.3, 1], lucky: [0.4, 1], claim: [0.25, 1], discover: [0.3, 1], mystery: [0.5, 1], event: [0.4, 1], album: [0.5, 1], taskDone: [0.5, 1], levelUp: [0.5, 1], daily: [0.5, 1], orderDone: [0.2, 1], chest: [0.3, 1], order: [0.2, 1], deny: [0.15, 1], noEnergy: [0.25, 1], open: [0.06, 1], close: [0.06, 1], sell: [0.1, 1],
-    iceCrack: [0.05, 3], boxBreak: [0.08, 2], cobweb: [0.06, 2], booster: [0.3, 2], wheelTick: [0.03, 3], wheelWin: [0.5, 2], levelWin: [0.8, 2], levelFail: [0.8, 2], star: [0.12, 2], piggy: [0.5, 1], calendar: [0.3, 1], heart: [0.25, 1], movesLow: [0.6, 1] };
-  const PRI = { mergeMax: 1, taskDone: 1, levelUp: 1, orderDone: 1, daily: 1, chest: 1, lucky: 1, discover: 1, mystery: 1, event: 1, album: 1, combo: 1, claim: 1, booster: 1, wheelWin: 1, levelWin: 1, levelFail: 1, star: 1, piggy: 1, calendar: 1, heart: 1 };
+    iceCrack: [0.05, 3], boxBreak: [0.08, 2], cobweb: [0.06, 2], booster: [0.3, 2], wheelTick: [0.03, 3], wheelWin: [0.5, 2], levelWin: [0.8, 2], levelFail: [0.8, 2], star: [0.12, 2], piggy: [0.5, 1], calendar: [0.3, 1], heart: [0.25, 1], movesLow: [0.6, 1],
+    passStep: [0.08, 2], styleSwap: [0.15, 1], wardrobe: [0.2, 1], pet: [0.25, 2], eventCur: [0.07, 2], photo: [0.3, 1], islandNew: [1, 1] };
+  const PRI = { mergeMax: 1, taskDone: 1, levelUp: 1, orderDone: 1, daily: 1, chest: 1, lucky: 1, discover: 1, mystery: 1, event: 1, album: 1, combo: 1, claim: 1, booster: 1, wheelWin: 1, levelWin: 1, levelFail: 1, star: 1, piggy: 1, calendar: 1, heart: 1, passStep: 1, styleSwap: 1, wardrobe: 1, pet: 1, photo: 1, islandNew: 1 };
   const lastAt = {};
   function sfx(name, opts) {
     if (typeof name !== 'string' || !hasOwn(SFX, name)) return false;
@@ -8541,7 +8663,7 @@ const AU = (function () {
       for (let i = act.length - 1; i >= 0; i--) { if (act[i].end <= now) { act.splice(i, 1); continue; } all++; if (act[i].name === name) same++; }
       if (same >= lim[1] || (all >= (LITE ? 8 : 14) && !PRI[name])) { ST.dropped++; if (name === 'merge') comboStep(now, 1); return false; }
       lastAt[name] = now;
-      const end = SFX[name](now + 0.005, opts || {});
+      const end = SFX[name](now + 0.005, opts && typeof opts === 'object' ? opts : {});
       act.push({ name: name, end: end || now + 0.3 });
       return true;
     } catch (e) { ST.err = name + ': ' + e.message; return false; }
@@ -8555,7 +8677,7 @@ const AU = (function () {
   // ---------- music ----------
   // A small song engine: 16th-note grid, bar by bar. Each area has its own key, tempo, groove, chords and hook.
   // Sections (intro, verse, pre, chorus, break, verse2, chorus2, outro) shuffle between cycles; verses get fresh melodies.
-  const SCALE = { major: [0, 2, 4, 5, 7, 9, 11], aeolian: [0, 2, 3, 5, 7, 8, 10], mixo: [0, 2, 4, 5, 7, 9, 10], dorian: [0, 2, 3, 5, 7, 9, 10] };
+  const SCALE = { lydian: [0, 2, 4, 6, 7, 9, 11], major: [0, 2, 4, 5, 7, 9, 11], aeolian: [0, 2, 3, 5, 7, 8, 10], mixo: [0, 2, 4, 5, 7, 9, 10], dorian: [0, 2, 3, 5, 7, 9, 10] };
   const Q = { maj7: [0, 4, 7, 11], m7: [0, 3, 7, 10], d7: [0, 4, 7, 10], sus: [0, 5, 7, 10], add9: [0, 4, 7, 14], m9: [0, 3, 7, 10, 14], maj9: [0, 4, 7, 11, 14], M: [0, 4, 7], m: [0, 3, 7] };
   // Hooks: two bars of [16th step, scale degree, length]; a = bar 1, b1 = the "call" ending, b2 = the "answer".
   const HOOK = {
@@ -8575,6 +8697,20 @@ const AU = (function () {
     cliffs: { a: [[0, 4, 3], [3, 3, 1], [4, 2, 2], [6, 0, 2], [8, 2, 2], [10, 4, 2], [12, 6, 4]], b1: [[0, 7, 2], [2, 6, 2], [4, 4, 4], [8, 3, 2], [10, 2, 6]], b2: [[0, 7, 2], [2, 6, 2], [4, 4, 2], [6, 6, 2], [8, 7, 8]] },
     winter: { a: [[0, 2, 2], [2, 4, 2], [4, 7, 2], [6, 4, 2], [8, 5, 4], [12, 4, 4]], b1: [[0, 3, 2], [2, 2, 2], [4, 1, 2], [6, 2, 2], [8, 4, 6], [14, 2, 2]], b2: [[0, 3, 2], [2, 4, 2], [4, 5, 2], [6, 6, 2], [8, 7, 8]] },
     lavender: { a: [[2, 4, 2], [4, 6, 2], [6, 4, 2], [8, 2, 4], [12, 1, 2], [14, 2, 2]], b1: [[0, 4, 4], [4, 2, 2], [6, 1, 2], [8, 0, 8]], b2: [[0, 4, 4], [4, 5, 2], [6, 6, 2], [8, 7, 6], [14, 6, 2]] },
+    // v3 phase B: the island tour themes
+    t_flower: { a: [[0, 2, 2], [2, 4, 2], [4, 5, 1], [5, 4, 1], [6, 2, 2], [8, 4, 4], [12, 7, 2], [14, 5, 2]], b1: [[0, 4, 2], [2, 2, 2], [4, 1, 2], [6, 2, 4], [10, 1, 6]], b2: [[0, 4, 2], [2, 5, 2], [4, 7, 2], [6, 5, 2], [8, 4, 2], [10, 2, 2], [12, 0, 4]] },
+    t_spa: { a: [[0, 4, 6], [6, 3, 2], [8, 6, 8]], b1: [[0, 5, 4], [4, 4, 4], [8, 1, 8]], b2: [[0, 5, 4], [4, 6, 4], [8, 7, 8]] },
+    t_icecream: { a: [[0, 4, 1], [1, 5, 1], [2, 4, 2], [4, 2, 1], [6, 4, 2], [8, 7, 1], [10, 6, 1], [11, 4, 3], [14, 2, 2]], b1: [[0, 1, 1], [2, 2, 1], [3, 4, 3], [6, 2, 2], [8, 1, 4], [12, 4, 2], [14, 5, 2]], b2: [[0, 4, 1], [2, 5, 1], [3, 7, 3], [6, 5, 2], [8, 4, 2], [10, 2, 2], [12, 0, 4]] },
+    t_fashion: { a: [[0, 0, 2], [2, 2, 1], [3, 4, 3], [6, 6, 2], [8, 4, 2], [10, 2, 2], [12, 4, 4]], b1: [[0, 3, 2], [2, 2, 2], [4, 0, 2], [6, 2, 4], [10, 1, 6]], b2: [[0, 3, 2], [2, 4, 2], [4, 6, 2], [6, 7, 4], [12, 4, 4]] },
+    t_wedding: { a: [[0, 2, 4], [4, 4, 2], [6, 7, 2], [8, 6, 6], [14, 4, 2]], b1: [[0, 5, 4], [4, 4, 2], [6, 2, 2], [8, 1, 8]], b2: [[0, 5, 4], [4, 6, 2], [6, 8, 2], [8, 7, 8]] },
+    t_beach: { a: [[0, 4, 2], [3, 4, 1], [4, 5, 2], [6, 4, 2], [8, 2, 2], [11, 4, 1], [12, 6, 4]], b1: [[0, 7, 2], [3, 6, 1], [4, 4, 2], [6, 2, 2], [8, 3, 6], [14, 2, 2]], b2: [[0, 4, 2], [3, 6, 1], [4, 7, 4], [8, 6, 2], [10, 4, 2], [12, 0, 4]] },
+    t_xmas: { a: [[0, 0, 2], [2, 4, 2], [4, 5, 2], [6, 7, 2], [8, 6, 3], [11, 5, 1], [12, 4, 4]], b1: [[0, 3, 2], [2, 4, 2], [4, 3, 2], [6, 2, 2], [8, 1, 6], [14, 4, 2]], b2: [[0, 3, 2], [2, 4, 2], [4, 5, 2], [6, 6, 2], [8, 7, 8]] },
+    t_orchard: { a: [[2, 4, 2], [4, 3, 2], [6, 4, 4], [10, 2, 2], [12, 0, 4]], b1: [[2, 2, 2], [4, 3, 2], [6, 4, 2], [8, 6, 6], [14, 5, 2]], b2: [[2, 6, 2], [4, 5, 2], [6, 4, 2], [8, 3, 2], [10, 2, 2], [12, 0, 4]] },
+    // v3 phase B: the weekly events (livelier than the islands: festival energy)
+    ev_garden: { a: [[0, 4, 1], [2, 4, 1], [3, 5, 1], [4, 7, 2], [6, 5, 2], [8, 4, 2], [10, 2, 2], [12, 4, 4]], b1: [[0, 5, 1], [2, 5, 1], [3, 4, 1], [4, 2, 2], [6, 1, 2], [8, 2, 6], [14, 1, 2]], b2: [[0, 5, 1], [2, 5, 1], [3, 6, 1], [4, 7, 4], [8, 9, 2], [10, 7, 6]] },
+    ev_fashion: { a: [[0, 4, 2], [3, 4, 1], [4, 3, 2], [6, 2, 2], [8, 0, 2], [10, 2, 1], [11, 4, 3], [14, 2, 2]], b1: [[0, 5, 2], [3, 4, 1], [4, 2, 4], [8, 4, 2], [10, 3, 6]], b2: [[0, 5, 2], [3, 6, 1], [4, 7, 4], [8, 6, 2], [10, 4, 2], [12, 0, 4]] },
+    ev_wedding: { a: [[0, 7, 2], [2, 6, 1], [3, 7, 1], [4, 4, 4], [8, 5, 2], [10, 4, 2], [12, 2, 4]], b1: [[0, 4, 2], [2, 2, 2], [4, 1, 2], [6, 2, 2], [8, 4, 6], [14, 5, 2]], b2: [[0, 4, 2], [2, 5, 2], [4, 7, 2], [6, 9, 2], [8, 7, 8]] },
+    ev_beach: { a: [[0, 0, 1], [1, 2, 1], [2, 4, 1], [3, 7, 3], [6, 6, 2], [8, 4, 2], [10, 6, 2], [12, 7, 4]], b1: [[0, 9, 2], [2, 7, 2], [4, 6, 2], [6, 4, 2], [8, 3, 4], [12, 2, 4]], b2: [[0, 9, 2], [2, 7, 2], [4, 6, 2], [6, 4, 2], [8, 2, 2], [10, 1, 2], [12, 0, 4]] },
   };
   // Grooves: kick, snare/clap steps, hats; the snare voice; the bass line [step, length, interval].
   const GROOVE = {
@@ -8584,6 +8720,8 @@ const AU = (function () {
     bouncy: { k: [0, 3, 8, 10], s: [4, 12], sn: 'snap', h: [0, 2, 4, 6, 8, 10, 12, 14], acc: 2, sh: false, bass: [[0, 2, 0], [3, 2, 7], [6, 1, 12], [8, 2, 0], [11, 2, 7], [14, 1, 12]] },
     half: { k: [0, 11], s: [8], sn: 'snap', h: [0, 4, 8, 12], acc: 4, sh: false, bass: [[0, 10, 0], [11, 4, 7]] },
     none: { k: [], s: [], sn: 'snap', h: [], acc: 0, sh: false, bass: [[0, 15, 0]] },
+    // v3 phase B: soft four-on-the-floor for the fashion week (offbeat hats, an octave bass)
+    house: { k: [0, 4, 8, 12], s: [4, 12], sn: 'clap', h: [2, 6, 10, 14], acc: 0, sh: true, bass: [[0, 2, 0], [2, 2, 12], [4, 2, 0], [6, 2, 12], [8, 2, 0], [10, 2, 12], [12, 2, 0], [14, 2, 7]] },
   };
   // Chord comping: [step, length, velocity].
   const COMP = {
@@ -8628,6 +8766,40 @@ const AU = (function () {
       v: [[C(0, 'maj7')], [C(4, 'm7')], [C(5, 'maj9')], [C(7, 'sus')]], c: [[C(5, 'maj7')], [C(7, 'M')], [C(9, 'm7')], [C(2, 'm7'), C(7, 'd7')]] },
     lavender: { root: 63, mode: 'major', bpm: 96, swing: 0.16, groove: 'pop', keys: 'ep', compV: 'lofi', compC: 'pop', lead: 'vox', lead2: 'ep', arp: 'pluck', pad: 0.9, pump: 0.3, tone: 6500, hook: 'lavender', vol: 0.84, level: true,
       v: [[C(0, 'maj9')], [C(9, 'm9')], [C(2, 'm7')], [C(7, 'sus')]], c: [[C(5, 'maj9')], [C(4, 'm7'), C(9, 'm7')], [C(2, 'm9')], [C(7, 'sus'), C(7, 'd7')]] },
+    // ---- v3 phase B: island tour themes (one song each; sections reshuffle and verses get fresh melodies every cycle) ----
+    // Flower shop: sunny F major pop, mallet hook over electric piano.
+    t_flower: { root: 65, mode: 'major', bpm: 102, swing: 0.05, groove: 'pop', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'mallet', lead2: 'vox', arp: 'pluck', pad: 0.7, pump: 0.35, tone: 8500, hook: 't_flower', vol: 0.82,
+      v: [[C(0, 'add9')], [C(9, 'm7')], [C(5, 'maj7')], [C(7, 'sus'), C(7, 'M')]], c: [[C(5, 'maj9')], [C(7, 'M')], [C(4, 'm7'), C(9, 'm7')], [C(0, 'add9')]] },
+    // Spa: slow, dreamy C lydian, bells and a soft pad, barely-there drums.
+    t_spa: { root: 60, mode: 'lydian', bpm: 70, swing: 0.06, groove: 'half', keys: 'ep', compV: 'whole', compC: 'halves', lead: 'bell', lead2: 'ep', arp: 'mallet', pad: 1, pump: 0.15, tone: 4200, hook: 't_spa', vol: 1.12,
+      v: [[C(0, 'maj9')], [C(2, 'add9')], [C(0, 'maj7')], [C(2, 'M')]], c: [[C(9, 'm9')], [C(2, 'add9')], [C(4, 'm7')], [C(0, 'maj9')]] },
+    // Ice cream kiosk: bouncy D major, offbeat plucks, playful mallet hook.
+    t_icecream: { root: 62, mode: 'major', bpm: 112, swing: 0, groove: 'bouncy', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'mallet', lead2: 'vox', arp: null, pad: 0.8, pump: 0.45, tone: 8500, hook: 't_icecream', vol: 1.0, bassV: 0.8,
+      v: [[C(0, 'M')], [C(7, 'M')], [C(9, 'm7')], [C(5, 'add9')]], c: [[C(5, 'maj7')], [C(7, 'add9')], [C(4, 'm7'), C(9, 'm7')], [C(2, 'm7'), C(7, 'sus')]] },
+    // Fashion boutique: chic A dorian groove, vocal-chop hook.
+    t_fashion: { root: 57, mode: 'dorian', bpm: 106, swing: 0.04, groove: 'pop', keys: 'ep', compV: 'offbeat', compC: 'pop', lead: 'vox', lead2: 'pluck', arp: 'pluck', pad: 0.9, pump: 0.5, tone: 8500, hook: 't_fashion', vol: 0.9,
+      v: [[C(0, 'm9')], [C(5, 'd7')], [C(0, 'm7')], [C(5, 'add9')]], c: [[C(3, 'maj7')], [C(10, 'add9')], [C(5, 'M')], [C(7, 'm7'), C(10, 'M')]] },
+    // Wedding garden: a tender Bb major ballad, bell melody over warm ninths.
+    t_wedding: { root: 58, mode: 'major', bpm: 78, swing: 0.06, groove: 'half', keys: 'ep', compV: 'whole', compC: 'halves', lead: 'bell', lead2: 'vox', arp: 'mallet', pad: 1, pump: 0.25, tone: 5500, hook: 't_wedding', vol: 0.9,
+      v: [[C(0, 'maj9')], [C(4, 'm7')], [C(5, 'maj9')], [C(7, 'sus'), C(7, 'M')]], c: [[C(5, 'maj7')], [C(7, 'add9')], [C(9, 'm9')], [C(2, 'm7'), C(7, 'd7')]] },
+    // Beach club: laid-back G mixolydian, steel pan hook, offbeat plucks.
+    t_beach: { root: 55, mode: 'mixo', bpm: 98, swing: 0.08, groove: 'tropical', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'steel', lead2: 'vox', arp: null, pad: 0.9, pump: 0.5, tone: 8000, hook: 't_beach', vol: 1.03, bassV: 0.75,
+      v: [[C(0, 'M')], [C(10, 'add9')], [C(5, 'maj7')], [C(0, 'add9')]], c: [[C(5, 'add9')], [C(10, 'M')], [C(9, 'm7')], [C(7, 'm7'), C(10, 'M')]] },
+    // Christmas market: cozy swung A major with bells and sleigh bells.
+    t_xmas: { root: 57, mode: 'major', bpm: 96, swing: 0.14, groove: 'bouncy', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'bell', lead2: 'mallet', arp: 'mallet', pad: 0.9, pump: 0.3, tone: 7000, hook: 't_xmas', vol: 0.98, jingle: true,
+      v: [[C(0, 'maj7')], [C(9, 'm7')], [C(2, 'm7')], [C(7, 'd7')]], c: [[C(5, 'maj7')], [C(4, 'm7'), C(9, 'm7')], [C(2, 'm9')], [C(7, 'sus'), C(7, 'd7')]] },
+    // Autumn orchard: warm E dorian lo-fi with vinyl crackle.
+    t_orchard: { root: 64, mode: 'dorian', bpm: 82, swing: 0.2, groove: 'lofi', keys: 'ep', compV: 'lofi', compC: 'halves', lead: 'mallet', lead2: 'vox', arp: 'pluck', pad: 0.8, pump: 0.2, tone: 3400, crackle: true, hook: 't_orchard', vol: 0.95,
+      v: [[C(0, 'm9')], [C(5, 'add9')], [C(3, 'maj7')], [C(10, 'add9')]], c: [[C(3, 'maj9')], [C(10, 'M')], [C(0, 'm7')], [C(5, 'M'), C(7, 'm7')]] },
+    // ---- v3 phase B: weekly events (festival energy, still easy to listen to for a long time) ----
+    ev_garden: { root: 57, mode: 'major', bpm: 112, swing: 0.06, groove: 'bouncy', keys: 'ep', compV: 'pop', compC: 'pop', lead: 'pluck', lead2: 'vox', arp: 'mallet', pad: 0.7, pump: 0.35, tone: 8500, hook: 'ev_garden', vol: 0.84, event: true,
+      v: [[C(0, 'add9')], [C(5, 'M')], [C(9, 'm7')], [C(7, 'M')]], c: [[C(5, 'maj7')], [C(7, 'M')], [C(0, 'add9')], [C(9, 'm7'), C(7, 'sus')]] },
+    ev_fashion: { root: 54, mode: 'aeolian', bpm: 120, swing: 0, groove: 'house', keys: 'ep', compV: 'offbeat', compC: 'offbeat', lead: 'vox', lead2: 'pluck', arp: 'pluck', pad: 1, pump: 0.6, tone: 8500, hook: 'ev_fashion', vol: 0.92, event: true, bassV: 0.8,
+      v: [[C(0, 'm7')], [C(8, 'maj7')], [C(3, 'add9')], [C(10, 'M')]], c: [[C(8, 'maj9')], [C(10, 'add9')], [C(0, 'm9')], [C(5, 'm7'), C(7, 'sus')]] },
+    ev_wedding: { root: 62, mode: 'major', bpm: 104, swing: 0.04, groove: 'pop', keys: 'ep', compV: 'halves', compC: 'pop', lead: 'bell', lead2: 'vox', arp: 'mallet', pad: 1, pump: 0.4, tone: 7500, hook: 'ev_wedding', vol: 0.86, event: true,
+      v: [[C(0, 'add9')], [C(7, 'M')], [C(9, 'm7')], [C(5, 'maj7')]], c: [[C(5, 'maj9')], [C(7, 'add9')], [C(4, 'm7'), C(9, 'm7')], [C(2, 'm7'), C(7, 'M')]] },
+    ev_beach: { root: 60, mode: 'mixo', bpm: 116, swing: 0, groove: 'tropical', keys: 'pluck', compV: 'offbeat', compC: 'offbeat', lead: 'steel', lead2: 'vox', arp: 'mallet', pad: 0.9, pump: 0.55, tone: 8500, hook: 'ev_beach', vol: 1.0, event: true, bassV: 0.75,
+      v: [[C(0, 'M')], [C(10, 'M')], [C(5, 'add9')], [C(0, 'add9')]], c: [[C(5, 'maj7')], [C(10, 'add9')], [C(9, 'm7')], [C(7, 'm7'), C(10, 'M')]] },
   };
   const CHAPTERS = ['candy', 'meadow', 'berry', 'cliffs', 'winter', 'lavender'];
   const CH_ALIAS = { beach: 'candy', rand: 'candy', komm: 'candy', kommirand: 'candy', flower: 'meadow', flowers: 'meadow', niit: 'meadow', lilleniit: 'meadow', forest: 'berry', mets: 'berry', marjamets: 'berry', lighthouse: 'cliffs', cliff: 'cliffs', kalju: 'cliffs', kaljud: 'cliffs', majakas: 'cliffs', village: 'winter', talv: 'winter', kula: 'winter', talvekula: 'winter', lavendel: 'lavender', lavendlivali: 'lavender' };
@@ -8643,14 +8815,48 @@ const AU = (function () {
   }
   const ALIAS = { bakery: 'pagariari', pagar: 'pagariari', cafe: 'pagariari', kohvik: 'pagariari', garden: 'aed', harbour: 'sadam', harbor: 'sadam', windmill: 'tuuleveski', veski: 'tuuleveski', lighthouse: 'majakas', secret: 'saladus' };
   const ORDER = ['pagariari', 'aed', 'sadam', 'tuuleveski', 'majakas', 'saladus'];
+  const slug = (v) => String(v === undefined || v === null ? '' : v).toLowerCase().replace(/[äâáà]/g, 'a').replace(/[õöóò]/g, 'o').replace(/[üú]/g, 'u').replace(/[éè]/g, 'e').replace(/š/g, 's').replace(/ž/g, 'z').replace(/[^a-z0-9]/g, '');
   function normArea(a) {
-    if (typeof a === 'number') return ORDER[cl(a | 0, 0, 5)];
-    let s = String(a || '').toLowerCase().replace(/[äâ]/g, 'a').replace(/[õöó]/g, 'o').replace(/ü/g, 'u').replace(/[^a-z]/g, '');
+    if (typeof a === 'number') return ORDER[cl(a | 0, 0, 5)] || ORDER[0];
+    let s = slug(a);
     if (ALIAS[s]) s = ALIAS[s];
-    return hasOwn(CFG, s) && s !== 'title' && s !== 'story' ? s : 'pagariari';
+    return ORDER.indexOf(s) >= 0 ? s : 'pagariari';
   }
-  const LEADV = { vox: 0.3, pluck: 0.085, mallet: 0.11, bell: 0.075, ep: 0.1 };
-  const MU = { E: null, want: null, key: '', sinceRest: 0, restAt: 190, tense: false };
+  // v3 phase B: island tour themes and weekly events. Keys, Estonian names and a few English words all work.
+  const TOURS = ['flower', 'spa', 'icecream', 'fashion', 'wedding', 'beach', 'xmas', 'orchard'];
+  const TOUR_ALIAS = { lillepood: 'flower', lilled: 'flower', lill: 'flower', flowers: 'flower', florist: 'flower', spaa: 'spa', saun: 'spa', jaatis: 'icecream', jaatisekiosk: 'icecream', ice: 'icecream', icecreamkiosk: 'icecream',
+    moebutiik: 'fashion', moe: 'fashion', butiik: 'fashion', boutique: 'fashion', pulmaaed: 'wedding', pulmad: 'wedding', pulm: 'wedding', rannaklubi: 'beach', rand: 'beach', beachclub: 'beach',
+    jouluturg: 'xmas', joulud: 'xmas', christmas: 'xmas', christmasmarket: 'xmas', ounaaed: 'orchard', sugiseneounaaed: 'orchard', apple: 'orchard', autumn: 'orchard' };
+  const WEEKS = ['garden', 'fashion', 'wedding', 'beach'];
+  const WEEK_ALIAS = { aiapidu: 'garden', aed: 'garden', evgarden: 'garden', moenadal: 'fashion', moe: 'fashion', evfashion: 'fashion', pulmad: 'wedding', pulm: 'wedding', evwedding: 'wedding', rannafestival: 'beach', rand: 'beach', festival: 'beach', evbeach: 'beach' };
+  function normTour(v) { // a key, a name, an island object {theme} or an index; '' when it is none of those
+    if (v && typeof v === 'object') v = v.theme !== undefined ? v.theme : v.key;
+    if (typeof v === 'number' && isFinite(v)) return TOURS[((Math.floor(v) % 8) + 8) % 8];
+    let s = slug(v); if (TOUR_ALIAS[s]) s = TOUR_ALIAS[s];
+    return TOURS.indexOf(s) >= 0 ? s : '';
+  }
+  function normWeek(o) {
+    let v = o && typeof o === 'object' ? (o.week !== undefined ? o.week : o.event !== undefined ? o.event : o.key !== undefined ? o.key : o.id) : o;
+    if (v && typeof v === 'object') v = v.key !== undefined ? v.key : v.id;
+    let s = slug(v); if (WEEK_ALIAS[s]) s = WEEK_ALIAS[s];
+    return WEEKS.indexOf(s) >= 0 ? s : 'garden';
+  }
+  // Music keys -> song configs: 'tour:flower' -> t_flower, 'event:beach' -> ev_beach, 'board:aed' -> aed, 'level:candy' -> candy.
+  function cfgName(key) {
+    const i = key.indexOf(':'), pre = i > 0 ? key.slice(0, i) : key, nm = i > 0 ? key.slice(i + 1) : key;
+    return pre === 'tour' ? 't_' + nm : pre === 'event' ? 'ev_' + nm : nm;
+  }
+  // Seasons: a colour layered on every song (sleigh bells and celesta in winter, birdsong mallets in spring, brighter tops
+  // and a shaker in summer, a warmer tone, a lazier swing and a little vinyl dust in autumn).
+  const SEASONS = ['winter', 'spring', 'summer', 'autumn'];
+  const SEASON_ALIAS = { talv: 'winter', kevad: 'spring', suvi: 'summer', sugis: 'autumn', fall: 'autumn' };
+  const SEAS = { winter: { tone: 0.92, swing: 0 }, spring: { tone: 1.06, swing: 0 }, summer: { tone: 1.22, swing: 0 }, autumn: { tone: 0.82, swing: 0.04 } };
+  function dateSeason(d) { const m = (d || new Date()).getMonth(); return m === 11 || m <= 1 ? 'winter' : m <= 4 ? 'spring' : m <= 7 ? 'summer' : 'autumn'; }
+  function normSeason(v) { let s = slug(v); if (SEASON_ALIAS[s]) s = SEASON_ALIAS[s]; return SEASONS.indexOf(s) >= 0 ? s : ''; }
+  const LEADV = { vox: 0.3, pluck: 0.085, mallet: 0.11, bell: 0.075, ep: 0.1, steel: 0.09 };
+  const MU = { E: null, want: null, key: '', sinceRest: 0, restAt: 190, tense: false, season: dateSeason(), seasonAuto: true };
+  try { const q = W.location && /[?&#]season=([a-z]+)/i.exec(W.location.search + W.location.hash); const s = q && normSeason(q[1]); if (s) { MU.season = s; MU.seasonAuto = false; } } catch (e) {}
+  const toneOf = (c) => Math.min(10000, c.tone * SEAS[MU.season].tone);
   function degMidi(c, d, base) { const s = SCALE[c.mode], o = Math.floor(d / 7), i = d - o * 7; return base + 12 * o + s[i]; }
   function voicing(c, ch) { // chord tones (root dropped from 4+ note chords; the bass has it) in a mid window
     const iv = Q[ch[1]], lo = fold(c.root, 55, 67) - 3, out = [];
@@ -8696,12 +8902,12 @@ const AU = (function () {
   }
   function section(E, type) {
     const c = E.c, S = { type: type, n: 8, prog: c.v, comp: c.compV, keys: true, dr: 0, bass: true, pad: false, arp: false, mel: null, lead: null, harm: false, dbl: false, lv: 1, filt: null, fill: false, riser: false };
-    if (type === 'intro') { S.n = 4; S.comp = 'whole'; S.bass = E.cycle > 0; S.pad = true; S.filt = [450, c.tone]; if (E.cycle > 0) { S.mel = hookMel(E, false).slice(0, 4); S.lead = 'bell'; S.lv = 0.6; } }
+    if (type === 'intro') { S.n = 4; S.comp = 'whole'; S.bass = E.cycle > 0; S.pad = true; S.filt = [450, toneOf(c)]; if (E.cycle > 0) { S.mel = hookMel(E, false).slice(0, 4); S.lead = 'bell'; S.lv = 0.6; } }
     else if (type === 'verse') { S.dr = 1; S.mel = genMel(E, S.prog, 8, 'sparse'); S.lead = c.lead2; S.lv = 0.75; }
     else if (type === 'verse2') { S.dr = 2; S.mel = genMel(E, S.prog, 8, 'busy'); S.lead = c.lead2 === 'vox' ? c.lead : c.lead2; S.lv = 0.75; S.arp = !!c.arp; }
-    else if (type === 'pre') { S.n = 4; S.dr = 1; S.pad = true; S.riser = true; S.fill = true; S.filt = [c.tone * 0.35, c.tone]; S.comp = c.compC; }
+    else if (type === 'pre') { S.n = 4; S.dr = 1; S.pad = true; S.riser = true; S.fill = true; S.filt = [toneOf(c) * 0.35, toneOf(c)]; S.comp = c.compC; }
     else if (type === 'chorus' || type === 'chorus2') { S.prog = c.c; S.comp = c.compC; S.dr = 2; S.pad = true; S.mel = hookMel(E, type === 'chorus2'); S.lead = c.lead; S.dbl = c.lead === 'vox'; S.harm = type === 'chorus2' && E.cycle > 0 && !LITE; S.arp = !!c.arp; S.fill = true; S.lv = 0.82; if (LITE) S.dbl = false; }
-    else if (type === 'break') { S.n = 4; S.prog = c.c; S.comp = 'whole'; S.dr = 0; S.bass = false; S.pad = true; S.mel = hookMel(E, false).slice(4); S.lead = c.lead === 'bell' ? 'mallet' : 'bell'; S.lv = 0.75; S.filt = [Math.min(1800, c.tone), Math.min(1800, c.tone)]; }
+    else if (type === 'break') { S.n = 4; S.prog = c.c; S.comp = 'whole'; S.dr = 0; S.bass = false; S.pad = true; S.mel = hookMel(E, false).slice(4); S.lead = c.lead === 'bell' ? 'mallet' : 'bell'; S.lv = 0.75; S.filt = [Math.min(1800, toneOf(c)), Math.min(1800, toneOf(c))]; }
     else if (type === 'outro') { S.n = 2; S.prog = [[c.v[0][0]], [c.v[0][0]]]; S.comp = 'whole'; S.pad = true; S.lv = 0.85; }
     else if (type === 'rest') { S.n = 4; S.comp = 'whole'; S.bass = false; S.pad = true; S.lv = 0.6; S.filt = [1400, 1400]; }
     else if (type === 'hush') { S.n = Math.max(2, Math.ceil(9 / E.bar)); S.keys = false; S.bass = false; }
@@ -8724,8 +8930,8 @@ const AU = (function () {
       setTimeout(() => { try { old.bus.disconnect(); } catch (e) {} }, 6000);
     }
     if (!key) { MU.E = null; return; }
-    const name = key.indexOf(':') > 0 ? key.split(':')[1] : key, c = CFG[name];
-    const e16 = 60 / c.bpm / 4, bus = G(B.music, 0), lp = F(bus, 'lowpass', c.tone, 0.7), inn = G(lp, 1);
+    const name = hasOwn(CFG, cfgName(key)) ? cfgName(key) : 'pagariari', c = CFG[name];
+    const e16 = 60 / c.bpm / 4, bus = G(B.music, 0), lp = F(bus, 'lowpass', toneOf(c), 0.7), inn = G(lp, 1);
     const E = { c: c, name: name, e16: e16, bar: 16 * e16, bus: bus, lp: lp, in: inn, pump: G(inn, 1), tempo: 1, t: now + (old ? 0.5 : 0.15), form: null, si: 0, bi: 0, S: null, cycle: 0, prev: 4, bars: 0 };
     E.bus.gain.setValueAtTime(0.0001, now); E.bus.gain.linearRampToValueAtTime(c.vol, now + (old ? 2.2 : 0.8));
     E.form = form(E); MU.E = E; MU.sinceRest = 0; MU.restAt = 170 + rnd() * 70;
@@ -8745,18 +8951,39 @@ const AU = (function () {
     if (depth <= 0) return; const g = E.pump.gain;
     g.setValueAtTime(1 - depth, t); g.setTargetAtTime(1, t + 0.01, E.e16 * 1.1);
   }
+  // The season's colour, on top of whatever song plays. Quiet, in key, and kept below about 2.1 kHz for the tonal parts.
+  function seasonLayer(E, S, T, chAt, b) {
+    const s = MU.season, c = E.c, lv = S.lv, dest = E.in, GR = GROOVE[c.groove], full = S.dr >= 2;
+    const hiTone = (st) => { const V = voicing(c, chAt(st)); return top(V[V.length - 1] + 12, 93); };
+    if (s === 'winter') {
+      // sleigh bells on the off-beats (the songs with their own already have them), a celesta note every other bar
+      if (S.dr && !c.jingle && !LITE) for (let k = 2; k < 16; k += 4) noise(T(k), { f: 4300, q: 4, a: 0.002, d: 0.07, v: (full ? 0.011 : 0.007) * lv, dest: dest });
+      if (b % 2 === 0) INS.bell(T(0) + 0.02, hiTone(0), 0.3, 0.026 * lv, dest, b % 4 ? 0.3 : -0.3);
+    } else if (s === 'spring') {
+      // birdsong: two quick mallet notes high in the chord, every other bar, in a different spot each time
+      if (b % 2 === 1) { const st = pick([6, 10, 11]), m = hiTone(st); INS.mallet(T(st), m, 0.1, 0.03 * lv, dest, 0.4); INS.mallet(T(st) + E.e16 * 0.5, top(m + pick([2, 5]), 95), 0.1, 0.024 * lv, dest, 0.45); }
+    } else if (s === 'summer') {
+      // brighter tops (the tone filter) and a light shaker when the groove has none
+      if (S.dr && !GR.sh && !LITE) for (let k = 1; k < 16; k += 2) INS.shaker(T(k), (full ? 0.01 : 0.007) * lv, dest);
+      if (full && b % 4 === 0 && !c.story) INS.pluck(T(0) + 0.01, hiTone(0), 0.2, 0.022 * lv, dest, -0.3);
+    } else if (s === 'autumn') {
+      // a little vinyl dust (the lazier swing and warmer tone are in playBar and toneOf)
+      if (!c.crackle && !LITE) for (let i = 0; i < 2; i++) noise(T(0) + rnd() * E.bar, { type: 'highpass', f: 2500, q: 0.5, a: 0.001, d: 0.003, v: 0.004 + rnd() * 0.005, dest: dest });
+      if (b % 4 === 2) INS.ep(T(8), hiTone(8) - 12, E.e16 * 6, 0.02 * lv, dest);
+    }
+  }
   function playBar(E) {
     // Tense (few moves left, level music only): the tempo lifts about 6 % over two bars and the hats stay on.
     const tense = MU.tense && !!E.c.level, tg = tense ? 1.06 : 1;
     if (E.tempo !== tg) { E.tempo = Math.abs(tg - E.tempo) < 0.012 ? tg : E.tempo + (tg - E.tempo) * 0.55; E.e16 = 60 / (E.c.bpm * E.tempo) / 4; E.bar = 16 * E.e16; }
     if (!E.S || E.bi >= E.S.n) { if (E.S) nextSection(E); E.bi = 0; E.S = section(E, E.form[E.si]); }
     const S = E.S, c = E.c, t0 = E.t, e16 = E.e16, b = E.bi, dest = E.in, lv = S.lv, GR = GROOVE[c.groove];
-    const sw = (s) => (s % 2 ? c.swing * e16 : 0), hum = () => rnd() * 0.005, T = (s) => t0 + s * e16 + sw(s);
+    const sw = (s) => (s % 2 ? (c.swing + SEAS[MU.season].swing) * e16 : 0), hum = () => rnd() * 0.005, T = (s) => t0 + s * e16 + sw(s);
     const bar = S.prog[b % S.prog.length], chAt = (s) => (bar.length > 1 && s >= 8 ? bar[1] : bar[0]);
     // Tone filter (sweeps open in intros and builds, closes in breaks).
     const lpf = E.lp.frequency;
     if (S.filt) { const a = S.filt[0], z = S.filt[1], f0 = a * Math.pow(z / a, b / S.n), f1 = a * Math.pow(z / a, (b + 1) / S.n); lpf.setValueAtTime(f0, t0); lpf.exponentialRampToValueAtTime(f1, t0 + E.bar); }
-    else lpf.setTargetAtTime(c.tone, t0, 0.15);
+    else lpf.setTargetAtTime(toneOf(c), t0, 0.15);
     // Chords
     if (S.keys && S.comp) {
       const P = COMP[S.comp], kv = (c.keys === 'pluck' ? 0.05 : 0.055) * lv;
@@ -8807,6 +9034,7 @@ const AU = (function () {
       }
       if (b % 4 === 3 && !fillOn && full) INS.kick(T(14), 0.14, dest);
     }
+    if (S.type !== 'hush') seasonLayer(E, S, T, chAt, b);
     if (S.riser && b === S.n - 1) noise(t0, { f: 400, f2: 3200, q: 1.2, a: E.bar * 0.9, d: 0.08, v: 0.03, dest: dest });
     if (c.crackle && !LITE && S.type !== 'hush') for (let i = 0; i < 3; i++) noise(t0 + rnd() * E.bar, { type: 'highpass', f: 2500, q: 0.5, a: 0.001, d: 0.003, v: 0.006 + rnd() * 0.008, dest: dest });
     E.bi++; E.bars++; E.t += E.bar;
@@ -8820,15 +9048,32 @@ const AU = (function () {
   }
   const MUSIC = {
     // MUSIC.scene('title' | 'board' | 'story' | 'map' | 'level' | null, {area} | {chapter, level, tense}) — crossfades; the same scene again is a no-op.
+    //   v3 phase B: 'board' with {tour: theme} plays that island theme's song; 'event' with {week: key}. Never throws.
     scene(name, opts) {
       let key = '';
-      if (name === 'title' || name === 'story' || name === 'map') key = name;
-      else if (name === 'board') key = 'board:' + normArea(opts && opts.area);
-      else if (name === 'level') { key = 'level:' + normChapter(opts); MU.tense = !!(opts && opts.tense); }
-      MU.want = key;
-      if (ctx && api.ready) startMusic(key);
+      try {
+        const o = opts && typeof opts === 'object' ? opts : {};
+        if (name === 'title' || name === 'story' || name === 'map') key = name;
+        else if (name === 'board') { const th = o.tour !== undefined && o.tour !== null && o.tour !== false ? normTour(o.tour) : ''; key = th ? 'tour:' + th : 'board:' + normArea(o.area); }
+        else if (name === 'tour') key = 'tour:' + (normTour(o.tour !== undefined ? o.tour : o.theme !== undefined ? o.theme : opts) || TOURS[0]);
+        else if (name === 'event') key = 'event:' + normWeek(opts);
+        else if (name === 'level') { key = 'level:' + normChapter(o); MU.tense = !!o.tense; }
+        MU.want = key;
+        if (ctx && api.ready) startMusic(key);
+      } catch (e) { ST.err = 'scene: ' + e.message; }
       return key;
     },
+    // MUSIC.season('winter' | 'spring' | 'summer' | 'autumn' | 'auto') -> the active season; no argument reads it.
+    // Estonian names work too (talv, kevad, suvi, sügis). Unknown keys keep the current season. Applies from the next bar.
+    season(k) {
+      if (k === undefined) return MU.season;
+      if (k === null || k === 'auto' || k === true) { MU.seasonAuto = true; MU.season = dateSeason(); return MU.season; }
+      const s = normSeason(k); if (s) { MU.season = s; MU.seasonAuto = false; }
+      return MU.season;
+    },
+    seasons: SEASONS.slice(),
+    tours: TOURS.slice(),
+    weeks: WEEKS.slice(),
     stop() { return MUSIC.scene(null); },
     // MUSIC.mood('tense' | 'normal'): few moves left in a level -> a slightly faster tempo (no restart, no crossfade).
     mood(m) { MU.tense = m === 'tense' || m === true; return MU.tense ? 'tense' : 'normal'; },
@@ -8924,6 +9169,7 @@ const AU = (function () {
   function tick() {
     if (!ctx) return;
     musicTick(); meterTick();
+    if (MU.seasonAuto && MU.E && MU.E.bars % 64 === 0) MU.season = dateSeason(); // a session across midnight on the 1st
     const now = performance.now(); if (now - ST.nrT >= 5000) { const r = (ST.made - ST.nrMade) * 1000 / (now - ST.nrT || 1); ST.nodeRate = Math.round(ST.nrT ? (ST.nodeRate ? 0.5 * ST.nodeRate + 0.5 * r : r) : 0); ST.nrMade = ST.made; ST.nrT = now; } // nodes per second, averaged over 5 s windows
   }
   function setVolume(kind, v) {
@@ -8992,7 +9238,7 @@ const AU = (function () {
   function stats() {
     const now = ctx ? ctx.currentTime : 0; let live = 0; for (const a of act) if (a.end > now) live++;
     const E = MU.E;
-    return { ready: api.ready, state: ctx ? ctx.state : 'none', muted: muted, hidden: hidden, lite: LITE, phone: PHONE, vol: Object.assign({}, VOL), music: MU.key, section: E && E.S ? E.S.type + ' bar' + E.bi + '/' + E.S.n + ' cycle' + E.cycle + ' lead:' + (E.S.lead || '-') + ' keys:' + (S_KEYS(E)) + (E.tempo !== 1 ? ' tempo x' + E.tempo.toFixed(2) : '') : '', bars: E ? E.bars : 0, sinceRest: Math.round(MU.sinceRest), sfxLive: live, made: ST.made, nodeRate: ST.nodeRate, dropped: ST.dropped, names: Object.assign({}, ST.names), err: ST.err, reverb: !!REV, meter: meterOut() };
+    return { ready: api.ready, state: ctx ? ctx.state : 'none', season: MU.season, live: ST.live, muted: muted, hidden: hidden, lite: LITE, phone: PHONE, vol: Object.assign({}, VOL), music: MU.key, section: E && E.S ? E.S.type + ' bar' + E.bi + '/' + E.S.n + ' cycle' + E.cycle + ' lead:' + (E.S.lead || '-') + ' keys:' + (S_KEYS(E)) + (E.tempo !== 1 ? ' tempo x' + E.tempo.toFixed(2) : '') : '', bars: E ? E.bars : 0, sinceRest: Math.round(MU.sinceRest), sfxLive: live, made: ST.made, nodeRate: ST.nodeRate, dropped: ST.dropped, names: Object.assign({}, ST.names), err: ST.err, reverb: !!REV, meter: meterOut() };
   }
 
   const api = { ready: false, unlock: unlock, setVolume: setVolume, setMuted: setMuted, setLite: setLite, stats: stats, sfx: sfx, meter: meter, music: MUSIC, sounds: Object.keys(SFX), who: Object.keys(WHO), setHidden: setHidden, suspend: () => setHidden(true), resume: () => { if (!DOC || DOC.visibilityState !== 'hidden') setHidden(false); } };
